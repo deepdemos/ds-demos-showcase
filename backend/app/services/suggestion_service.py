@@ -114,6 +114,10 @@ def review(
     actor_type: str = "user",
 ) -> EntitySuggestion:
     """审核一条建议：approve 即调对应 service 真正落库（同事务 + 审计）。"""
+    if suggestion.kind == "new_prompt":
+        from . import prompt_library_service
+
+        prompt_library_service.lock_review(db, suggestion)
     if suggestion.status != "pending":
         raise HTTPException(status_code=409, detail="该建议已处理")
     if action not in ("approve", "reject"):
@@ -198,6 +202,14 @@ def _execute(db: Session, s: EntitySuggestion, payload: dict, actor_id: int | No
             task_service.attach_demos(db, task, demo_ids, actor_id=actor_id, commit=False)
         return f"题目 {task.slug} 挂 {len(demo_ids)} 个作品"
 
+    if s.kind == "new_prompt":
+        from . import prompt_library_service
+
+        entry = prompt_library_service.publish_prompt(db, payload, created_by=s.created_by)
+        # 持久化目标 id，让已处理收件箱可直接打开条目，不从结果文案解析地址。
+        s.payload = json.dumps({**payload, "prompt_id": entry.prompt_id}, ensure_ascii=False)
+        return f"提示词 /prompts/{entry.prompt_id} 已收录"
+
     if s.kind == "task_match":
         task = task_service.get_task_or_404(db, payload.get("task_id") or s.ref_id or 0)
         demo_id = payload.get("demo_id") or s.demo_id
@@ -237,6 +249,21 @@ def _execute(db: Session, s: EntitySuggestion, payload: dict, actor_id: int | No
 # ---------------- 查询 ----------------
 
 
+def _list_out(s: EntitySuggestion) -> dict:
+    """收件箱列表序列化：new_prompt 正文超长时截断（480 字 + 标记），全量走详情端点。
+    审核执行读的是库里存的完整 payload，这里只裁剪展示，不影响批准结果。"""
+    out = suggestion_out(s)
+    if s.kind == "new_prompt":
+        from .prompt_library_service import content_excerpt
+
+        content = out["payload"].get("content")
+        if isinstance(content, str):
+            excerpt, truncated = content_excerpt(content)
+            if truncated:
+                out["payload"] = {**out["payload"], "content": excerpt, "content_truncated": True}
+    return out
+
+
 def suggestion_out(s: EntitySuggestion) -> dict:
     out = {
         "id": s.id,
@@ -273,7 +300,7 @@ def list_suggestions(
     if status == "pending" and min_confidence is None:
         q = q.filter(EntitySuggestion.confidence >= floor)
     rows = q.order_by(EntitySuggestion.confidence.desc().nullslast(), EntitySuggestion.id.desc()).limit(200).all()
-    return [suggestion_out(s) for s in rows]
+    return [_list_out(s) for s in rows]
 
 
 def counts_by_kind(db: Session) -> dict[str, int]:

@@ -16,7 +16,7 @@ import type { SuggestionItem } from '../../api/types'
 import { useUiStore } from '../../stores/ui'
 import { parseDate } from '../../utils/time'
 import { INBOX_KINDS, inboxKindLabel } from '../../utils/adminLabels'
-import { entityHrefTo, suggestionEntityHref } from '../../utils/entityDeepLink'
+import { entityHrefTo, promptSuggestionSource, suggestionEntityHref } from '../../utils/entityDeepLink'
 import LoadingRow from '../LoadingRow.vue'
 import EmptyBox from '../EmptyBox.vue'
 import { t } from '../../i18n'
@@ -60,6 +60,7 @@ function brief(s: SuggestionItem): string {
         Array.isArray(p.matched) && p.matched.length ? `（命中：${p.matched.slice(0, 3).join('、')}）` : ''
       }`
     case 'new_task':
+    case 'new_prompt':
       return str(p.title) || str(p.task_id)
     default:
       return `${str(p.source_id ?? p.source ?? '')} → ${str(p.target_id ?? p.target ?? '')}`
@@ -70,6 +71,7 @@ function effectOf(s: SuggestionItem): string {
   if (s.kind === 'task_match') return t('admin.inbox.effectAttach', '批准后该作品进入同题对比')
   if (s.kind === 'new_model') return t('admin.inbox.effectModel', '通过后创建模型实体（active）')
   if (s.kind === 'new_task') return t('admin.inbox.effectTask', '批准后创建题目并按建议挂题')
+  if (s.kind === 'new_prompt') return t('admin.inbox.effectPrompt', '批准后收录到提示词库')
   if (s.kind === 'retag_demo') return t('admin.inbox.effectRetag', '通过后仅替换该作品的 type 值，其他标签不动')
   return t('admin.inbox.effectMerge', '通过后迁移引用并废弃源实体（可审计回溯）')
 }
@@ -77,6 +79,35 @@ function effectOf(s: SuggestionItem): string {
 /** 后端 GET /suggestions 的 kind 过滤 pattern 不含 retag_demo（传了 422）→ 客户端过滤 */
 function isClientFilteredKind(k: string): boolean {
   return k === 'retag_demo'
+}
+
+function promptContent(s: SuggestionItem): string {
+  return typeof s.payload.content === 'string' ? s.payload.content : ''
+}
+
+// ---- new_prompt 展开全文：列表口 payload.content 超 480 字已被后端截断（content_truncated），
+// 「查看全文」时才调详情接口取全量；已取条目按 id 缓存，避免重复请求（带宽与 DOM 双省） ----
+const fullContents = ref(new Map<number, string>())
+const fullLoading = ref<Record<number, boolean>>({})
+
+/** <pre> 显示的正文：优先已取回的全量，否则用列表里的（可能被截断的）payload.content */
+function promptText(s: SuggestionItem): string {
+  return fullContents.value.get(s.id) ?? promptContent(s)
+}
+
+async function loadFullPrompt(s: SuggestionItem) {
+  if (fullContents.value.has(s.id) || fullLoading.value[s.id]) return
+  fullLoading.value[s.id] = true
+  try {
+    const full = await api.getSuggestion(s.id)
+    // 仅缓存真正的字符串全文；payload 异常时不写缓存，保持「查看全文」可重试
+    if (typeof full.payload.content === 'string') fullContents.value.set(s.id, full.payload.content)
+    else ui.toast(t('admin.inbox.promptFullFailed', '全文读取失败'), 'error')
+  } catch (e) {
+    ui.toast((e as Error).message, 'error')
+  } finally {
+    fullLoading.value[s.id] = false
+  }
 }
 
 async function load() {
@@ -152,7 +183,9 @@ async function runBatch(action: 'approve' | 'reject', idsOverride?: number[]) {
       title: t('admin.inbox.batchConfirmTitle', '批量批准 {n} 条建议？', { n: ids.length }),
       message:
         `${preview}${rows.length > 5 ? `\n…${t('admin.inbox.batchMore', '等共 {n} 条', { n: rows.length })}` : ''}\n\n` +
-        t('admin.inbox.batchUndoNote', '治理语义：批准效果逐条可审计回溯（合并可 unmerge/实体可删/挂题可撤）；驳回不销毁数据，引擎可再次提名。'),
+        (rows.some((s) => s.kind === 'new_prompt')
+          ? t('admin.inbox.promptBatchNote', '提示词批准后公开收录，请先核对完整正文和来源。')
+          : t('admin.inbox.batchUndoNote', '治理语义：批准效果逐条可审计回溯（合并可 unmerge/实体可删/挂题可撤）；驳回不销毁数据，引擎可再次提名。')),
       confirmText: t('admin.inbox.batchApprove', '批量批准'),
     })
     if (!ok) return
@@ -200,7 +233,9 @@ async function review(s: SuggestionItem, action: 'approve' | 'reject') {
   if (action === 'approve') {
     const ok = await ui.confirm({
       title: t('admin.inbox.confirmApprove', '批准这条建议？'),
-      message: `${brief(s)}\n${effectOf(s)}\n${t('admin.inbox.digestThenEntity', '队列只消化待办；批准后深链回实体页改字段。')}`,
+      message: `${brief(s)}\n${effectOf(s)}\n${s.kind === 'new_prompt'
+        ? t('admin.inbox.promptOpenHint', '批准后可打开提示词，查看同正文作品。')
+        : t('admin.inbox.digestThenEntity', '队列只消化待办；批准后深链回实体页改字段。')}`,
       confirmText: t('admin.inbox.approve', '批准'),
     })
     if (!ok) return
@@ -249,11 +284,11 @@ onMounted(() => {
       </select>
       <select v-model="kind" class="input" style="max-width: 150px" @change="load">
         <option value="">{{ t('admin.inbox.allKinds', '全部类型') }}</option>
-        <option v-for="(v, k) in KIND_LABELS" :key="k" :value="k">{{ v[0] }}</option>
+        <option v-for="(_v, k) in KIND_LABELS" :key="k" :value="k">{{ inboxKindLabel(k) }}</option>
       </select>
       <button class="btn btn-sm btn-secondary" type="button" :disabled="loading" @click="load">{{ t('common.refresh', '刷新') }}</button>
       <span v-if="status === 'pending'" class="mini-stat"><b>{{ total }}</b> {{ t('admin.inbox.total', '条待处理') }}</span>
-      <span v-for="(n, k) in counts" :key="k" class="tag-chip mode-open">{{ KIND_LABELS[k]?.[0] || k }} <b class="count">{{ n }}</b></span>
+      <span v-for="(n, k) in counts" :key="k" class="tag-chip mode-open">{{ inboxKindLabel(k) }} <b class="count">{{ n }}</b></span>
     </div>
 
     <div v-if="error" class="notice notice-error">{{ error }}</div>
@@ -301,7 +336,7 @@ onMounted(() => {
           <div class="inbox-head">
             <label class="inbox-check">
               <input type="checkbox" :checked="selected.has(s.id)" @change="toggle(s.id)" />
-              <span class="cluster-badge cb-exact">{{ KIND_LABELS[s.kind]?.[0] || s.kind }}</span>
+              <span class="cluster-badge cb-exact">{{ inboxKindLabel(s.kind) }}</span>
             </label>
             <span class="inbox-source mono">{{ s.source }}</span>
             <span v-if="s.confidence != null" class="mini-stat"><b>{{ (s.confidence * 100).toFixed(0) }}%</b> {{ t('admin.inbox.confidence', '置信度') }}</span>
@@ -311,6 +346,25 @@ onMounted(() => {
             <span class="muted mono inbox-time">{{ parseDate(s.created_at).toLocaleString('zh-CN') }}</span>
           </div>
           <div class="inbox-brief">{{ brief(s) }}</div>
+          <!-- 默认收起：列表正文是摘要（超 480 字后端截断），审核员展开按需看/取全量 -->
+          <details v-if="s.kind === 'new_prompt'" class="inbox-prompt-details">
+            <summary>{{ t('admin.inbox.promptContent', '提示词全文') }}</summary>
+            <pre class="inbox-prompt-text mono">{{ promptText(s) }}</pre>
+            <button
+              v-if="s.payload.content_truncated && !fullContents.has(s.id)"
+              class="btn btn-sm btn-outline"
+              type="button"
+              :disabled="fullLoading[s.id]"
+              @click="loadFullPrompt(s)"
+            >
+              {{ fullLoading[s.id] ? t('admin.inbox.promptFullLoading', '加载中…') : t('admin.inbox.promptFull', '查看全文') }}
+            </button>
+            <p v-if="s.payload.source_url" class="inbox-prompt-source">
+              <b>{{ t('admin.inbox.promptSource', '来源链接') }}：</b>
+              <a v-if="promptSuggestionSource(s)" :href="promptSuggestionSource(s)!" target="_blank" rel="noopener noreferrer">{{ s.payload.source_url }}</a>
+              <span v-else>{{ s.payload.source_url }}</span>
+            </p>
+          </details>
           <div class="filter-row" style="margin: var(--sp-8) 0 0">
             <span class="hint">{{ effectOf(s) }}</span>
             <template v-if="s.status === 'pending'">
@@ -323,7 +377,7 @@ onMounted(() => {
             </template>
             <span v-else class="cluster-covered-tag">{{ s.status === 'approved' ? t('admin.inbox.approved', '已批准') : t('admin.inbox.rejected', '已驳回') }}</span>
             <button v-if="suggestionEntityHref(s)" class="btn btn-sm btn-outline" type="button" @click="goEntity(s)">
-              {{ t('admin.inbox.openEntity', '打开实体 →') }}
+              {{ s.kind === 'new_prompt' ? t('admin.inbox.openPrompt', '打开提示词') : t('admin.inbox.openEntity', '打开实体 →') }}
             </button>
           </div>
         </article>
@@ -332,12 +386,31 @@ onMounted(() => {
     <div v-else class="inbox-list">
       <article v-for="s in items" :key="s.id" class="inbox-row card card-default">
         <div class="inbox-head">
-          <span class="cluster-badge cb-exact">{{ KIND_LABELS[s.kind]?.[0] || s.kind }}</span>
+          <span class="cluster-badge cb-exact">{{ inboxKindLabel(s.kind) }}</span>
           <span class="inbox-source mono">{{ s.source }}</span>
           <span v-if="s.confidence != null" class="mini-stat"><b>{{ (s.confidence * 100).toFixed(0) }}%</b> {{ t('admin.inbox.confidence', '置信度') }}</span>
           <span class="muted mono inbox-time">{{ parseDate(s.created_at).toLocaleString('zh-CN') }}</span>
         </div>
         <div class="inbox-brief">{{ brief(s) }}</div>
+        <!-- 默认收起：列表正文是摘要（超 480 字后端截断），审核员展开按需看/取全量 -->
+        <details v-if="s.kind === 'new_prompt'" class="inbox-prompt-details">
+          <summary>{{ t('admin.inbox.promptContent', '提示词全文') }}</summary>
+          <pre class="inbox-prompt-text mono">{{ promptText(s) }}</pre>
+          <button
+            v-if="s.payload.content_truncated && !fullContents.has(s.id)"
+            class="btn btn-sm btn-outline"
+            type="button"
+            :disabled="fullLoading[s.id]"
+            @click="loadFullPrompt(s)"
+          >
+            {{ fullLoading[s.id] ? t('admin.inbox.promptFullLoading', '加载中…') : t('admin.inbox.promptFull', '查看全文') }}
+          </button>
+          <p v-if="s.payload.source_url" class="inbox-prompt-source">
+            <b>{{ t('admin.inbox.promptSource', '来源链接') }}：</b>
+            <a v-if="promptSuggestionSource(s)" :href="promptSuggestionSource(s)!" target="_blank" rel="noopener noreferrer">{{ s.payload.source_url }}</a>
+            <span v-else>{{ s.payload.source_url }}</span>
+          </p>
+        </details>
         <div class="filter-row" style="margin: var(--sp-8) 0 0">
           <span class="hint">{{ effectOf(s) }}</span>
           <template v-if="s.status === 'pending'">
@@ -350,7 +423,7 @@ onMounted(() => {
           </template>
           <span v-else class="cluster-covered-tag">{{ s.status === 'approved' ? t('admin.inbox.approved', '已批准') : t('admin.inbox.rejected', '已驳回') }}</span>
           <button v-if="suggestionEntityHref(s)" class="btn btn-sm btn-outline" type="button" @click="goEntity(s)">
-            {{ t('admin.inbox.openEntity', '打开实体 →') }}
+            {{ s.kind === 'new_prompt' ? t('admin.inbox.openPrompt', '打开提示词') : t('admin.inbox.openEntity', '打开实体 →') }}
           </button>
         </div>
       </article>
@@ -359,6 +432,34 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.inbox-prompt-details {
+  margin-top: var(--sp-8);
+}
+.inbox-prompt-details > summary {
+  padding: var(--sp-8) 0;
+  min-height: 44px;
+  box-sizing: border-box;
+  cursor: pointer;
+  font-weight: 800;
+}
+.inbox-prompt-details > summary:focus-visible {
+  outline: var(--border-w) solid var(--ink);
+  outline-offset: var(--sp-2);
+}
+.inbox-prompt-text {
+  margin: 0;
+  padding: var(--sp-12);
+  background: var(--paper);
+  border: var(--border-w) solid var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-14);
+  line-height: 1.6;
+}
+.inbox-prompt-source {
+  margin: var(--sp-8) 0 0;
+  overflow-wrap: anywhere;
+}
 /* ---- M2-t4 批量消化（admin scoped 纪律：styles/ 零新增块）---- */
 /* kind 分节头：节名+计数+全选（44px 触达线内按钮复用 btn-sm 既有触达） */
 .inbox-kind-section {

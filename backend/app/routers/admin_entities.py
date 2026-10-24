@@ -398,6 +398,19 @@ def admin_list_suggestions(
     }
 
 
+@router.get("/suggestions/{sid}")
+def admin_get_suggestion(
+    sid: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """收件箱详情：列表对 new_prompt 正文做了截断，展开全文按 id 取完整 payload。"""
+    s = db.get(EntitySuggestion, sid)
+    if s is None:
+        raise HTTPException(status_code=404, detail="建议不存在")
+    return suggestion_service.suggestion_out(s)
+
+
 @router.post("/suggestions/{sid}/review")
 def admin_review_suggestion(
     sid: int,

@@ -4,6 +4,7 @@ import {
   adminEntityQuery,
   entityHrefTo,
   parseApproveIdent,
+  promptSuggestionSource,
   suggestionEntityHref,
   tagSuggestionEntityQuery,
   tagsForWrite,
@@ -60,6 +61,44 @@ describe('entityDeepLink', () => {
 
   it('pending new_task 只有 title 时不深链（实体尚未创建）', () => {
     expect(suggestionEntityHref(item({ kind: 'new_task', payload: { title: '新题' } }))).toBeNull()
+  })
+
+  it('new_prompt 批准后用服务端回填的 prompt_id 打开固定正文', () => {
+    const href = suggestionEntityHref(item({
+      kind: 'new_prompt',
+      status: 'approved',
+      payload: { title: '五阶魔方', prompt_id: 42 },
+    }))
+    expect(href).toEqual({ kind: 'prompt', id: 42 })
+    expect(entityHrefTo(href!)).toEqual({ path: '/prompts/42' })
+  })
+
+  it.each(['pending', 'rejected'] as const)('new_prompt %s 时不公开正文入口', (status) => {
+    expect(suggestionEntityHref(item({ kind: 'new_prompt', status, payload: { prompt_id: 42 } }))).toBeNull()
+  })
+
+  it.each([null, undefined, 0, -1, 1.5, '42/../admin', '0x2a', Number.MAX_SAFE_INTEGER + 1])(
+    'new_prompt 不把无效 id %s 拼进路由', (promptId) => {
+      expect(suggestionEntityHref(item({ kind: 'new_prompt', status: 'approved', payload: { prompt_id: promptId } }))).toBeNull()
+    },
+  )
+
+  it('来源接受 HTTP(S) 绝对地址，保留路径和查询参数', () => {
+    expect(promptSuggestionSource(item({ kind: 'new_prompt', payload: { source_url: ' https://example.org/prompts?id=42#text ' } })))
+      .toBe('https://example.org/prompts?id=42#text')
+    expect(promptSuggestionSource(item({ kind: 'new_prompt', payload: { source_url: 'http://example.org/prompt' } })))
+      .toBe('http://example.org/prompt')
+  })
+
+  it.each(['javascript:alert(1)', 'data:text/html,test', 'file:///test.txt', '//example.org/prompt', '/prompts/42', 'not a url', '', null])(
+    '来源拒绝非 HTTP(S) 绝对地址 %s', (sourceUrl) => {
+      expect(promptSuggestionSource(item({ kind: 'new_prompt', payload: { source_url: sourceUrl } }))).toBeNull()
+    },
+  )
+
+  it('来源拒绝内嵌账号密码（历史/异常 payload 防御）', () => {
+    expect(promptSuggestionSource(item({ kind: 'new_prompt', payload: { source_url: 'https://user:pass@example.org/prompt' } }))).toBeNull()
+    expect(promptSuggestionSource(item({ kind: 'new_prompt', payload: { source_url: 'http://user@example.org/prompt' } }))).toBeNull()
   })
 
   it('tagsForWrite 丢掉系统保留键', () => {

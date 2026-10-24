@@ -13,6 +13,7 @@ import { t } from '../i18n'
 import { compressImage } from '../utils/imageCompress'
 import { tagLabel } from '../utils/funMode'
 import { useUploadDraft } from '../composables/useUploadDraft'
+import { usePromptLibraryUpload } from '../composables/usePromptLibraryUpload'
 import { useTaskMount } from '../composables/useTaskMount'
 import { useTagSuggest } from '../composables/useTagSuggest'
 import { useUploadPlayable } from '../composables/useUploadPlayable'
@@ -239,6 +240,22 @@ const challengePrompt = computed(() =>
 )
 const promptCopied = ref(false)
 
+const library = usePromptLibraryUpload({
+  id: computed(() => route.query.prompt),
+  editing: computed(() => !!editSlug || typeof route.query.slug === 'string'),
+  prompt, title,
+  hasDraft: () => !!draftFound.value,
+  fetch: (id) => api.getPrompt(id),
+})
+const libraryPrompt = library.entry
+const libraryLoading = library.loading
+const libraryError = library.error
+
+function fillLibraryPrompt() {
+  library.apply()
+  ui.toast(t('upload.promptLibraryCopied', '已填入提示词'), 'success')
+}
+
 async function loadChallenge() {
   if (!challengeSlug || editSlug) return
   try {
@@ -277,6 +294,7 @@ onMounted(async () => {
     if (p && hasDraftContent(p)) draftFound.value = { savedAt: p.savedAt || 0, title: (p.title || '').slice(0, 24) }
   }
   void loadChallenge()
+  void library.load()
   try {
     await tagsStore.load()
   } catch {
@@ -577,6 +595,23 @@ async function submit(force = false) {
         <!-- P4：写成 submit() 而不是 submit —— submit 现在带 force 参数，
              直接绑会把 submit 事件当 force 传进去（永远是 truthy），等于编辑一律强推。 -->
         <form class="form-stack" @submit.prevent="submit()">
+        <div v-if="!editSlug && (libraryPrompt || libraryLoading || libraryError)" class="card card-mint challenge-card" aria-live="polite">
+          <p v-if="libraryLoading" class="hint">{{ t('common.loading', '加载中…') }}</p>
+          <template v-else-if="libraryPrompt">
+            <div class="filter-row" style="margin-bottom: var(--sp-6)">
+              <span class="mini-stat">{{ t('upload.promptLibraryTitle', '来自提示词库') }}</span>
+              <b>{{ libraryPrompt.title }}</b>
+              <button class="btn btn-sm btn-primary" type="button" @click="fillLibraryPrompt">{{ t('upload.promptLibraryApply', '填入这条提示词') }}</button>
+              <RouterLink class="btn btn-sm btn-outline" :to="`/prompts/${libraryPrompt.id}`">{{ t('upload.promptLibraryBack', '查看提示词') }}</RouterLink>
+            </div>
+            <p class="challenge-prompt mono">{{ libraryPrompt.content }}</p>
+            <p class="hint">{{ t('upload.promptLibraryHint', '提交作品时保留原文，可关联到同提示词结果。') }}</p>
+          </template>
+          <template v-else>
+            <p class="hint">{{ t('upload.promptLibraryError', '提示词加载失败，请重试') }}</p>
+            <button class="btn btn-sm btn-outline" type="button" @click="library.load()">{{ t('common.retry', '重试') }}</button>
+          </template>
+        </div>
         <!-- v2 B4′：挑战上下文（跨步保留，因为题面同时喂给标题与提示词） -->
         <div v-if="challenge && !challengeOff" class="card card-mint challenge-card">
           <div class="filter-row" style="margin-bottom: var(--sp-6)">

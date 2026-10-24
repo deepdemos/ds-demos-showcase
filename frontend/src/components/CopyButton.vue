@@ -1,29 +1,42 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount } from 'vue'
 import { t } from '../i18n'
+import { useUiStore } from '../stores/ui'
 
 /**
  * CopyButton 复制按钮微组件（03 §12.5 复制 stamp 语汇；t21 追加）。
- * - 点击复制 text（支持 getter 惰性取值）→ 按钮短暂变「已复制」（stamp-in 微档，1.5s 复原，
- *   03 规格 900ms~2s 档取中）；失败静默（不弹 toast 打断——按钮原样可再点）。
+ * - 点击复制 text（支持同步/异步 getter 惰性取值）→ 按钮短暂变「已复制」（1.5s 复原）。
+ * - 两种复制方式均失败时给出手动复制提示，避免无反馈。
  * - navigator.clipboard 优先（安全上下文）；非安全上下文/拒绝 → execCommand textarea 兜底。
  * - 全站可复用（DemoView 提示词块/严格复现 PROMPT 首批接入；替代散落的裸 clipboard 调用的候补）。
+ * - getter 路径：抛错（含 Promise reject）或取值为空 → 走失败 toast；成功行为与同步字符串一致。
  */
 const props = defineProps<{
-  text: string | (() => string)
+  /** 同步字符串，或惰性取值的 getter（同步/返回 Promise 均可——按需拉全文的异步口用后者） */
+  text: string | (() => string) | (() => Promise<string>)
   /** 按钮文案（缺省「复制」；i18n 键 copy.copy） */
   label?: string
 }>()
 
 const copied = ref(false)
+const ui = useUiStore()
 let timer: ReturnType<typeof setTimeout> | null = null
 onBeforeUnmount(() => {
   if (timer) clearTimeout(timer)
 })
 
 async function copy() {
-  const value = (typeof props.text === 'function' ? props.text() : props.text) ?? ''
-  if (!value) return
+  let value = ''
+  try {
+    // getter 抛错（同步 throw 或 Promise reject）统一按取值失败处理 → 空值走失败 toast
+    value = (typeof props.text === 'function' ? await props.text() : props.text) ?? ''
+  } catch {
+    value = ''
+  }
+  if (!value) {
+    ui.toast(t('copy.failed', '复制失败，请手动选择复制'), 'error')
+    return
+  }
   let ok = false
   try {
     if (navigator.clipboard && window.isSecureContext) {
@@ -40,6 +53,8 @@ async function copy() {
     timer = setTimeout(() => {
       copied.value = false
     }, 1500)
+  } else {
+    ui.toast(t('copy.failed', '复制失败，请手动选择复制'), 'error')
   }
 }
 

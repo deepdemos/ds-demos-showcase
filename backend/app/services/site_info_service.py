@@ -26,7 +26,7 @@ _refreshing: set[str] = set()
 
 
 def _utc_iso(dt: datetime) -> str:
-    """naive UTC 补 Z，与 main._json_dt 口径一致。"""
+    """naive UTC 补 Z，避免前端按本地时间解析提前 8 小时。"""
     if dt.tzinfo is None:
         return dt.isoformat() + "Z"
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

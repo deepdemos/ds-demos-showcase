@@ -147,6 +147,7 @@ const ROUTE_TITLES_EN: Record<string, string> = {
   粉丝: 'Followers', 关注: 'Following',
   '上传 Demo': 'Upload', 管理后台: 'Admin', '赞助/致谢管理': 'Sponsors admin', '404': '404',
   模型: 'Model', 题目: 'Task', 探索: 'Explore',
+  提示词库: 'Prompt library', 收录提示词: 'Contribute a prompt', 提示词: 'Prompt',
 }
 
 export function routeTitle(zhTitle: string): string {

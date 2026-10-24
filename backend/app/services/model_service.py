@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from ..models import AuditLog, Demo, DemoModel, DemoTask, DemoTag, Model, ModelAlias, Prompt, Tag, Task
+from ..models import AuditLog, Demo, DemoModel, DemoTask, DemoTag, Model, ModelAlias, Tag, Task
 from . import audit_service, cluster_service, matching_service, tag_service
 
 _UNVERIFIED_NAMES = {"ds-unknown", "unknown"}  # 灰测模型：建实体即 unverified
@@ -318,17 +318,18 @@ def sync_demo_models(db: Session, demo: Demo, fallback_unspecified: bool = False
 
 
 def set_demo_prompt(db: Session, demo: Demo) -> None:
-    """把 demo.prompt 规范化去重写入 prompts 并回填 prompt_id（demos.prompt 原列保留双写）。"""
+    """把 demo.prompt 规范化去重写入 prompts 并回填 prompt_id（demos.prompt 原列保留双写）。
+
+    必须复用 get_or_create_prompt（而非直插）：并发唯一约束竞争由保存点兜底，
+    且 FTS 搜索索引在写入路径内同步——直插会让上传/编辑的作品正文在 ≥3 字符搜索下静默漏结果。
+    """
     content = (demo.prompt or "").replace("\r\n", "\n").strip()
     if not content:
         demo.prompt_id = None
         return
-    h = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    row = db.query(Prompt).filter(Prompt.content_hash == h).first()
-    if row is None:
-        row = Prompt(content_hash=h, content=content)
-        db.add(row)
-        db.flush()
+    from .prompt_library_service import get_or_create_prompt
+
+    row = get_or_create_prompt(db, content)
     demo.prompt_id = row.id
     # 语料变了（新增/改提示词）→ 聚类缓存作废，管理面板不会看到过期簇
     cluster_service.invalidate()

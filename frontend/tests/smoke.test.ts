@@ -96,11 +96,14 @@ describe('三主题对比度表（04 §3.7 硬门）', () => {
 // 题目系统 v2：新增 /tasks/new（独立出题，meta.requiresAuth，置于 /tasks/:slug 之前）→ 34
 describe('路由表快照', () => {
   it('路由数量与形态稳定（快照防误删/误改）', () => {
-    expect(routes.length).toBe(34)
+    expect(routes.length).toBe(37)
     // P2：独立预览页必须带 meta.bare（App.vue 据此隐藏顶栏/页脚/底栏）
     const play = routes.find((r) => r.name === 'demo-play')
     expect(play?.path).toBe('/demo/:slug/play')
     expect((play?.meta as { bare?: boolean } | undefined)?.bare).toBe(true)
+    const promptNew = routes.find((r) => r.name === 'prompt-new')
+    expect(promptNew?.path).toBe('/prompts/new')
+    expect(promptNew?.meta?.requiresAuth).toBe(true)
     const paths = routes.map((r) => r.path).sort()
     expect(paths).toMatchSnapshot()
     // 全部 path 可被 vue-router 解析（形态合法：以 / 开头）

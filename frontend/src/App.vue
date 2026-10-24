@@ -141,14 +141,14 @@ onMounted(() => {
 
       <!-- T7 v3（用户二轮反馈①③）：论坛出顶栏（首页纸条+footer+404 地图+TabBar 社区承接），
            ⌕ 占论坛原槽位（SearchOverlay openSearch 复用——/ 与 ⌘K 仍由覆盖层自持）。
-           入口收口 D（只减不增）：顶栏维持 ≤4 项（作品库/探索/排行榜/⌕）+ 上传 CTA；
-           「关于」迁出顶栏 → footer + 管理用户菜单 + 404 地图（低频件不再占信息位，避免多主入口）。
-           T9 反馈②：⌕ 去卡片化——与相邻 nav-link 同形态（裸图标链，hover=现有静默语汇：变色+3px 下划线），
+           提示词库为一级入口（供直接复制与复测）；「关于」迁出顶栏 → footer + 用户菜单 + 404 地图。
+           IA 约定（PR #17 review）：桌面顶栏主入口 ≤4（作品库/提示词库/探索/⌕）——排行榜迁 footer 承接
+           （/leaderboard 路由与键不动）；T9 反馈②：⌕ 去卡片化=裸图标链（hover 变色+3px 下划线），
            去 btn-outline 边框卡片感（06 §P2 的『唯一带框件』分工被用户实测否决） -->
       <nav class="topnav topnav-desktop">
         <RouterLink class="nav-link" to="/demos">{{ t('app.nav.demos', '作品库') }}</RouterLink>
+        <RouterLink class="nav-link" to="/prompts">{{ t('app.nav.prompts', '提示词库') }}</RouterLink>
         <RouterLink class="nav-link" to="/tags">{{ t('app.nav.explore', '探索') }}</RouterLink>
-        <RouterLink class="nav-link" to="/leaderboard">{{ t('app.nav.leaderboard', '排行榜') }}</RouterLink>
         <button class="nav-link topnav-search" type="button" :aria-label="t('search.title', '全局搜索')" :title="t('search.openTip', '全局搜索（快捷键 /）')" @click="openSearch">
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
             <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.6" />
@@ -267,6 +267,9 @@ onMounted(() => {
           <span class="footer-links-div" aria-hidden="true"></span>
           <!-- T7 v3：论坛出顶栏后的 footer 承接（可达性集=footer+论坛直链+404 地图+首页纸条） -->
           <RouterLink class="footer-link" to="/forum">{{ t('app.nav.forum', '论坛') }}</RouterLink>
+          <span class="footer-links-div" aria-hidden="true"></span>
+          <!-- IA 收纳（PR #17 review）：排行榜出顶栏进 footer，/leaderboard 路由与键不变 -->
+          <RouterLink class="footer-link" to="/leaderboard">{{ t('app.nav.leaderboard', '排行榜') }}</RouterLink>
           <span class="footer-links-div" aria-hidden="true"></span>
           <a class="footer-link" href="https://github.com/liceses/ds-demos-showcase" target="_blank" rel="noopener" :title="t('app.github', 'GitHub 仓库')">
             GitHub <span class="footer-ext" aria-hidden="true">↗</span>

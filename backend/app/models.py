@@ -529,6 +529,23 @@ class Prompt(Base):
     demos: Mapped[list["Demo"]] = relationship(back_populates="prompt_ref")
 
 
+class PromptLibraryEntry(Base):
+    """审核后的提示词收录信息；正文仍由不可变的 Prompt 实体保存。"""
+
+    __tablename__ = "prompt_library_entries"
+    __table_args__ = (UniqueConstraint("prompt_id", "scope", name="uq_prompt_library_scope"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prompt_id: Mapped[int] = mapped_column(ForeignKey("prompts.id"), nullable=False, index=True)
+    scope: Mapped[str] = mapped_column(String(16), default="deep", nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="approved", nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
 # ---------------- v2 治理地基：审计 + 统一建议收件箱 ----------------
 
 
@@ -559,7 +576,7 @@ class AuditLog(Base):
 
 
 # 建议类型（EntitySuggestion.kind）
-SUGGESTION_KINDS = ("new_model", "new_task", "task_match", "merge_model", "merge_task", "alias", "retag_demo")
+SUGGESTION_KINDS = ("new_model", "new_task", "new_prompt", "task_match", "merge_model", "merge_task", "alias", "retag_demo")
 # 审计动作全集：路由的 action 过滤白名单、前端下拉都从这里取，
 # 避免「加了新写入动作但忘了补白名单」导致审计记录筛不出来（attribute 曾漏在这里）。
 AUDIT_ACTIONS = (

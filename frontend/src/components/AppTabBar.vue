@@ -1,6 +1,8 @@
 <script setup lang="ts">
-// M2-1 移动底部 TabBar（03 §10.2 + 任务书裁决）：4 Tab + 中央上传 FAB。
-// <720 启用（与既有移动断点同值），桌面 display:none 零影响；forum 双皮壳壳层不挂载（App.vue v-if）。
+// M2-1 移动底部 TabBar（03 §10.2 + 任务书裁决）：Tab + 中央上传 FAB。
+// 手机首页可发现性（PR #17 review）：恢复「首页」为第一槽位——六槽 首页/作品/提示词/+FAB/社区/我的
+// （.tb 为 flex:1，390px 视口可容）；<720 启用（与既有移动断点同值），桌面 display:none 零影响；
+// forum 双皮壳壳层不挂载（App.vue v-if）。
 // 我的位内聚：登录→/user/:u（页内 hero 自我工具排：通知（未读红点镜像）/设置/工作台(admin)/退出，
 // M2-1 落地于 UserView isSelf 分支）；未登录→/login（页内含注册路径）。
 // 未读红点镜像：与 NotificationBell 同源 notifications store 单一口径（startPolling 幂等）。
@@ -35,6 +37,7 @@ onMounted(() => {
 
 <template>
   <nav class="tabbar" :aria-label="t('app.tabbar.label', '底部导航')">
+    <!-- 首页槽：exact 匹配（/ 不抢其他路由的点亮）；手机端首页可发现性的兜底入口 -->
     <RouterLink class="tb" :class="{ active: route.path === '/' }" to="/">
       {{ t('app.tabbar.home', '首页') }}
     </RouterLink>
@@ -44,6 +47,9 @@ onMounted(() => {
       to="/demos"
     >
       {{ t('app.tabbar.works', '作品') }}
+    </RouterLink>
+    <RouterLink class="tb" :class="{ active: route.path.startsWith('/prompts') }" to="/prompts">
+      {{ t('app.tabbar.prompts', '提示词') }}
     </RouterLink>
     <!-- 中央上传 FAB：转化主件的物理地位（菲茨：拇指热区 56px 反色大目标）；CTA 随顶栏减法退到此处 -->
     <div class="fab-slot">

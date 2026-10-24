@@ -1,6 +1,7 @@
 // Mock API —— 前端独立运行时使用的占位数据与逻辑。
 // 切换到真实后端：设置环境变量 VITE_USE_MOCK=false，api/index.ts 会改走 axios。
 
+import { createMockPromptStore } from './mockPrompts'
 import type {
   AdminDemo,
   AdminStats,
@@ -62,6 +63,11 @@ import type {
   TaskDetail,
   TaskProposalIn,
   TaskProposalOut,
+  PromptListItem,
+  PromptSummary,
+  PromptListParams,
+  PromptProposalIn,
+  PromptProposalOut,
   TaskSummary,
   TaskSuggestItem,
   SamePromptResult,
@@ -618,6 +624,21 @@ let mockDemoIdSeq = 1
 // v2 B4′：mock 收件箱（带 task 的上传会真的入队，能完整演一遍批准流程）
 const mockSuggestions: SuggestionItem[] = []
 let mockSuggestionSeq = 1
+const mockPromptStore = createMockPromptStore({
+  demos: () => demos,
+  userId: () => currentUser?.id ?? null,
+  suggestions: mockSuggestions,
+  nextSuggestionId: () => mockSuggestionSeq++,
+})
+
+/** 收件箱列表口对超长 new_prompt 正文做摘要（与后端契约一致：>480 字截断 + content_truncated）。
+ *  只截克隆返回值，存储对象不动 —— approve 仍用全量 payload 执行，语义不变。 */
+function excerptSuggestion(s: SuggestionItem): SuggestionItem {
+  if (s.kind !== 'new_prompt' || typeof s.payload.content !== 'string') return s
+  const content = s.payload.content
+  if (content.length <= 480) return s
+  return { ...s, payload: { ...s.payload, content: content.slice(0, 480), content_truncated: true } }
+}
 // C：TagValueSuggestion 与 EntitySuggestion 分表；概览台并语义合成
 const mockTagSuggestions: TagSuggestion[] = [
   { id: 1, key: 'plugin', value: 'routing-lite', description: '用户申请的固定值', group: null, status: 'pending', demo_id: null, created_at: '2026-08-20T10:00:00Z' },
@@ -768,6 +789,22 @@ function demosApproved() {
 }
 
 export const mockApi = {
+  async listPrompts(params: PromptListParams = {}): Promise<Paginated<PromptListItem>> {
+    await delay(120)
+    return clone(mockPromptStore.list(params))
+  },
+  async getPrompt(id: number): Promise<PromptSummary> {
+    await delay(100)
+    return clone(mockPromptStore.get(id))
+  },
+  async getPromptDemos(id: number, params: { page?: number; page_size?: number } = {}): Promise<Paginated<DemoSummary>> {
+    await delay(120)
+    return clone(mockPromptStore.demos(id, params))
+  },
+  async proposePrompt(payload: PromptProposalIn): Promise<PromptProposalOut> {
+    await delay(150)
+    return clone(mockPromptStore.propose(payload))
+  },
   // ---------- 认证 ----------
   async login(username: string, password: string): Promise<AuthResponse> {
     await delay(300)
@@ -1737,7 +1774,15 @@ export const mockApi = {
     )
     const byKind: Record<string, number> = {}
     for (const s of mockSuggestions) if (s.status === 'pending') byKind[s.kind] = (byKind[s.kind] || 0) + 1
-    return { items: clone(items), pending_by_kind: byKind, thresholds: { auto_accept: 0.99, review: 0.6 } }
+    // 列表出口降级：new_prompt 超长正文截断（存储不动）；全量走 getSuggestion
+    return { items: clone(items).map(excerptSuggestion), pending_by_kind: byKind, thresholds: { auto_accept: 0.99, review: 0.6 } }
+  },
+  // 详情口：返回未截断的完整建议（payload.content 为全量），收件箱「查看全文」数据源
+  async getSuggestion(id: number): Promise<SuggestionItem> {
+    await delay(120)
+    const s = mockSuggestions.find((x) => x.id === id)
+    if (!s) throw new Error('建议不存在')
+    return clone(s)
   },
   // M3-3 直改权演示：Model 状态跃迁/Task 题面直改（mock 内存态，与真实端点同形状）
   async setModelStatus(ident: string, payload: { status: string; reason?: string }): Promise<{ id: number; slug: string; status: string }> {
@@ -1850,6 +1895,7 @@ export const mockApi = {
     if (s.status !== 'pending') throw new Error('该建议已处理')
     s.status = action === 'approve' ? 'approved' : 'rejected'
     s.reviewed_at = new Date().toISOString()
+    if (action === 'approve' && s.kind === 'new_prompt') mockPromptStore.approve(s)
     // 批准挂题：mock 里把对应题目的作品数 +1，面板反馈可见
     if (action === 'approve' && s.kind === 'task_match') {
       const title = String(s.payload.task_title || '')

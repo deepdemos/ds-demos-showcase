@@ -253,6 +253,9 @@ class DemoSummaryOut(BaseModel):
     rating_god: int = 0
     rating_ghost: int = 0
     prompt: str = ""
+    # 同提示词结果需显式展示测试条件；未知保持 None，不推断为首轮。
+    gen_rounds: int | None = None
+    gen_minutes: int | None = None
     models: list[DemoModelBriefOut] = []
     tasks: list[DemoTaskBriefOut] = []
 
@@ -753,6 +756,48 @@ class TaskListOut(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------- Prompt library ----------
+class PromptListItemOut(BaseModel):
+    """列表项：正文只给 480 字摘要，全文按 id 单取（最坏一页从 ~2MB 降到 ~100KB）。"""
+
+    id: int
+    title: str
+    content_excerpt: str
+    content_truncated: bool
+    category: str | None = None
+    source_url: str | None = None
+    source: Literal["contributed", "demo"]
+    created_at: datetime
+    demos_total: int
+    models_total: int
+
+
+class PromptSummaryOut(PromptListItemOut):
+    """详情：摘要字段 + 完整正文。"""
+
+    content: str
+
+
+class PromptListOut(BaseModel):
+    items: list[PromptListItemOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class PromptProposalIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=20000)
+    category: str | None = Field(default=None, max_length=64)
+    source_url: str | None = Field(default=None, max_length=2048)
+
+
+class PromptProposalOut(BaseModel):
+    status: Literal["pending", "existing"]
+    suggestion_id: int | None = None
+    prompt_id: int | None = None
 
 
 class TaskProposalIn(BaseModel):

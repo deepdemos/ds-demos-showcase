@@ -5,7 +5,7 @@ import logging
 import mimetypes
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -20,7 +20,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import AppError
 from .models import ForumTopic, Setting, Tag, TagKey, User
-from .routers import admin, admin_entities, announcements, auth, collections, comments, demos, explore, forum, history, meta, models, notifications, peek, ratings, sessions, stats, tags, tasks, users
+from .routers import admin, admin_entities, announcements, auth, collections, comments, demos, explore, forum, history, meta, models, notifications, peek, prompts, ratings, sessions, stats, tags, tasks, users
 from .security import hash_password
 from .services import oss
 from .services import scope as scope_service
@@ -32,16 +32,12 @@ logging.basicConfig(level=logging.INFO)
 # slim 镜像的 mime 库不认识 .webp：不注册的话 /media 封面会以 application/octet-stream 下发
 mimetypes.add_type("image/webp", ".webp")
 
-def _json_dt(dt: datetime) -> str:
-    """naive UTC 统一补 Z，避免前端按本地时间解析提前 8 小时"""
-    if dt.tzinfo is None:
-        return dt.isoformat() + 'Z'
-    return dt.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
-
 # 发布版本：与 frontend/package.json 的 version 同步维护（前后端各一份声明，改版本必须一起改）。
 APP_VERSION = "0.2.0-alpha"
 
-app = FastAPI(title="DS 民间科研成果展示 API", version=APP_VERSION, json_encoders={datetime: _json_dt})
+# naive UTC 统一补 Z 的口径由各响应模型/服务自行保证（pydantic v2 原生输出 Z）；
+# 旧版 FastAPI 的 json_encoders 在 pydantic v2 下从未实际生效，0.161 起参数被移除。
+app = FastAPI(title="DS 民间科研成果展示 API", version=APP_VERSION)
 
 settings.media_path.mkdir(parents=True, exist_ok=True)
 
@@ -136,6 +132,7 @@ app.include_router(notifications.router, prefix=API_PREFIX)
 # v2 实体（B1）：Model / Task / Explore
 app.include_router(models.router, prefix=API_PREFIX)
 app.include_router(tasks.router, prefix=API_PREFIX)
+app.include_router(prompts.router, prefix=API_PREFIX)
 app.include_router(explore.router, prefix=API_PREFIX)
 # 侧滑"瞄一眼"的紧凑摘要（Demo 页第 3 期）
 app.include_router(peek.router, prefix=API_PREFIX)
@@ -622,6 +619,32 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _ensure_demo_columns()
+    # 旧库可能尚未执行 v2 全模型迁移；这里只补缺失的提示词关联，不动其他实体。
+    # 版本标记（settings 主键）让稳态启动零扫描：完整回填过一次即不再跑；
+    # 无标记的旧库照常执行，多进程并发首启两边都跑也幂等。FTS5 可用时同步建搜索索引。
+    from .services.prompt_library_service import (
+        backfill_missing_prompt_links_once,
+        ensure_prompt_search_index,
+        mark_backfill_done,
+        mark_search_index_ready,
+        search_index_marked,
+        sync_prompt_search_index,
+    )
+
+    with SessionLocal() as prompt_db:
+        index_created = ensure_prompt_search_index(prompt_db)
+        # 标记缺失（升级首启/并发首启窗口）时也重灌一次：提交成功才打标，
+        # 未打标期间所有查询回退 LIKE；稳态（标记在、表在）保持零扫描。
+        fill_needed = index_created or not search_index_marked(prompt_db)
+        linked = backfill_missing_prompt_links_once(prompt_db)
+        if fill_needed:
+            sync_prompt_search_index(prompt_db)
+        prompt_db.commit()
+    mark_backfill_done()
+    if fill_needed:
+        mark_search_index_ready()
+    if linked:
+        logger.info("启动回填：本次补关联 %s 件旧作品的 prompt_id", linked)
     _ensure_tag_columns()
     _ensure_tag_key_columns()
     _ensure_announcement_columns()

@@ -218,6 +218,8 @@ def serialize_demo(
         "rating_god": demo.rating_god,
         "rating_ghost": demo.rating_ghost,
         "prompt": demo.prompt,
+        "gen_rounds": demo.gen_rounds,
+        "gen_minutes": demo.gen_minutes,
         # 策展字段：仅 AdminDemoOut 声明消费，公开 schema 未声明 → pydantic 自动剥离
         "sites": demo.sites,
         "lang": demo.lang,

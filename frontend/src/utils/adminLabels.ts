@@ -59,6 +59,7 @@ export const INBOX_KINDS: Record<string, [string, string]> = {
   task_match: ['挂题请求', 'attach task'],
   new_model: ['新模型', 'new model'],
   new_task: ['新题目', 'new task'],
+  new_prompt: ['新提示词', 'new prompt'],
   merge_model: ['模型合并', 'merge model'],
   merge_task: ['题目合并', 'merge task'],
   alias: ['别名归一', 'alias'],

@@ -8,6 +8,7 @@ export type AdminEntityQuery = { tab: 'entities'; type: 'model' | 'task' | 'tag'
 export type EntityHref =
   | { kind: 'admin'; query: AdminEntityQuery }
   | { kind: 'demo'; slug: string }
+  | { kind: 'prompt'; id: number }
 
 export function adminEntityQuery(type: 'model' | 'task' | 'tag', id: string, key?: string): AdminEntityQuery {
   const q: AdminEntityQuery = { tab: 'entities', type, id }
@@ -54,6 +55,12 @@ export function suggestionEntityHref(s: SuggestionItem): EntityHref | null {
       const ident = str(p.task_id || p.slug) || parseApproveIdent(s.result, 'task')
       return ident ? { kind: 'admin', query: adminEntityQuery('task', ident) } : null
     }
+    case 'new_prompt': {
+      if (s.status !== 'approved') return null
+      const raw = p.prompt_id
+      const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN
+      return Number.isSafeInteger(id) && id > 0 ? { kind: 'prompt', id } : null
+    }
     case 'task_match': {
       const ident = str(p.task_id || p.task_slug || s.ref_id)
       return ident ? { kind: 'admin', query: adminEntityQuery('task', ident) } : null
@@ -78,9 +85,24 @@ export function tagSuggestionEntityQuery(s: Pick<TagSuggestion, 'key' | 'value'>
 
 export function entityHrefTo(h: EntityHref): { path: string; query?: Record<string, string> } {
   if (h.kind === 'demo') return { path: `/demo/${h.slug}` }
+  if (h.kind === 'prompt') return { path: `/prompts/${h.id}` }
   const query: Record<string, string> = { tab: h.query.tab, type: h.query.type, id: h.query.id }
   if (h.query.key) query.key = h.query.key
   return { path: '/admin', query }
+}
+
+/** 投稿来源由作者输入；即使历史记录绕过校验，也只渲染 HTTP(S) 外链。 */
+export function promptSuggestionSource(s: SuggestionItem): string | null {
+  if (s.kind !== 'new_prompt') return null
+  const raw = payloadOf(s).source_url
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  try {
+    const url = new URL(raw.trim())
+    // 新投稿后端已拒绝凭据；这里挡历史/异常 payload 把 user:pass 渲染成可点击链接
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname && !url.username && !url.password ? url.href : null
+  } catch {
+    return null
+  }
 }
 
 /** 写回 tags 时丢掉系统保留键（author / version-of 由服务端重挂） */
