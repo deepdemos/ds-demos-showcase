@@ -1,0 +1,6972 @@
+{
+  "info": {
+    "title": "DS 民间科研成果展示 API",
+    "version": "0.2.0-alpha"
+  },
+  "paths": {
+    "/api/v1": {
+      "get": {
+        "deprecated": false,
+        "operationId": "api_root_api_v1_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": []
+      }
+    },
+    "/api/v1/admin/announcements": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_announcements_api_v1_admin_announcements_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "pinned",
+            "required": false,
+            "schema": "anyOf(boolean,null)"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<AnnouncementOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "announcements"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_announcement_api_v1_admin_announcements_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "AnnouncementUpsert"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "AnnouncementOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "announcements"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/{ann_id}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_announcement_api_v1_admin_announcements__ann_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ann_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "announcements"
+        ]
+      },
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_get_announcement_api_v1_admin_announcements__ann_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ann_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "AnnouncementOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "announcements"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "update_announcement_api_v1_admin_announcements__ann_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ann_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "AnnouncementUpsert"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "AnnouncementOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "announcements"
+        ]
+      }
+    },
+    "/api/v1/admin/attribution": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_attribution_api_v1_admin_attribution_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "AttributeIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/attribution/pending": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_attribution_pending_api_v1_admin_attribution_pending_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit_demos",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "limit_models",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/audit": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_audit_api_v1_admin_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": false,
+            "schema": "anyOf(integer,null)"
+          },
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/demos": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_demos_api_v1_admin_demos_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "anyOf(integer,null)"
+          },
+          {
+            "in": "query",
+            "name": "sites",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<AdminDemoOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/demos/{slug}/curation": {
+      "put": {
+        "deprecated": false,
+        "operationId": "set_demo_curation_api_v1_admin_demos__slug__curation_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "DemoCurationIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/entities/tag/{tag_id}/status": {
+      "put": {
+        "deprecated": false,
+        "operationId": "admin_tag_status_api_v1_admin_entities_tag__tag_id__status_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "TagStatusIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/entities/{entity_type}/{ident}": {
+      "patch": {
+        "deprecated": false,
+        "operationId": "admin_patch_entity_api_v1_admin_entities__entity_type___ident__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_type",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "object"
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/entity-conflicts": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_entity_conflicts_api_v1_admin_entity_conflicts_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/featured": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_featured_api_v1_admin_featured_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_add_featured_api_v1_admin_featured_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "object"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/featured/{demo_id}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_remove_featured_api_v1_admin_featured__demo_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "demo_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/featured/{demo_id}/hero": {
+      "put": {
+        "deprecated": false,
+        "operationId": "admin_set_featured_hero_api_v1_admin_featured__demo_id__hero_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "demo_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/featured/{demo_id}/order": {
+      "put": {
+        "deprecated": false,
+        "operationId": "admin_move_featured_api_v1_admin_featured__demo_id__order_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "demo_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "object"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/inspection": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_inspection_api_v1_admin_inspection_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sample_limit",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/inspection/{check_id}/queue": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_inspection_queue_api_v1_admin_inspection__check_id__queue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "check_id",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "min_confidence",
+            "required": false,
+            "schema": "number"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/knowledge/stats": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_knowledge_stats_api_v1_admin_knowledge_stats_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_models_api_v1_admin_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_create_model_api_v1_admin_models_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "ModelCreate"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models/merge-history": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_merge_history_api_v1_admin_models_merge_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{ident}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_delete_model_api_v1_admin_models__ident__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "admin_update_model_api_v1_admin_models__ident__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ModelUpdate"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{ident}/aliases": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_add_alias_api_v1_admin_models__ident__aliases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "AliasIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{ident}/aliases/{alias}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_remove_alias_api_v1_admin_models__ident__aliases__alias__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alias",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{ident}/merge": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_merge_model_api_v1_admin_models__ident__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "MergeIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{ident}/status": {
+      "put": {
+        "deprecated": false,
+        "operationId": "admin_model_status_api_v1_admin_models__ident__status_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ModelStatusIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{ident}/unmerge": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_unmerge_model_api_v1_admin_models__ident__unmerge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "UnmergeIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/oss-sync": {
+      "post": {
+        "deprecated": false,
+        "operationId": "oss_sync_api_v1_admin_oss_sync_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": "boolean"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/oss-sync-status": {
+      "get": {
+        "deprecated": false,
+        "operationId": "oss_sync_status_api_v1_admin_oss_sync_status_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/prompt-clusters": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_prompt_clusters_api_v1_admin_prompt_clusters_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "exact_min_demos",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "min_score",
+            "required": false,
+            "schema": "number"
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": "boolean"
+          },
+          {
+            "in": "query",
+            "name": "similar_min_demos",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "similar_min_models",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/review": {
+      "get": {
+        "deprecated": false,
+        "operationId": "review_list_api_v1_admin_review_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<AdminDemoOut>"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/review/{slug}": {
+      "post": {
+        "deprecated": false,
+        "operationId": "review_demo_api_v1_admin_review__slug__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ReviewAction"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_settings_api_v1_admin_settings_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "SettingsOut"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "update_settings_api_v1_admin_settings_put",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "SettingsIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "SettingsOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/stats": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_stats_api_v1_admin_stats_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "AdminStatsOut"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/storage-status": {
+      "get": {
+        "deprecated": false,
+        "operationId": "storage_status_api_v1_admin_storage_status_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/suggestions": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_suggestions_api_v1_admin_suggestions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "min_confidence",
+            "required": false,
+            "schema": "anyOf(null,number)"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/suggestions/batch-review": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_batch_review_suggestions_api_v1_admin_suggestions_batch_review_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "BatchReviewIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/suggestions/{sid}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_get_suggestion_api_v1_admin_suggestions__sid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/suggestions/{sid}/review": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_review_suggestion_api_v1_admin_suggestions__sid__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "SuggestionReviewIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/tasks": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_tasks_api_v1_admin_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_create_task_api_v1_admin_tasks_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "TaskCreateIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/tasks/{ident}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_delete_task_api_v1_admin_tasks__ident__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      },
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_task_detail_api_v1_admin_tasks__ident__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "admin_update_task_api_v1_admin_tasks__ident__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "TaskUpdateIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/tasks/{ident}/demos": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_attach_demos_api_v1_admin_tasks__ident__demos_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "AttachDemosIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/tasks/{ident}/demos/slug/{demo_slug}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_detach_demo_by_slug_api_v1_admin_tasks__ident__demos_slug__demo_slug__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "demo_slug",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/tasks/{ident}/demos/{demo_id}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_detach_demo_api_v1_admin_tasks__ident__demos__demo_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "demo_id",
+            "required": true,
+            "schema": "integer"
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/tasks/{ident}/merge": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_merge_task_api_v1_admin_tasks__ident__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "MergeIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/type-demo/preview": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_type_demo_preview_api_v1_admin_type_demo_preview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "min_confidence",
+            "required": false,
+            "schema": "number"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/type-demo/queue": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_type_demo_queue_api_v1_admin_type_demo_queue_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "min_confidence",
+            "required": false,
+            "schema": "number"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin-entities"
+        ]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_users_api_v1_admin_users_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<AdminUserOut>"
+          }
+        },
+        "security": [],
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/announcements": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_announcements_api_v1_announcements_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<AnnouncementOut>"
+          }
+        },
+        "security": [],
+        "tags": [
+          "announcements"
+        ]
+      }
+    },
+    "/api/v1/announcements/{ann_id}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_announcement_api_v1_announcements__ann_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ann_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "AnnouncementOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "announcements"
+        ]
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "deprecated": false,
+        "operationId": "change_password_api_v1_auth_change_password_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "ChangePasswordRequest"
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "deprecated": false,
+        "operationId": "login_api_v1_auth_login_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "LoginRequest"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "AuthResponse"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "deprecated": false,
+        "operationId": "logout_api_v1_auth_logout_post",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "204": {}
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "deprecated": false,
+        "operationId": "me_api_v1_auth_me_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "MeOut"
+          }
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "deprecated": false,
+        "operationId": "update_me_api_v1_auth_me_patch",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "MePatch"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "MeOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me/avatar": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "remove_avatar_api_v1_auth_me_avatar_delete",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "204": {}
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "upload_avatar_api_v1_auth_me_avatar_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": "Body_upload_avatar_api_v1_auth_me_avatar_post"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "deprecated": false,
+        "operationId": "register_api_v1_auth_register_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "RegisterRequest"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "AuthResponse"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/collections/{collection_id}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_collection_api_v1_collections__collection_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "CollectionOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/collections/{collection_id}/items": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_public_collection_items_api_v1_collections__collection_id__items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/comments/{comment_id}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_comment_api_v1_comments__comment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comment_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "410": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "comments"
+        ]
+      }
+    },
+    "/api/v1/demos": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_demos_api_v1_demos_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "author",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "featured",
+            "required": false,
+            "schema": "anyOf(integer,null)"
+          },
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "rounds",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "rs",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": "array<string>"
+          },
+          {
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "Paginated"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_demo_api_v1_demos_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": "Body_create_demo_api_v1_demos_post"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "DemoCreateResult"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/by-tasks": {
+      "get": {
+        "deprecated": false,
+        "operationId": "demos_by_tasks_api_v1_demos_by_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "per_task_limit",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "task_ids",
+            "required": false,
+            "schema": "array<integer>"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<DemoSummaryOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/from-url": {
+      "post": {
+        "deprecated": false,
+        "operationId": "create_demo_from_url_api_v1_demos_from_url_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "DemoFromUrlIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "DemoCreateResult"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_demo_api_v1_demos__slug__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      },
+      "get": {
+        "deprecated": false,
+        "operationId": "get_demo_api_v1_demos__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "DemoDetailOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "update_demo_api_v1_demos__slug__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": "Body_update_demo_api_v1_demos__slug__put"
+          },
+          "required": false
+        },
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/comments": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_comments_api_v1_demos__slug__comments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<CommentOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "comments"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_comment_api_v1_demos__slug__comments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "CommentCreate"
+          },
+          "required": true
+        },
+        "responses": {
+          "410": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "comments"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/download": {
+      "get": {
+        "deprecated": false,
+        "operationId": "download_demo_api_v1_demos__slug__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/meta": {
+      "get": {
+        "deprecated": false,
+        "operationId": "demo_meta_api_v1_demos__slug__meta_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "DemoMetaOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/rating": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "unrate_demo_api_v1_demos__slug__rating_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "RatingOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "ratings"
+        ]
+      },
+      "get": {
+        "deprecated": false,
+        "operationId": "get_rating_api_v1_demos__slug__rating_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "RatingOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "ratings"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "rate_demo_api_v1_demos__slug__rating_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "RatingIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "RatingOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "ratings"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/related": {
+      "get": {
+        "deprecated": false,
+        "operationId": "related_demos_api_v1_demos__slug__related_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<DemoSummaryOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/same-prompt": {
+      "get": {
+        "deprecated": false,
+        "operationId": "same_prompt_demos_api_v1_demos__slug__same_prompt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "SamePromptOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "demos"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/session-logs": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_session_logs_api_v1_demos__slug__session_logs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<SessionLogOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "session-logs"
+        ]
+      }
+    },
+    "/api/v1/demos/{slug}/session-logs/{filename}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_session_log_api_v1_demos__slug__session_logs__filename__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filename",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "session-logs"
+        ]
+      }
+    },
+    "/api/v1/explore": {
+      "get": {
+        "deprecated": false,
+        "operationId": "explore_api_v1_explore_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ExploreOut"
+          }
+        },
+        "security": [],
+        "tags": [
+          "explore"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/replies": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_replies_api_v1_forum_admin_replies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "topic_id",
+            "required": false,
+            "schema": "anyOf(integer,null)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<ForumReplyOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/replies/{rid}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_delete_reply_api_v1_forum_admin_replies__rid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/replies/{rid}/review": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_review_reply_api_v1_forum_admin_replies__rid__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ForumReviewIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "ForumReplyOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/reports": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_reports_api_v1_forum_admin_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<ForumReportOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/reports/{rid}/handle": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_handle_report_api_v1_forum_admin_reports__rid__handle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ForumReportHandleIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "ForumReportOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/topics": {
+      "get": {
+        "deprecated": false,
+        "operationId": "admin_list_topics_api_v1_forum_admin_topics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ForumTopicPage"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/topics/{tid}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "admin_delete_topic_api_v1_forum_admin_topics__tid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "admin_update_topic_api_v1_forum_admin_topics__tid__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ForumTopicAdminUpdate"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "ForumTopicOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/topics/{tid}/review": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_review_topic_api_v1_forum_admin_topics__tid__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ForumReviewIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "ForumTopicOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/admin/users/{uid}/ban": {
+      "post": {
+        "deprecated": false,
+        "operationId": "admin_ban_user_api_v1_forum_admin_users__uid__ban_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/reactions": {
+      "post": {
+        "deprecated": false,
+        "operationId": "toggle_reaction_api_v1_forum_reactions_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "ReactionToggleIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "ReactionToggleOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/reactions/summary": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_reaction_summary_api_v1_forum_reactions_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": true,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "target_type",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ReactionSummary"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/reports": {
+      "post": {
+        "deprecated": false,
+        "operationId": "create_report_api_v1_forum_reports_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "ForumReportIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "ForumReportOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/topics": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_topics_api_v1_forum_topics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "demo",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "followed",
+            "required": false,
+            "schema": "boolean"
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "participated",
+            "required": false,
+            "schema": "boolean"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "sticky",
+            "required": false,
+            "schema": "boolean"
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ForumTopicPage"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_topic_api_v1_forum_topics_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "ForumTopicIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "ForumTopicOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/topics/{tid}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_topic_api_v1_forum_topics__tid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ForumTopicOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/forum/topics/{tid}/replies": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_replies_api_v1_forum_topics__tid__replies_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ForumReplyPage"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_reply_api_v1_forum_topics__tid__replies_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "ForumReplyIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "ForumReplyOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "forum"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "deprecated": false,
+        "operationId": "health_api_v1_health_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": []
+      }
+    },
+    "/api/v1/leaderboard": {
+      "get": {
+        "deprecated": false,
+        "operationId": "leaderboard_api_v1_leaderboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "Paginated"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "ratings"
+        ]
+      }
+    },
+    "/api/v1/me/collections": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_my_collections_api_v1_me_collections_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_collection_api_v1_me_collections_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "CollectionCreateIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "CollectionOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/me/collections/{collection_id}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_collection_api_v1_me_collections__collection_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      },
+      "patch": {
+        "deprecated": false,
+        "operationId": "update_collection_api_v1_me_collections__collection_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "CollectionUpdateIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "CollectionOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/me/collections/{collection_id}/items": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_collection_items_api_v1_me_collections__collection_id__items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "add_item_api_v1_me_collections__collection_id__items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "CollectionItemIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/me/collections/{collection_id}/items/{slug}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "remove_item_api_v1_me_collections__collection_id__items__slug__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": "integer"
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/me/favorites/status": {
+      "get": {
+        "deprecated": false,
+        "operationId": "favorite_status_api_v1_me_favorites_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "FavoriteStatus"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/me/favorites/toggle": {
+      "post": {
+        "deprecated": false,
+        "operationId": "toggle_favorite_api_v1_me_favorites_toggle_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "FavoriteToggleIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "FavoriteStatus"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/me/history": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "clear_history_api_v1_me_history_delete",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "204": {}
+        },
+        "security": [],
+        "tags": [
+          "history"
+        ]
+      },
+      "get": {
+        "deprecated": false,
+        "operationId": "list_history_api_v1_me_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "HistoryPage"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "history"
+        ]
+      }
+    },
+    "/api/v1/me/history/{slug}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_history_item_api_v1_me_history__slug__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "history"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "record_view_api_v1_me_history__slug__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "history"
+        ]
+      }
+    },
+    "/api/v1/meta/agent-guide": {
+      "get": {
+        "deprecated": false,
+        "operationId": "agent_guide_api_v1_meta_agent_guide_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "text/plain": "string"
+          }
+        },
+        "security": [],
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/meta/site-info": {
+      "get": {
+        "deprecated": false,
+        "operationId": "site_info_api_v1_meta_site_info_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_models_api_v1_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "vendor",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ModelListOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/models/{slug}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "model_detail_api_v1_models__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "ModelDetailOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/models/{slug}/demos": {
+      "get": {
+        "deprecated": false,
+        "operationId": "model_demos_api_v1_models__slug__demos_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "game",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "Paginated"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_notifications_api_v1_notifications_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "unread_only",
+            "required": false,
+            "schema": "boolean"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<NotificationOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/read": {
+      "post": {
+        "deprecated": false,
+        "operationId": "mark_read_api_v1_notifications_read_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "NotificationReadIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "NotificationOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "deprecated": false,
+        "operationId": "mark_all_read_api_v1_notifications_read_all_post",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "204": {}
+        },
+        "security": [],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "deprecated": false,
+        "operationId": "unread_count_api_v1_notifications_unread_count_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "UnreadCountOut"
+          }
+        },
+        "security": [],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/peek/{kind}/{ident}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "peek_api_v1_peek__kind___ident__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "peek"
+        ]
+      }
+    },
+    "/api/v1/prompts": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_prompts_api_v1_prompts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "has_results",
+            "required": false,
+            "schema": "anyOf(boolean,null)"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "PromptListOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "prompts"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "propose_prompt_api_v1_prompts_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "PromptProposalIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "application/json": "PromptProposalOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/v1/prompts/{prompt_id}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "prompt_detail_api_v1_prompts__prompt_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prompt_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "PromptSummaryOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/v1/prompts/{prompt_id}/demos": {
+      "get": {
+        "deprecated": false,
+        "operationId": "prompt_demos_api_v1_prompts__prompt_id__demos_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prompt_id",
+            "required": true,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "Paginated"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/v1/stats/heartbeat": {
+      "post": {
+        "deprecated": false,
+        "operationId": "stats_heartbeat_api_v1_stats_heartbeat_post",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "object"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/stats/live": {
+      "get": {
+        "deprecated": false,
+        "operationId": "stats_live_api_v1_stats_live_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "object"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/stats/recognition": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_recognition_api_v1_stats_recognition_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "object"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_recognition_api_v1_stats_recognition_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "RecognitionIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "object"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/stats/recognition/{rid}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_recognition_api_v1_stats_recognition__rid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "update_recognition_api_v1_stats_recognition__rid__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "RecognitionIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "object"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/stats/sponsors": {
+      "get": {
+        "deprecated": false,
+        "operationId": "stats_sponsors_api_v1_stats_sponsors_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "object"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/stats/thanks": {
+      "get": {
+        "deprecated": false,
+        "operationId": "stats_thanks_api_v1_stats_thanks_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "object"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/stats/visit": {
+      "post": {
+        "deprecated": false,
+        "operationId": "stats_visit_api_v1_stats_visit_post",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "object"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/stats/visits": {
+      "get": {
+        "deprecated": false,
+        "operationId": "stats_visits_api_v1_stats_visits_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "object"
+          }
+        },
+        "security": [],
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/tags": {
+      "post": {
+        "deprecated": false,
+        "operationId": "create_tag_api_v1_tags_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "TagCreate"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "TagOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/ai-suggest": {
+      "post": {
+        "deprecated": false,
+        "operationId": "ai_suggest_api_v1_tags_admin_ai_suggest_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "AiSuggestIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/fetch-models": {
+      "post": {
+        "deprecated": false,
+        "operationId": "fetch_models_api_v1_tags_admin_fetch_models_post",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/groups": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_groups_api_v1_tags_admin_groups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/groups/{key}/{group}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "clear_group_api_v1_tags_admin_groups__key___group__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "rename_group_api_v1_tags_admin_groups__key___group__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "TagGroupRename"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/merge": {
+      "post": {
+        "deprecated": false,
+        "operationId": "merge_tags_api_v1_tags_admin_merge_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "TagMergeIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "TagMergeResult"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/suggestions": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_suggestions_api_v1_tags_admin_suggestions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<TagValueSuggestionOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/suggestions/{sid}/review": {
+      "post": {
+        "deprecated": false,
+        "operationId": "review_suggestion_api_v1_tags_admin_suggestions__sid__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "TagSuggestionReview"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "TagValueSuggestionOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/sync-models": {
+      "post": {
+        "deprecated": false,
+        "operationId": "sync_models_api_v1_tags_admin_sync_models_post",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/tag-keys": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_tag_keys_admin_api_v1_tags_admin_tag_keys_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<TagKeyOut>"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "create_tag_key_api_v1_tags_admin_tag_keys_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "TagKeyUpsert"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "TagKeyOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/tag-keys/{key}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_tag_key_api_v1_tags_admin_tag_keys__key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      },
+      "put": {
+        "deprecated": false,
+        "operationId": "update_tag_key_api_v1_tags_admin_tag_keys__key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "TagKeyUpdate"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "TagKeyOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/tag-keys/{key}/values/{value}": {
+      "delete": {
+        "deprecated": false,
+        "operationId": "delete_tag_value_api_v1_tags_admin_tag_keys__key__values__value__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "value",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "204": {},
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/admin/values/{tag_id}/group": {
+      "put": {
+        "deprecated": false,
+        "operationId": "set_value_group_api_v1_tags_admin_values__tag_id__group_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "TagValueGroupSet"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "TagOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/derive": {
+      "post": {
+        "deprecated": false,
+        "operationId": "derive_tags_api_v1_tags_derive_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "DeriveIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "DeriveOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/suggestions": {
+      "post": {
+        "deprecated": false,
+        "operationId": "create_suggestion_api_v1_tags_suggestions_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "TagValueSuggestionIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "application/json": "TagValueSuggestionOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/tag-keys": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_tag_keys_api_v1_tags_tag_keys_get",
+        "parameters": [],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<TagKeyOut>"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tags/{key_value}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_tag_api_v1_tags__key_value__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_value",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "TagDetail"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/tasks": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_tasks_api_v1_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": "anyOf(null,string)"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "TaskListOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tasks"
+        ]
+      },
+      "post": {
+        "deprecated": false,
+        "operationId": "propose_task_api_v1_tasks_post",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": "TaskProposalIn"
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "application/json": "TaskProposalOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/suggest": {
+      "get": {
+        "deprecated": false,
+        "operationId": "suggest_tasks_api_v1_tasks_suggest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<TaskSuggestItemOut>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{slug}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "task_detail_api_v1_tasks__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "TaskDetailOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/users/leaderboard": {
+      "get": {
+        "deprecated": false,
+        "operationId": "user_leaderboard_api_v1_users_leaderboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": "integer"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "UserLeaderboardPage"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "patch": {
+        "deprecated": false,
+        "operationId": "patch_user_api_v1_users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": "UserPatch"
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "application/json": "UserPublic"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/follow": {
+      "post": {
+        "deprecated": false,
+        "operationId": "toggle_follow_api_v1_users__user_id__follow_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": "integer"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "FollowOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{username}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_user_api_v1_users__username__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "UserPublic"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{username}/collections": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_public_collections_api_v1_users__username__collections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/users/{username}/followers": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_followers_api_v1_users__username__followers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<UserPublic>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{username}/following": {
+      "get": {
+        "deprecated": false,
+        "operationId": "list_following_api_v1_users__username__following_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "array<UserPublic>"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{username}/profile": {
+      "get": {
+        "deprecated": false,
+        "operationId": "get_user_profile_api_v1_users__username__profile_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "UserProfileOut"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/media/{path}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "media_file_media__path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": []
+      }
+    },
+    "/preview/{slug}/v{version}/{path}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "preview_file_versioned_preview__slug__v_version___path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": []
+      }
+    },
+    "/preview/{slug}/{path}": {
+      "get": {
+        "deprecated": false,
+        "operationId": "preview_file_preview__slug___path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": "string"
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": "string"
+          }
+        ],
+        "requestBody": null,
+        "responses": {
+          "200": {
+            "application/json": "unknown"
+          },
+          "422": {
+            "application/json": "HTTPValidationError"
+          }
+        },
+        "security": [],
+        "tags": []
+      }
+    }
+  },
+  "schemas": {
+    "AdminDemoOut": {
+      "properties": {
+        "author": "anyOf(null,string)",
+        "author_id": "anyOf(integer,null)",
+        "comment_count": "integer",
+        "cover_url": "string",
+        "created_at": "string",
+        "demo_type": "string",
+        "description": "string",
+        "download_count": "integer",
+        "external_url": "anyOf(null,string)",
+        "file_size": "anyOf(integer,null)",
+        "gen_minutes": "anyOf(integer,null)",
+        "gen_rounds": "anyOf(integer,null)",
+        "inconsistency": "boolean",
+        "is_author": "boolean",
+        "lang": "string",
+        "model_hint": "string",
+        "models": "array<DemoModelBriefOut>",
+        "preview_url": "string",
+        "prompt": "string",
+        "rating_avg": "number",
+        "rating_count": "integer",
+        "rating_ghost": "integer",
+        "rating_god": "integer",
+        "session_log_count": "integer",
+        "single_file": "anyOf(null,string)",
+        "sites": "string",
+        "slug": "string",
+        "status": "string",
+        "storage_size": "anyOf(integer,null)",
+        "tags": "array<TagRef>",
+        "tasks": "array<DemoTaskBriefOut>",
+        "timeline": "array<DemoTimelineOut>",
+        "title": "string",
+        "updated_at": "string",
+        "video_url": "anyOf(null,string)",
+        "view_count": "integer"
+      },
+      "required": [
+        "author",
+        "author_id",
+        "comment_count",
+        "cover_url",
+        "created_at",
+        "description",
+        "download_count",
+        "slug",
+        "status",
+        "tags",
+        "title",
+        "updated_at",
+        "view_count"
+      ]
+    },
+    "AdminStatsOut": {
+      "properties": {
+        "demos": "DemoCounts",
+        "storage": "StorageStatusOut",
+        "users": "integer"
+      },
+      "required": [
+        "demos",
+        "storage",
+        "users"
+      ]
+    },
+    "AdminUserOut": {
+      "properties": {
+        "avatar_url": "string",
+        "bio": "string",
+        "created_at": "string",
+        "demo_count": "integer",
+        "display_name": "string",
+        "id": "integer",
+        "role": "string",
+        "status": "string",
+        "username": "string"
+      },
+      "required": [
+        "bio",
+        "created_at",
+        "id",
+        "role",
+        "status",
+        "username"
+      ]
+    },
+    "AiSuggestIn": {
+      "properties": {
+        "demo_id": "anyOf(integer,null)",
+        "text": "string"
+      },
+      "required": []
+    },
+    "AliasIn": {
+      "properties": {
+        "alias": "string"
+      },
+      "required": [
+        "alias"
+      ]
+    },
+    "AnnouncementOut": {
+      "properties": {
+        "category": "string",
+        "content": "string",
+        "created_at": "string",
+        "created_by": "anyOf(integer,null)",
+        "demo_slug": "anyOf(null,string)",
+        "expires_at": "anyOf(null,string)",
+        "id": "integer",
+        "pinned": "boolean",
+        "published_at": "anyOf(null,string)",
+        "status": "string",
+        "title": "string",
+        "topic_id": "anyOf(integer,null)",
+        "topic_title": "anyOf(null,string)",
+        "type": "string"
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "title",
+        "type"
+      ]
+    },
+    "AnnouncementUpsert": {
+      "properties": {
+        "category": "string",
+        "content": "string",
+        "demo_slug": "anyOf(null,string)",
+        "expires_at": "anyOf(null,string)",
+        "pinned": "boolean",
+        "published_at": "anyOf(null,string)",
+        "status": "string",
+        "title": "string",
+        "topic_id": "anyOf(integer,null)"
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "AttachDemosIn": {
+      "properties": {
+        "demo_ids": "array<integer>",
+        "demo_slugs": "array<string>"
+      },
+      "required": []
+    },
+    "AttributeIn": {
+      "properties": {
+        "demo_ids": "array<integer>",
+        "reason": "string",
+        "target_id": "integer"
+      },
+      "required": [
+        "demo_ids",
+        "target_id"
+      ]
+    },
+    "AuthResponse": {
+      "properties": {
+        "access_token": "string",
+        "user": "UserOut"
+      },
+      "required": [
+        "access_token",
+        "user"
+      ]
+    },
+    "BatchReviewIn": {
+      "properties": {
+        "action": "string",
+        "ids": "array<integer>"
+      },
+      "required": [
+        "action",
+        "ids"
+      ]
+    },
+    "Body_create_demo_api_v1_demos_post": {
+      "properties": {
+        "cover": "anyOf(null,string)",
+        "demo_type": "string",
+        "description": "string",
+        "external_url": "anyOf(null,string)",
+        "file": "anyOf(null,string)",
+        "force": "boolean",
+        "idempotency_key": "anyOf(null,string)",
+        "model_hint": "anyOf(null,string)",
+        "prompt": "anyOf(null,string)",
+        "propose_task": "anyOf(null,string)",
+        "tags": "anyOf(null,string)",
+        "task": "anyOf(null,string)",
+        "title": "string",
+        "upload_code": "anyOf(null,string)",
+        "video_url": "anyOf(null,string)"
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "Body_update_demo_api_v1_demos__slug__put": {
+      "properties": {
+        "commit_message": "anyOf(null,string)",
+        "cover": "anyOf(null,string)",
+        "demo_type": "anyOf(null,string)",
+        "description": "anyOf(null,string)",
+        "external_url": "anyOf(null,string)",
+        "file": "anyOf(null,string)",
+        "force": "boolean",
+        "keep_old_version": "boolean",
+        "prompt": "anyOf(null,string)",
+        "tags": "anyOf(null,string)",
+        "title": "anyOf(null,string)",
+        "video_url": "anyOf(null,string)"
+      },
+      "required": []
+    },
+    "Body_upload_avatar_api_v1_auth_me_avatar_post": {
+      "properties": {
+        "file": "string"
+      },
+      "required": [
+        "file"
+      ]
+    },
+    "ChangePasswordRequest": {
+      "properties": {
+        "new_password": "string",
+        "old_password": "string"
+      },
+      "required": [
+        "new_password",
+        "old_password"
+      ]
+    },
+    "CollectionCreateIn": {
+      "properties": {
+        "description": "string",
+        "title": "string",
+        "visibility": "string"
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "CollectionItemIn": {
+      "properties": {
+        "slug": "string"
+      },
+      "required": [
+        "slug"
+      ]
+    },
+    "CollectionOut": {
+      "properties": {
+        "cover_urls": "array<string>",
+        "description": "string",
+        "id": "integer",
+        "is_default": "boolean",
+        "item_count": "integer",
+        "owner_username": "string",
+        "title": "string",
+        "updated_at": "string",
+        "visibility": "string"
+      },
+      "required": [
+        "id",
+        "owner_username",
+        "title",
+        "updated_at"
+      ]
+    },
+    "CollectionUpdateIn": {
+      "properties": {
+        "description": "anyOf(null,string)",
+        "title": "anyOf(null,string)",
+        "visibility": "anyOf(null,string)"
+      },
+      "required": []
+    },
+    "CommentCreate": {
+      "properties": {
+        "content": "string",
+        "parent_id": "anyOf(integer,null)"
+      },
+      "required": [
+        "content"
+      ]
+    },
+    "CommentOut": {
+      "properties": {
+        "children": "array<CommentOut>",
+        "content": "string",
+        "created_at": "string",
+        "demo_id": "integer",
+        "id": "integer",
+        "parent_id": "anyOf(integer,null)",
+        "user_id": "anyOf(integer,null)",
+        "username": "anyOf(null,string)"
+      },
+      "required": [
+        "content",
+        "created_at",
+        "demo_id",
+        "id",
+        "parent_id",
+        "user_id",
+        "username"
+      ]
+    },
+    "CompareBestDemoOut": {
+      "properties": {
+        "rating_avg": "number",
+        "slug": "string",
+        "title": "string"
+      },
+      "required": [
+        "slug",
+        "title"
+      ]
+    },
+    "CompareRowOut": {
+      "properties": {
+        "avg_minutes": "anyOf(null,number)",
+        "avg_rating": "anyOf(null,number)",
+        "avg_rounds": "anyOf(null,number)",
+        "best_demo": "anyOf(CompareBestDemoOut,null)",
+        "demo_count": "integer",
+        "model": "ModelBriefOut"
+      },
+      "required": [
+        "model"
+      ]
+    },
+    "DemoCounts": {
+      "properties": {
+        "approved": "integer",
+        "pending": "integer",
+        "rejected": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "approved",
+        "pending",
+        "rejected",
+        "total"
+      ]
+    },
+    "DemoCreateResult": {
+      "properties": {
+        "created": "boolean",
+        "id": "integer",
+        "slug": "string",
+        "status": "string"
+      },
+      "required": [
+        "id",
+        "slug",
+        "status"
+      ]
+    },
+    "DemoCurationIn": {
+      "properties": {
+        "lang": "anyOf(enum(en|zh),null)",
+        "sites": "anyOf(array<enum(astra|deep)>,null)"
+      },
+      "required": []
+    },
+    "DemoDetailOut": {
+      "properties": {
+        "author": "anyOf(null,string)",
+        "author_id": "anyOf(integer,null)",
+        "comment_count": "integer",
+        "cover_url": "string",
+        "created_at": "string",
+        "demo_type": "string",
+        "description": "string",
+        "download_count": "integer",
+        "external_url": "anyOf(null,string)",
+        "file_size": "anyOf(integer,null)",
+        "gen_minutes": "anyOf(integer,null)",
+        "gen_rounds": "anyOf(integer,null)",
+        "inconsistency": "boolean",
+        "is_author": "boolean",
+        "model_hint": "string",
+        "models": "array<DemoModelBriefOut>",
+        "preview_url": "string",
+        "prompt": "string",
+        "rating_avg": "number",
+        "rating_count": "integer",
+        "rating_ghost": "integer",
+        "rating_god": "integer",
+        "session_log_count": "integer",
+        "single_file": "anyOf(null,string)",
+        "slug": "string",
+        "status": "string",
+        "storage_size": "anyOf(integer,null)",
+        "tags": "array<TagRef>",
+        "tasks": "array<DemoTaskBriefOut>",
+        "timeline": "array<DemoTimelineOut>",
+        "title": "string",
+        "updated_at": "string",
+        "video_url": "anyOf(null,string)",
+        "view_count": "integer"
+      },
+      "required": [
+        "author",
+        "author_id",
+        "comment_count",
+        "cover_url",
+        "created_at",
+        "description",
+        "download_count",
+        "slug",
+        "status",
+        "tags",
+        "title",
+        "updated_at",
+        "view_count"
+      ]
+    },
+    "DemoFromUrlIn": {
+      "properties": {
+        "cover_url": "anyOf(null,string)",
+        "demo_type": "string",
+        "description": "string",
+        "external_url": "anyOf(null,string)",
+        "file_url": "anyOf(null,string)",
+        "force": "boolean",
+        "idempotency_key": "string",
+        "model_hint": "string",
+        "prompt": "string",
+        "tags": "anyOf(array<unknown>,null)",
+        "task": "string",
+        "title": "string",
+        "upload_code": "string",
+        "video_url": "anyOf(null,string)",
+        "zip_url": "anyOf(null,string)"
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "DemoMetaOut": {
+      "properties": {
+        "author": "string",
+        "cover_url": "string",
+        "slug": "string",
+        "title": "string"
+      },
+      "required": [
+        "author",
+        "cover_url",
+        "slug",
+        "title"
+      ]
+    },
+    "DemoModelBriefOut": {
+      "properties": {
+        "id": "integer",
+        "name": "string",
+        "resolution": "string",
+        "slug": "string",
+        "status": "string",
+        "vendor": "anyOf(null,string)"
+      },
+      "required": [
+        "id",
+        "name",
+        "slug"
+      ]
+    },
+    "DemoSummaryOut": {
+      "properties": {
+        "author": "anyOf(null,string)",
+        "author_id": "anyOf(integer,null)",
+        "comment_count": "integer",
+        "cover_url": "string",
+        "created_at": "string",
+        "demo_type": "string",
+        "description": "string",
+        "download_count": "integer",
+        "external_url": "anyOf(null,string)",
+        "gen_minutes": "anyOf(integer,null)",
+        "gen_rounds": "anyOf(integer,null)",
+        "models": "array<DemoModelBriefOut>",
+        "prompt": "string",
+        "rating_avg": "number",
+        "rating_count": "integer",
+        "rating_ghost": "integer",
+        "rating_god": "integer",
+        "slug": "string",
+        "status": "string",
+        "tags": "array<TagRef>",
+        "tasks": "array<DemoTaskBriefOut>",
+        "title": "string",
+        "updated_at": "string",
+        "view_count": "integer"
+      },
+      "required": [
+        "author",
+        "author_id",
+        "comment_count",
+        "cover_url",
+        "created_at",
+        "description",
+        "download_count",
+        "slug",
+        "status",
+        "tags",
+        "title",
+        "updated_at",
+        "view_count"
+      ]
+    },
+    "DemoTaskBriefOut": {
+      "properties": {
+        "id": "integer",
+        "slug": "string",
+        "title": "string"
+      },
+      "required": [
+        "id",
+        "slug",
+        "title"
+      ]
+    },
+    "DemoTimelineOut": {
+      "properties": {
+        "created_at": "string",
+        "id": "integer",
+        "message": "string",
+        "old_slug": "anyOf(null,string)",
+        "version_label": "string"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "message",
+        "version_label"
+      ]
+    },
+    "DeriveIn": {
+      "properties": {
+        "description": "string",
+        "limit": "integer",
+        "prompt": "string",
+        "title": "string"
+      },
+      "required": []
+    },
+    "DeriveItemOut": {
+      "properties": {
+        "confidence": "number",
+        "demo_count": "anyOf(integer,null)",
+        "key": "string",
+        "label": "string",
+        "reason": "string",
+        "value": "string"
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "DeriveOut": {
+      "properties": {
+        "items": "array<DeriveItemOut>",
+        "note": "string"
+      },
+      "required": []
+    },
+    "ExploreGroupOut": {
+      "properties": {
+        "fallback_demos": "integer",
+        "items": "array<ModelSummaryOut>",
+        "total": "integer"
+      },
+      "required": []
+    },
+    "ExploreOut": {
+      "properties": {
+        "models": "ExploreGroupOut",
+        "tags": "object",
+        "tasks": "array<TaskSummaryOut>",
+        "tasks_total": "integer"
+      },
+      "required": [
+        "models"
+      ]
+    },
+    "ExploreTagValuesOut": {
+      "properties": {
+        "demos": "integer",
+        "value": "string"
+      },
+      "required": [
+        "demos",
+        "value"
+      ]
+    },
+    "FavoriteStatus": {
+      "properties": {
+        "collection_ids": "array<integer>",
+        "favorited": "boolean"
+      },
+      "required": [
+        "favorited"
+      ]
+    },
+    "FavoriteToggleIn": {
+      "properties": {
+        "collection_id": "anyOf(integer,null)",
+        "slug": "string"
+      },
+      "required": [
+        "slug"
+      ]
+    },
+    "FollowOut": {
+      "properties": {
+        "followers_count": "integer",
+        "following": "boolean",
+        "following_count": "integer"
+      },
+      "required": [
+        "following"
+      ]
+    },
+    "ForumReplyIn": {
+      "properties": {
+        "content": "string",
+        "parent_id": "anyOf(integer,null)"
+      },
+      "required": [
+        "content"
+      ]
+    },
+    "ForumReplyOut": {
+      "properties": {
+        "author": "anyOf(null,string)",
+        "author_id": "anyOf(integer,null)",
+        "content": "string",
+        "created_at": "string",
+        "id": "integer",
+        "like_count": "integer",
+        "my_reactions": "array<string>",
+        "parent_id": "anyOf(integer,null)",
+        "status": "string",
+        "thanks_count": "integer",
+        "topic_id": "integer",
+        "topic_title": "anyOf(null,string)"
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "topic_id"
+      ]
+    },
+    "ForumReplyPage": {
+      "properties": {
+        "items": "array<ForumReplyOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "ForumReportHandleIn": {
+      "properties": {
+        "action": "string"
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "ForumReportIn": {
+      "properties": {
+        "reason": "string",
+        "target_id": "integer",
+        "target_type": "string"
+      },
+      "required": [
+        "reason",
+        "target_id",
+        "target_type"
+      ]
+    },
+    "ForumReportOut": {
+      "properties": {
+        "created_at": "string",
+        "id": "integer",
+        "reason": "string",
+        "reporter_id": "anyOf(integer,null)",
+        "status": "string",
+        "target_id": "integer",
+        "target_type": "string"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "target_id",
+        "target_type"
+      ]
+    },
+    "ForumReviewIn": {
+      "properties": {
+        "action": "string"
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "ForumTopicAdminUpdate": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "locked": "anyOf(boolean,null)",
+        "pinned": "anyOf(boolean,null)",
+        "solved": "anyOf(boolean,null)",
+        "status": "anyOf(null,string)",
+        "sticky": "anyOf(boolean,null)",
+        "tags": "anyOf(null,string)",
+        "title": "anyOf(null,string)"
+      },
+      "required": []
+    },
+    "ForumTopicIn": {
+      "properties": {
+        "category": "string",
+        "content": "string",
+        "demo_slug": "anyOf(null,string)",
+        "tags": "string",
+        "title": "string"
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "ForumTopicOut": {
+      "properties": {
+        "author": "anyOf(null,string)",
+        "author_id": "anyOf(integer,null)",
+        "category": "string",
+        "content": "string",
+        "created_at": "string",
+        "demo_slug": "anyOf(null,string)",
+        "id": "integer",
+        "like_count": "integer",
+        "locked": "boolean",
+        "my_reactions": "array<string>",
+        "pinned": "boolean",
+        "reply_count": "integer",
+        "solved": "boolean",
+        "status": "string",
+        "sticky": "boolean",
+        "tags": "array<string>",
+        "thanks_count": "integer",
+        "title": "string",
+        "updated_at": "string",
+        "view_count": "integer"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "title",
+        "updated_at"
+      ]
+    },
+    "ForumTopicPage": {
+      "properties": {
+        "items": "array<ForumTopicOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "HTTPValidationError": {
+      "properties": {
+        "detail": "array<ValidationError>"
+      },
+      "required": []
+    },
+    "HistoryItemOut": {
+      "properties": {
+        "demo": "DemoSummaryOut",
+        "viewed_at": "string"
+      },
+      "required": [
+        "demo",
+        "viewed_at"
+      ]
+    },
+    "HistoryPage": {
+      "properties": {
+        "items": "array<HistoryItemOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "LoginRequest": {
+      "properties": {
+        "password": "string",
+        "username": "string"
+      },
+      "required": [
+        "password",
+        "username"
+      ]
+    },
+    "MeOut": {
+      "properties": {
+        "avatar_url": "string",
+        "bio": "string",
+        "created_at": "string",
+        "display_name": "string",
+        "history_enabled": "boolean",
+        "id": "integer",
+        "role": "string",
+        "status": "string",
+        "username": "string"
+      },
+      "required": [
+        "bio",
+        "created_at",
+        "id",
+        "role",
+        "status",
+        "username"
+      ]
+    },
+    "MePatch": {
+      "properties": {
+        "bio": "anyOf(null,string)",
+        "display_name": "anyOf(null,string)",
+        "history_enabled": "anyOf(boolean,null)"
+      },
+      "required": []
+    },
+    "MergeIn": {
+      "properties": {
+        "dry_run": "boolean",
+        "reason": "string",
+        "target_id": "integer"
+      },
+      "required": [
+        "target_id"
+      ]
+    },
+    "ModelBriefOut": {
+      "properties": {
+        "id": "integer",
+        "name": "string",
+        "slug": "string",
+        "status": "string",
+        "vendor": "anyOf(null,string)"
+      },
+      "required": [
+        "id",
+        "name",
+        "slug"
+      ]
+    },
+    "ModelCreate": {
+      "properties": {
+        "description": "string",
+        "name": "string",
+        "status": "string",
+        "vendor": "anyOf(null,string)"
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "ModelDetailOut": {
+      "properties": {
+        "aliases": "array<string>",
+        "created_at": "string",
+        "demo_count": "integer",
+        "description": "string",
+        "game_dist": "array<ModelTagDistOut>",
+        "id": "integer",
+        "merged_into": "anyOf(integer,null)",
+        "name": "string",
+        "prior": "object",
+        "rating_avg": "anyOf(null,number)",
+        "recent_demos": "array<DemoSummaryOut>",
+        "resolution": "string",
+        "sample_level": "string",
+        "score": "anyOf(null,number)",
+        "slug": "string",
+        "status": "string",
+        "tasks": "array<ModelTaskRefOut>",
+        "type_dist": "array<ModelTagDistOut>",
+        "vendor": "anyOf(null,string)",
+        "votes": "integer"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "name",
+        "slug"
+      ]
+    },
+    "ModelListOut": {
+      "properties": {
+        "items": "array<ModelSummaryOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "ModelStatusIn": {
+      "properties": {
+        "reason": "string",
+        "status": "string"
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "ModelSummaryOut": {
+      "properties": {
+        "created_at": "string",
+        "demo_count": "integer",
+        "description": "string",
+        "id": "integer",
+        "name": "string",
+        "rating_avg": "anyOf(null,number)",
+        "resolution": "string",
+        "sample_level": "string",
+        "score": "anyOf(null,number)",
+        "slug": "string",
+        "status": "string",
+        "vendor": "anyOf(null,string)",
+        "votes": "integer"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "name",
+        "slug"
+      ]
+    },
+    "ModelTagDistOut": {
+      "properties": {
+        "demos": "integer",
+        "value": "string"
+      },
+      "required": [
+        "demos",
+        "value"
+      ]
+    },
+    "ModelTaskRefOut": {
+      "properties": {
+        "demo_count": "integer",
+        "id": "integer",
+        "slug": "string",
+        "title": "string"
+      },
+      "required": [
+        "id",
+        "slug",
+        "title"
+      ]
+    },
+    "ModelUpdate": {
+      "properties": {
+        "description": "anyOf(null,string)",
+        "name": "anyOf(null,string)",
+        "slug": "anyOf(null,string)",
+        "vendor": "anyOf(null,string)"
+      },
+      "required": []
+    },
+    "NotificationOut": {
+      "properties": {
+        "actor": "anyOf(null,string)",
+        "actor_id": "anyOf(integer,null)",
+        "created_at": "string",
+        "demo_slug": "anyOf(null,string)",
+        "id": "integer",
+        "read": "boolean",
+        "reply_id": "anyOf(integer,null)",
+        "topic_id": "anyOf(integer,null)",
+        "type": "string"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "type"
+      ]
+    },
+    "NotificationReadIn": {
+      "properties": {
+        "id": "integer"
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "Paginated": {
+      "properties": {
+        "items": "array<DemoSummaryOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "random_seed": "anyOf(null,string)",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "PromptListItemOut": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "content_excerpt": "string",
+        "content_truncated": "boolean",
+        "created_at": "string",
+        "demos_total": "integer",
+        "id": "integer",
+        "models_total": "integer",
+        "source": "enum(contributed|demo)",
+        "source_url": "anyOf(null,string)",
+        "title": "string"
+      },
+      "required": [
+        "content_excerpt",
+        "content_truncated",
+        "created_at",
+        "demos_total",
+        "id",
+        "models_total",
+        "source",
+        "title"
+      ]
+    },
+    "PromptListOut": {
+      "properties": {
+        "items": "array<PromptListItemOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "PromptProposalIn": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "content": "string",
+        "source_url": "anyOf(null,string)",
+        "title": "string"
+      },
+      "required": [
+        "content",
+        "title"
+      ]
+    },
+    "PromptProposalOut": {
+      "properties": {
+        "prompt_id": "anyOf(integer,null)",
+        "status": "enum(existing|pending)",
+        "suggestion_id": "anyOf(integer,null)"
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "PromptSummaryOut": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "content": "string",
+        "content_excerpt": "string",
+        "content_truncated": "boolean",
+        "created_at": "string",
+        "demos_total": "integer",
+        "id": "integer",
+        "models_total": "integer",
+        "source": "enum(contributed|demo)",
+        "source_url": "anyOf(null,string)",
+        "title": "string"
+      },
+      "required": [
+        "content",
+        "content_excerpt",
+        "content_truncated",
+        "created_at",
+        "demos_total",
+        "id",
+        "models_total",
+        "source",
+        "title"
+      ]
+    },
+    "RatingIn": {
+      "properties": {
+        "device_id": "string",
+        "score": "integer"
+      },
+      "required": [
+        "score"
+      ]
+    },
+    "RatingOut": {
+      "properties": {
+        "avg": "number",
+        "count": "integer",
+        "distribution": "array<object>",
+        "ghost": "integer",
+        "god": "integer",
+        "my_score": "anyOf(integer,null)"
+      },
+      "required": []
+    },
+    "ReactionSummary": {
+      "properties": {
+        "like_count": "integer",
+        "my_reactions": "array<string>",
+        "target_id": "integer",
+        "target_type": "string",
+        "thanks_count": "integer"
+      },
+      "required": [
+        "target_id",
+        "target_type"
+      ]
+    },
+    "ReactionToggleIn": {
+      "properties": {
+        "reaction_type": "string",
+        "target_id": "integer",
+        "target_type": "string"
+      },
+      "required": [
+        "reaction_type",
+        "target_id",
+        "target_type"
+      ]
+    },
+    "ReactionToggleOut": {
+      "properties": {
+        "active": "boolean",
+        "like_count": "integer",
+        "my_reactions": "array<string>",
+        "target_id": "integer",
+        "target_type": "string",
+        "thanks_count": "integer"
+      },
+      "required": [
+        "target_id",
+        "target_type"
+      ]
+    },
+    "RecognitionIn": {
+      "properties": {
+        "active": "boolean",
+        "amount": "anyOf(integer,null)",
+        "kind": "string",
+        "message": "string",
+        "name": "string",
+        "show_amount": "boolean",
+        "sort": "integer"
+      },
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "RegisterRequest": {
+      "properties": {
+        "password": "string",
+        "username": "string"
+      },
+      "required": [
+        "password",
+        "username"
+      ]
+    },
+    "ReviewAction": {
+      "properties": {
+        "action": "string"
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "SamePromptOut": {
+      "properties": {
+        "items": "array<DemoSummaryOut>",
+        "prompt": "string",
+        "prompt_id": "anyOf(integer,null)"
+      },
+      "required": []
+    },
+    "SessionLogOut": {
+      "properties": {
+        "created_at": "string",
+        "file_size": "integer",
+        "filename": "string",
+        "id": "integer"
+      },
+      "required": [
+        "created_at",
+        "file_size",
+        "filename",
+        "id"
+      ]
+    },
+    "SettingsIn": {
+      "properties": {
+        "auto_approve": "anyOf(boolean,null)",
+        "auto_approve_public": "anyOf(boolean,null)",
+        "fun_mode": "anyOf(boolean,null)"
+      },
+      "required": []
+    },
+    "SettingsOut": {
+      "properties": {
+        "auto_approve": "boolean",
+        "auto_approve_public": "boolean",
+        "fun_mode": "anyOf(boolean,null)"
+      },
+      "required": []
+    },
+    "StorageStatusOut": {
+      "properties": {
+        "local_demos": "integer",
+        "local_files": "integer",
+        "local_size_bytes": "integer",
+        "mode": "string",
+        "oss_enabled": "boolean"
+      },
+      "required": [
+        "local_demos",
+        "local_files",
+        "local_size_bytes",
+        "mode",
+        "oss_enabled"
+      ]
+    },
+    "SuggestionReviewIn": {
+      "properties": {
+        "action": "string"
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "TagCreate": {
+      "properties": {
+        "description": "string",
+        "group": "anyOf(null,string)",
+        "key": "string",
+        "parent_id": "anyOf(integer,null)",
+        "value": "string"
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "TagDetail": {
+      "properties": {
+        "child_count": "integer",
+        "children": "array<TagOut>",
+        "demo_count": "integer",
+        "description": "string",
+        "id": "integer",
+        "key": "string",
+        "mode": "string",
+        "parent": "anyOf(TagOut,null)",
+        "parent_id": "anyOf(integer,null)",
+        "status": "string",
+        "value": "string"
+      },
+      "required": [
+        "description",
+        "id",
+        "key",
+        "parent_id",
+        "value"
+      ]
+    },
+    "TagGroupRename": {
+      "properties": {
+        "new_group": "string"
+      },
+      "required": [
+        "new_group"
+      ]
+    },
+    "TagKeyOut": {
+      "properties": {
+        "demo_count": "integer",
+        "description": "string",
+        "key": "string",
+        "label": "string",
+        "max": "anyOf(integer,null)",
+        "min": "anyOf(integer,null)",
+        "mode": "string",
+        "sort": "integer",
+        "tier": "integer",
+        "values": "array<TagKeyValueOut>"
+      },
+      "required": [
+        "description",
+        "key",
+        "label",
+        "mode"
+      ]
+    },
+    "TagKeyUpdate": {
+      "properties": {
+        "description": "string",
+        "label": "string",
+        "mode": "string",
+        "sort": "integer"
+      },
+      "required": [
+        "label",
+        "mode"
+      ]
+    },
+    "TagKeyUpsert": {
+      "properties": {
+        "description": "string",
+        "key": "string",
+        "label": "string",
+        "mode": "string",
+        "sort": "integer"
+      },
+      "required": [
+        "key",
+        "label",
+        "mode"
+      ]
+    },
+    "TagKeyValueOut": {
+      "properties": {
+        "demo_count": "integer",
+        "description": "string",
+        "group": "anyOf(null,string)",
+        "id": "integer",
+        "status": "string",
+        "value": "string"
+      },
+      "required": [
+        "id",
+        "value"
+      ]
+    },
+    "TagMergeIn": {
+      "properties": {
+        "dry_run": "boolean",
+        "from_key": "string",
+        "from_value": "string",
+        "to_key": "string",
+        "to_value": "string"
+      },
+      "required": [
+        "from_key",
+        "from_value",
+        "to_key",
+        "to_value"
+      ]
+    },
+    "TagMergeResult": {
+      "properties": {
+        "affected_demos": "integer",
+        "deleted_source": "boolean",
+        "dry_run": "boolean",
+        "found": "boolean",
+        "merged": "integer",
+        "removed_dups": "integer"
+      },
+      "required": []
+    },
+    "TagOut": {
+      "properties": {
+        "child_count": "integer",
+        "demo_count": "integer",
+        "description": "string",
+        "id": "integer",
+        "key": "string",
+        "mode": "string",
+        "parent_id": "anyOf(integer,null)",
+        "status": "string",
+        "value": "string"
+      },
+      "required": [
+        "description",
+        "id",
+        "key",
+        "parent_id",
+        "value"
+      ]
+    },
+    "TagRef": {
+      "properties": {
+        "key": "string",
+        "value": "string"
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "TagStatusIn": {
+      "properties": {
+        "reason": "string",
+        "status": "string"
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "TagSuggestionReview": {
+      "properties": {
+        "action": "string",
+        "group": "anyOf(null,string)"
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "TagValueGroupSet": {
+      "properties": {
+        "group": "anyOf(null,string)"
+      },
+      "required": []
+    },
+    "TagValueSuggestionIn": {
+      "properties": {
+        "demo_id": "anyOf(integer,null)",
+        "description": "string",
+        "group": "anyOf(null,string)",
+        "key": "string",
+        "value": "string"
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "TagValueSuggestionOut": {
+      "properties": {
+        "created_at": "string",
+        "demo_id": "anyOf(integer,null)",
+        "description": "string",
+        "group": "anyOf(null,string)",
+        "id": "integer",
+        "key": "string",
+        "status": "string",
+        "value": "string"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "key",
+        "value"
+      ]
+    },
+    "TaskChainOut": {
+      "properties": {
+        "brief": "string",
+        "brief_source": "string",
+        "no_prompt_count": "integer",
+        "prompt_id": "anyOf(integer,null)",
+        "prompt_variants": "integer",
+        "rows": "array<TaskChainRowOut>"
+      },
+      "required": []
+    },
+    "TaskChainRowOut": {
+      "properties": {
+        "cover_url": "string",
+        "demo_type": "string",
+        "minutes": "anyOf(integer,null)",
+        "models": "array<ModelBriefOut>",
+        "prompt_excerpt": "string",
+        "prompt_id": "anyOf(integer,null)",
+        "rating_avg": "anyOf(null,number)",
+        "rating_count": "integer",
+        "rounds": "anyOf(integer,null)",
+        "same_prompt": "anyOf(boolean,null)",
+        "slug": "string",
+        "title": "string"
+      },
+      "required": [
+        "slug",
+        "title"
+      ]
+    },
+    "TaskCreateIn": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "demo_ids": "array<integer>",
+        "demo_slugs": "array<string>",
+        "description": "string",
+        "status": "string",
+        "title": "string"
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "TaskDetailOut": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "chain": "anyOf(TaskChainOut,null)",
+        "compare": "array<CompareRowOut>",
+        "created_at": "string",
+        "demos": "array<DemoSummaryOut>",
+        "demos_total": "integer",
+        "description": "string",
+        "id": "integer",
+        "slug": "string",
+        "status": "string",
+        "title": "string"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "slug",
+        "title"
+      ]
+    },
+    "TaskListOut": {
+      "properties": {
+        "items": "array<TaskSummaryOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "TaskProposalIn": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "description": "string",
+        "title": "string"
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "TaskProposalOut": {
+      "properties": {
+        "duplicate": "boolean",
+        "status": "const(pending)",
+        "suggestion_id": "integer"
+      },
+      "required": [
+        "status",
+        "suggestion_id"
+      ]
+    },
+    "TaskSuggestItemOut": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "demo_count": "integer",
+        "score": "number",
+        "slug": "string",
+        "task_id": "integer",
+        "title": "string"
+      },
+      "required": [
+        "score",
+        "slug",
+        "task_id",
+        "title"
+      ]
+    },
+    "TaskSummaryOut": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "cover_thumb_url": "string",
+        "cover_url": "string",
+        "created_at": "string",
+        "demo_count": "integer",
+        "description": "string",
+        "id": "integer",
+        "prompt_excerpt": "string",
+        "slug": "string",
+        "status": "string",
+        "title": "string"
+      },
+      "required": [
+        "created_at",
+        "id",
+        "slug",
+        "title"
+      ]
+    },
+    "TaskUpdateIn": {
+      "properties": {
+        "category": "anyOf(null,string)",
+        "description": "anyOf(null,string)",
+        "reason": "anyOf(null,string)",
+        "status": "anyOf(null,string)",
+        "title": "anyOf(null,string)"
+      },
+      "required": []
+    },
+    "UnmergeIn": {
+      "properties": {
+        "dry_run": "boolean",
+        "reason": "string"
+      },
+      "required": []
+    },
+    "UnreadCountOut": {
+      "properties": {
+        "count": "integer"
+      },
+      "required": []
+    },
+    "UserLeaderboardOut": {
+      "properties": {
+        "bio": "string",
+        "demo_count": "integer",
+        "follower_count": "integer",
+        "id": "integer",
+        "received_likes": "integer",
+        "received_thanks": "integer",
+        "reply_count": "integer",
+        "reputation": "integer",
+        "topic_count": "integer",
+        "username": "string"
+      },
+      "required": [
+        "id",
+        "username"
+      ]
+    },
+    "UserLeaderboardPage": {
+      "properties": {
+        "items": "array<UserLeaderboardOut>",
+        "page": "integer",
+        "page_size": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "items",
+        "page",
+        "page_size",
+        "total"
+      ]
+    },
+    "UserOut": {
+      "properties": {
+        "avatar_url": "string",
+        "bio": "string",
+        "created_at": "string",
+        "display_name": "string",
+        "id": "integer",
+        "role": "string",
+        "status": "string",
+        "username": "string"
+      },
+      "required": [
+        "bio",
+        "created_at",
+        "id",
+        "role",
+        "status",
+        "username"
+      ]
+    },
+    "UserPatch": {
+      "properties": {
+        "role": "anyOf(null,string)",
+        "status": "anyOf(null,string)"
+      },
+      "required": []
+    },
+    "UserProfileOut": {
+      "properties": {
+        "bio": "string",
+        "created_at": "string",
+        "demo_count": "integer",
+        "follower_count": "integer",
+        "following_count": "integer",
+        "id": "integer",
+        "is_following": "boolean",
+        "is_self": "boolean",
+        "reply_count": "integer",
+        "reputation": "integer",
+        "role": "string",
+        "status": "string",
+        "topic_count": "integer",
+        "username": "string"
+      },
+      "required": [
+        "bio",
+        "created_at",
+        "id",
+        "role",
+        "status",
+        "username"
+      ]
+    },
+    "UserPublic": {
+      "properties": {
+        "avatar_url": "string",
+        "bio": "string",
+        "created_at": "string",
+        "demo_count": "integer",
+        "display_name": "string",
+        "id": "integer",
+        "role": "string",
+        "status": "string",
+        "username": "string"
+      },
+      "required": [
+        "bio",
+        "created_at",
+        "id",
+        "role",
+        "status",
+        "username"
+      ]
+    },
+    "ValidationError": {
+      "properties": {
+        "ctx": "object",
+        "input": "unknown",
+        "loc": "array<anyOf(integer,string)>",
+        "msg": "string",
+        "type": "string"
+      },
+      "required": [
+        "loc",
+        "msg",
+        "type"
+      ]
+    }
+  },
+  "securitySchemes": []
+}

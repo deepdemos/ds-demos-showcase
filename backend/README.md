@@ -46,7 +46,21 @@ app/
 ├── serializers.py   # Demo/Tag 序列化
 ├── routers/         # API 路由
 └── services/        # 存储、OSS、设置
+scripts/             # 维护脚本（不属于运行时）
+└── dump_openapi.py  # 生成/校验 OpenAPI 契约快照
 ```
+
+## API 契约快照
+
+`tests/snapshots/openapi-contract.json` 钉住对外契约面（路径、方法、参数、请求/响应媒体类型、组件模型字段）。
+重构（搬文件、拆路由）必须让 `tests/test_openapi_contract.py` 保持通过。
+
+```bash
+python -m scripts.dump_openapi           # 有意变更契约后重新生成
+python -m scripts.dump_openapi --check   # 只校验（CI 之外的快速检查）
+```
+
+快照是**投影**而非整份 OpenAPI：依赖小版本升级会改变 schema 写法，整份对拍会把升级误报成契约变更。
 
 ## 与前端联调
 
