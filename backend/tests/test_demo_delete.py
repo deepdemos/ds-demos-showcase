@@ -29,7 +29,7 @@ def _mk_demo(db, slug: str, author_id: int) -> Demo:
 
 
 def _mk_user(db, username: str) -> User:
-    from app.security import hash_password
+    from app.domains.identity.security import hash_password
 
     user = User(username=username, password_hash=hash_password("x"), role="user")
     db.add(user)

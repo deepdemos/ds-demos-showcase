@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..client_ip import get_client_ip
 from ..database import get_db
-from ..deps import require_admin
+from ..domains.identity.deps import require_admin
 from ..models import Acknowledgment, User
 from ..schemas import RecognitionIn
 from ..services import ratelimit, visits

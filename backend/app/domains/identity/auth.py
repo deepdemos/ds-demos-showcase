@@ -3,20 +3,20 @@ import asyncio
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from ..client_ip import get_client_ip
-from ..database import get_db
-from ..deps import current_user
-from ..models import User
-from ..config import settings
-from ..schemas import AuthResponse, ChangePasswordRequest, LoginRequest, MeOut, MePatch, RegisterRequest, UserOut
-from ..security import (
+from ...client_ip import get_client_ip
+from ...config import settings
+from ...database import get_db
+from ...models import User
+from ...schemas import AuthResponse, ChangePasswordRequest, LoginRequest, MeOut, MePatch, RegisterRequest, UserOut
+from ...services import ratelimit, storage, storage
+from .deps import current_user
+from .security import (
     clear_auth_cookie,
     create_access_token,
     hash_password,
     set_auth_cookie,
     verify_password,
 )
-from ..services import ratelimit, storage, storage
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -95,7 +95,7 @@ async def upload_avatar(
 
     接收上限与封面一致（settings.max_file_size），不做"图片太大"式的严苛限制。
     """
-    from .demos import _read_limited
+    from ...routers.demos import _read_limited
 
     data = await _read_limited(file, settings.max_file_size, "图片过大（上限 200MB）")
     old = user.avatar_url

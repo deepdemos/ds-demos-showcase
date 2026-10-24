@@ -41,10 +41,10 @@ app/
 ├── database.py      # SQLAlchemy
 ├── models.py        # ORM 模型
 ├── schemas.py       # Pydantic 模型
-├── security.py      # 密码/JWT/Cookie
-├── deps.py          # 当前用户依赖
 ├── serializers.py   # Demo/Tag 序列化
-├── routers/         # API 路由
+├── domains/         # 业务域（按限界上下文分包，域内自带 router）
+│   └── identity/    #   认证凭据、请求用户依赖、账号与公开用户资料
+├── routers/         # 其余域的路由（搬家进行中）
 └── services/        # 存储、OSS、设置
 scripts/             # 维护脚本（不属于运行时）
 └── dump_openapi.py  # 生成/校验 OpenAPI 契约快照

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import current_user, optional_user
+from ..domains.identity.deps import current_user, optional_user
 from ..models import Demo, DemoTask, EntitySuggestion, Task, User
 from ..schemas import TaskDetailOut, TaskListOut, TaskProposalIn, TaskProposalOut, TaskSuggestItemOut
 from ..serializers import preload_demo_relations, serialize_demo

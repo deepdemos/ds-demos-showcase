@@ -1,8 +1,8 @@
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from .database import get_db
-from .models import User
+from ...database import get_db
+from ...models import User
 from .security import decode_access_token, token_from_request
 
 

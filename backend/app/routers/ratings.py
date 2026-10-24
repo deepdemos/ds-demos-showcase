@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..client_ip import get_client_ip
 from ..config import settings
 from ..database import get_db
-from ..deps import optional_user
+from ..domains.identity.deps import optional_user
 from ..models import Demo, DemoRating, User
 from ..schemas import Paginated, RatingIn, RatingOut
 from ..serializers import serialize_demo

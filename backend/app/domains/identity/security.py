@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi import Request
 
-from .config import settings
+from ...config import settings
 
 COOKIE_NAME = "demo_token"
 ALGORITHM = settings.jwt_algorithm

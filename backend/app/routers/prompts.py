@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import current_user
+from ..domains.identity.deps import current_user
 from ..models import EntitySuggestion, Prompt, User
 from ..schemas import Paginated, PromptListOut, PromptProposalIn, PromptProposalOut, PromptSummaryOut
 from ..services import prompt_library_service, ratelimit, suggestion_service

@@ -302,7 +302,7 @@ def test_ratelimit_bounded_keyspace_and_retry_after(client):
 
 def test_login_is_rate_limited(client):
     """登录失败限流（修前可无限次爆破口令）。"""
-    from app.routers.auth import LOGIN_RATE
+    from app.domains.identity.auth import LOGIN_RATE
     from app.services import ratelimit
 
     ratelimit.reset()

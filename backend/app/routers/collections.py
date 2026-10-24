@@ -17,7 +17,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import current_user, optional_user
+from ..domains.identity.deps import current_user, optional_user
 from ..models import Collection, CollectionItem, Demo, User, utcnow
 from ..schemas import (
     CollectionCreateIn,

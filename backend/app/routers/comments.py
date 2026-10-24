@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import current_user
+from ..domains.identity.deps import current_user
 from ..models import Comment, Demo, User
 from ..schemas import CommentCreate, CommentOut
 

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ..config import settings
-from ..deps import optional_user
+from ..domains.identity.deps import optional_user
 from ..models import User
 from ..services import site_info_service
 from ..services.scope import get_scope

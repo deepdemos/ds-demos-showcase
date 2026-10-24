@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..client_ip import get_client_ip
 from ..database import get_db
-from ..deps import optional_user, require_admin
+from ..domains.identity.deps import optional_user, require_admin
 from ..models import Demo, DemoTag, Tag, TagKey, TagValueSuggestion, User
 from ..schemas import (
     AiSuggestIn,

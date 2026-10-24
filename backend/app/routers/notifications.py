@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..deps import current_user
+from ..domains.identity.deps import current_user
 from ..models import Notification, User
 from ..schemas import NotificationOut, NotificationReadIn, UnreadCountOut
 

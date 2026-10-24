@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..client_ip import get_client_ip
 from ..database import get_db
-from ..deps import current_user, optional_user, require_admin
+from ..domains.identity.deps import current_user, optional_user, require_admin
 from ..models import Announcement, Demo, ForumReply, ForumReport, ForumTopic, User, UserFollow
 from ..schemas import (
     ForumReplyIn,

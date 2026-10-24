@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import require_admin
+from ..domains.identity.deps import require_admin
 from ..models import Announcement, Demo, ForumTopic, User
 from ..schemas import AnnouncementOut, AnnouncementUpsert
 from ..services.site_git import list_site_commits

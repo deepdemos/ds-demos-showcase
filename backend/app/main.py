@@ -20,8 +20,9 @@ from .config import settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import AppError
 from .models import ForumTopic, Setting, Tag, TagKey, User
-from .routers import admin, admin_entities, announcements, auth, collections, comments, demos, explore, forum, history, meta, models, notifications, peek, prompts, ratings, sessions, stats, tags, tasks, users
-from .security import hash_password
+from .domains import identity
+from .routers import admin, admin_entities, announcements, collections, comments, demos, explore, forum, history, meta, models, notifications, peek, prompts, ratings, sessions, stats, tags, tasks
+from .domains.identity.security import hash_password
 from .services import oss
 from .services import scope as scope_service
 from .services.settings_service import KEY_AUTO_APPROVE
@@ -114,10 +115,9 @@ async def site_scope(request: Request, call_next):
         scope_service.current_scope.reset(token)
 
 API_PREFIX = "/api/v1"
-app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(identity.router, prefix=API_PREFIX)
 app.include_router(collections.router, prefix=API_PREFIX)
 app.include_router(history.router, prefix=API_PREFIX)
-app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(tags.router, prefix=API_PREFIX)
 app.include_router(demos.router, prefix=API_PREFIX)
 app.include_router(comments.router, prefix=API_PREFIX)

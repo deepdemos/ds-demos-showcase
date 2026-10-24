@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import require_admin
+from ..domains.identity.deps import require_admin
 from ..models import AUDIT_ACTIONS, AUDIT_ENTITY_TYPES, SUGGESTION_KINDS, AuditLog, Demo, DemoModel, DemoTask, EntitySuggestion, Tag, Task, User
 from ..schemas import (
     AliasIn,

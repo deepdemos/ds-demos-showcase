@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..deps import require_admin
+from ..domains.identity.deps import require_admin
 from ..models import Announcement, Demo, User
 from ..schemas import (
     AdminDemoOut,

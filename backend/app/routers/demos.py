@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from ..client_ip import get_client_ip
 from ..config import settings
 from ..database import get_db
-from ..deps import current_user, optional_user
+from ..domains.identity.deps import current_user, optional_user
 from ..models import CollectionItem, DemoView, Announcement, Demo, DemoModel, DemoTask, DemoTimeline, DemoTag, Model, SessionLog, Tag, TagKey, Task, User
 from ..schemas import DemoCreateResult, DemoDetailOut, DemoFromUrlIn, DemoMetaOut, DemoSummaryOut, Paginated, SamePromptOut
 from ..serializers import preload_demo_relations, serialize_demo

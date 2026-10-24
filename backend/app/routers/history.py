@@ -18,7 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import current_user
+from ..domains.identity.deps import current_user
 from ..models import Demo, DemoView, User, utcnow
 from ..schemas import HistoryPage
 from ..serializers import preload_demo_relations, serialize_demo

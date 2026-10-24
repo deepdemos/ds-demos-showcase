@@ -13,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import optional_user
+from ..domains.identity.deps import optional_user
 from ..models import Demo, DemoModel, DemoTask, Model, Task, User
 from ..services import model_service, task_service
 
