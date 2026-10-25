@@ -6,7 +6,7 @@
 
 - 所有改动走 PR，禁止直接 push dev / main / release。
 - 每个 PR 必须关联 issue；没有 issue 不允许合并。
-- 每个 PR 必须经过独立 review；有潜在问题禁止合并。
+- 每个 PR 必须经过独立 review，并在 PR 上留下 review 评论；有潜在问题禁止合并。
 - 一个 PR 只做一类修改；规模过大直接打回拆分。
 - CI 红或发现 bug：先建 issue，再修复，PR 关联该 issue。
 - review 锁：只能经 PR 合并 + required checks + 对话解决 + review 结论；不强制其他 owner approve，作者可在 review 无阻断后自行合并。
@@ -53,7 +53,8 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 ## 4. Review（强制）
 
 - dev / main / release 保留 PR 锁：只能经 PR 合并，required checks + 对话解决必须通过；不强制其他 owner approve。
-- 所有 review 结论必须回复在 PR（gh pr review / gh pr comment；本地查看分支可用 SSH git fetch），不能只在聊天里说“看过了”；作者可在无阻断项后自行合并。
+- 所有 review 结论必须用 gh pr review 提交到 PR（--comment / --request-changes；本地查看分支可用 SSH git fetch），普通 issue comment 不算，不能只在聊天里说“看过了”；作者可在无阻断项后自行合并。
+- CI 的 pr-guard 会检查 PR 上至少有 1 条已提交、body ≥10 字符的 review 评论；不足直接红。
 
 ### 盲审（agent 可派发子 agent）
 
@@ -92,7 +93,7 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 | frontend | format / lint / typecheck / test / build |
 | ui-contract | 控件库、Dev Room、注册名、接线检查 |
 | file-size | 单文件 >500 警告，>800 失败；脚本自检 |
-| pr-guard | issue 关联、单一标题、规模 ≤500 行 / ≤20 文件 |
+| pr-guard | issue 关联、单一标题、规模 ≤500 行 / ≤20 文件、必须存在 review 评论 |
 
 - required checks：backend、frontend、ui-contract、file-size、pr-guard（三个长期分支都启用）。
 - 所有 job 失败时会输出指引，要求先读本文件。
