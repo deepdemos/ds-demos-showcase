@@ -33,4 +33,6 @@ Closes #
 ## Review
 
 - [ ] 已由独立 reviewer 盲审（见 docs/development-workflow.md），并用 `gh pr review` 回复在 PR（CI pr-guard 检查）
+- [ ] review 评论晚于最新 commit；push 后已重新 review
+- [ ] 不确定的问题已 ask 并记录，没有未经确认的假设
 - [ ] 无潜在问题；有则 request changes，禁止合并
