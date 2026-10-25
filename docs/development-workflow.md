@@ -9,7 +9,8 @@
 - 每个 PR 必须经过独立 review；有潜在问题禁止合并。
 - 一个 PR 只做一类修改；规模过大直接打回拆分。
 - CI 红或发现 bug：先建 issue，再修复，PR 关联该 issue。
-- 不允许自我 approve、绕过 CI/ruleset、删除或弱化门禁。
+- review 锁：只能经 PR 合并 + required checks + 对话解决 + review 结论；不强制其他 owner approve，作者可在 review 无阻断后自行合并。
+- 不允许绕过 review 流程、CI/ruleset、删除或弱化门禁。
 
 ## 1. Issue first
 
@@ -51,9 +52,8 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 
 ## 4. Review（强制）
 
-- dev / main / release 都要求至少 1 个 approve（ruleset 强制，不能自我 approve）。
-- gate 文件（scripts/、.github/、docs/development-workflow.md、AGENTS.md）由 CODEOWNERS 保护，需要 code owner 审阅。
-- 所有 review 结论必须回复在 PR（gh pr review / gh pr comment；本地查看分支可用 SSH git fetch），不能只在聊天里说“看过了”。
+- dev / main / release 保留 PR 锁：只能经 PR 合并，required checks + 对话解决必须通过；不强制其他 owner approve。
+- 所有 review 结论必须回复在 PR（gh pr review / gh pr comment；本地查看分支可用 SSH git fetch），不能只在聊天里说“看过了”；作者可在无阻断项后自行合并。
 
 ### 盲审（agent 可派发子 agent）
 
@@ -69,8 +69,8 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 
        gh pr review <PR> --request-changes --body "阻断项：...；建议：..."
 
-   无 approve 权限时用 gh pr review <PR> --comment --body "..."，作者不得据此合并。
-5. 修复后重新盲审；无阻断项才允许有权限的 reviewer 执行 --approve。
+   没有 approve 权限时用 gh pr review <PR> --comment --body "..." 即可，不强制 --approve。
+5. 修复后重新盲审；无阻断项即可合并（作者可自行 squash）。
 
 ### Review 清单
 
@@ -105,8 +105,8 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 
 1. 关联 issue；
 2. CI 全绿（required checks）；
-3. 至少 1 个独立 approve，无 unresolved threads；
-4. review 明确“无阻断项”；
+3. review 结论已回复在 PR，且明确“无阻断项”；
+4. 无 unresolved threads；
 5. 只有一类修改，规模未超限。
 
 ruleset 强制合并方式：dev 只允许 squash；main / release 只允许 merge commit。合并后删临时分支，release 打 tag。

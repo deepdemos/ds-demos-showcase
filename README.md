@@ -44,7 +44,7 @@ cd backend && go test ./...
 ## 开发门禁
 
 - 每个 PR 必须关联 issue；CI 红或发现 bug 先建 issue，再修复。
-- 每个 PR 必须独立 review（至少 1 个 approve）；有潜在问题禁止合并；agent 盲审结果必须回复在 PR。
+- 每个 PR 必须独立 review，结果回复在 PR；有潜在问题禁止合并；无阻断项后作者可自行合并。
 - 一个 PR 只做一类修改；修改 >500 行或 >20 文件会被 `pr-guard` 打回。
 - 单文件 >500 行报告过耦合风险（警告），>800 行失败；完整流程见 [docs/development-workflow.md](docs/development-workflow.md)。
 

@@ -14,8 +14,8 @@
 
 | 分支 | 角色 | 保护 |
 | --- | --- | --- |
-| `dev` | 默认分支 / 集成分支 | 受 ruleset 保护：禁止直接 push、force-push、删除；PR 需 1 人 approve + required checks |
-| `main` | 预发布 / 验收 | 受 ruleset 保护：禁止直接 push、force-push、删除；PR 需 1 人 approve 且对话全部解决 |
+| `dev` | 默认分支 / 集成分支 | 受 ruleset 保护：禁止直接 push、force-push、删除；只能经 PR 合并，required checks + review 无阻断 |
+| `main` | 预发布 / 验收 | 受 ruleset 保护：禁止直接 push、force-push、删除；PR 锁 + required checks + review 无阻断 + 对话全部解决 |
 | `release` | 生产 | 与 `main` 同级保护；只能从 `main` 合入；合入后打 `vX.Y.Z` tag 并部署 |
 
 - 临时分支从 `dev` 切出，命名：`feat/<short-name>`、`fix/<short-name>`、`refactor/<short-name>`、`docs/<short-name>`、`chore/<short-name>`。
@@ -25,7 +25,7 @@
 ## 变更流转（唯一合法路径）
 
 1. `feat/*` → PR → `dev`：**squash merge**；CI 全绿。
-2. `dev` 稳定 → PR → `main`：**merge commit**（保留 dev 历史）；CI 全绿 + 1 人 approve。不得跳过 `main` 直接发 `release`。
+2. `dev` 稳定 → PR → `main`：**merge commit**（保留 dev 历史）；CI 全绿 + review 无阻断。不得跳过 `main` 直接发 `release`。
 3. `main` 验收测试通过 → PR → `release`：**merge commit**；合入后在 `release` 上打版本 tag 并部署。
 4. 紧急修复：从 `release` 切 `hotfix/*` → PR 回 `release`；合入后必须把同一修复回灌到 `main` 和 `dev`（PR 或 cherry-pick），不允许只改 `release`。
 5. 合并方向只能顺流：`feat → dev → main → release`。禁止把 `main` / `release` 反向合并进 `dev`（hotfix 回灌除外）。
@@ -35,7 +35,7 @@
 完整流程见 [docs/development-workflow.md](docs/development-workflow.md)；CI 失败先读该文档。
 
 - 每个 PR 必须关联 issue（`Closes #N` / `Fixes #N` / `Refs #N`）；CI 红或发现 bug 必须先建 issue，再修复。
-- 每个 PR 必须经过独立 review（至少 1 个 approve，不能自我 approve）。agent 可派发子 agent 盲审，review 结果必须用 gh CLI 回复在 PR 上；有潜在问题禁止合并。
+- 每个 PR 必须经过独立 review，review 结果必须用 gh CLI 回复在 PR 上；有潜在问题禁止合并。不强制其他 owner approve，作者可在无阻断项后自行合并。
 - 一个 PR 只做一类修改；修改超过 500 行或 20 个文件会被 `pr-guard` 直接打回。
 - 单文件超过 500 行报告过耦合风险（不红）；超过 800 行 `file-size` 直接失败，必须拆分。
 
@@ -117,6 +117,6 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 
 ## 给 AI agent 的硬性约束
 
-- 不得直接推送 `dev` / `main` / `release`；不得自我 approve；不得修改或绕过分支保护 / ruleset。
+- 不得直接推送 `dev` / `main` / `release`；不得跳过 review/CI 直接合并；不得修改或绕过分支保护 / ruleset。
 - 不得擅自新增依赖、改架构或改已定选型；变更先讨论并同步文档。
 - 收尾必须报告：改了哪些文件、跑了哪些检查、还有什么没验证。
