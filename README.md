@@ -17,7 +17,7 @@ pnpm --dir web dev
 
 ## 后端
 
-需要 Go 1.27.3+。本机已解压在 `D:\Code\tools\go1.27.3\go`，把 `...\go\bin` 加进 PATH 即可。
+需要 Go 1.27.3+。
 
 ```bash
 cd backend
