@@ -1,21 +1,34 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { expect, test } from 'vitest';
-import { controls } from '@/components/ui/registry';
+import { afterEach, expect, test } from 'vitest';
 import { DevRoomPage } from './DevRoomPage';
 
-test('renders every registered control with its stable id', () => {
+afterEach(() => {
+  localStorage.clear();
+  document.documentElement.classList.remove('ring-ui-theme-dark');
+});
+
+test('支持分类筛选、分页与主题切换', () => {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/dev-room']}>
       <DevRoomPage />
     </MemoryRouter>,
   );
 
-  for (const control of controls) {
-    expect(screen.getByRole('heading', { level: 2, name: control.name })).toBeInTheDocument();
+  expect(document.querySelectorAll('[data-control-id]')).toHaveLength(6);
+  expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument();
 
-    const card = document.querySelector(`[data-control-id="${control.id}"]`);
-    expect(card).not.toBeNull();
-    expect(within(card as HTMLElement).getByText(`#${control.id}`)).toBeInTheDocument();
-  }
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+  expect(screen.getByText('第 2 / 2 页')).toBeInTheDocument();
+  expect(document.querySelectorAll('[data-control-id]')).toHaveLength(4);
+
+  fireEvent.click(screen.getByRole('button', { name: '输入' }));
+  expect(screen.getByText('共 3 个控件')).toBeInTheDocument();
+  expect(document.querySelectorAll('[data-control-id]')).toHaveLength(3);
+
+  fireEvent.click(screen.getByRole('button', { name: '切换到深色模式' }));
+  expect(document.documentElement).toHaveClass('ring-ui-theme-dark');
+
+  fireEvent.click(screen.getByRole('button', { name: '切换到浅色模式' }));
+  expect(document.documentElement).not.toHaveClass('ring-ui-theme-dark');
 });
