@@ -1,6 +1,0 @@
-# 强制 sh 脚本用 LF：core.autocrlf=true 的环境下，钩子被转成 CRLF 后
-# sh 会报 "bad interpreter"/命令尾部 \r 错误，钩子直接失效。
-.githooks/* text eol=lf
-*.sh text eol=lf
-
-# 其余文件交给用户/仓库的 autocrlf 设置处理（不在此锁定）。
