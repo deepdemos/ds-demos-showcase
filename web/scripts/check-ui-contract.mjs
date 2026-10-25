@@ -56,7 +56,7 @@ for (const file of sourceFiles) {
   visit(sf);
 }
 
-// 2) 控件库导出清单必须与 Dev Room registry 完全一致，且每个控件有唯一稳定 ID。
+// 2) 控件库导出必须与 registry 对应；一个控件可以注册多种样式；ID 必须唯一且支持 <控件>/<样式>。
 const exported = new Set();
 const indexed = parse(path.join(uiRoot, 'index.ts'));
 indexed.forEachChild((node) => {
@@ -67,9 +67,52 @@ indexed.forEachChild((node) => {
   }
 });
 
-const registered = new Map();
+const registryFile = path.join(uiRoot, 'registry.tsx');
+const registry = parse(registryFile);
+const categories = new Map();
+const registeredComponents = new Set();
 const ids = new Map();
-const registry = parse(path.join(uiRoot, 'registry.tsx'));
+
+// 2.1 读取分类
+registry.forEachChild((node) => {
+  if (!ts.isVariableStatement(node)) return;
+  for (const declaration of node.declarationList.declarations) {
+    let initializer = declaration.initializer;
+    while (
+      initializer &&
+      (ts.isAsExpression(initializer) || ts.isParenthesizedExpression(initializer))
+    ) {
+      initializer = initializer.expression;
+    }
+    if (
+      ts.isIdentifier(declaration.name) &&
+      declaration.name.text === 'controlCategories' &&
+      initializer &&
+      ts.isArrayLiteralExpression(initializer)
+    ) {
+      for (const element of initializer.elements) {
+        if (!ts.isObjectLiteralExpression(element)) continue;
+        const idProperty = element.properties.find(
+          (property) => ts.isPropertyAssignment(property) && property.name.getText() === 'id',
+        );
+        if (
+          idProperty &&
+          ts.isPropertyAssignment(idProperty) &&
+          ts.isStringLiteral(idProperty.initializer)
+        ) {
+          const id = idProperty.initializer.text;
+          categories.set(id, (categories.get(id) ?? 0) + 1);
+          if (!/^[a-z][a-z0-9-]*$/.test(id)) {
+            errors.push(`分类 ID "${id}" 不是 kebab-case`);
+          }
+        }
+      }
+    }
+  }
+});
+if (categories.size === 0) errors.push('registry 缺少 controlCategories 分类定义');
+
+const entries = [];
 const visitRegistry = (node) => {
   if (ts.isObjectLiteralExpression(node)) {
     const props = new Map();
@@ -78,45 +121,77 @@ const visitRegistry = (node) => {
         props.set(property.name.text, property.initializer);
       }
     }
-    const nameValue = props.get('name');
-    const idValue = props.get('id');
-    if (nameValue && ts.isStringLiteral(nameValue)) {
-      const name = nameValue.text;
-      registered.set(name, (registered.get(name) ?? 0) + 1);
-      if (!idValue || !ts.isStringLiteral(idValue) || idValue.text.trim() === '') {
-        errors.push(`控件 ${name} 缺少字符串字面量 id（Dev Room 需要稳定控件 ID）`);
-      } else {
-        const id = idValue.text;
-        if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(id)) {
-          errors.push(`控件 ${name} 的 id "${id}" 不是 kebab-case`);
-        }
-        ids.set(id, (ids.get(id) ?? 0) + 1);
-      }
+    const componentValue = props.get('component');
+    if (componentValue && ts.isStringLiteral(componentValue)) {
+      entries.push({ node, props });
     }
   }
   ts.forEachChild(node, visitRegistry);
 };
 visitRegistry(registry);
 
-for (const name of exported) {
-  if (!registered.has(name)) errors.push(`控件库导出 ${name} 未在 Dev Room registry 登记`);
-}
-for (const [name, count] of registered) {
-  if (!exported.has(name)) errors.push(`Dev Room registry 登记了 ${name}，但控件库未导出`);
-  if (count > 1) errors.push(`Dev Room registry 重复登记了 ${name}`);
-}
-for (const [id, count] of ids) {
-  if (count > 1) errors.push(`Dev Room 控件 ID 重复: ${id}`);
+for (const { node, props } of entries) {
+  const nameValue = props.get('name');
+  const idValue = props.get('id');
+  const componentValue = props.get('component');
+  const categoryValue = props.get('category');
+
+  const name =
+    nameValue && ts.isStringLiteral(nameValue)
+      ? nameValue.text
+      : `(line ${lineOf(registry, node)})`;
+  if (!nameValue || !ts.isStringLiteral(nameValue) || nameValue.text.trim() === '') {
+    errors.push(`控件 ${name} 缺少字符串字面量 name`);
+  }
+  if (!componentValue || !ts.isStringLiteral(componentValue)) {
+    errors.push(`控件 ${name} 缺少字符串字面量 component`);
+    continue;
+  }
+  const component = componentValue.text;
+  registeredComponents.add(component);
+
+  if (!idValue || !ts.isStringLiteral(idValue) || idValue.text.trim() === '') {
+    errors.push(`控件 ${name} 缺少字符串字面量 id`);
+  } else {
+    const id = idValue.text;
+    if (!/^[a-z][a-z0-9-]*(?:\/[a-z0-9-]+)*$/.test(id)) {
+      errors.push(`控件 ${name} 的注册名 "${id}" 不合法（应为 <控件>/<样式> 形式）`);
+    }
+    ids.set(id, (ids.get(id) ?? 0) + 1);
+  }
+
+  if (!categoryValue || !ts.isStringLiteral(categoryValue)) {
+    errors.push(`控件 ${name} 缺少字符串字面量 category`);
+  } else if (!categories.has(categoryValue.text)) {
+    errors.push(`控件 ${name} 的分类 "${categoryValue.text}" 未在 controlCategories 中定义`);
+  }
 }
 
-// Dev Room 必须把 ID 渲染到 DOM（data-control-id），供用户/agent 精确定位。
+for (const name of exported) {
+  if (!registeredComponents.has(name)) {
+    errors.push(`控件库导出 ${name} 未在 Dev Room registry 登记`);
+  }
+}
+for (const component of registeredComponents) {
+  if (!exported.has(component)) {
+    errors.push(`Dev Room registry 引用了未导出的控件 ${component}`);
+  }
+}
+for (const [id, count] of ids) {
+  if (count > 1) errors.push(`Dev Room 控件注册名重复: ${id}`);
+}
+for (const [id, count] of categories) {
+  if (count > 1) errors.push(`分类 ID 重复: ${id}`);
+}
+
+// 3) Dev Room 必须把注册名渲染到 DOM（data-control-id），供用户/agent 精确定位。
 if (
   !/\bdata-control-id\b/.test(fs.readFileSync(path.join(devRoomRoot, 'DevRoomPage.tsx'), 'utf8'))
 ) {
   errors.push('DevRoomPage 没有渲染 data-control-id，Dev Room 控件无法被精确定位');
 }
 
-// 3) Dev Room 之外的控件必须接线（至少一个真实交互属性）。
+// 4) Dev Room 之外的控件必须接线（至少一个真实交互属性）。
 const interactionProps = new Set([
   'onClick',
   'onChange',
@@ -182,5 +257,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `ui-contract ok: ${exported.size} controls, ${ids.size} ids, ${sourceFiles.length} source files`,
+  `ui-contract ok: ${exported.size} components, ${ids.size} registrations, ${categories.size} categories, ${sourceFiles.length} files`,
 );

@@ -1,19 +1,13 @@
-import { useState } from 'react';
 import { Input } from './input';
-import styles from './demo.module.css';
 
-export function InputDemo() {
-  const [value, setValue] = useState('DeepDemos');
+export function InputDefaultDemo() {
+  return <Input placeholder="请输入内容" />;
+}
 
-  return (
-    <div className={styles.stack}>
-      <Input
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        placeholder="Demo 名称"
-      />
-      <Input defaultValue="禁用状态" disabled />
-      <Input defaultValue="错误状态" error="这是一条示例错误" />
-    </div>
-  );
+export function InputErrorDemo() {
+  return <Input defaultValue="错误内容" error="示例错误信息" />;
+}
+
+export function InputDisabledDemo() {
+  return <Input defaultValue="禁用状态" disabled />;
 }

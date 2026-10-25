@@ -1,14 +1,17 @@
 import { Button } from './button';
-import styles from './demo.module.css';
 
-export function ButtonDemo() {
-  return (
-    <div className={styles.row}>
-      <Button>Default</Button>
-      <Button primary>Primary</Button>
-      <Button danger>Danger</Button>
-      <Button disabled>Disabled</Button>
-      <Button loader>Loading</Button>
-    </div>
-  );
+export function ButtonDefaultDemo() {
+  return <Button>默认按钮</Button>;
+}
+
+export function ButtonPrimaryDemo() {
+  return <Button primary>主要按钮</Button>;
+}
+
+export function ButtonDangerDemo() {
+  return <Button danger>危险按钮</Button>;
+}
+
+export function ButtonDisabledDemo() {
+  return <Button disabled>禁用按钮</Button>;
 }

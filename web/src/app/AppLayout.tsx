@@ -8,8 +8,8 @@ export function AppLayout() {
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
-        <span className={styles.brand}>DeepDemos Showcase</span>
-        {import.meta.env.DEV && <Button onClick={() => navigate('/dev-room')}>Dev Room</Button>}
+        <span className={styles.brand}>DeepDemos 展示</span>
+        {import.meta.env.DEV && <Button onClick={() => navigate('/dev-room')}>开发房间</Button>}
       </header>
       <main className={styles.main}>
         <Outlet />
