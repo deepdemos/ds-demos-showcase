@@ -5,10 +5,10 @@
 
 ## 当前状态
 
-- 本仓库正在**完全重构**：后端重写为 Go，前端重写为 React。旧的 Vue 3 + FastAPI 实现只保留在 `main` 历史中，不再维护。
-- `dev` 分支从干净状态开始：目前只有 `LICENSE`（AGPL-3.0-only）和本文件。
-- **技术栈尚未定稿**：已确定 Go 后端、React 18 前端、Ring UI 作为基础控件来源；数据库、Go 框架、API 契约、构建工具等通过 ASK 逐项确认。
-- 技术栈定稿前不写业务代码、不建脚手架、不提交未确认的技术选型文档。
+- 本仓库正在**完全重构**：后端 Go 1.27 + chi，前端 React 18.3 + Ring UI 7。旧的 Vue 3 + FastAPI 实现只保留在 `main` 历史中，不再维护。
+- `dev` 上已有基础脚手架：`backend/`（chi + `/healthz`）、`web/`（Vite 8 + React Router 7 + TanStack Query 5 + Ring UI）、Dev Room 与 `ui-contract` 检查；尚无业务代码。
+- 已定方向：PostgreSQL 18 + sqlc/pgx、OpenAPI 3.1 契约生成、Nginx 静态 + Go API 同域反代、OSS 预签名直传；按里程碑接入。
+- 未经讨论不要改架构、加依赖或跳过上面的接入顺序。
 
 ## 分支模型（三条长期分支）
 
@@ -40,9 +40,10 @@
 
 ### Dev Room
 
-- 控件库中的**每一个控件都必须出现在 Dev Room**（站内开发房间页面，形态在技术栈定稿时确认），并覆盖其全部公开变体/状态（含 disabled/loading/error 等）。
-- 新增或修改控件，必须在同一个 PR 里同步更新 Dev Room 示例；Dev Room 未登记 = 控件不可用。
-- Dev Room 只用于开发和演示；生产环境是否暴露、如何鉴权在脚手架阶段确定。
+- 控件库中的**每一个控件都必须出现在 Dev Room**（站内 `/dev-room`，生产环境不注册该路由），并覆盖其全部公开变体/状态（含 disabled/loading/error 等）。
+- 每个控件必须有稳定的 **控件 ID**（`registry.tsx` 里的 `id`，kebab-case、唯一、不随文案变化）。Dev Room 显示该 ID，并在 DOM 上用 `data-control-id` 暴露；用户与 agent 用这个 ID 指代控件。
+- 新增或修改控件，必须在同一个 PR 里同步更新 Dev Room 示例与 ID；Dev Room 未登记 = 控件不可用。
+- Dev Room 只用于开发和演示。
 
 ### 接线
 
@@ -50,7 +51,7 @@
 - 禁止占位实现：空 `onClick`、`TODO`、仅 `console.log`、只有样式没有行为的按钮，一律不允许合入。
 - 演示用途的未接线控件只允许存在于 Dev Room。
 
-### CI 硬约束（`ui-contract` job，脚手架时落地）
+### CI 硬约束（`ui-contract` job）
 
 CI 必须自动拦截以下情况，不依赖人工 review：
 
@@ -58,12 +59,13 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 2. 控件库导出清单与 Dev Room 登记清单不一致（机读 registry / manifest 比对，任一方向缺失都失败）。
 3. Dev Room 之外存在未接线控件（AST/自定义 lint 规则检查事件处理器、路由跳转或表单绑定；无法判定时按失败处理）。
 4. 新增控件未同时提交 Dev Room 示例。
+5. 控件缺少稳定 ID、ID 重复或 Dev Room 未渲染 `data-control-id`。
 
-在上述检查落地前，前端控件相关 PR 不允许合并。
+以上检查由 CI 的 `ui-contract` job 执行，未通过不允许合并。
 
 ## CI 与合并门槛
 
-- 所有 PR 必须 CI 全绿才能合并；`main` / `release` 的 required checks 在 CI 落地后配置（至少包含 `backend`、`frontend`、`contract`、`ui-contract`）。
+- 所有 PR 必须 CI 全绿才能合并；`main` / `release` 的 required checks 在 CI 落地后配置（当前为 `backend`、`frontend`、`ui-contract`；契约生成接入后加 `contract`）。
 - 不允许以“跳过 CI”的方式合并，包括管理员；CI 自身坏了先修 CI。
 - 新逻辑必须带测试；修 bug 先补能复现的测试。
 - PR 的验证方式必须可复现（命令写进 PR 描述）。
@@ -78,26 +80,26 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 ## 代码规范
 
 - Go：`gofmt` / `goimports` 干净；`golangci-lint run` 零告警；错误用 `%w` 包装上下文；可预期错误不 panic；并发代码必须有 race 测试路径。
-- TypeScript / React 18：`eslint` + `prettier` 干净；`tsc --noEmit` 通过；组件 PascalCase，hooks 以 `use` 开头；服务端状态统一走数据请求库（定稿后明确），不手写缓存层。
-- API 以统一契约为唯一事实源（定稿后明确路径）：先改契约 → 重新生成 → 再改实现；禁止手改生成目录。
+- TypeScript / React 18：`eslint` + `prettier` 干净；`tsc --noEmit` 通过；组件 PascalCase，hooks 以 `use` 开头；服务端状态统一走 TanStack Query 5，不手写缓存层。
+- API 以 `api/openapi.yaml`（OpenAPI 3.1）为唯一事实源：先改契约 → 重新生成 → 再改实现；禁止手改生成目录。
 - 数据库变更只加新 migration，禁止修改已合入的 migration。
 - 依赖：能用标准库 / 现有依赖解决的不加新依赖；新依赖需在 PR 说明理由与体积影响。Ring UI 只允许在控件库内使用。
 - 注释只写代码无法表达的“为什么”，用中文；标识符用英文。
 
 ## 安全红线（不可协商）
 
-- 不提交密钥、token、生产配置；本地配置放 `.env`（脚手架落地时加入 gitignore）。
+- 不提交密钥、token、生产配置；本地配置放 `.env`（已在 `.gitignore`）。
 - 用户上传内容一律视为不可信：限制类型、大小、解压条目数；预览必须放在独立沙箱域名，不继承主站 Cookie，禁止与主站同源渲染。
 - 鉴权、限流、输入校验、SQL 参数化不允许“先跳过，之后补”。
 - 不允许删除或弱化安全相关测试与保护配置。
 
 ## 文档
 
-- 技术栈定稿后，决策记录写入本文件或独立设计文档；定稿前不推送未确认的设计文档。
+- 技术栈决策记录在 README 与本文件；改选型先讨论并同步文档。
 - 架构或流程变化必须同步更新文档。
 
 ## 给 AI agent 的硬性约束
 
 - 不得直接推送 `main` / `release`；不得修改或绕过分支保护 / ruleset。
-- 技术栈未定稿前，不得新增依赖、写脚手架或业务代码，也不得自行替用户拍板未确认的选型。
+- 不得擅自新增依赖、改架构或改已定选型；变更先讨论并同步文档。
 - 收尾必须报告：改了哪些文件、跑了哪些检查、还有什么没验证。

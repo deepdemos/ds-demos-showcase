@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+*.exe
+.DS_Store
+web/test-results/
+web/playwright-report/
+backend/bin/
