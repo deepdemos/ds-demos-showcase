@@ -1,7 +1,7 @@
 # DeepDemos Showcase
 
 DeepDemos 展示站的完全重构：React 前端 + Go 后端。旧 Vue 3 + FastAPI 实现保留在 `main` 历史中。
-许可证：AGPL-3.0-only。协作规则见 [AGENTS.md](AGENTS.md)。
+许可证：AGPL-3.0-only。协作规则见 [AGENTS.md](AGENTS.md)，开发/评审/合并门禁见 [docs/development-workflow.md](docs/development-workflow.md)。
 
 ## 快速开始（前端 / Dev Room）
 
@@ -35,8 +35,18 @@ pnpm --dir web test
 pnpm --dir web build
 pnpm --dir web check:ui
 
+node scripts/check-file-size.mjs
+
 cd backend && go test ./...
+
 ```
+
+## 开发门禁
+
+- 每个 PR 必须关联 issue；CI 红或发现 bug 先建 issue，再修复。
+- 每个 PR 必须独立 review（至少 1 个 approve）；有潜在问题禁止合并；agent 盲审结果必须回复在 PR。
+- 一个 PR 只做一类修改；修改 >500 行或 >20 文件会被 `pr-guard` 打回。
+- 单文件 >500 行报告过耦合风险（警告），>800 行失败；完整流程见 [docs/development-workflow.md](docs/development-workflow.md)。
 
 ## 目录
 
@@ -54,7 +64,11 @@ web/
   src/routes/               页面
   src/styles/               全局样式
   scripts/check-ui-contract.mjs  ui-contract 检查
-.github/workflows/ci.yml    backend / frontend / ui-contract
+docs/development-workflow.md  开发 / 评审 / 合并门禁
+scripts/check-file-size.mjs   单文件行数门禁
+scripts/check-pr.mjs          PR issue / 类型 / 规模门禁
+.github/pull_request_template.md PR 模板
+.github/workflows/ci.yml      backend / frontend / ui-contract / file-size / pr-guard
 ```
 
 ## 控件与 Dev Room 约定
