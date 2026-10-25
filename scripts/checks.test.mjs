@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { classifyLines, countTextLines, listSourceFiles } from './check-file-size.mjs';
 import { validatePullRequest } from './check-pr.mjs';
+import { hasReviewComment } from './check-review.mjs';
 
 test('文件行数阈值：500/501/800/801', () => {
   assert.equal(classifyLines(500), 'ok');
@@ -85,6 +86,14 @@ test('PR 门禁：issue 编号不能为 0', () => {
     changed_files: 1,
   });
   assert.ok(errors.some((error) => error.includes('issue')));
+});
+
+test('review 锁：必须有已提交且非空的 review 评论', () => {
+  assert.equal(hasReviewComment([]), false);
+  assert.equal(hasReviewComment([{ state: 'COMMENTED', body: 'LGTM' }]), false);
+  assert.equal(hasReviewComment([{ state: 'PENDING', body: '这是一条足够长的 review 评论' }]), false);
+  assert.equal(hasReviewComment([{ state: 'COMMENTED', body: '## 审查结论\n无阻断项，建议合并。' }]), true);
+  assert.equal(hasReviewComment([{ state: 'CHANGES_REQUESTED', body: '阻断：需要拆分文件。' }]), true);
 });
 
 test('PR 门禁：代码块里的 issue 关键字不算关联', () => {

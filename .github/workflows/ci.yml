@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -113,6 +114,11 @@ jobs:
           node-version: 24
       - name: PR 门禁（issue / 标题类型 / 修改规模）
         run: node scripts/check-pr.mjs
+      - name: PR 必须有 review 评论
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/check-review.mjs
       - name: 失败处理指引
         if: failure()
         run: echo "::error title=CI 门禁::PR 门禁失败。先读 docs/development-workflow.md：PR 必须关联 issue、单一类型、修改规模不超限；CI 红或发现 bug 必须先建 issue。"

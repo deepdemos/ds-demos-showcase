@@ -35,7 +35,7 @@
 完整流程见 [docs/development-workflow.md](docs/development-workflow.md)；CI 失败先读该文档。
 
 - 每个 PR 必须关联 issue（`Closes #N` / `Fixes #N` / `Refs #N`）；CI 红或发现 bug 必须先建 issue，再修复。
-- 每个 PR 必须经过独立 review，review 结果必须用 gh CLI 回复在 PR 上；有潜在问题禁止合并。不强制其他 owner approve，作者可在无阻断项后自行合并。
+- 每个 PR 必须经过独立 review，review 结果必须用 `gh pr review` 回复在 PR 上（普通 issue comment 不算）；有潜在问题禁止合并。不强制其他 owner approve，作者可在无阻断项后自行合并。CI `pr-guard` 会检查 PR 上存在 review 评论。
 - 一个 PR 只做一类修改；修改超过 500 行或 20 个文件会被 `pr-guard` 直接打回。
 - 单文件超过 500 行报告过耦合风险（不红）；超过 800 行 `file-size` 直接失败，必须拆分。
 
