@@ -35,7 +35,8 @@
 完整流程见 [docs/development-workflow.md](docs/development-workflow.md)；CI 失败先读该文档。
 
 - 每个 PR 必须关联 issue（`Closes #N` / `Fixes #N` / `Refs #N`）；CI 红或发现 bug 必须先建 issue，再修复。
-- 每个 PR 必须经过独立 review，review 结果必须用 `gh pr review` 回复在 PR 上（普通 issue comment 不算）；有潜在问题禁止合并。不强制其他 owner approve，作者可在无阻断项后自行合并。CI `pr-guard` 会检查 PR 上存在 review 评论。
+- 每个 PR 必须经过独立 review，review 结果必须用 `gh pr review` 回复在 PR 上（普通 issue comment 不算）；review 评论必须晚于最新 commit，push 后必须重新 review。有潜在问题禁止合并。不强制其他 owner approve，作者可在无阻断项后自行合并。CI `pr-guard` 会检查该 review 评论。
+- 不确定先 ask：需求、边界、技术选型、数据/安全取舍等任何不确定问题，必须先问用户/负责人，不得自行假设或替用户拍板；review 时也必须检查这一点。
 - 一个 PR 只做一类修改；修改超过 500 行或 20 个文件会被 `pr-guard` 直接打回。
 - 单文件超过 500 行报告过耦合风险（不红）；超过 800 行 `file-size` 直接失败，必须拆分。
 
@@ -118,5 +119,6 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 ## 给 AI agent 的硬性约束
 
 - 不得直接推送 `dev` / `main` / `release`；不得跳过 review/CI 直接合并；不得修改或绕过分支保护 / ruleset。
+- 遇到任何不确定问题必须先 ask（不要自行假设）；review/合并不确定时同样先问。
 - 不得擅自新增依赖、改架构或改已定选型；变更先讨论并同步文档。
 - 收尾必须报告：改了哪些文件、跑了哪些检查、还有什么没验证。

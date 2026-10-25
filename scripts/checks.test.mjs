@@ -88,12 +88,47 @@ test('PR 门禁：issue 编号不能为 0', () => {
   assert.ok(errors.some((error) => error.includes('issue')));
 });
 
-test('review 锁：必须有已提交且非空的 review 评论', () => {
-  assert.equal(hasReviewComment([]), false);
-  assert.equal(hasReviewComment([{ state: 'COMMENTED', body: 'LGTM' }]), false);
-  assert.equal(hasReviewComment([{ state: 'PENDING', body: '这是一条足够长的 review 评论' }]), false);
-  assert.equal(hasReviewComment([{ state: 'COMMENTED', body: '## 审查结论\n无阻断项，建议合并。' }]), true);
-  assert.equal(hasReviewComment([{ state: 'CHANGES_REQUESTED', body: '阻断：需要拆分文件。' }]), true);
+test('review 锁：评论必须提交、非空且晚于最新 commit', () => {
+  const commit = '2026-10-25T10:00:00Z';
+  const longBody = '## 审查结论\n无阻断项，建议合并。';
+  assert.equal(hasReviewComment([], commit), false);
+  assert.equal(hasReviewComment([{ state: 'COMMENTED', body: longBody }], commit), false);
+  assert.equal(
+    hasReviewComment(
+      [{ state: 'COMMENTED', body: longBody, submitted_at: '2026-10-25T09:59:59Z' }],
+      commit,
+    ),
+    false,
+  );
+  assert.equal(
+    hasReviewComment(
+      [{ state: 'COMMENTED', body: longBody, submitted_at: '2026-10-25T10:00:00Z' }],
+      commit,
+    ),
+    false,
+  );
+  assert.equal(
+    hasReviewComment(
+      [{ state: 'COMMENTED', body: longBody, submitted_at: '2026-10-25T10:00:01Z' }],
+      commit,
+    ),
+    true,
+  );
+  assert.equal(
+    hasReviewComment(
+      [{ state: 'PENDING', body: longBody, submitted_at: '2026-10-25T10:00:01Z' }],
+      commit,
+    ),
+    false,
+  );
+  assert.equal(
+    hasReviewComment(
+      [{ state: 'COMMENTED', body: 'LGTM', submitted_at: '2026-10-25T10:00:01Z' }],
+      commit,
+    ),
+    false,
+  );
+  assert.equal(hasReviewComment([{ state: 'COMMENTED', body: longBody }], undefined), false);
 });
 
 test('PR 门禁：代码块里的 issue 关键字不算关联', () => {
