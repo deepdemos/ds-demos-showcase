@@ -6,7 +6,7 @@
 ## 当前状态
 
 - 本仓库正在**完全重构**：后端 Go 1.27 + chi，前端 React 18.3 + Ring UI 7。旧的 Vue 3 + FastAPI 实现只保留在 `main` 历史中，不再维护。
-- `dev` 上已有基础脚手架：`backend/`（chi + `/healthz`）、`web/`（Vite 8 + React Router 7 + TanStack Query 5 + Ring UI）、Dev Room 与 `ui-contract` 检查；尚无业务代码。
+- `dev` 上已有基础脚手架：`backend/`（chi + `/healthz`）、`web/`（Vite 8 + React Router 7 + TanStack Query 5 + Ring UI + Tailwind CSS 4）、Dev Room（分类、分页、浅色/暗色）与 `ui-contract` 检查；尚无业务代码。
 - 已定方向：PostgreSQL 18 + sqlc/pgx、OpenAPI 3.1 契约生成、Nginx 静态 + Go API 同域反代、OSS 预签名直传；按里程碑接入。
 - 未经讨论不要改架构、加依赖或跳过上面的接入顺序。
 
@@ -36,13 +36,17 @@
 
 - 页面（含页面级组件）**不得直接使用** Ring UI 或任何第三方 UI 控件，只能从自有控件库 `web/src/components/ui` 导入。
 - 控件库是页面可用的唯一控件来源；每个控件必须有明确的 props 类型、事件回调和可访问性属性。
+- 简单自定义样式使用 Tailwind CSS 4 utilities；复杂样式可用 CSS Modules；Ring UI 只允许在控件库内使用。
 - 需要新控件时：先加入控件库并导出，再在页面使用；不允许页面内临时拼装第三方控件。
 
 ### Dev Room
 
 - 控件库中的**每一个控件都必须出现在 Dev Room**（站内 `/dev-room`，生产环境不注册该路由），并覆盖其全部公开变体/状态（含 disabled/loading/error 等）。
-- 每个控件必须有稳定的 **控件 ID**（`registry.tsx` 里的 `id`，kebab-case、唯一、不随文案变化）。Dev Room 显示该 ID，并在 DOM 上用 `data-control-id` 暴露；用户与 agent 用这个 ID 指代控件。
-- 新增或修改控件，必须在同一个 PR 里同步更新 Dev Room 示例与 ID；Dev Room 未登记 = 控件不可用。
+- 控件注册名格式为 `<控件>/<样式>`（如 `button/primary`）：同一种控件可以登记多种样式，便于扩展；注册名 kebab-case、唯一、稳定，不随文案变化。
+- 每个注册项在 `registry.tsx` 中声明 `component`（对应控件库导出）、中文 `name`、`category` 与示例；分类统一在 `controlCategories` 中维护。
+- Dev Room 显示注册名并在 DOM 上用 `data-control-id` 暴露；用户与 agent 用它指代控件。
+- Dev Room 支持分类筛选、分页与浅色/暗色切换；所有前端文案使用中文。
+- 新增或修改控件，必须在同一个 PR 里同步更新 Dev Room 示例、注册名与分类；Dev Room 未登记 = 控件不可用。
 - Dev Room 只用于开发和演示。
 
 ### 接线
@@ -56,16 +60,16 @@
 CI 必须自动拦截以下情况，不依赖人工 review：
 
 1. 页面/功能代码直接 import Ring UI 或第三方 UI 控件（ESLint `no-restricted-imports`，只允许控件库 import）。
-2. 控件库导出清单与 Dev Room 登记清单不一致（机读 registry / manifest 比对，任一方向缺失都失败）。
+2. 控件库导出与 Dev Room 注册项不一致（每个导出至少一个注册项，每个注册项的 `component` 必须已导出；一个控件允许多个注册项）。
 3. Dev Room 之外存在未接线控件（AST/自定义 lint 规则检查事件处理器、路由跳转或表单绑定；无法判定时按失败处理）。
 4. 新增控件未同时提交 Dev Room 示例。
-5. 控件缺少稳定 ID、ID 重复或 Dev Room 未渲染 `data-control-id`。
+5. 注册名缺失/格式错误/重复、分类未定义，或 Dev Room 未渲染 `data-control-id`。
 
 以上检查由 CI 的 `ui-contract` job 执行，未通过不允许合并。
 
 ## CI 与合并门槛
 
-- 所有 PR 必须 CI 全绿才能合并；`main` / `release` 的 required checks 在 CI 落地后配置（当前为 `backend`、`frontend`、`ui-contract`；契约生成接入后加 `contract`）。
+- 所有 PR 必须 CI 全绿才能合并；`main` / `release` 已配置 required checks：`backend`、`frontend`、`ui-contract`（契约生成接入后加 `contract`）。
 - 不允许以“跳过 CI”的方式合并，包括管理员；CI 自身坏了先修 CI。
 - 新逻辑必须带测试；修 bug 先补能复现的测试。
 - PR 的验证方式必须可复现（命令写进 PR 描述）。
@@ -81,6 +85,7 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 
 - Go：`gofmt` / `goimports` 干净；`golangci-lint run` 零告警；错误用 `%w` 包装上下文；可预期错误不 panic；并发代码必须有 race 测试路径。
 - TypeScript / React 18：`eslint` + `prettier` 干净；`tsc --noEmit` 通过；组件 PascalCase，hooks 以 `use` 开头；服务端状态统一走 TanStack Query 5，不手写缓存层。
+- 样式：简单布局/自定义用 Tailwind utilities，复杂样式用 CSS Modules；不要在页面里绕开控件库直接使用第三方 UI。
 - API 以 `api/openapi.yaml`（OpenAPI 3.1）为唯一事实源：先改契约 → 重新生成 → 再改实现；禁止手改生成目录。
 - 数据库变更只加新 migration，禁止修改已合入的 migration。
 - 依赖：能用标准库 / 现有依赖解决的不加新依赖；新依赖需在 PR 说明理由与体积影响。Ring UI 只允许在控件库内使用。
@@ -88,7 +93,8 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 
 ## 安全红线（不可协商）
 
-- 不提交密钥、token、生产配置；本地配置放 `.env`（已在 `.gitignore`）。
+- 不提交密钥、token、生产配置；配置放 `.env`（已在 `.gitignore`）。
+- 提交文件里不写只对某一台开发机器成立的路径、用户名、安装位置或运行状态；命令写成通用形式。
 - 用户上传内容一律视为不可信：限制类型、大小、解压条目数；预览必须放在独立沙箱域名，不继承主站 Cookie，禁止与主站同源渲染。
 - 鉴权、限流、输入校验、SQL 参数化不允许“先跳过，之后补”。
 - 不允许删除或弱化安全相关测试与保护配置。

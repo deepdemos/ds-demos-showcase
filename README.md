@@ -28,6 +28,7 @@ go run ./cmd/api
 ## 检查
 
 ```bash
+pnpm --dir web format:check
 pnpm --dir web lint
 pnpm --dir web typecheck
 pnpm --dir web test
@@ -58,17 +59,19 @@ web/
 
 ## 控件与 Dev Room 约定
 
-- 页面只能从 `src/components/ui` 取控件，禁止直接 import Ring UI。
-- 每个控件在 `components/ui/registry.tsx` 有稳定 **控件 ID**（如 `button`），Dev Room 显示该 ID，并在 DOM 上暴露 `data-control-id`，方便用户与 agent 精确指代。
-- 控件库导出的每个控件必须登记到 Dev Room；Dev Room 外的控件必须接线。
-- `pnpm --dir web check:ui` 在 CI 中强制以上规则（含 ID 唯一性/格式）。
+- 页面只能从 `src/components/ui` 取控件，禁止直接 import Ring UI；简单自定义样式用 Tailwind CSS 4，复杂样式可用 CSS Modules。
+- 控件注册名格式为 `<控件>/<样式>`（如 `button/primary`）：同一种控件可以登记多种样式；注册名稳定、唯一、kebab-case，已在用的注册名不改名。
+- 每个注册项在 `components/ui/registry.tsx` 中带 `component`（对应控件库导出）、中文 `name`、`category` 和 Dev Room 示例；分类由 `controlCategories` 统一维护。
+- Dev Room 支持分类筛选、分页（`?category=input&page=2`）以及浅色/暗色切换；页面文案使用中文。
+- 每个注册项渲染 `data-control-id="<注册名>"`，用户与 agent 用它精确指代控件；控件库导出的每个控件至少登记一种样式。
+- Dev Room 外的控件必须接线；`pnpm --dir web check:ui` 在 CI 中强制组件/注册项/分类/注册名/接线规则。
 
 ## 技术栈（已定）
 
 | 层 | 选型 |
 | --- | --- |
 | 前端 | React 18.3 + TypeScript 6.0 + Vite 8 + React Router 7 + TanStack Query 5 |
-| UI | Ring UI 7（`@jetbrains/ring-ui-built`）+ CSS Modules |
+| UI | Ring UI 7（`@jetbrains/ring-ui-built`）+ Tailwind CSS 4.3 + CSS Modules |
 | 后端 | Go 1.27.3 + chi 5.5 + slog |
 | 数据 | PostgreSQL 18（自托管）+ sqlc + pgx |
 | 接口 | OpenAPI 3.1，oapi-codegen + orval（下一步接入） |
