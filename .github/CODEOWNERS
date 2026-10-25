@@ -1,0 +1,6 @@
+# 门禁与协作规则文件：改动需要 owner 审阅（配合 ruleset 的 code owner review）。
+
+/scripts/ @Tang-Tian-dev @liceses @RedEyeCaleb
+/.github/ @Tang-Tian-dev @liceses @RedEyeCaleb
+/docs/development-workflow.md @Tang-Tian-dev @liceses @RedEyeCaleb
+/AGENTS.md @Tang-Tian-dev @liceses @RedEyeCaleb
