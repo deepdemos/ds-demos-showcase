@@ -1,6 +1,10 @@
-# 实体域 UML 图集 v1.0
+# 实体域 UML 图集 v2.1
 
-**适用范围**：本文是 [`实体域数据结构设计.md`](./实体域数据结构设计.md) v2.0 的**图形化补充**。只画图，不重复 DDL 与文字论证。所有图基于 v2.0 的三级层次（Task → Prompt → Demo）。
+**适用范围**：本文是 [`实体域数据结构设计.md`](./实体域数据结构设计.md) v2.1 的**图形化补充**。只画图，不重复 DDL 与文字论证。所有图基于 v2.1 的三级层次（Task → Prompt → Demo）+ 提案层（Proposal）。
+
+**状态：草案，待真实数据验证**。数据结构设计 §10.1 列了 3 条必须拿到线上数据才能定的参数（`title_key` 白名单、回填冲突数、提案抽象收益）。本文的图反映的是**结构**，不受这些参数影响；但 §20（题目名去重）的具体判定结果会随白名单调整而变。
+
+**v2.1 相对 v1.0 的变化**：新增 §17–§21 五张图（提案状态机 / 提交 / 审核 / 题目名去重 / 提案与产物类图）；§1 类图与 §4 ER 图补上 `title_key` / `title_norm` / `proposals` / `proposal_refs`；§5 Task 状态机去掉 `candidate`。
 
 **图目录**：
 
@@ -20,6 +24,13 @@
 | 12 | 组件图 | flowchart | 谁依赖谁 |
 | 13 | 活动图：挂题决策 | flowchart | 挂题时的判断链 |
 | 14 | 部署图 | flowchart | 表落在哪个库 |
+| 15 | 图与文档的对应 | — | 索引 |
+| 16 | 三张图串起来看 | flowchart | 阅读顺序 |
+| 17 | 状态机：Proposal | stateDiagram | 提案的一生（5 态） |
+| 18 | 时序：提交提案 | sequenceDiagram | `dedupe_key` 怎么算 |
+| 19 | 时序：审核提案 | sequenceDiagram | 执行失败怎么回滚 |
+| 20 | 时序：题目名去重 | sequenceDiagram | 硬约束 + 软提示 |
+| 21 | 类图：提案与产物 | classDiagram | 入口与出口 |
 
 ---
 
@@ -33,6 +44,8 @@ classDiagram
         +bigint id
         +text slug
         +text title
+        +text title_key
+        +text title_norm
         +text brief
         +text category
         +TaskStatus status
@@ -98,7 +111,6 @@ classDiagram
 
     class TaskStatus {
         <<enumeration>>
-        candidate
         active
         merged
         hidden
@@ -265,6 +277,8 @@ erDiagram
         bigint id PK
         text slug UK
         text title
+        text title_key UK
+        text title_norm
         text brief
         text category
         text status
@@ -327,6 +341,33 @@ erDiagram
         text username
     }
 
+    PROPOSALS {
+        bigint id PK
+        text kind
+        text status
+        jsonb payload
+        bigint created_by FK
+        timestamptz created_at
+        bigint reviewed_by FK
+        timestamptz reviewed_at
+        text reject_reason
+        text result_kind
+        bigint result_id
+        text source
+        real confidence
+        text dedupe_key
+        timestamptz updated_at
+    }
+
+    PROPOSAL_REFS {
+        bigint proposal_id PK,FK
+        text role PK
+        bigint demo_id FK
+        bigint task_id FK
+        bigint model_id FK
+        bigint tag_id FK
+    }
+
     TASKS ||--o{ TASK_PROMPTS : "归类"
     PROMPTS ||--o{ TASK_PROMPTS : "被归类"
     PROMPTS ||--o{ PROMPT_LIBRARY_ENTRIES : "收录"
@@ -337,17 +378,24 @@ erDiagram
     USERS ||--o{ PROMPTS : "created_by"
     USERS ||--o{ PROMPT_LIBRARY_ENTRIES : "created_by"
     USERS ||--o{ DEMOS : "author_id"
+    PROPOSALS ||--o{ PROPOSAL_REFS : "引用"
+    PROPOSALS }o--|| USERS : "created_by"
+    PROPOSAL_REFS }o--o| DEMOS : "subject"
+    PROPOSAL_REFS }o--o| TASKS : "subject/target/source"
+    PROPOSAL_REFS }o--o| MODELS : "subject/target/source"
 ```
 
 **约束标注**：
 
 | 表 | 约束 |
 |---|---|
-| `tasks` | `UNIQUE (slug) WHERE deleted_at IS NULL` |
+| `tasks` | `UNIQUE (slug) WHERE deleted_at IS NULL`；`UNIQUE (title_key) WHERE deleted_at IS NULL AND status='active'` |
 | `task_prompts` | `PK (task_id, prompt_id)`；`UNIQUE (task_id) WHERE role='primary'` |
 | `prompts` | `UNIQUE (content_hash)` |
 | `prompt_library_entries` | `UNIQUE (prompt_id, scope)` |
 | `task_slug_history` | `PK (slug)` |
+| `proposals` | `UNIQUE (kind, dedupe_key) WHERE status='pending' AND dedupe_key IS NOT NULL` |
+| `proposal_refs` | `PK (proposal_id, role)`；`CHECK` 每行只指向一种实体 |
 
 ---
 
@@ -355,17 +403,13 @@ erDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> candidate: 建题（默认）
-    candidate --> active: 管理员确认
-    candidate --> hidden: 管理员下架
+    [*] --> active: 建题（默认）
     active --> hidden: 下架
     hidden --> active: 重新上架
     active --> merged: 合并到另一题
-    candidate --> merged: 合并到另一题
     merged --> [*]: 终态（merged_into_id 指向归宿）
     active --> deleted: 软删除
     hidden --> deleted: 软删除
-    candidate --> deleted: 软删除
     deleted --> [*]
 
     note right of merged
@@ -377,6 +421,12 @@ stateDiagram-v2
     note right of deleted
         deleted_at 非空
         slug 可被复用
+    end note
+
+    note left of active
+        v2.1 去掉了 candidate
+        旧栈从未写入过该状态
+        用户建题走 proposals 表
     end note
 ```
 
@@ -821,6 +871,11 @@ flowchart TB
 | 12 组件图 | §8 与模型域的接缝 |
 | 13 活动图 挂题决策 | §4.4 |
 | 14 部署图 | §6 迁移路线 |
+| 17 状态机 Proposal | §3.10 + §4.10 |
+| 18 时序 提交提案 | §4.9 |
+| 19 时序 审核提案 | §4.10 |
+| 20 时序 题目名去重 | §3.8 + §3.9 + §4.9 |
+| 21 类图 提案与产物 | §3.10 + §3.11 |
 
 ---
 
@@ -841,6 +896,320 @@ flowchart LR
 3. **改 prompt 换题**回答「最反直觉的地方」——改一条 prompt，作品自动换题
 
 **如果只看一张图**：看 §10 的时序图。它把三级层次的核心机制（视图派生）和最大副作用（自动换题）都画出来了。
+
+**如果关心「用户怎么建题」**：看 §18（提交提案）+ §20（题目名去重）。这两张图解释了为什么提案不写 `tasks.status='candidate'`。
+
+---
+
+## 17. 状态机：Proposal
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: 提交
+    pending --> approved: 管理员批准<br/>+ 执行成功
+    pending --> rejected: 管理员驳回
+    pending --> withdrawn: 提交人撤回
+    pending --> superseded: 目标被合并/删除
+    approved --> [*]
+    rejected --> [*]
+    withdrawn --> [*]
+    superseded --> [*]
+
+    note right of approved
+        result_kind + result_id 回填
+        指向建出的实体
+    end note
+
+    note right of rejected
+        reject_reason 可选
+        未填时前端提示「管理员未填写理由」
+    end note
+
+    note right of withdrawn
+        只有 created_by 本人能撤
+        且只能撤 pending
+    end note
+
+    note right of superseded
+        目标被 merge_task 合并
+        或 proposal_refs 的 CASCADE 触发
+    end note
+```
+
+**与旧栈的对比**：
+
+| 态 | 旧栈 `EntitySuggestion` | 新模型 |
+|---|---|---|
+| `pending` | ✅ | ✅ |
+| `approved` | ✅ | ✅ |
+| `rejected` | ✅ | ✅ |
+| `withdrawn` | ❌ | ✅ 新增 |
+| `superseded` | ❌（靠 `merge_task` 手工扫） | ✅ 新增 |
+
+**为什么需要 `withdrawn`**：旧栈用户提了就不能撤，只能等管理员处理。
+
+**为什么需要 `superseded`**：旧栈靠 `task_service.py:275` 在合并时手工扫一遍 pending 建议：
+
+```python
+EntitySuggestion.kind.in_(("task_match", "merge_task", "new_task")),
+```
+
+新模型里这是显式的状态跃迁。
+
+---
+
+## 18. 时序：提交提案
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 用户
+    participant API as POST /proposals
+    participant S as proposal_service
+    participant DB as PostgreSQL
+
+    U->>API: {kind, payload}
+    API->>S: submit(kind, payload, user)
+    S->>S: 校验 payload 形状（按 kind）
+    S->>S: dedupe_key = f(kind, payload)
+    S->>DB: SELECT WHERE kind=? AND dedupe_key=?<br/>AND status='pending'
+    alt 已存在 pending
+        DB-->>S: 已有行
+        S-->>API: {status: 'duplicate', id}
+    else 不存在
+        S->>DB: INSERT proposals(status='pending')
+        DB-->>S: proposal_id
+        S->>DB: INSERT proposal_refs（按 kind 提取）
+        S-->>API: {status: 'pending', id}
+    end
+    API-->>U: 202 Accepted
+```
+
+**`dedupe_key` 的算法**（应用层算，DB 只保证 pending 内唯一）：
+
+| kind | `dedupe_key` |
+|---|---|
+| `new_task` | `title_key(title)` |
+| `new_prompt` | `content_hash` |
+| `new_model` | `normalize(name)` |
+| `new_tag_value` | `key:value` |
+| `task_match` | `task_id:demo_id` |
+| `model_alias` | `model_id:normalize(alias)` |
+| `merge_task` / `merge_model` | `source_id>target_id` |
+| `retag_demo` | `demo_id:add` |
+| `report` | `target_type:target_id:created_by` |
+
+**为什么 `new_task` 用 `title_key` 而不是 `lower(title)`**：见 §20。
+
+---
+
+## 19. 时序：审核提案
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as 管理员
+    participant API as POST /proposals/{id}/review
+    participant S as proposal_service
+    participant X as 领域 service
+    participant DB as PostgreSQL
+
+    A->>API: {action: 'approve'}
+    API->>S: review(id, 'approve', admin)
+    S->>DB: SELECT ... FOR UPDATE
+    alt status != 'pending'
+        S-->>API: 409 已处理
+    else status = 'pending'
+        S->>X: execute(kind, payload)
+        alt 执行成功
+            X-->>S: {result_kind, result_id}
+            S->>DB: UPDATE status='approved'<br/>result_*, reviewed_*
+        else 执行失败
+            X-->>S: 抛错
+            S->>DB: ROLLBACK
+            S-->>API: 422
+        end
+    end
+    S->>DB: INSERT audit_log（同事务）
+    S->>DB: INSERT notifications（同事务）
+    S-->>API: 200
+    API-->>A: 结果
+```
+
+**这张图对应旧栈的 KB-16 教训**：旧实现内部各自 `commit`，中断就会留下「实体已建、建议仍 pending」的假象，再点一次批准会重复建实体。
+
+**`execute` 的 8 个分支抽象不掉**：
+
+| kind | 执行 |
+|---|---|
+| `new_task` | `create_task(status='active')` + 若有 `subject` demo 则 `attach_demos` |
+| `new_prompt` | `publish_prompt` |
+| `new_model` | `get_or_create_model` + 若已存在则 `alias_add` |
+| `new_tag_value` | `tag_service.ensure_value` + 可选挂 demo |
+| `task_match` | `attach_demos` |
+| `model_alias` | `alias_add` |
+| `merge_task` | `merge_task` + 相关 pending 置 `superseded` |
+| `merge_model` | `merge_model` |
+| `retag_demo` | `refine_service.apply_retag` |
+| `report` | 改目标状态（论坛外置后作废） |
+
+---
+
+## 20. 时序：题目名去重
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 用户
+    participant API as POST /tasks
+    participant S as proposal_service
+    participant DB as PostgreSQL
+
+    U->>API: {title: "画一个3D坦克！"}
+    API->>S: submit_new_task(title)
+    S->>S: key = title_key(title) = "画一个3d坦克"
+    S->>S: norm = normalize(title) = "画一个3d坦克!"
+
+    S->>DB: 硬查 tasks WHERE title_key = key<br/>AND status='active' AND deleted_at IS NULL
+    alt 命中
+        DB-->>S: 已有题
+        S-->>API: 409「已存在同名题目：/tasks/{slug}」
+    else 未命中
+        S->>DB: 硬查 proposals WHERE kind='new_task'<br/>AND dedupe_key = key AND status='pending'
+        alt 命中
+            DB-->>S: 已有 pending 提案
+            S-->>API: 202 {status: 'duplicate', id}
+        else 未命中
+            S->>DB: 软查 tasks WHERE title_norm = norm<br/>AND status='active'
+            alt 命中
+                DB-->>S: 可能重复
+                S-->>API: 202 + warning「可能重复：/tasks/{slug}」
+            else 未命中
+                S->>DB: INSERT proposals + proposal_refs
+                S-->>API: 202 {status: 'pending', id}
+            end
+        end
+    end
+    API-->>U: 结果
+```
+
+**两级去重的分工**：
+
+| 层 | 键 | 函数 | 误判后果 | 漏判后果 |
+|---|---|---|---|---|
+| 硬约束 | `title_key` | 保守（只删装饰标点） | 静默丢弃合法提案 | 收件箱堆重复 |
+| 软提示 | `title_norm` | 激进（`normalize`） | 用户看到多余警告 | 无 |
+
+**为什么硬约束必须保守**：误判会让用户「以为提交成功，实际没进队列」，且用户不知道、也不会重提。漏判只是管理员多合并一次。
+
+**`title_key` 的实测效果**（44 个用例）：
+
+| 输入 | `title_key` | 与基准同？ |
+|---|---|---|
+| `画一个3D坦克` | `画一个3d坦克` | 基准 |
+| `画一个3D坦克！` | `画一个3d坦克` | ✅ 同 |
+| `《画一个3D坦克》` | `画一个3d坦克` | ✅ 同 |
+| `画一个3D坦克…` | `画一个3d坦克` | ✅ 同 |
+| `画一个３Ｄ坦克` | `画一个3d坦克` | ✅ 同 |
+| `用 C++ 写排序` | `用c++写排序` | — |
+| `用 C# 写排序` | `用c#写排序` | ✅ 不同（正确） |
+| `GPT-4o 画图` | `gpt-4o画图` | — |
+| `GPT 4o 画图` | `gpt4o画图` | ✅ 不同（漏判，可接受） |
+
+---
+
+## 21. 类图：提案与产物
+
+```mermaid
+classDiagram
+    direction LR
+
+    class Proposal {
+        +bigint id
+        +text kind
+        +text status
+        +jsonb payload
+        +text dedupe_key
+        +text source
+        +real confidence
+        +bigint created_by
+        +bigint reviewed_by
+        +timestamptz reviewed_at
+        +text reject_reason
+        +text result_kind
+        +bigint result_id
+    }
+
+    class ProposalRef {
+        +bigint proposal_id
+        +text role
+        +bigint demo_id
+        +bigint task_id
+        +bigint model_id
+        +bigint tag_id
+    }
+
+    class Task {
+        +bigint id
+        +text slug
+        +text title
+        +text title_key
+        +TaskStatus status
+    }
+
+    class Prompt {
+        +bigint id
+        +text content_hash
+        +text content
+    }
+
+    class Model {
+        +bigint id
+        +text slug
+        +text name
+        +ModelStatus status
+    }
+
+    class Tag {
+        +bigint id
+        +text key
+        +text value
+    }
+
+    class Demo {
+        +bigint id
+        +text slug
+        +bigint prompt_id
+    }
+
+    Proposal "1" --> "0..*" ProposalRef : 引用
+    ProposalRef ..> Demo : subject
+    ProposalRef ..> Task : subject / target / source
+    ProposalRef ..> Model : subject / target / source
+    ProposalRef ..> Tag : subject
+    Proposal ..> Task : "result: new_task"
+    Proposal ..> Prompt : "result: new_prompt"
+    Proposal ..> Model : "result: new_model"
+    Proposal ..> Tag : "result: new_tag_value"
+```
+
+**读图要点**：
+
+| 关系 | 含义 |
+|---|---|
+| `Proposal → ProposalRef` | 1 : 0..*（独立出题无引用） |
+| `ProposalRef → Demo/Task/Model/Tag` | 每行只指向一种（`CHECK` 保证） |
+| `Proposal → 产物` | 通过 `result_kind` + `result_id` 弱引用（不是 FK） |
+
+**为什么 `result_id` 不是 FK**：产物类型由 `result_kind` 决定，一个列无法同时 FK 到四张表。这是多态引用的固有代价，用 `result_kind` 做判别列。
+
+**为什么 `ProposalRef` 是 FK 而 `result_id` 不是**：
+
+| | `ProposalRef` | `result_id` |
+|---|---|---|
+| 方向 | 提案 → 输入（目标实体） | 提案 → 输出（产物） |
+| 生命周期 | 目标删除 → 提案作废（CASCADE） | 产物删除 → 提案保留（历史记录） |
+| 需要 FK | ✅ | ❌ |
 
 ---
 
