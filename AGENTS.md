@@ -12,14 +12,17 @@
 
 ## 分支模型（三条长期分支）
 
+**远程仓库只保留 `dev` / `main` / `release` 三条分支，不保留任何临时分支。**
+
 | 分支 | 角色 | 保护 |
 | --- | --- | --- |
-| `dev` | 默认分支 / 集成分支 | 受 ruleset 保护：禁止直接 push、force-push、删除；只能经 PR 合并，required checks + review 无阻断 |
-| `main` | 预发布 / 验收 | 受 ruleset 保护：禁止直接 push、force-push、删除；PR 锁 + required checks + review 无阻断 + 对话全部解决 |
-| `release` | 生产 | 与 `main` 同级保护；只能从 `main` 合入；合入后打 `vX.Y.Z` tag 并部署 |
+| `dev` | **开发分支**（默认分支 / 集成分支） | 受 ruleset 保护：禁止直接 push、force-push、删除；只能经 PR 合并，required checks + review 无阻断 |
+| `main` | **部署分支**（预发布 / 验收） | 受 ruleset 保护：禁止直接 push、force-push、删除；PR 锁 + required checks + review 无阻断 + 对话全部解决 |
+| `release` | **发行分支**（生产 / 版本发行） | 与 `main` 同级保护；只能从 `main` 合入；合入后打 `vX.Y.Z` tag 并部署 |
 
 - 临时分支从 `dev` 切出，命名：`feat/<short-name>`、`fix/<short-name>`、`refactor/<short-name>`、`docs/<short-name>`、`chore/<short-name>`。
-- 合入后删除临时分支（仓库已开启 delete branch on merge）。
+- 临时分支**只存在于个人 fork**，不得推送到上游仓库（`deepdemos/ds-demos-showcase`）。
+- 合入后删除临时分支（仓库已开启 delete branch on merge）；上游仓库出现任何临时分支即视为违规，须立即删除。
 - 任何共享分支都不允许 force-push。
 
 ## 变更流转（唯一合法路径）
