@@ -112,7 +112,15 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      - name: 收集改动文件清单（docs-only 判定用）
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr view "$PR_NUMBER" --json files --jq '.files[] | .path' > changed-files.txt
       - name: PR 门禁（issue / 标题类型 / 修改规模）
+        env:
+          CHANGED_FILES_PATH: changed-files.txt
         run: node scripts/check-pr.mjs
       - name: PR 必须有晚于最新 commit 的 review 评论
         env:

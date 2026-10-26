@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { classifyLines, countTextLines, listSourceFiles } from './check-file-size.mjs';
-import { validatePullRequest } from './check-pr.mjs';
+import { isDocsOnly, validatePullRequest } from './check-pr.mjs';
 import { hasReviewComment } from './check-review.mjs';
 
 test('文件行数阈值：500/501/800/801', () => {
@@ -75,6 +75,50 @@ test('PR 门禁：无 issue / 标题不合法 / 超规模', () => {
 test('PR 门禁：字段缺失 fail-closed', () => {
   const errors = validatePullRequest({ title: 'feat: 描述', body: 'Closes #47' });
   assert.ok(errors.some((error) => error.includes('缺少')));
+});
+
+test('PR 门禁：纯文档 PR 豁免规模上限，但仍要 issue 与合法标题', () => {
+  const docsFiles = ['docs/模型域设计.md', 'docs/Demo域设计.md'];
+  assert.equal(isDocsOnly(docsFiles), true);
+  assert.deepEqual(
+    validatePullRequest({
+      title: 'docs(model): 设计文档入库',
+      body: 'Refs #100',
+      additions: 1800,
+      deletions: 0,
+      changed_files: 5,
+      files: docsFiles,
+    }),
+    [],
+  );
+  const noIssue = validatePullRequest({
+    title: 'docs(model): 设计文档入库',
+    body: '无关联',
+    additions: 1800,
+    deletions: 0,
+    changed_files: 5,
+    files: docsFiles,
+  });
+  assert.ok(noIssue.some((error) => error.includes('issue')));
+});
+
+test('isDocsOnly：混入非 docs 文件或空清单都不豁免', () => {
+  assert.equal(isDocsOnly(['docs/a.md', 'scripts/check-pr.mjs']), false);
+  assert.equal(isDocsOnly(['README.md']), false);
+  assert.equal(isDocsOnly([]), false);
+  assert.equal(isDocsOnly(undefined), false);
+});
+
+test('PR 门禁：文件清单混入代码时恢复规模校验', () => {
+  const errors = validatePullRequest({
+    title: 'docs(model): 设计文档入库',
+    body: 'Refs #100',
+    additions: 600,
+    deletions: 0,
+    changed_files: 2,
+    files: ['docs/a.md', 'backend/main.go'],
+  });
+  assert.ok(errors.some((error) => error.includes('行上限')));
 });
 
 test('PR 门禁：issue 编号不能为 0', () => {
