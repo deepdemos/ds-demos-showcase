@@ -52,6 +52,12 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 - 单文件 >800 行：直接失败，必须拆分。
 - 按物理行统计；不要用压缩/生成代码绕过。
 
+## 3.1 提交信息
+
+- 提交信息不得包含 AI 署名 trailer：禁止 `Co-authored-by: Copilot <…>`、`Co-authored-by: DeepSeek <…>` 等任何 AI 工具署名。
+- 提交作者只写真实参与的人；AI 辅助不进入 commit 元数据。
+- review 时发现 AI trailer 视为需要修正的问题（不阻断合并，但要求作者在后续提交中改正，不追溯改写已合入历史）。
+
 ## 4. Review（强制）
 
 - dev / main / release 保留 PR 锁：只能经 PR 合并，required checks + 对话解决必须通过；不强制其他 owner approve。

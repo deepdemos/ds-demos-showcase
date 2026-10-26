@@ -88,6 +88,7 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 ## 提交与 PR 规范
 
 - Conventional Commits：`feat|fix|refactor|docs|chore|test|perf|build|ci: 描述`。PR 标题就是 squash 后的提交标题。
+- **提交信息不得包含 AI 署名 trailer**：禁止 `Co-authored-by: Copilot <…>`、`Co-authored-by: DeepSeek <…>` 等任何 AI 工具署名。提交作者只写真实参与的人；AI 辅助不进入 commit 元数据。
 - 一个 PR 只做一件事；大规模格式化、重命名必须与功能改动分开。
 - PR 描述必须关联 issue（`Closes #N` / `Fixes #N` / `Refs #N`），并写清：改了什么、为什么、怎么验证、影响面（API / DB / 部署 / 安全）。
 - 不提交构建产物（`web/dist`、二进制、上传文件）；生成代码按目录规则提交，且必须能由 CI 重新生成。
