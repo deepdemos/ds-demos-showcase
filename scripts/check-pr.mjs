@@ -12,12 +12,17 @@ const TITLE_PATTERN = /^(feat|fix|refactor|docs|chore|test|perf|build|ci)(\([A-Z
 const ISSUE_PATTERN = /\b(?:close[sd]?|fix(?:e[sd])?|resolv(?:e[sd])?|refs?|issue)\s*[:：]?\s*#[1-9]\d*\b/i;
 const DOC = 'docs/development-workflow.md';
 
-/** 全部改动都在 docs/ 下才算纯文档 PR；空列表按「不是纯文档」处理（fail-closed）。 */
+/** 全部改动都在 docs/ 下才算纯文档 PR；空列表或含越界段一律按「不是纯文档」处理（fail-closed）。 */
 export function isDocsOnly(files) {
   return (
     Array.isArray(files) &&
     files.length > 0 &&
-    files.every((file) => typeof file === 'string' && file.startsWith(DOCS_PREFIX))
+    files.every(
+      (file) =>
+        typeof file === 'string' &&
+        file.startsWith(DOCS_PREFIX) &&
+        !file.split('/').includes('..'),
+    )
   );
 }
 

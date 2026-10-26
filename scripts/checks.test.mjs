@@ -109,6 +109,11 @@ test('isDocsOnly：混入非 docs 文件或空清单都不豁免', () => {
   assert.equal(isDocsOnly(undefined), false);
 });
 
+test('isDocsOnly：拒绝越界路径段', () => {
+  assert.equal(isDocsOnly(['docs/../backend/main.go']), false);
+  assert.equal(isDocsOnly(['docs/a.md', '../secrets.md']), false);
+});
+
 test('PR 门禁：文件清单混入代码时恢复规模校验', () => {
   const errors = validatePullRequest({
     title: 'docs(model): 设计文档入库',
