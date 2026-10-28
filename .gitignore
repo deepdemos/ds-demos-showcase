@@ -10,3 +10,13 @@ coverage/
 web/test-results/
 web/playwright-report/
 backend/bin/
+
+# 编辑器 / 工具状态（本地产物，不入库）
+.vscode/
+.dsh/
+
+# 生成物（PIM 模型快照等）
+docs/model/
+
+# 第三方版权参考素材，仅本地查阅
+docs/桌宠素材参考/
