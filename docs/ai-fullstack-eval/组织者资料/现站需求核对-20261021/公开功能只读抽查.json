@@ -1,0 +1,175 @@
+{
+  "purpose": "仅组织者核对资料；低频公开读取，不代表写操作已验收",
+  "date": "2026-10-21",
+  "checks": [
+    {
+      "name": "site_info",
+      "url": "https://deepdemos.top/api/v1/meta/site-info",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:30.595323+00:00",
+      "status": 200,
+      "shape": "object",
+      "public_content_summary": {
+        "demos_total": 1280,
+        "demos_by_type": {
+          "link": 50,
+          "web": 1206,
+          "zip": 24
+        },
+        "authors_total": 256,
+        "uploads_last_7d": 120,
+        "tags": {
+          "keys": 10,
+          "values": 344
+        },
+        "forum_topics": 221
+      }
+    },
+    {
+      "name": "demos",
+      "url": "https://deepdemos.top/api/v1/demos?page_size=1",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:30.596817+00:00",
+      "status": 200,
+      "shape": "object",
+      "total": 1280,
+      "returned_items": 1,
+      "has_content_update_time": true
+    },
+    {
+      "name": "models",
+      "url": "https://deepdemos.top/api/v1/models?page_size=1",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:30.597496+00:00",
+      "status": 200,
+      "shape": "object",
+      "total": 131,
+      "returned_items": 1
+    },
+    {
+      "name": "tasks",
+      "url": "https://deepdemos.top/api/v1/tasks?page_size=1",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:30.598076+00:00",
+      "status": 200,
+      "shape": "object",
+      "total": 48,
+      "returned_items": 1
+    },
+    {
+      "name": "tag_keys",
+      "url": "https://deepdemos.top/api/v1/tags/tag-keys",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:30.837467+00:00",
+      "status": 200,
+      "shape": "list",
+      "returned_items": 10
+    },
+    {
+      "name": "explore",
+      "url": "https://deepdemos.top/api/v1/explore",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:31.053071+00:00",
+      "status": 200,
+      "shape": "object"
+    },
+    {
+      "name": "forum",
+      "url": "https://deepdemos.top/api/v1/forum/topics?page_size=1",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:31.284404+00:00",
+      "status": 200,
+      "shape": "object",
+      "total": 221,
+      "returned_items": 1
+    },
+    {
+      "name": "leaderboard",
+      "url": "https://deepdemos.top/api/v1/leaderboard?page_size=1",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:31.290345+00:00",
+      "error": "The read operation timed out",
+      "retry": {
+        "checked_at": "2026-10-21T12:34:44.041173+00:00",
+        "status": 200,
+        "total": 908
+      }
+    },
+    {
+      "name": "user_leaderboard",
+      "url": "https://deepdemos.top/api/v1/users/leaderboard?page_size=1",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:31.574346+00:00",
+      "status": 200,
+      "shape": "object",
+      "total": 1054,
+      "returned_items": 1
+    },
+    {
+      "name": "sponsors",
+      "url": "https://deepdemos.top/api/v1/stats/sponsors",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:31.739089+00:00",
+      "status": 200,
+      "shape": "object"
+    },
+    {
+      "name": "thanks",
+      "url": "https://deepdemos.top/api/v1/stats/thanks",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:31.863278+00:00",
+      "status": 200,
+      "shape": "object"
+    },
+    {
+      "name": "announcements",
+      "url": "https://deepdemos.top/api/v1/announcements",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:31.938445+00:00",
+      "status": 200,
+      "shape": "list",
+      "returned_items": 50
+    },
+    {
+      "name": "random",
+      "url": "https://deepdemos.top/api/v1/demos?sort=random&page_size=1",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:32.014092+00:00",
+      "status": 200,
+      "shape": "object",
+      "total": 1280,
+      "returned_items": 1,
+      "has_continuation_seed": true
+    },
+    {
+      "name": "group_read",
+      "url": "https://deepdemos.top/api/v1/demos/by-tasks",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:32.147123+00:00",
+      "status": 200,
+      "shape": "list",
+      "returned_items": 0
+    },
+    {
+      "name": "astra",
+      "url": "https://astrademos.top/api/v1/meta/site-info",
+      "method": "GET",
+      "checked_at": "2026-10-21T12:31:32.164485+00:00",
+      "status": 200,
+      "shape": "object",
+      "public_content_summary": {
+        "demos_total": 14,
+        "demos_by_type": {
+          "web": 14
+        },
+        "authors_total": 0,
+        "uploads_last_7d": 0,
+        "tags": {
+          "keys": 10,
+          "values": 344
+        },
+        "forum_topics": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "purpose": "只确认公开读功能响应，不证明完整写入业务或管理员功能已通过",
+  "records": [
+    {
+      "feature": "作品浏览",
+      "url": "https://deepdemos.top/api/v1/demos?page_size=1",
+      "observed_at": "2026-10-13T16:17:40.464470+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "total": 1153,
+      "item_count": 1
+    },
+    {
+      "feature": "模型浏览",
+      "url": "https://deepdemos.top/api/v1/models?page_size=1",
+      "observed_at": "2026-10-13T16:17:40.465425+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "total": 126,
+      "item_count": 1
+    },
+    {
+      "feature": "题目浏览",
+      "url": "https://deepdemos.top/api/v1/tasks?page_size=1",
+      "observed_at": "2026-10-13T16:17:40.466053+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "total": 44,
+      "item_count": 1
+    },
+    {
+      "feature": "标签词表",
+      "url": "https://deepdemos.top/api/v1/tags/tag-keys",
+      "observed_at": "2026-10-13T16:17:40.466534+00:00",
+      "http_status": 200,
+      "response_kind": "list",
+      "item_count": 10
+    },
+    {
+      "feature": "探索",
+      "url": "https://deepdemos.top/api/v1/explore",
+      "observed_at": "2026-10-13T16:17:41.098835+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "models",
+        "tasks_total",
+        "tasks",
+        "tags"
+      ],
+      "total": null,
+      "item_count": null
+    },
+    {
+      "feature": "论坛列表",
+      "url": "https://deepdemos.top/api/v1/forum/topics?page_size=1",
+      "observed_at": "2026-10-13T16:17:41.376397+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "total": 218,
+      "item_count": 1
+    },
+    {
+      "feature": "作品榜单",
+      "url": "https://deepdemos.top/api/v1/leaderboard?page_size=1",
+      "observed_at": "2026-10-13T16:17:41.617612+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "total": 819,
+      "item_count": 1
+    },
+    {
+      "feature": "用户榜单",
+      "url": "https://deepdemos.top/api/v1/users/leaderboard?page_size=1",
+      "observed_at": "2026-10-13T16:17:41.739603+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "items",
+        "total",
+        "page",
+        "page_size"
+      ],
+      "total": 1001,
+      "item_count": 1
+    },
+    {
+      "feature": "赞助展示",
+      "url": "https://deepdemos.top/api/v1/stats/sponsors",
+      "observed_at": "2026-10-13T16:17:41.968726+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "total_amount",
+        "updated_at",
+        "sponsors"
+      ],
+      "total": null,
+      "item_count": null
+    },
+    {
+      "feature": "致谢展示",
+      "url": "https://deepdemos.top/api/v1/stats/thanks",
+      "observed_at": "2026-10-13T16:17:42.055665+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "updated_at",
+        "thanks"
+      ],
+      "total": null,
+      "item_count": null
+    },
+    {
+      "feature": "公告展示",
+      "url": "https://deepdemos.top/api/v1/announcements",
+      "observed_at": "2026-10-13T16:17:42.334477+00:00",
+      "http_status": 200,
+      "response_kind": "list",
+      "item_count": 50
+    },
+    {
+      "feature": "只读橱窗",
+      "url": "https://astrademos.top/api/v1/meta/site-info",
+      "observed_at": "2026-10-13T16:17:42.410378+00:00",
+      "http_status": 200,
+      "response_kind": "dict",
+      "keys": [
+        "site",
+        "display",
+        "content",
+        "community",
+        "traffic",
+        "hot",
+        "capabilities",
+        "generated_at"
+      ],
+      "total": null,
+      "item_count": null
+    }
+  ]
+}

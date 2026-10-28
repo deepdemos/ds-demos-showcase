@@ -1,0 +1,1526 @@
+{
+  "purpose": "组织者核对资料，含现有实现信息；不要发给被测模型",
+  "modules": [
+    {
+      "file": "backend/app/routers/admin.py",
+      "functions": [
+        {
+          "function": "review_list",
+          "line": 35,
+          "methods": [
+            "get /review"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "review_demo",
+          "line": 41,
+          "methods": [
+            "post /review/{slug}"
+          ],
+          "summary": "审核作品：approve/reject。"
+        },
+        {
+          "function": "admin_demos",
+          "line": 91,
+          "methods": [
+            "get /demos"
+          ],
+          "summary": "作品全量/分页列表。"
+        },
+        {
+          "function": "set_demo_curation",
+          "line": 118,
+          "methods": [
+            "put /demos/{slug}/curation"
+          ],
+          "summary": "astra 橱窗策展：发放站点通行证（sites）+ 语言标记（lang）。None 字段保持不变。"
+        },
+        {
+          "function": "admin_users",
+          "line": 155,
+          "methods": [
+            "get /users"
+          ],
+          "summary": "用户列表（含作品数）。KB-19：作品数走一次 GROUP BY 聚合，不再逐用户懒加载 demos。"
+        },
+        {
+          "function": "get_settings",
+          "line": 179,
+          "methods": [
+            "get /settings"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "update_settings",
+          "line": 188,
+          "methods": [
+            "put /settings"
+          ],
+          "summary": "更新站点设置：缺省字段不改；三项同事务写 + 一条审计（KB-22/KB-17）。"
+        },
+        {
+          "function": "oss_sync",
+          "line": 222,
+          "methods": [
+            "post /oss-sync"
+          ],
+          "summary": "启动后台 OSS 同步（不阻塞请求）；已有任务在跑则返回 started=false。"
+        },
+        {
+          "function": "oss_sync_status",
+          "line": 231,
+          "methods": [
+            "get /oss-sync-status"
+          ],
+          "summary": "查询后台 OSS 同步进度/结果。"
+        },
+        {
+          "function": "storage_status",
+          "line": 279,
+          "methods": [
+            "get /storage-status"
+          ],
+          "summary": "本地存储规模 + 当前生效模式（oss / local）。"
+        },
+        {
+          "function": "admin_stats",
+          "line": 285,
+          "methods": [
+            "get /stats"
+          ],
+          "summary": "管理后台顶部概览统计：作品状态计数 / 用户数 / 存储模式（轻量，不序列化完整列表）。"
+        },
+        {
+          "function": "admin_list_featured",
+          "line": 333,
+          "methods": [
+            "get /featured"
+          ],
+          "summary": "精选池列表（含 featured_order；面板排序/hero/移除的数据源）。"
+        },
+        {
+          "function": "admin_add_featured",
+          "line": 340,
+          "methods": [
+            "post /featured"
+          ],
+          "summary": "把已上架 demo 加入首页策展池（尾部追加 order）。只接受 approved（上架）作品——"
+        },
+        {
+          "function": "admin_remove_featured",
+          "line": 372,
+          "methods": [
+            "delete /featured/{demo_id}"
+          ],
+          "summary": "把 demo 移出策展池并重排剩余行。"
+        },
+        {
+          "function": "admin_move_featured",
+          "line": 398,
+          "methods": [
+            "put /featured/{demo_id}/order"
+          ],
+          "summary": "池内上移/下移（body: {\"direction\": \"up\"|\"down\"}）；相邻交换后重排归一。"
+        },
+        {
+          "function": "admin_set_featured_hero",
+          "line": 431,
+          "methods": [
+            "put /featured/{demo_id}/hero"
+          ],
+          "summary": "把该件置为 hero（=移到池首，order 归一为 1）——首页 hero 大卡取池内首件。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/admin_entities.py",
+      "functions": [
+        {
+          "function": "admin_list_models",
+          "line": 55,
+          "methods": [
+            "get /models"
+          ],
+          "summary": "管理端列表：任何状态都可见（公开列表只出 active+unverified），附状态计数。"
+        },
+        {
+          "function": "admin_create_model",
+          "line": 68,
+          "methods": [
+            "post /models"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_update_model",
+          "line": 86,
+          "methods": [
+            "put /models/{ident}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_model_status",
+          "line": 100,
+          "methods": [
+            "put /models/{ident}/status"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_delete_model",
+          "line": 112,
+          "methods": [
+            "delete /models/{ident}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_add_alias",
+          "line": 119,
+          "methods": [
+            "post /models/{ident}/aliases"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_remove_alias",
+          "line": 133,
+          "methods": [
+            "delete /models/{ident}/aliases/{alias}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_merge_model",
+          "line": 146,
+          "methods": [
+            "post /models/{ident}/merge"
+          ],
+          "summary": "合并实体：治理铁律要求**先 dry_run 预览影响面**，确认后才真合。"
+        },
+        {
+          "function": "admin_merge_history",
+          "line": 161,
+          "methods": [
+            "get /models/merge-history"
+          ],
+          "summary": "可撤销的合并清单（处于「已被合并」状态的实体 + 撤销可行性判断）。"
+        },
+        {
+          "function": "admin_unmerge_model",
+          "line": 171,
+          "methods": [
+            "post /models/{ident}/unmerge"
+          ],
+          "summary": "撤销合并：迁回当初被搬走的引用 + 源实体恢复合并前状态。"
+        },
+        {
+          "function": "admin_list_tasks",
+          "line": 192,
+          "methods": [
+            "get /tasks"
+          ],
+          "summary": "管理端题目列表：缺省看全部状态（公开列表只出 active）；传 status 可筛待审 candidate。"
+        },
+        {
+          "function": "admin_task_detail",
+          "line": 213,
+          "methods": [
+            "get /tasks/{ident}"
+          ],
+          "summary": "M3-B2 管理端题目详情（任何状态含 merged/hidden）+ 归属作品全量列表（含 pending/rejected）。"
+        },
+        {
+          "function": "admin_create_task",
+          "line": 245,
+          "methods": [
+            "post /tasks"
+          ],
+          "summary": "管理员直接建题（治理边界内合法，不经候选队列，落审计）；带 demo_ids/demo_slugs 时一并挂题。"
+        },
+        {
+          "function": "admin_update_task",
+          "line": 272,
+          "methods": [
+            "put /tasks/{ident}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_delete_task",
+          "line": 285,
+          "methods": [
+            "delete /tasks/{ident}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_merge_task",
+          "line": 292,
+          "methods": [
+            "post /tasks/{ident}/merge"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_attach_demos",
+          "line": 306,
+          "methods": [
+            "post /tasks/{ident}/demos"
+          ],
+          "summary": "批量挂题：冷启动与 prompt 簇「成题」的执行入口。M3-B2：支持 demo_ids 或 demo_slugs（实体详情按 slug 挂）。"
+        },
+        {
+          "function": "admin_detach_demo",
+          "line": 324,
+          "methods": [
+            "delete /tasks/{ident}/demos/{demo_id}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_detach_demo_by_slug",
+          "line": 337,
+          "methods": [
+            "delete /tasks/{ident}/demos/slug/{demo_slug}"
+          ],
+          "summary": "M3-B2 摘题（按 slug）：实体详情关联作品列表是 DemoSummary（只有 slug），按 slug 摘除。"
+        },
+        {
+          "function": "admin_prompt_clusters",
+          "line": 357,
+          "methods": [
+            "get /prompt-clusters"
+          ],
+          "summary": "提示词簇 → 待确认题目（两档：exact 同句 / similar 相似；60s 缓存，写路径主动失效）。"
+        },
+        {
+          "function": "admin_list_suggestions",
+          "line": 386,
+          "methods": [
+            "get /suggestions"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_review_suggestion",
+          "line": 402,
+          "methods": [
+            "post /suggestions/{sid}/review"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_batch_review_suggestions",
+          "line": 416,
+          "methods": [
+            "post /suggestions/batch-review"
+          ],
+          "summary": "M3-B3 收件箱批量审核（t4 前端限速循环→真批量端点）：逐条独立提交+审计，单条失败不拖垮整批。"
+        },
+        {
+          "function": "admin_patch_entity",
+          "line": 426,
+          "methods": [
+            "patch /entities/{entity_type}/{ident}"
+          ],
+          "summary": "M3-B1 统一实体字段直改（06 §A2「自由」格落地）：白名单逐实体定义，全部走 service 层+审计。"
+        },
+        {
+          "function": "admin_tag_status",
+          "line": 438,
+          "methods": [
+            "put /entities/tag/{tag_id}/status"
+          ],
+          "summary": "T3·M5-B2 Tag 状态跃迁（06 §A3.3 + 附录 B 实施）：candidate|active|deprecated。"
+        },
+        {
+          "function": "admin_knowledge_stats",
+          "line": 459,
+          "methods": [
+            "get /knowledge/stats"
+          ],
+          "summary": "治理体检：覆盖率 / 实体积压 / 收件箱待处理 / 重复率（明确不用「标签数量」当 KPI）。"
+        },
+        {
+          "function": "admin_audit",
+          "line": 465,
+          "methods": [
+            "get /audit"
+          ],
+          "summary": "审计回溯：谁在什么时候改了什么、改前改后是什么。"
+        },
+        {
+          "function": "admin_type_demo_preview",
+          "line": 536,
+          "methods": [
+            "get /type-demo/preview"
+          ],
+          "summary": "规则预览（**不写库**）：type:demo 会被拆成哪些值、各自命中多少、置信度分布。"
+        },
+        {
+          "function": "admin_type_demo_queue",
+          "line": 573,
+          "methods": [
+            "post /type-demo/queue"
+          ],
+          "summary": "把规则建议落进收件箱（`retag_demo`，人工 approve 才真改标签）。"
+        },
+        {
+          "function": "admin_inspection",
+          "line": 607,
+          "methods": [
+            "get /inspection"
+          ],
+          "summary": "巡检全部检查项（只读，不写库）。"
+        },
+        {
+          "function": "admin_inspection_queue",
+          "line": 619,
+          "methods": [
+            "post /inspection/{check_id}/queue"
+          ],
+          "summary": "把可执行巡检项落成候选（不可执行的项返回 422，不造假动作）。"
+        },
+        {
+          "function": "admin_entity_conflicts",
+          "line": 632,
+          "methods": [
+            "get /entity-conflicts"
+          ],
+          "summary": "规范化同名的实体冲突组（合并向导的发现层）：只报不动手。"
+        },
+        {
+          "function": "admin_attribution_pending",
+          "line": 646,
+          "methods": [
+            "get /attribution/pending"
+          ],
+          "summary": "待归属清单：兜底实体（未标注 / 未定型号 / 灰测）+ 其下作品 + 规则预填目标。"
+        },
+        {
+          "function": "admin_attribution",
+          "line": 657,
+          "methods": [
+            "post /attribution"
+          ],
+          "summary": "把选中的作品从兜底位归属到真实型号。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/admin_tables.py",
+      "functions": [
+        {
+          "function": "list_tables",
+          "line": 37,
+          "methods": [
+            "get /tables"
+          ],
+          "summary": "注册表全清单：档位 / 行数 / 有没有写口（前端左侧清单与概览数字）。"
+        },
+        {
+          "function": "table_meta",
+          "line": 43,
+          "methods": [
+            "get /tables/{table}"
+          ],
+          "summary": "单表元数据：列（类型/可空/主键/外键/枚举/隐藏）+ 可搜索/可排序列 + 写口与 ops。"
+        },
+        {
+          "function": "list_rows",
+          "line": 49,
+          "methods": [
+            "get /tables/{table}/rows"
+          ],
+          "summary": "分页读行：`q` 走注册表的可搜索列，`f_<列>=值` 走等值筛选，排序限白名单列。"
+        },
+        {
+          "function": "insert_row",
+          "line": 68,
+          "methods": [
+            "post /tables/{table}/rows"
+          ],
+          "summary": "插一行（走该表的 writer 适配器 → 领域 service；无写口的表 403 + 原因）。"
+        },
+        {
+          "function": "update_row",
+          "line": 86,
+          "methods": [
+            "patch /tables/{table}/rows"
+          ],
+          "summary": "改一行：主键走查询串，`changes` 只放要改的列（没有变化 → 422，不造假审计）。"
+        },
+        {
+          "function": "delete_row",
+          "line": 106,
+          "methods": [
+            "delete /tables/{table}/rows"
+          ],
+          "summary": "删一行。`dry_run=1` 只回影响面（引用计数 + 级联说明），**不写库**。"
+        },
+        {
+          "function": "preview_row",
+          "line": 122,
+          "methods": [
+            "post /tables/{table}/rows/preview"
+          ],
+          "summary": "只读影响面预览：逐列校验 + 引用计数 + 级联 + 副作用提示。"
+        },
+        {
+          "function": "batch_rows",
+          "line": 142,
+          "methods": [
+            "post /tables/{table}/batch"
+          ],
+          "summary": "批量改/删（逐行独立提交 + 独立审计；单行失败不拖垮整批，失败原因逐行返回）。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/announcements.py",
+      "functions": [
+        {
+          "function": "list_announcements",
+          "line": 78,
+          "methods": [
+            "get /announcements"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_announcement",
+          "line": 116,
+          "methods": [
+            "get /announcements/{ann_id}"
+          ],
+          "summary": "公开详情：只返回可见公告（published 未过期），否则 404。站点更新（负 id）无详情。"
+        },
+        {
+          "function": "admin_get_announcement",
+          "line": 127,
+          "methods": [
+            "get /admin/announcements/{ann_id}"
+          ],
+          "summary": "管理端详情：任意状态可见。"
+        },
+        {
+          "function": "admin_list_announcements",
+          "line": 142,
+          "methods": [
+            "get /admin/announcements"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_announcement",
+          "line": 161,
+          "methods": [
+            "post /admin/announcements"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "update_announcement",
+          "line": 186,
+          "methods": [
+            "put /admin/announcements/{ann_id}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "delete_announcement",
+          "line": 211,
+          "methods": [
+            "delete /admin/announcements/{ann_id}"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/auth.py",
+      "functions": [
+        {
+          "function": "register",
+          "line": 29,
+          "methods": [
+            "post /register"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "login",
+          "line": 43,
+          "methods": [
+            "post /login"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "logout",
+          "line": 59,
+          "methods": [
+            "post /logout"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "me",
+          "line": 66,
+          "methods": [
+            "get /me"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "update_me",
+          "line": 71,
+          "methods": [
+            "patch /me"
+          ],
+          "summary": "改展示名 / 简介 / 历史开关。"
+        },
+        {
+          "function": "upload_avatar",
+          "line": 89,
+          "methods": [
+            "post /me/avatar"
+          ],
+          "summary": "头像上传：端侧已先压成 512×512，这里**再归一化一次**（双保险，也兜住端侧解不了的格式）。"
+        },
+        {
+          "function": "remove_avatar",
+          "line": 117,
+          "methods": [
+            "delete /me/avatar"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "change_password",
+          "line": 130,
+          "methods": [
+            "post /change-password"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/collections.py",
+      "functions": [
+        {
+          "function": "list_my_collections",
+          "line": 94,
+          "methods": [
+            "get /me/collections"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_collection",
+          "line": 106,
+          "methods": [
+            "post /me/collections"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "update_collection",
+          "line": 136,
+          "methods": [
+            "patch /me/collections/{collection_id}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "delete_collection",
+          "line": 163,
+          "methods": [
+            "delete /me/collections/{collection_id}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "list_collection_items",
+          "line": 174,
+          "methods": [
+            "get /me/collections/{collection_id}/items"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "add_item",
+          "line": 186,
+          "methods": [
+            "post /me/collections/{collection_id}/items"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "remove_item",
+          "line": 198,
+          "methods": [
+            "delete /me/collections/{collection_id}/items/{slug}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "favorite_status",
+          "line": 218,
+          "methods": [
+            "get /me/favorites/status"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "toggle_favorite",
+          "line": 237,
+          "methods": [
+            "post /me/favorites/toggle"
+          ],
+          "summary": "一键收藏/取消：不指定夹时走默认夹（\"收藏\"永远只点一下）。"
+        },
+        {
+          "function": "list_public_collections",
+          "line": 267,
+          "methods": [
+            "get /users/{username}/collections"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_collection",
+          "line": 281,
+          "methods": [
+            "get /collections/{collection_id}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "list_public_collection_items",
+          "line": 296,
+          "methods": [
+            "get /collections/{collection_id}/items"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/comments.py",
+      "functions": [
+        {
+          "function": "list_comments",
+          "line": 55,
+          "methods": [
+            "get /demos/{slug}/comments"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_comment",
+          "line": 68,
+          "methods": [
+            "post /demos/{slug}/comments"
+          ],
+          "summary": "评论已迁移到论坛：写操作下线，返回 410。"
+        },
+        {
+          "function": "delete_comment",
+          "line": 74,
+          "methods": [
+            "delete /comments/{comment_id}"
+          ],
+          "summary": "评论已迁移到论坛：写操作下线，返回 410。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/demos.py",
+      "functions": [
+        {
+          "function": "list_demos",
+          "line": 310,
+          "methods": [
+            "get "
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_demo",
+          "line": 492,
+          "methods": [
+            "get /{slug}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "demo_meta",
+          "line": 511,
+          "methods": [
+            "get /{slug}/meta"
+          ],
+          "summary": "轻量作品 meta（富卡片用）：不增加 view_count。"
+        },
+        {
+          "function": "same_prompt_demos",
+          "line": 521,
+          "methods": [
+            "get /{slug}/same-prompt"
+          ],
+          "summary": "同提示词的其他作品（v2 B2′）：prompt_id 精确共享 = 严格复现对比，零 Task 依赖。"
+        },
+        {
+          "function": "related_demos",
+          "line": 562,
+          "methods": [
+            "get /{slug}/related"
+          ],
+          "summary": "相关推荐候选池：标签重合度 + 同类型 + 热度 + 随机（60s 缓存按视区分键）。"
+        },
+        {
+          "function": "create_demo",
+          "line": 1047,
+          "methods": [
+            "post "
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_demo_from_url",
+          "line": 1143,
+          "methods": [
+            "post /from-url"
+          ],
+          "summary": "AI agent 友好：JSON 提交，zip/封面走 URL（后端下载），免 multipart；可匿名上传。"
+        },
+        {
+          "function": "update_demo",
+          "line": 1235,
+          "methods": [
+            "put /{slug}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "delete_demo",
+          "line": 1437,
+          "methods": [
+            "delete /{slug}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "download_demo",
+          "line": 1451,
+          "methods": [
+            "get /{slug}/download"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/explore.py",
+      "functions": [
+        {
+          "function": "explore",
+          "line": 31,
+          "methods": [
+            "get "
+          ],
+          "summary": "四段聚合：模型（Top12+总数）/ 题目（Top8+总数）/ 描述性标签（category/type/game）。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/forum.py",
+      "functions": [
+        {
+          "function": "list_topics",
+          "line": 83,
+          "methods": [
+            "get /topics"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_topic",
+          "line": 156,
+          "methods": [
+            "get /topics/{tid}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "list_replies",
+          "line": 169,
+          "methods": [
+            "get /topics/{tid}/replies"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_reaction_summary",
+          "line": 198,
+          "methods": [
+            "get /reactions/summary"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "toggle_reaction",
+          "line": 208,
+          "methods": [
+            "post /reactions"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_topic",
+          "line": 218,
+          "methods": [
+            "post /topics"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_reply",
+          "line": 248,
+          "methods": [
+            "post /topics/{tid}/replies"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_report",
+          "line": 291,
+          "methods": [
+            "post /reports"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_list_topics",
+          "line": 326,
+          "methods": [
+            "get /admin/topics"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_list_replies",
+          "line": 351,
+          "methods": [
+            "get /admin/replies"
+          ],
+          "summary": "管理端回复列表：**默认全局**（不必先选主题），可按主题/状态/关键词过滤。"
+        },
+        {
+          "function": "admin_update_topic",
+          "line": 383,
+          "methods": [
+            "put /admin/topics/{tid}"
+          ],
+          "summary": "改主题属性（置顶/精华/锁定/已解决/分类/状态）。KB-17：同事务落审计。"
+        },
+        {
+          "function": "admin_review_topic",
+          "line": 421,
+          "methods": [
+            "post /admin/topics/{tid}/review"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_review_reply",
+          "line": 449,
+          "methods": [
+            "post /admin/replies/{rid}/review"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_delete_topic",
+          "line": 479,
+          "methods": [
+            "delete /admin/topics/{tid}"
+          ],
+          "summary": "删除主题（回复级联）。KB-17：不可逆治理动作必须留痕。"
+        },
+        {
+          "function": "admin_delete_reply",
+          "line": 497,
+          "methods": [
+            "delete /admin/replies/{rid}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_ban_user",
+          "line": 526,
+          "methods": [
+            "post /admin/users/{uid}/ban"
+          ],
+          "summary": "封禁用户。KB-17：封禁是不可逆治理动作，必须留痕（谁封的、封前状态）。"
+        },
+        {
+          "function": "admin_list_reports",
+          "line": 547,
+          "methods": [
+            "get /admin/reports"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "admin_handle_report",
+          "line": 559,
+          "methods": [
+            "post /admin/reports/{rid}/handle"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/history.py",
+      "functions": [
+        {
+          "function": "record_view",
+          "line": 32,
+          "methods": [
+            "post /me/history/{slug}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "list_history",
+          "line": 54,
+          "methods": [
+            "get /me/history"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "clear_history",
+          "line": 80,
+          "methods": [
+            "delete /me/history"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "delete_history_item",
+          "line": 87,
+          "methods": [
+            "delete /me/history/{slug}"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/meta.py",
+      "functions": [
+        {
+          "function": "agent_guide",
+          "line": 14,
+          "methods": [
+            "get /agent-guide"
+          ],
+          "summary": "AI agent 上传指南全文（AI_AGENT_GUIDE.md），供 agent 直接爬取。"
+        },
+        {
+          "function": "site_info",
+          "line": 23,
+          "methods": [
+            "get /site-info"
+          ],
+          "summary": "站点公开概况：内容/社区/流量/热门/能力（机器可读，agent 与前端共用）。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/models.py",
+      "functions": [
+        {
+          "function": "list_models",
+          "line": 16,
+          "methods": [
+            "get "
+          ],
+          "summary": ""
+        },
+        {
+          "function": "model_demos",
+          "line": 32,
+          "methods": [
+            "get /{slug}/demos"
+          ],
+          "summary": "模型页作品清单（分页）。详情接口只带首屏 12 件，看全部走这里。"
+        },
+        {
+          "function": "model_detail",
+          "line": 53,
+          "methods": [
+            "get /{slug}"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/notifications.py",
+      "functions": [
+        {
+          "function": "list_notifications",
+          "line": 29,
+          "methods": [
+            "get "
+          ],
+          "summary": ""
+        },
+        {
+          "function": "unread_count",
+          "line": 50,
+          "methods": [
+            "get /unread-count"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "mark_read",
+          "line": 56,
+          "methods": [
+            "post /read"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "mark_all_read",
+          "line": 67,
+          "methods": [
+            "post /read-all"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/peek.py",
+      "functions": [
+        {
+          "function": "peek",
+          "line": 150,
+          "methods": [
+            "get /{kind}/{ident}"
+          ],
+          "summary": "紧凑实体摘要（供侧滑预览）。未知 kind → 422，不猜。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/ratings.py",
+      "functions": [
+        {
+          "function": "rate_demo",
+          "line": 62,
+          "methods": [
+            "post /demos/{slug}/rating"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "unrate_demo",
+          "line": 107,
+          "methods": [
+            "delete /demos/{slug}/rating"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_rating",
+          "line": 128,
+          "methods": [
+            "get /demos/{slug}/rating"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "leaderboard",
+          "line": 142,
+          "methods": [
+            "get /leaderboard"
+          ],
+          "summary": "排行榜：只展示 approved demo。质量榜（avg/god/ghost/net）排除 0 评。range=all|week|month。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/sessions.py",
+      "functions": [
+        {
+          "function": "list_session_logs",
+          "line": 48,
+          "methods": [
+            "get /demos/{slug}/session-logs"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_session_log",
+          "line": 89,
+          "methods": [
+            "get /demos/{slug}/session-logs/{filename}"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/stats.py",
+      "functions": [
+        {
+          "function": "stats_visits",
+          "line": 30,
+          "methods": [
+            "get /visits"
+          ],
+          "summary": "站点访问统计：today/yesterday/total/last7（升序，当天在最后）。公开。"
+        },
+        {
+          "function": "stats_visit",
+          "line": 36,
+          "methods": [
+            "post /visit"
+          ],
+          "summary": "页面访问打点：前端每次页面浏览发一次（原始 PV +1）。带每 IP 限流。"
+        },
+        {
+          "function": "stats_heartbeat",
+          "line": 54,
+          "methods": [
+            "post /heartbeat"
+          ],
+          "summary": "实时在线心跳：前端每 30s 发一次；后端仅更新内存在线表。"
+        },
+        {
+          "function": "stats_live",
+          "line": 62,
+          "methods": [
+            "get /live"
+          ],
+          "summary": "实时访问：在线人数 + 近1/5分钟 PV + 今日 PV。"
+        },
+        {
+          "function": "stats_sponsors",
+          "line": 68,
+          "methods": [
+            "get /sponsors"
+          ],
+          "summary": "赞助榜：按金额降序（→sort）；未公开金额的条目不返回金额字段。公开。"
+        },
+        {
+          "function": "stats_thanks",
+          "line": 94,
+          "methods": [
+            "get /thanks"
+          ],
+          "summary": "致谢榜：按添加时间倒序。公开。"
+        },
+        {
+          "function": "list_recognition",
+          "line": 113,
+          "methods": [
+            "get /recognition"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_recognition",
+          "line": 131,
+          "methods": [
+            "post /recognition"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "update_recognition",
+          "line": 152,
+          "methods": [
+            "put /recognition/{rid}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "delete_recognition",
+          "line": 174,
+          "methods": [
+            "delete /recognition/{rid}"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/tags.py",
+      "functions": [
+        {
+          "function": "list_tag_keys",
+          "line": 44,
+          "methods": [
+            "get /tag-keys"
+          ],
+          "summary": "标签键定义（供发布/编辑页做选择器 + 标签主页展示）。"
+        },
+        {
+          "function": "list_tag_keys_admin",
+          "line": 55,
+          "methods": [
+            "get /admin/tag-keys"
+          ],
+          "summary": "管理端词表全量：含 deprecated（状态徽章随附），知识中心总表/详情导航的数据源。"
+        },
+        {
+          "function": "get_tag",
+          "line": 72,
+          "methods": [
+            "get /{key_value}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "create_tag",
+          "line": 87,
+          "methods": [
+            "post "
+          ],
+          "summary": "新增固定值标签（仅 admin）。规则与审计在 tag_service（KB-4）。"
+        },
+        {
+          "function": "create_tag_key",
+          "line": 103,
+          "methods": [
+            "post /admin/tag-keys"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "update_tag_key",
+          "line": 120,
+          "methods": [
+            "put /admin/tag-keys/{key}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "delete_tag_key",
+          "line": 139,
+          "methods": [
+            "delete /admin/tag-keys/{key}"
+          ],
+          "summary": "删除标签键（同时删除该键下未被引用的标签值）；子标签/引用一律 409，不再 500。"
+        },
+        {
+          "function": "delete_tag_value",
+          "line": 145,
+          "methods": [
+            "delete /admin/tag-keys/{key}/values/{value}"
+          ],
+          "summary": "删除某个标签值（被 demo 引用或作为父标签时禁止删除）。"
+        },
+        {
+          "function": "create_suggestion",
+          "line": 170,
+          "methods": [
+            "post /suggestions"
+          ],
+          "summary": "用户申请新增 fixed 标签值：只写 pending 建议，不直接创建 Tag。"
+        },
+        {
+          "function": "list_suggestions",
+          "line": 218,
+          "methods": [
+            "get /admin/suggestions"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "review_suggestion",
+          "line": 230,
+          "methods": [
+            "post /admin/suggestions/{sid}/review"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "fetch_models",
+          "line": 280,
+          "methods": [
+            "post /admin/fetch-models"
+          ],
+          "summary": "抓取/整理主流 AI 模型：写入 model 键的 pending 建议（人工审核后生效）。"
+        },
+        {
+          "function": "derive_tags",
+          "line": 316,
+          "methods": [
+            "post /derive"
+          ],
+          "summary": "标签建议包（上传页第 2 步用）：**不要求登录、不写库**，作者收下或跳过都行。"
+        },
+        {
+          "function": "ai_suggest",
+          "line": 341,
+          "methods": [
+            "post /admin/ai-suggest"
+          ],
+          "summary": "AI 辅助整理（管理端）：与 `/tags/derive` **同一规则引擎**，只是响应形态不同。"
+        },
+        {
+          "function": "list_groups",
+          "line": 366,
+          "methods": [
+            "get /admin/groups"
+          ],
+          "summary": "列出某 key 下的 group 分布。"
+        },
+        {
+          "function": "rename_group",
+          "line": 383,
+          "methods": [
+            "put /admin/groups/{key}/{group}"
+          ],
+          "summary": "重命名 group：批量更新该 group 下所有 Tag.group（同事务落审计）。"
+        },
+        {
+          "function": "clear_group",
+          "line": 398,
+          "methods": [
+            "delete /admin/groups/{key}/{group}"
+          ],
+          "summary": "清除 group：该 group 下所有值变为无分组（同事务落审计）。"
+        },
+        {
+          "function": "set_value_group",
+          "line": 410,
+          "methods": [
+            "put /admin/values/{tag_id}/group"
+          ],
+          "summary": "给单个固定值设置/清除 group。"
+        },
+        {
+          "function": "merge_tags",
+          "line": 426,
+          "methods": [
+            "post /admin/merge"
+          ],
+          "summary": "合并标签：把 from 值的引用迁到 to 值，删除源值（单事务 + 审计 + 派生数据回填）。"
+        },
+        {
+          "function": "sync_models",
+          "line": 450,
+          "methods": [
+            "post /admin/sync-models"
+          ],
+          "summary": "从 models.dev 拉取模型字典，同步 model 固定值（新模型写 pending 建议，已有模型更新 group）。"
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/tasks.py",
+      "functions": [
+        {
+          "function": "suggest_tasks",
+          "line": 17,
+          "methods": [
+            "get /suggest"
+          ],
+          "summary": "规则层（TF-IDF）相似任务建议：纯读、无 LLM；供上传页「挂到已有题目」参考。"
+        },
+        {
+          "function": "list_tasks",
+          "line": 27,
+          "methods": [
+            "get "
+          ],
+          "summary": ""
+        },
+        {
+          "function": "task_detail",
+          "line": 50,
+          "methods": [
+            "get /{slug}"
+          ],
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "file": "backend/app/routers/users.py",
+      "functions": [
+        {
+          "function": "user_leaderboard",
+          "line": 14,
+          "methods": [
+            "get /users/leaderboard"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_user",
+          "line": 40,
+          "methods": [
+            "get /users/{username}"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "get_user_profile",
+          "line": 48,
+          "methods": [
+            "get /users/{username}/profile"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "toggle_follow",
+          "line": 57,
+          "methods": [
+            "post /users/{user_id}/follow"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "list_followers",
+          "line": 66,
+          "methods": [
+            "get /users/{username}/followers"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "list_following",
+          "line": 74,
+          "methods": [
+            "get /users/{username}/following"
+          ],
+          "summary": ""
+        },
+        {
+          "function": "patch_user",
+          "line": 82,
+          "methods": [
+            "patch /users/{user_id}"
+          ],
+          "summary": "改用户角色/状态（KB-17：改角色与封禁都是治理动作，同事务落审计）。"
+        }
+      ]
+    }
+  ]
+}
