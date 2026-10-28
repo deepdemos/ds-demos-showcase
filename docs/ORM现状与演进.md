@@ -2,10 +2,10 @@
 
 **适用范围**：本文是**旧栈（`main`，FastAPI + SQLAlchemy）**的 ORM 快照与演进基线。`dev` 已迁移至 Go，表结构仅作迁移参考。
 
-本文是**现有 ORM 的完整快照**，以及在它之上叠加《模型域设计 v1.0》的演进计划。
+本文是**现有 ORM 的完整快照**，以及在它之上叠加《模型域设计 v1.1》的演进计划。
 
 - 快照来源：`backend/app/models.py`（`org/main` @ `57ee489`），AST 解析，非手抄
-- 设计基线：[`模型域设计.md`](./模型域设计.md) v1.0
+- 设计基线：[`模型域设计.md`](./模型域设计.md) **v1.1**
 - 编排基线：[`模型域-roadmap.md`](./模型域-roadmap.md)
 
 **核心原则：不重写。以下所有变更是增量叠加，模型域设计原样保留。**
@@ -293,18 +293,22 @@ demo_tags(key=model) ──投影──> demo_models
       └─ S6 归档到 model_tag_archive 后删除
 ```
 
-`tags` / `demo_tags` 表**结构不变**，只是 `key='model'` 的行退场；其他标签键完全不受影响。
+`tags` / `demo_tags` 表在 **T6 之前结构不变**，只是 `key='model'` 的行退场；其他标签键在 T6 前不受影响。**T6 之后这两张表随标签域的删表计划整体退场（G4）**——`classifications` / `platforms` / `platform_configs` / `skills` / `demo_classifications` / `demo_platforms` / `demo_platform_configs` / `demo_skills` 已覆盖全部 12 个旧键，旧表没有继续存在的理由。
 
 ## 六、迭代顺序（六步，每步独立可发布）
 
-| 步 | 名称 | 变更 | 依赖 | 回滚 |
-|---|---|---|---|---|
-| **T1** | 契约与审计 | 无结构变更：审计脚本 + 双读打点 | — | 无需 |
-| **T2** | 事实源收敛 | `demo_models` +4 列；新增 `DemoModelWriter` | T1 | 关投影开关 + 回滚代码 |
-| **T3** | 厂商与服务方 | 新增 `vendors` / `providers` / `model_specs` / 4 张同步表；`models` +`vendor_id` | T1 | 删表 |
-| **T4** | provider 维度 | 启用 `demo_models.provider_id` 写入与展示 | **T2**、T3 | 停写、读回落「未标注」 |
-| **T5** | 第三方基准 | 新增 4 张基准表 | T3 | 删表 |
-| **T6** | 标签退场 | 冻结投影 → 归档 → 删除 `key='model'` 行 | T2 稳定一周期 | 从归档表恢复 |
+**命名统一（G13）**：`T1–T6` 是**本文的本地步骤编号**，全局阶段一律用 **M 编号**（已落 GitHub milestone + issue #21–#42）。对应关系：
+
+| 步 | M | 名称 | 变更 | 依赖 | 回滚 |
+|---|---|---|---|---|---|
+| **T1** | **M3** | 契约与审计 | 无结构变更：审计脚本 + 双读打点 | — | 无需 |
+| **T2** | **M4** | 事实源收敛 | `demo_models` +4 列；新增 `DemoModelWriter` | T1 | 关投影开关 + 回滚代码 |
+| **T3** | **M5** | 厂商与服务方 | 新增 `vendors` / `providers` / `model_specs` / 4 张同步表；`models` +`vendor_id` | T1 | 删表 |
+| **T4** | **M6** | provider 维度 | 启用 `demo_models.provider_id` 写入与展示 | **T2**、T3 | 停写、读回落「未标注」 |
+| **T5** | **M7** | 第三方基准 | 新增 4 张基准表 | T3 | 删表 |
+| **T6** | **M8** | 标签退场 | 冻结投影 → 归档（`model_tag_archive`，DDL 见《模型域设计》**§11.2**，2026-10-28 按 G16 下沉）→ 删除 `key='model'` 行 | T2 稳定一周期 | 从归档表恢复（A6） |
+
+**M 与 T 不是两套计划，是同一套的两种粒度**：M 是交付里程碑（对外、可发布），T 是本文的技术步骤（对内、可独立回滚）。完整映射表见 [`设计决策台账.md`](./设计决策台账.md) 的 **G13**。
 
 **硬约束（不能调换）**
 
