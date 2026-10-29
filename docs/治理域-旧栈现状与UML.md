@@ -557,7 +557,7 @@ stateDiagram-v2
 | Q3 | **删除策略**：硬删还是软删？ | `delete_demo` 硬删（无审计）；论坛主题硬删 | Demo 域已定**软删 + tombstone**（G1），治理域必须与之对齐 | **全软删**；删除本身是一条治理动作，必须留审计 + 可恢复窗口 |
 | Q4 | **待审队列**：一个 `proposals` 还是保留多张队列表？ | 4 套（图 3） | G9 已定「提案 kind 扩展」，但**没定 UI 与路由形态** | **一张表 + kind 过滤 + 一组动作名**（`approve`/`reject`/`resolve`/`dismiss` 统一成 `review(decision)`） |
 | Q5 | **admin 能否改内容列**（G11 的例外） | 旧栈能（`demos.py` 的 PUT 就带 force） | 决定 G11「revision 内容不可变」要不要开例外、审计要不要记 `admin_override` | **能改，但必须**：走独立端点 + 带 `reason` + 审计记 `admin_override=true` + 生成新 revision（而不是原地改） |
-| Q6 | **`audit_log` 归属与结构**（P14） | 谁写谁调 `record()`，表在 `models.py` | **全库没有它的定义**，所有时序图都在写一张不存在的表 | **治理域拥有**（独占写口 `audit_log` + 读口 `/admin/audit`）；`entity_type` 用 CHECK 枚举；保留期与分区策略写进文档 |
+| Q6 | **`audit_log` 归属与结构**（P14） | 谁写谁调 `record()`，表在 `models.py` | **全库没有它的定义**，所有时序图都在写一张不存在的表 | **治理域拥有**（独占写口 `audit_log` + 读口 `/admin/audit`）；`entity_type` 用 CHECK 枚举；保留期与分区策略写进文档（**2026-10-29 定案**：`action` / `entity_type` 已由 CHECK 改**目录表 + FK**；`audit_log` 落 `PARTITION BY RANGE (created_at)` + 复合主键 `(id, created_at)` + 默认分区兜底，见 `治理域设计.md` §5.2） |
 | Q7 | **写路径是否强制 service** | 一半一半（P2） | 决定 router 的职责边界、也决定能否做「全部治理动作可回放」 | **强制**：router 只做鉴权 + 参数校验 + 转调；service 负责事务与审计 |
 | Q8 | **批量语义**：部分成功还是全有全无？ | 逐条独立提交（KB-16） | 决定 `/batch-review` 的返回结构与前端重试逻辑 | **保留部分成功**，但返回结构必须固定（`{ok, failed, results[]}`），且**每条都要有审计** |
 
