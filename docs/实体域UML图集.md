@@ -1,6 +1,8 @@
-# 实体域 UML 图集 v2.7
+# 实体域 UML 图集 v2.8
 
-**适用范围**：本文是 [`实体域数据结构设计.md`](./实体域数据结构设计.md) v2.6 的**图形化补充**。只画图，不重复 DDL 与文字论证。所有图基于 v2.6 的三级层次（Task → Prompt → Demo）+ 提案层（Proposal），且 Demo 一侧按《Demo域设计》v1.0 的目标模型落图（`Demo` / `DemoRevision` / `DemoStat` / `DemoChannel`）。
+**v2.8 变更（2026-10-30，镜像台账 G20 / 数据结构设计 v2.7）**：只补**两个生命周期列**，不新画图、不改口径——`PROMPT_LIBRARY_ENTRIES` 与 `PROPOSALS` 各加 `timestamptz erased_at`（§4 ER 图）。`payload` 与 `title` 由 `NOT NULL` 放宽为可空这件事**图上不体现**（ER 图从不标可空性），以数据结构设计 §3.4 / §3.10 的 DDL 为准。
+
+**适用范围**：本文是 [`实体域数据结构设计.md`](./实体域数据结构设计.md) v2.7 的**图形化补充**。只画图，不重复 DDL 与文字论证。所有图基于 v2.7 的三级层次（Task → Prompt → Demo）+ 提案层（Proposal），且 Demo 一侧按《Demo域设计》v1.0 的目标模型落图（`Demo` / `DemoRevision` / `DemoStat` / `DemoChannel`）。
 
 **状态：草案，待真实数据验证**。数据结构设计 §10.1 是一份 **① ~ ⑩ 的待取数清单**（10 条，靠推理定不了、必须从线上库取数；节首写明「这是什么 / 为什么必须线上取数 / 与台账的区别」）。本文的图反映的是**结构**，不受这些参数影响；但 §20（题目名去重）的具体判定结果会随白名单调整而变。**注意与 [`设计决策台账.md`](./设计决策台账.md) 区分**：台账记**已拍板**的决策（G 编号），§10.1 记**还没数据、还拍不了**的问题（① ~ ⑩）。
 
@@ -45,7 +47,7 @@
 
 **留在正文的目标态**：§1–§21 全部（类图 / 数据流图 Level 0·1 / ER / 状态机 / 时序 / 组件图 / 活动图 / 部署图 / 索引），其中 **§21 类图已不含 `Tag`**。
 
-**本版说明**：台账现有 **G1–G18**（G13 迁移阶段命名统一、G14 新栈保留 agent 通道、G15 `version_of_id` 判给 revision、G16 本分层原则、**G17 `platform` 改「形态小表 + `is_harness`」、G18 生成条件下放 revision**）；本文正文引用一律用 G 编号。数据结构设计现为 **v2.6**（两份文档已按 G16 / G18 同步）。
+**本版说明**：台账现有 **G1–G18**（G13 迁移阶段命名统一、G14 新栈保留 agent 通道、G15 `version_of_id` 判给 revision、G16 本分层原则、**G17 `platform` 改「形态小表 + `is_harness`」、G18 生成条件下放 revision、G19 治理域、G20 数据生命周期**）；本文正文引用一律用 G 编号。数据结构设计现为 **v2.7**（两份文档已按 G16 / G18 / G20 同步）。
 
 **v2.3 相对 v2.2 的变化（2026-10-28）**：
 
@@ -557,6 +559,7 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
         timestamptz deleted_at
+        timestamptz erased_at
     }
 
     TASK_SLUG_HISTORY {
@@ -662,6 +665,7 @@ erDiagram
         real confidence
         text dedupe_key
         timestamptz updated_at
+        timestamptz erased_at
     }
 
     PROPOSAL_REFS {
