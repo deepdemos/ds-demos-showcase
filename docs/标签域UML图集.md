@@ -1383,7 +1383,7 @@ flowchart TB
 | **`demo_count` 用 `LEFT JOIN + GROUP BY` 一次算完** | 不需要每条 3 次查询；且只数**公开可见**的作品（`<公开可见谓词>`，G1） |
 | **`ix_demo_cls_cls` 修掉全表扫** | 现状 `demo_tags` 的 PK 是 `(demo_id, tag_id)`，按 `tag_id` 查询用不到 btree 前缀 |
 
-**`<公开可见谓词>` 是什么（G1）**：数据结构文档 §5 开头定义，展开为 4 个条件 —— `moderation_state='approved' AND lifecycle_state='published' AND deleted_at IS NULL AND EXISTS (demo_channels: channel=:channel AND visibility='listed')`。**列表 / 计数 / 榜单**一律套它；**下架作品按 slug 直访**返回 200 + tombstone（见 §14.4）。
+**`<公开可见谓词>` 是什么（G1；权威定义见 `标准对象 §ST-2`）**：数据结构文档 §5 开头定义，展开为 4 个条件 —— `moderation_state='approved' AND lifecycle_state='published' AND deleted_at IS NULL AND EXISTS (demo_channels: channel=:channel AND visibility='listed')`。**列表 / 计数 / 榜单**一律套它；**下架作品按 slug 直访**返回 200 + tombstone（见 §14.4）。
 
 ### 14.4 按 slug 直访：分档与 tombstone（G1 / G8）
 
