@@ -783,6 +783,8 @@ stateDiagram-v2
 
 **列表 / 计数**只算公开可见：`moderation_state='approved' AND lifecycle_state='published' AND deleted_at IS NULL` + 渠道 `visibility='listed'`（谓词定义见《实体域数据结构设计》§5.0，决议 G1）。
 
+**渠道的 `visibility` 不是第五个可见性档位**：它是**列表过滤**，只决定「这件作品要不要出现在某个渠道的列表里」。可见性档位只有《标准对象》§ST-2 的四档（公开 / 墓碑 / 仅作者 / 无人），由 `deleted_at` / `erased_at` / 公开谓词决定。恢复软删时渠道行**原样保留**——把渠道当档位会得出「恢复后要不要恢复渠道」这种没有答案的问题。
+
 **为什么两类 tombstone 必须不同**：`archived` 是作者自主行为（可恢复、无申诉），`removed` 是平台处置（有申诉、有条款依据）。合成一个页面会让用户既不知道能不能申诉，也不知道作品会不会回来。
 
 ### 6.5 运行元数据的更正（G11，2026-10-28）
@@ -972,13 +974,13 @@ sequenceDiagram
 5. `manifest_hash` 只由清单内容决定，与打包方式无关。
 6. `DemoRevisionFile.blob_hash` 必须存在于 `Blob`。
 7. **`erased_at` 非空 ⟹ `deleted_at` 非空，且全部内容列为 `NULL`**：`demos` 侧 `title` / `description` / `cover_url` / `cover_thumb_url` / `guest_name`；revision 侧 `title` / `description` / `cover_url` / `entry_path` / `manifest_hash` / `file_count` / `total_bytes` / `prompt` / `model_hint` / `single_file` / `external_url` / `video_url` / `prompt_id`。**逐列清单以 [`数据生命周期设计.md`](./数据生命周期设计.md) §6.2 为准**（本行只是投影），验收 SQL 见其附录 A.2。
-8. **行永不物理删除**（Q11）：`demos` / `demo_revisions` / `demo_revision_files` 都不做 `DELETE`，只有 GC 删派生物。
-7. `Blob` 不可变：同 sha256 永远同内容；写盘前必须校验。
-8. `DemoChannel.(demo_id, channel)` 唯一；`visibility='listed'` 要求 `moderation_state='approved'`。
-9. `DemoStat` 可随时从 `DemoRating` 重建；不得作为唯一数据源。
-10. `Demo.slug` 永久唯一；改名写入 `DemoSlugHistory` 并 301。
-11. 软删除的 `Demo` 不出现在任何公开查询；**行永不物理删除**（台账 G19 Q11）——GC 只清派生物（目录 / OSS 对象 / 无引用 blob），擦除只清内容字段。已擦除的 `Demo` 与 revision 一律按 404（§6.4）。
-12. 生成条件（模型 / 平台 / 平台配置 / 技能 / MCP）是 **revision 级事实**：每个 revision 的关联行只描述该版本；**历史版本可追溯**。demo 层只提供「当前版本」（`current_revision_id`）的派生值，不得作为独立事实源（见 §2.2 / §3.2.1）。
+8. **内容行永不物理删除**（Q11）：`demos` / `demo_revisions` 不做 `DELETE`，只有 GC 删派生物。**唯一例外是 `demo_revision_files`**：它是清单子行（没有任何 id 指向它），擦除时按《数据生命周期设计》§6.3 的顺序「先入队 → 再清字段 → 最后删子行」整行删除；留着的副作用是永久记着「他传过 12 个 3 MB 的 png」。
+9. `Blob` 不可变：同 sha256 永远同内容；写盘前必须校验。
+10. `DemoChannel.(demo_id, channel)` 唯一；`visibility='listed'` 要求 `moderation_state='approved'`。
+11. `DemoStat` 可随时从 `DemoRating` 重建；不得作为唯一数据源。
+12. `Demo.slug` 永久唯一；改名写入 `DemoSlugHistory` 并 301。
+13. 软删除的 `Demo` 不出现在任何公开查询；**行永不物理删除**（台账 G19 Q11）——GC 只清派生物（目录 / OSS 对象 / 无引用 blob），擦除只清内容字段。已擦除的 `Demo` 与 revision 一律按 404（§6.4）。
+14. 生成条件（模型 / 平台 / 平台配置 / 技能 / MCP）是 **revision 级事实**：每个 revision 的关联行只描述该版本；**历史版本可追溯**。demo 层只提供「当前版本」（`current_revision_id`）的派生值，不得作为独立事实源（见 §2.2 / §3.2.1）。
 
 ## 10. 与模型域的衔接
 
