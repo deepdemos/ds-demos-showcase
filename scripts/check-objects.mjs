@@ -37,6 +37,10 @@ export function parseAuthority(text) {
       objects.push({ key: section.key, ...found });
       break; // 每个对象的第一处 CHECK 视为权威取值域
     }
+    if (objects.some((o) => o.key === section.key)) return;
+    // 派生对象不落列（可见性四档、内容档位），没有 CHECK，靠正文一行「取值域：`a` / `b`」声明
+    const declarations = extractDeclarations(body);
+    if (declarations.length > 0) objects.push({ key: section.key, column: null, ...declarations[0] });
   });
   return { keys, objects };
 }
@@ -61,6 +65,33 @@ export function extractDiagrams(text) {
   return result;
 }
 
+/** 抽出正文里的「取值域：`a` / `b` / `c`」声明（派生对象用）。 */
+export function extractDeclarations(text) {
+  const result = [];
+  for (const match of text.matchAll(/^取值域\s*[：:]\s*(.+)$/gm)) {
+    const values = [...match[1].matchAll(/`([a-z0-9_]+)`/g)].map((v) => v[1]);
+    if (values.length >= 2) result.push({ values, index: match.index });
+  }
+  return result;
+}
+
+/** 抽出「`a` / `b` / `c`」形态的连续枚举片段（散文与表格里的副本），至少三个取值才算。 */
+export function extractInlineLists(text) {
+  const result = [];
+  const run = /`[a-z0-9_]+`(?:\s*\/\s*`[a-z0-9_]+`)+/g;
+  for (const match of text.matchAll(run)) {
+    const values = match[0].split('/').map((part) => part.trim().replace(/`/g, ''));
+    if (values.length >= 3) result.push({ column: null, values, index: match.index });
+  }
+  return result;
+}
+
+/** 从所在二级章节开头到 index 之前的正文（用于「章节级锚点必须写在副本前面」）。 */
+function sectionPrefix(text, index) {
+  const start = text.lastIndexOf('\n## ', index) + 1;
+  return text.slice(start >= 0 ? start : 0, index);
+}
+
 function shared(a, b) {
   const set = new Set(b);
   return a.filter((value) => set.has(value)).length;
@@ -70,21 +101,23 @@ function shared(a, b) {
 export function inspectDocument(name, text, authority) {
   const lines = text.split('\n');
   const problems = [];
-  for (const candidate of [...extractChecks(text), ...extractDiagrams(text)]) {
+  for (const candidate of [...extractChecks(text), ...extractDiagrams(text), ...extractInlineLists(text)]) {
     const { column, values, index } = candidate;
     const lineNo = text.slice(0, index).split('\n').length - 1;
     const window = lines.slice(Math.max(0, lineNo - 4), lineNo + 3).join('\n');
+    const section = sectionPrefix(text, index);
     for (const object of authority.objects) {
-      if (object.column !== column) continue;
+      if (object.column !== null && object.column !== column) continue;
       const same = object.values.length === values.length && shared(values, object.values) === values.length;
       const overlap = shared(values, object.values);
       if (same) {
-        if (!ANCHOR_PATTERN.test(window)) {
+        if (!ANCHOR_PATTERN.test(window) && !ANCHOR_PATTERN.test(section)) {
           problems.push(`${name}: 完整抄了一份 ${object.key} 的取值域（${values.join('/')}），缺 \`标准对象 §${object.key}\` 锚点（第 ${lineNo + 1} 行）`);
         }
-      } else if (overlap >= 2) {
+      } else if (overlap >= 2 && object.column !== null) {
+        const subject = object.column === null ? '这处枚举' : `\`${column}\``;
         problems.push(
-          `${name}: \`${column}\` 的取值与 ${object.key} 不一致（本文 ${values.join('/')}，权威 ${object.values.join('/')}，第 ${lineNo + 1} 行）`,
+          `${name}: ${subject} 的取值与 ${object.key} 不一致（本文 ${values.join('/')}，权威 ${object.values.join('/')}，第 ${lineNo + 1} 行）`,
         );
       }
     }
