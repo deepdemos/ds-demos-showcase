@@ -154,6 +154,13 @@ flowchart TB
 | `erased_at` | timestamptz | 是 | NULL | **擦除时间**（内容列已清空、不可恢复；非空必然蕴含 `deleted_at` 非空） |
 | `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符；治理列，擦除不动） |
 
+这两列都是受限枚举，取值集合与迁移矩阵在 `标准对象 §ST-4` / `标准对象 §ST-5`，本节只落可执行的约束——建表时随列一起加，别只写在注释里：
+
+```sql
+CHECK (moderation_state IN ('pending', 'approved', 'rejected'))
+CHECK (lifecycle_state  IN ('draft', 'published', 'archived', 'removed'))
+```
+
 **这些关注点不在 `Demo` 上**（各自的家如下；左侧沿用旧栈列名，便于对照迁移）：
 
 | 关注点 | 家 |
@@ -280,6 +287,8 @@ INDEX  (blob_hash)   -- GC 反查
 | `created_at` / `updated_at` | timestamptz | 否 | `now()` | |
 
 ```text
+-- 取值域：标准对象 §EN-1
+CHECK  (visibility IN ('listed', 'unlisted', 'hidden'))
 UNIQUE (demo_id, channel)
 INDEX  (channel, visibility, featured_order)
 ```
