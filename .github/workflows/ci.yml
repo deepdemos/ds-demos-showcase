@@ -99,9 +99,11 @@ jobs:
         run: node --test scripts/checks.test.mjs
       - name: 单文件行数门禁（>500 警告，>800 失败）
         run: node scripts/check-file-size.mjs
+      - name: 标准对象门禁（跨域取值域只允许定义一次）
+        run: node scripts/check-objects.mjs
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行或门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
+        run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行 / 标准对象取值域出现重复或走样 / 门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
 
   pr-guard:
     if: github.event_name == 'pull_request'

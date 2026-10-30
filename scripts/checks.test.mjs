@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { classifyLines, countTextLines, listSourceFiles } from './check-file-size.mjs';
 import { isDocsOnly, validatePullRequest } from './check-pr.mjs';
 import { hasReviewComment } from './check-review.mjs';
+import { inspectDocument as inspectStandardObjects, parseAuthority as parseStandardObjects, run as runStandardObjects } from './check-objects.mjs';
 
 test('文件行数阈值：500/501/800/801', () => {
   assert.equal(classifyLines(500), 'ok');
@@ -189,4 +190,42 @@ test('PR 门禁：代码块里的 issue 关键字不算关联', () => {
     changed_files: 1,
   });
   assert.ok(errors.some((error) => error.includes('issue')));
+});
+const AUTHORITY_TEXT = [
+  '## 登记表',
+  '| `ST-1` | 账号状态 | 身份域 | 全部 | **已展开** |',
+  '## §ST-1 账号状态 `AccountStatus`',
+  '```sql',
+  "CHECK (status IN ('pending', 'active', 'suspended', 'banned', 'deleted'))",
+  '```',
+].join('\n');
+
+test('标准对象门禁：完整抄取值域必须带锚点', () => {
+  const authority = parseStandardObjects(AUTHORITY_TEXT);
+  const copied = "```sql\nCHECK (status IN ('pending','active','suspended','banned','deleted'))\n```\n";
+  assert.ok(inspectStandardObjects('a.md', copied, authority).some((p) => p.includes('缺')));
+  assert.deepEqual(
+    inspectStandardObjects('a.md', `见 标准对象 §ST-1。\n\n${copied}`, authority),
+    [],
+  );
+});
+
+test('标准对象门禁：取值写歪了要报，私有枚举放行', () => {
+  const authority = parseStandardObjects(AUTHORITY_TEXT);
+  const drifted = "标准对象 §ST-1\nCHECK (status IN ('active','suspended','deleted'))\n";
+  assert.ok(inspectStandardObjects('a.md', drifted, authority).some((p) => p.includes('不一致')));
+  assert.deepEqual(inspectStandardObjects('a.md', "CHECK (status IN ('ok','error'))\n", authority), []);
+});
+
+test('标准对象门禁：引用键格式与登记表', () => {
+  const authority = parseStandardObjects(AUTHORITY_TEXT);
+  assert.ok(inspectStandardObjects('a.md', '见 标准对象 §XX-9\n', authority).some((p) => p.includes('格式')));
+  assert.ok(inspectStandardObjects('a.md', '见 标准对象 §EN-99\n', authority).some((p) => p.includes('未登记')));
+  assert.deepEqual(inspectStandardObjects('a.md', '见 标准对象 §ST-1\n', authority), []);
+});
+
+test('标准对象门禁：真实文档全绿', () => {
+  const { problems, objects } = runStandardObjects();
+  assert.deepEqual(problems, []);
+  assert.ok(objects.length >= 1);
 });
