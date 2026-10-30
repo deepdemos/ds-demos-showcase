@@ -194,8 +194,8 @@ CHECK (lifecycle_state  IN ('draft', 'published', 'archived', 'removed'))
 | `file_count` | bigint | **是** | NULL | **内容列**：擦除后是「不可知」，不是 0 |
 | `total_bytes` | bigint | **是** | NULL | 同上 |
 | `prompt` | text | **是** | NULL | 第一轮提示词原文。**内容列** |
-| `prompt_id` | bigint FK→prompts | 是 | NULL | 规范化去重实体（擦除不动：只断 `prompt` 文本） |
-| `video_url` | text | 是 | NULL | （≤2000 字符） |
+| `prompt_id` | bigint FK→prompts | 是 | NULL | 规范化去重实体。**内容列**：擦除时与 `prompt` 一起置 `NULL`（断链，`prompts` 行本身不动） |
+| `video_url` | text | 是 | NULL | （≤2000 字符）。**内容列**，擦除时置 `NULL` |
 | `model_hint` | text | **是** | NULL | 兜底型号依据；**可更正**（§6.5）（≤500 字符）。**内容列** |
 | `gen_rounds` | int | 是 | NULL | **可更正**（§6.5） |
 | `gen_minutes` | int | 是 | NULL | **可更正**（§6.5） |
@@ -971,7 +971,7 @@ sequenceDiagram
 4. `rev_no` 在同一 demo 内从 1 连续递增，不跳号不复用。
 5. `manifest_hash` 只由清单内容决定，与打包方式无关。
 6. `DemoRevisionFile.blob_hash` 必须存在于 `Blob`。
-7. **`erased_at` 非空 ⟹ `deleted_at` 非空，且全部内容列为 `NULL`**（`title` / `description` / `cover_url` / `cover_thumb_url`；revision 侧再加 `entry_path` / `manifest_hash` / `file_count` / `total_bytes` / `prompt` / `model_hint`）。由 §11.1 验收 SQL 守（[`数据生命周期设计.md`](./数据生命周期设计.md) 附录 A.5）。
+7. **`erased_at` 非空 ⟹ `deleted_at` 非空，且全部内容列为 `NULL`**：`demos` 侧 `title` / `description` / `cover_url` / `cover_thumb_url` / `guest_name`；revision 侧 `title` / `description` / `cover_url` / `entry_path` / `manifest_hash` / `file_count` / `total_bytes` / `prompt` / `model_hint` / `single_file` / `external_url` / `video_url` / `prompt_id`。**逐列清单以 [`数据生命周期设计.md`](./数据生命周期设计.md) §6.2 为准**（本行只是投影），验收 SQL 见其附录 A.2。
 8. **行永不物理删除**（Q11）：`demos` / `demo_revisions` / `demo_revision_files` 都不做 `DELETE`，只有 GC 删派生物。
 7. `Blob` 不可变：同 sha256 永远同内容；写盘前必须校验。
 8. `DemoChannel.(demo_id, channel)` 唯一；`visibility='listed'` 要求 `moderation_state='approved'`。
