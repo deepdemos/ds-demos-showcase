@@ -112,29 +112,7 @@ sequenceDiagram
 
 ### 3.2 DDL
 
-```sql
--- 能力目录：一个 key 一行，平台自持，不对 UGC 开放写
-CREATE TABLE demo_capabilities (
-    key            text PRIMARY KEY,              -- '<resource>.<action>'
-    summary        text NOT NULL,                 -- 中文一句话，前端与文档直接读
-    kind           text NOT NULL CHECK (kind IN ('read', 'write', 'net', 'realtime')),
-    needs_review   boolean NOT NULL DEFAULT false, -- 开这个能力要不要人工审核
-    quota_default  jsonb NOT NULL DEFAULT '{}'::jsonb,
-    is_active      boolean NOT NULL DEFAULT true,  -- 退役用 false，禁删行
-    doc_url        text,
-    created_at     timestamptz NOT NULL DEFAULT now()
-);
-
--- 每个 demo 被授予的能力（needs_review 的能力必须走这张表）
-CREATE TABLE demo_grants (
-    demo_id     bigint NOT NULL REFERENCES demos (id),
-    capability  text   NOT NULL REFERENCES demo_capabilities (key),
-    granted_at  timestamptz NOT NULL DEFAULT now(),
-    granted_by  bigint REFERENCES accounts (id),
-    revoked_at  timestamptz,
-    PRIMARY KEY (demo_id, capability)
-);
-```
+> **DDL 见 [30-demo.sql](../db/schema/30-demo.sql)**（本节涉及的 2 张表/视图：`demo_capabilities` / `demo_grants`）。表结构以 SQL 文件为准，文档不再复制。
 
 `demo_grants` 在 Step 1 用不上（`identity.read` 免审，声明即授予），它随第一个需要审核的能力一起进场——**先建表不建行**比以后补表便宜，但也不要现在写授予 UI。
 
