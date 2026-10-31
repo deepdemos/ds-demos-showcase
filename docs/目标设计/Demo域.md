@@ -66,7 +66,7 @@
 | 统计 | **`DemoStat`** 独立表，可重建，不作为权威 |
 | 评分 | **`DemoRating`** 只增不改（撤销是 delete），聚合进 `DemoStat` |
 | 模型关联 | **挂 `DemoRevision`**（见 §5.2.1）；demo 层 `demo_models` 是视图 |
-| 删除 | **软删除**（`deleted_at` + tombstone），物理清理走 GC |
+| 删除 | **行永不物理删除**：软删（`deleted_at`）、擦除（`erased_at`）、GC 只清派生物；可见性按 `标准对象 §ST-2` 四档，归档/移除才是墓碑页，软删/擦除是 404 |
 | 社区 | **`DemoExternalThread`** 只存外链标识，不复制帖子 |
 
 ## 3. 聚合与边界
@@ -127,10 +127,11 @@ flowchart TB
 |---|---|---|---|---|
 | `id` | bigint PK | 否 | 自增 | |
 | `slug` | text | 否 | — | **唯一且永久**；改名留历史见 §5.10（≤128 字符） |
-| `title` | text | 否 | — | 展示用；同时快照进 revision（≤200 字符） |
-| `description` | text | 否 | `''` | 可编辑 |
-| `cover_url` | text | 否 | `''` | 当前版本封面（便于列表直读；≤500 字符） |
-| `cover_thumb_url` | text | 否 | `''` | 200 档小图（≤500 字符） |
+| `title` | text | **是** | NULL | 展示用；同时快照进 revision（≤200 字符）。**内容列**，擦除置 NULL |
+| `description` | text | **是** | NULL | 可编辑。**内容列**，擦除置 NULL |
+| `cover_url` | text | **是** | NULL | 当前版本封面（便于列表直读；≤500 字符）。**内容列** |
+| `cover_thumb_url` | text | **是** | NULL | 200 档小图（≤500 字符）。**内容列** |
+| `cover_inline` | bytea | 是 | NULL | ≤32 KiB 内联封面（生命周期 §8.3）。**内容列** |
 | `author_id` | bigint FK→users | 是 | NULL | NULL = 匿名 |
 | `guest_name` | text | 是 | NULL | 匿名展示名（≤64 字符） |
 | `current_revision_id` | bigint FK→demo_revisions | 是 | NULL | 建库时可能还没有版本 |
@@ -140,7 +141,8 @@ flowchart TB
 | `created_at` | timestamptz | 否 | `now()` | |
 | `updated_at` | timestamptz | 否 | `now()` | **无 onupdate**，仅内容变更时显式赋值 |
 | `deleted_at` | timestamptz | 是 | NULL | 软删除时间 |
-| `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符） |
+| `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符）。治理列，擦除不动 |
+| `erased_at` | timestamptz | 是 | NULL | 内容已擦除的时刻（生命周期 §6.7）；非空 ⟹ `deleted_at` 非空且内容列全 NULL |
 
 **这些关注点不在 `Demo` 上**（各自的归属如下）：
 
