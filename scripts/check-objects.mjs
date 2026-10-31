@@ -7,6 +7,10 @@
 //   B 值集走样 —— 列名相同且与标准对象**至少共享 2 个取值**、但集合不同，视为同一枚举写歪了
 //      （历史事故：账号状态在另一份文档里写成 3 值，缺 pending/banned）。
 //   C 引用键 —— 任何 `标准对象 §X` 的键必须是 `ST|EN|ID|TS|P` + 数字，且在登记表里存在。
+//   D YAML 围栏 —— ```yaml 代码块顶层的结构必须单一：要么全是映射键（`key:`），要么全是序列项
+//      （`- `），不能混。混起来在 YAML 里是非法的，但 Markdown 渲染看不出来——历史事故：在
+//      生命周期 §11.4 的 registry.yaml 序列前插了一行 `not_content_tables: [...]`，文档照常
+//      渲染，谁也没发现那份"注册表"根本解析不了。
 //
 // 放行规则：只被一个域消费的私有枚举（与标准对象交集 < 2）不参与比对，避免把无关枚举当冲突。
 import fs from 'node:fs';
@@ -97,6 +101,35 @@ function shared(a, b) {
   return a.filter((value) => set.has(value)).length;
 }
 
+/** 抽出 ```yaml 围栏里的顶层结构，返回 `{ kind, lines }` 序列；结构混杂时 kind = 'mixed'。 */
+export function inspectYamlFences(text) {
+  const problems = [];
+  const fence = /^```yaml\s*$([\s\S]*?)^```\s*$/gm;
+  for (const match of text.matchAll(fence)) {
+    const body = match[1];
+    const kinds = new Set();
+    const samples = { mapping: null, sequence: null };
+    for (const line of body.split('\n')) {
+      if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) continue;
+      if (line.startsWith('#') || line === '---') continue;
+      if (line.startsWith('- ')) {
+        kinds.add('sequence');
+        samples.sequence ||= line.slice(0, 40);
+      } else if (/^[A-Za-z_][\w-]*\s*:/.test(line)) {
+        kinds.add('mapping');
+        samples.mapping ||= line.slice(0, 40);
+      }
+    }
+    if (kinds.size > 1) {
+      const lineNo = text.slice(0, match.index).split('\n').length;
+      problems.push(
+        `: \`\`\`yaml 代码块顶层结构混用（映射键 \`${samples.mapping}\` 与序列项 \`${samples.sequence}\` 同级，第 ${lineNo} 行）——YAML 会解析失败；把它们分到两个键下面`,
+      );
+    }
+  }
+  return problems;
+}
+
 /** 对单个文档做比对，返回错误列表。 */
 export function inspectDocument(name, text, authority) {
   const lines = text.split('\n');
@@ -127,6 +160,7 @@ export function inspectDocument(name, text, authority) {
     if (!KEY_PATTERN.test(key)) problems.push(`${name}: 引用键格式不合规 \`标准对象 §${match[1]}\`（只允许 ST/EN/ID/TS/P + 数字）`);
     else if (!authority.keys.includes(match[1])) problems.push(`${name}: 引用了未登记的键 \`标准对象 ${key}\``);
   }
+  for (const problem of inspectYamlFences(text)) problems.push(`${name}${problem}`);
   return problems;
 }
 
