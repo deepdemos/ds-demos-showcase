@@ -8,6 +8,7 @@ import { classifyLines, countTextLines, listSourceFiles } from './check-file-siz
 import { isDocsOnly, validatePullRequest } from './check-pr.mjs';
 import { hasReviewComment } from './check-review.mjs';
 import { inspectDocument as inspectStandardObjects, inspectYamlFences, parseAuthority as parseStandardObjects, run as runStandardObjects } from './check-objects.mjs';
+import { inspectContracts } from './check-contracts.mjs';
 
 test('文件行数阈值：500/501/800/801', () => {
   assert.equal(classifyLines(500), 'ok');
@@ -251,6 +252,69 @@ test('标准对象门禁：派生对象的局部枚举不算复制（不误伤�
   assert.deepEqual(inspectStandardObjects('a.md', '混排：`a1` / `a2` / `zzz`\n', authority), []);
 });
 
+const CONTRACT_GOV = [
+  '### 4.3 权限清单（2 个）',
+  '',
+  '| 域 | permission | 说明 | `moderator` | `admin` |',
+  '|---|---|---|---|---|',
+  '| 作品 | `demo.review` | 审核 | ✅ | ✅ |',
+  '| 运维 | `ops.run` | 运维 | — | ✅ |',
+  '',
+  '```sql',
+  "CREATE TABLE gc_queue (reason text NOT NULL CHECK (reason IN ('delete','erase')));",
+  '```',
+].join('\n');
+
+const CONTRACT_STD = [
+  '## §EN-5 审计动作',
+  '',
+  '```sql',
+  'INSERT INTO audit_actions (key, description) VALUES',
+  "    ('create', '新建'), ('erase', '擦除');",
+  '```',
+  '',
+  '**2 条**，且这是唯一权威。',
+  '',
+  '## §EN-6 审计实体类型',
+  '',
+  '```sql',
+  'INSERT INTO audit_entity_types (key, description, table_name, route_template) VALUES',
+  "    ('demo', '作品', 'demos', '/admin/demos/{id}');",
+  '```',
+  '',
+  '**1 条**。',
+  '',
+  '## §EN-7 GC 对象类型',
+  '',
+  '```sql',
+  'INSERT INTO gc_kinds (key, description) VALUES',
+  "    ('demo_dir', '作品目录');",
+  '```',
+  '',
+  '**1 条**。',
+  '',
+  '## §EN-8 GC 原因',
+  '',
+  '取值域：`delete` / `erase`',
+].join('\n');
+
+const CONTRACT_LIFECYCLE = [
+  '```yaml',
+  'version: 1',
+  'tables:',
+  '  - table: demos',
+  '    entity_type: demo',
+  '    derivatives:',
+  '      - {kind: demo_dir, from: slug}',
+  '```',
+].join('\n');
+
+const contractDocs = () => ({
+  governance: CONTRACT_GOV,
+  standard: CONTRACT_STD,
+  lifecycle: CONTRACT_LIFECYCLE,
+});
+
 test('标准对象门禁：章节级锚点必须写在副本之前', () => {
   const authority = parseStandardObjects(DERIVED_AUTHORITY);
   // 锚点远在副本下方（超出 ±4 行窗口、也不在章节前缀里）→ 仍要报
@@ -272,4 +336,45 @@ test('标准对象门禁：YAML 围栏顶层结构混用要被拦（映射键 + 
   // 纯序列、带注释、带 --- 也算干净；非 yaml 围栏不参与
   assert.deepEqual(inspectYamlFences(['```yaml', '# 注释', '- a', '- b', '```'].join('\n')), []);
   assert.deepEqual(inspectYamlFences(['```sql', 'not_content_tables: [x]', '- y', '```'].join('\n')), []);
+});
+
+
+test('契约门禁：权限必须绑全 admin、计数要对、退役键与反例豁免', () => {
+  assert.deepEqual(inspectContracts(contractDocs()), []);
+
+  const missing = contractDocs();
+  missing.governance = missing.governance.replace('| 运维 | `ops.run` | 运维 | — | ✅ |', '| 运维 | `ops.run` | 运维 | — | — |');
+  assert.ok(inspectContracts(missing).some((p) => p.includes('admin')));
+
+  const offByOne = contractDocs();
+  offByOne.governance = offByOne.governance.replace('（2 个）', '（3 个）');
+  assert.ok(inspectContracts(offByOne).some((p) => p.includes('实际')));
+
+  const stale = contractDocs();
+  stale.governance += '\n调它需要 `demo.erase`。\n';
+  assert.ok(inspectContracts(stale).some((p) => p.includes('demo.erase')));
+
+  const negative = contractDocs();
+  negative.governance += '\n**反例**：写成 `demo.erase` 会破坏命名。\n';
+  assert.deepEqual(inspectContracts(negative), []);
+});
+
+test('契约门禁：注册表里的 kind / entity_type 必须在目录表里', () => {
+  const badKind = contractDocs();
+  badKind.lifecycle = badKind.lifecycle.replace('kind: demo_dir', 'kind: oss_object');
+  assert.ok(inspectContracts(badKind).some((p) => p.includes('oss_object')));
+
+  const badEntity = contractDocs();
+  badEntity.lifecycle = badEntity.lifecycle.replace('entity_type: demo', 'entity_type: account');
+  assert.ok(inspectContracts(badEntity).some((p) => p.includes('account')));
+
+  const duplicated = contractDocs();
+  duplicated.standard = duplicated.standard.replace("('create', '新建')", "('create', '新建'), ('create', '重复')");
+  assert.ok(inspectContracts(duplicated).some((p) => p.includes('重复')));
+});
+
+test('契约门禁：gc_queue.reason 的 CHECK 必须与 §EN-8 取值域一致', () => {
+  const mismatch = contractDocs();
+  mismatch.governance = mismatch.governance.replace("('delete','erase')", "('delete','erase','purge')");
+  assert.ok(inspectContracts(mismatch).some((p) => p.includes('gc_queue.reason')));
 });
