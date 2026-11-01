@@ -13,7 +13,7 @@
 | 文件 | 内容 | 表的归属 |
 |---|---|---|
 | `10-identity.sql` | 身份域 **17 张**：`accounts` / `credentials` / `account_emails` / `sessions` / `account_marks` / `auth_events` / `profiles` / `avatars` / `username_history` / `groups` / `group_members` / `clients` / `consents` / `external_links` / `outbox_events`，以及 demo 站投影 `users` 与 demo 站会话 `web_sessions`；另有 `auth_events_default` 分区（`PARTITION OF`，门禁不计入表数） | 身份域 |
-| `15-settings.sql` | 设置域 **3 张**：`setting_keys`（参数注册表 = 白名单 + 类型 + 默认值）/ `site_settings`（站点级取值）/ `user_preferences`（用户级取值），以及 **19 条**首批参数种子（site 16 + user 3） | 设置域 |
+| `15-settings.sql` | 设置域 **3 张**：`setting_keys`（参数注册表 = 白名单 + 类型 + 默认值）/ `site_settings`（站点级取值）/ `user_preferences`（用户级取值），以及 **18 条**首批参数种子（site 15 + user 3） | 设置域 |
 | `20-governance.sql` | 治理域 **10 张**：`roles` / `permissions` / `role_permissions` / `audit_log`（另有 `audit_log_default` 与当月分区 `audit_log_p2026_10` 两个 `PARTITION OF`，门禁不计入表数）/ `audit_actions` / `audit_entity_types` / `gc_kinds` / `gc_queue` / `review_kinds` / `reports`，以及四张目录表的种子 | 治理域 |
 | `30-demo.sql` | Demo 域 **13 张**：`demos` / `demo_revisions` / `demo_types`（作品类型主数据，4 行种子）/ `blobs` / `demo_revision_files` / `demo_channels` / `demo_stats` / `demo_ratings` / `demo_timeline` / `demo_slug_history` / `demo_task_overrides` / `demo_capabilities` / `demo_grants` | Demo 域 |
 | `40-entity.sql` | 实体域 **7 张**：`tasks` / `task_prompts` / `task_slug_history` / `prompts` / `prompt_library_entries` / `proposals` / `proposal_refs` | 实体域 |

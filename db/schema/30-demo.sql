@@ -50,27 +50,32 @@ CREATE INDEX ix_demos_visible ON demos (moderation_state, lifecycle_state)
 
 CREATE INDEX ix_demos_author ON demos (author_id) WHERE author_id IS NOT NULL;
 
--- ===== demo_revisions =====
 -- ===== demo_types：作品类型（主数据表，DEMO-001） =====
 -- 为什么是表不是 CHECK：DEMO-001 要求「类型清单可扩展」——加一种类型是加一行数据，
 -- 不是加一条 migration。原先是 demo_revisions 上的一条 CHECK (demo_type IN (...))，
 -- 加类型要改约束、要迁移，与「可扩展」正好相反。
--- 类型是主数据（DDL 约定 §7.1）：不要 deleted_at / erased_at，退役靠 is_active = false。
+-- 类型是主数据（DDL 约定 §7.1）：不要 deleted_at / erased_at，退役靠 status = 'deprecated'。
+-- 列口径对齐其它主数据表（50-classification.sql 的 platforms / skills / tags）：
+--   sort int + status('active'|'deprecated') + created_at + updated_at。
+-- 不用 is_active 布尔、不用 sort_order —— 同一个仓库里两套写法会让人猜哪套是标准。
 CREATE TABLE demo_types (
     code        text        PRIMARY KEY,
     name        text        NOT NULL,
-    sort_order  int         NOT NULL DEFAULT 0,
-    is_active   boolean     NOT NULL DEFAULT true,
+    sort        int         NOT NULL DEFAULT 0,
+    status      text        NOT NULL DEFAULT 'active'
+                            CHECK (status IN ('active', 'deprecated')),
     created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT ck_demo_types_code CHECK (code ~ '^[a-z][a-z0-9_]*$')
 );
 
-INSERT INTO demo_types (code, name, sort_order) VALUES
+INSERT INTO demo_types (code, name, sort) VALUES
     ('web',   '网页作品',   10),
     ('zip',   '压缩包作品', 20),
     ('link',  '外部链接',   30),
     ('image', '图片作品',   40);
 
+-- ===== demo_revisions =====
 CREATE TABLE demo_revisions (
     id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     demo_id       bigint      NOT NULL,
