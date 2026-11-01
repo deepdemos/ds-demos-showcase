@@ -4,7 +4,8 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/**'] },
+  // src/api/gen 是契约生成物，不参与 lint：那套规则是约束人写代码的
+  { ignores: ['dist/**', 'src/api/gen/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
