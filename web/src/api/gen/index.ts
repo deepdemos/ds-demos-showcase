@@ -126,7 +126,10 @@ export type ListDemosParams = {
    * @maximum 200
    */
   pageSize?: number;
-  /** 排序口径 */
+  /**
+   * 排序口径。目前只有「最新」一种——`hot` 需要热度数据（浏览/收藏/评分），
+   * 那批指标还没落地，所以先不放进枚举：契约里有的值必须真能算出来。
+   */
   sort?: ListDemosSort;
 };
 
@@ -135,7 +138,6 @@ export type ListDemosSort = typeof ListDemosSort[keyof typeof ListDemosSort];
 
 export const ListDemosSort = {
   latest: 'latest',
-  hot: 'hot',
 } as const;
 
 export type getHealthzResponse200 = {
@@ -200,10 +202,15 @@ export type listDemosResponse400 = {
   status: 400
 }
 
+export type listDemosResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type listDemosResponseSuccess = (listDemosResponse200) & {
   headers: Headers;
 };
-export type listDemosResponseError = (listDemosResponse400) & {
+export type listDemosResponseError = (listDemosResponse400 | listDemosResponse503) & {
   headers: Headers;
 };
 
@@ -259,10 +266,15 @@ export type getDemoResponse404 = {
   status: 404
 }
 
+export type getDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type getDemoResponseSuccess = (getDemoResponse200) & {
   headers: Headers;
 };
-export type getDemoResponseError = (getDemoResponse404) & {
+export type getDemoResponseError = (getDemoResponse404 | getDemoResponse503) & {
   headers: Headers;
 };
 
