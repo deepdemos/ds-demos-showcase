@@ -229,3 +229,33 @@ test('标准对象门禁：真实文档全绿', () => {
   assert.deepEqual(problems, []);
   assert.ok(objects.length >= 1);
 });
+
+const DERIVED_AUTHORITY = [
+  '| `ST-9` | 派生档位 | 一 | 派生 |',
+  '## §ST-9 派生档位',
+  '取值域：`a1` / `a2` / `a3`',
+].join('\n');
+
+test('标准对象门禁：派生对象（无 CHECK）靠「取值域：」声明识别', () => {
+  const authority = parseStandardObjects(DERIVED_AUTHORITY);
+  assert.equal(authority.objects.length, 1);
+  assert.equal(authority.objects[0].column, null);
+  const copied = '档位：`a1` / `a2` / `a3` 全量复制\n';
+  assert.ok(inspectStandardObjects('a.md', copied, authority).some((p) => p.includes('缺')));
+  assert.deepEqual(inspectStandardObjects('a.md', `见 标准对象 §ST-9。\n\n${copied}`, authority), []);
+});
+
+test('标准对象门禁：派生对象的局部枚举不算复制（不误伤行文）', () => {
+  const authority = parseStandardObjects(DERIVED_AUTHORITY);
+  assert.deepEqual(inspectStandardObjects('a.md', '作者可见：`a1` / `a2`\n', authority), []);
+  assert.deepEqual(inspectStandardObjects('a.md', '混排：`a1` / `a2` / `zzz`\n', authority), []);
+});
+
+test('标准对象门禁：章节级锚点必须写在副本之前', () => {
+  const authority = parseStandardObjects(DERIVED_AUTHORITY);
+  // 锚点远在副本下方（超出 ±4 行窗口、也不在章节前缀里）→ 仍要报
+  const filler = '\n'.repeat(8);
+  const copyLine = '档位：`a1` / `a2` / `a3`';
+  const after = '## 某节\n' + copyLine + '\n' + filler + '见 标准对象 §ST-9。\n';
+  assert.ok(inspectStandardObjects('a.md', after, authority).some((p) => p.includes('缺')));
+});
