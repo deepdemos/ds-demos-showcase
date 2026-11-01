@@ -92,12 +92,12 @@ scripts/check-pr.mjs          PR issue / 类型 / 规模门禁
 | 接口 | OpenAPI 3.0.3（3.1 待工具支持），oapi-codegen 已接入 / orval 待接入 |
 | 部署 | Nginx 静态 + Go API 同域反代；OSS 预签名直传 |
 
-尚未接入：数据库 migration、登录会话、上传、业务页面。契约与两侧生成物、数据库连接已落地，**三个契约端点还没有 handler 实现**。
+尚未接入：数据库 migration、登录会话、上传、业务页面。**三个契约端点已实现**（`/healthz`、作品列表、作品详情含墓碑）。
 
 本地起后端：
 
 ```bash
 cd backend
-go run ./cmd/api                 # 不配数据库也能起，/healthz 返回 200
-DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable'   go run ./cmd/api               # 配了库则 /healthz 会真的 Ping，库不可用时返回 503
+go run ./cmd/api                 # 不配数据库也能起；/healthz 返回 200，业务端点返回 503
+DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable'   go run ./cmd/api               # 配了库则 /healthz 会真的 Ping，三个端点都可用
 ```

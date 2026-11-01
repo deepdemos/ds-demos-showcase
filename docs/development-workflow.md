@@ -155,9 +155,13 @@ TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=
   go test ./... -run Integration
 ```
 
-CI 里用 `services: postgres` 起库，所以**集成测试只在 CI 强制执行**。这是有意的取舍：
-不为少数人要跑的测试强迫所有人装数据库。代价是可能出现「本地绿、CI 红」，
-承担这个代价的方式是：CI 红时先看是不是集成测试，再判断是不是自己的改动引起的。
+CI 里用 `services: postgres` 起库（`backend` job），先灌 `db/schema/*.sql` 再跑
+`go test -race ./...`，所以**集成测试只在 CI 强制执行**。这是有意的取舍：不为少数人要跑的
+测试强迫所有人装数据库。代价是可能出现「本地绿、CI 红」——承担方式就是这一句：
+CI 红时先看是不是集成测试，再判断是不是自己的改动引起的。
+
+增删表结构后要同步确认 CI 里灌得进去：`db/schema/*.sql` 是被**逐个文件** `psql -f` 的，
+顺序错、缺扩展都会在 `准备测试库` 那一步红。
 
 ### contract job 里的两类校验
 

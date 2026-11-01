@@ -17,10 +17,26 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
+    # 集成测试要真库。本地不设 TEST_DATABASE_URL 就自动 skip，谁都不用装 PostgreSQL；
+    # CI 里由这个 service 提供，并在下面先灌一遍 db/schema/*.sql。
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: deepdemos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -31,7 +47,17 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: vet
         run: go vet ./...
-      - name: test
+      - name: 准备测试库（灌 db/schema）
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable
+        run: |
+          for f in ../db/schema/*.sql; do
+            echo "applying $f"
+            psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+      - name: test（含集成测试）
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable
         run: go test -race ./...
       - name: build
         run: go build ./...
