@@ -96,7 +96,7 @@ jobs:
         with:
           node-version: 24
       - name: 门禁脚本自检
-        run: node --test scripts/checks.test.mjs
+        run: node --test scripts/*.test.mjs
       - name: 单文件行数门禁（>500 警告，>800 失败）
         run: node scripts/check-file-size.mjs
       - name: 标准对象门禁（跨域取值域只允许定义一次）
@@ -105,28 +105,39 @@ jobs:
         if: failure()
         run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行 / 标准对象取值域出现重复或走样 / 门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
 
-  # 契约门禁（文档级）：目录表是唯一事实源——权限键、审计动作、审计实体类型、GC 对象类型，
-  # 以及生命周期 registry.yaml 对它们的引用。后端接上之后这里再扩「代码常量 ↔ 目录表」比对。
-  # 目前不是 required check（ruleset 由管理员维护），但 PR 上会红。
+  # 契约门禁：目录表是唯一事实源——权限键、审计动作、审计实体类型、GC 对象类型，
+  # 以及生命周期 registry.yaml 对它们的引用；表结构与可变常量两道静态门禁；
+  # 外加一道**真库**校验（PGlite / PG 18 wasm：把 db/schema/*.sql 灌进去逐条断言）。
+  # 静态与真库的分工：静态证明「文件之间互相对得上」，真库证明「数据库真的会拒绝」。
+  # 2026-11-01 起是 required check（ruleset protect-dev / protect-main-release 已加入），
+  # 红了就不能合并。
   contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      # 根 package.json 只给仓库工具用（唯一依赖是 @electric-sql/pglite，零传递依赖）；
+      # 前端仍走 web/ 下的 pnpm。两者互不影响，见 docs/development-workflow.md「契约门禁」。
+      - name: 安装仓库工具依赖
+        run: npm ci
       - name: 门禁脚本自检
-        run: node --test scripts/checks.test.mjs
+        run: node --test scripts/*.test.mjs
       - name: 契约门禁（权限键 / 审计动作 / 审计实体类型 / GC 对象类型）
         run: node scripts/check-contracts.mjs
       - name: 表结构门禁（db/schema 静态检查 + 文档里不许再手写 DDL）
         run: node scripts/check-schema.mjs
       - name: 可变常量门禁（运行手册里每个「唯一改动点」锚点必须还活着）
         run: node scripts/check-constants.mjs
+      - name: 真库校验（PG 18：白名单外键 / 类型 / 枚举 / 级联 / 审计路由模板）
+        run: node scripts/verify-schema.mjs
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::contract 失败（目录表与引用不一致 / 权限没绑全 admin / registry.yaml 引用了不存在的 kind 或 entity_type）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
+        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
 
   pr-guard:
     if: github.event_name == 'pull_request'

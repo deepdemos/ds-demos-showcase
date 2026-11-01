@@ -43,8 +43,21 @@
     pnpm --dir web check:ui
     pnpm --dir web build
     node scripts/check-file-size.mjs
-    node --test scripts/checks.test.mjs
+    node --test scripts/*.test.mjs
     cd backend && go vet ./... && go test ./...
+
+仓库工具（`scripts/` 下的门禁脚本）在**根目录**用 npm 装依赖，只有 `contract` 相关的那几个需要：
+
+    npm ci                       # 首次或 package-lock.json 变了之后
+    node scripts/check-contracts.mjs
+    node scripts/check-schema.mjs
+    node scripts/check-constants.mjs
+    node scripts/verify-schema.mjs   # 真库校验，见下
+
+**为什么根目录是 npm、`web/` 是 pnpm**：根目录只有一件事要做——把 `db/schema/*.sql` 灌进一个
+PostgreSQL 18 跑断言。唯一依赖是 `@electric-sql/pglite`（WASM 版 PG，零传递依赖），脚本本身是
+裸 `node`（无构建、无打包）。给它引一套 pnpm workspace 只会让「跑个门禁」多两步。两套包管理
+互不 import、互不影响：`web/` 的 `pnpm-lock.yaml` 和根目录的 `package-lock.json` 各自独立。
 
 ### 单文件行数
 
@@ -91,7 +104,7 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 - [ ] 只有一类修改；无混入的无关重构/格式化。
 - [ ] 修改 ≤500 行、≤20 文件；否则要求拆分。
 - [ ] file-size 警告文件是否被触碰；>800 行是否拆分。
-- [ ] CI 全绿：backend / frontend / ui-contract / file-size / pr-guard。
+- [ ] CI 全绿：backend / frontend / ui-contract / file-size / contract / pr-guard。
 - [ ] review 评论晚于最新 commit；push 后已重新 review。
 - [ ] 不确定的问题已 ask 并记录；没有未经确认的假设。
 - [ ] 有测试；bug 修复有复现测试；无占位/未使用代码。
@@ -107,10 +120,21 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 | frontend | format / lint / typecheck / test / build |
 | ui-contract | 控件库、Dev Room、注册名、接线检查 |
 | file-size | 单文件 >500 警告，>800 失败；脚本自检 |
+| contract | 契约（目录表引用一致）、表结构静态检查、可变常量锚点、**真库校验** |
 | pr-guard | issue 关联、单一标题、规模 ≤500 行 / ≤20 文件、必须存在晚于最新 commit 的 review 评论 |
 
-- required checks：backend、frontend、ui-contract、file-size、pr-guard（三个长期分支都启用）。
+- required checks：backend、frontend、ui-contract、file-size、contract、pr-guard（三个长期分支都启用）。`contract` 自 2026-11-01 起加入（ruleset `protect-dev` / `protect-main-release` 同步更新）。
 - 所有 job 失败时会输出指引，要求先读本文件。
+
+### contract job 里的两类校验
+
+| | 证明什么 | 不证明什么 |
+| --- | --- | --- |
+| 静态（`check-contracts` / `check-schema` / `check-constants`） | 文件之间互相对得上：权限键绑全 admin、文档引用的目录表行存在、`db/schema` 与文档里的表名一致、运行手册每个锚点还在 | 数据库**真的会拒绝**某条非法数据 |
+| 真库（`verify-schema`） | 把 `db/schema/*.sql` 灌进 PostgreSQL 18（PGlite wasm），逐条断言：白名单外键、值类型、枚举、级联删除、审计路由模板、结构性上限 | 业务代码怎么用这些表；性能；事务边界；`90-extensions.sql`（PGlite 无 contrib，该文件在缺扩展的环境整块跳过） |
+
+写「某个约束一定生效」这类结论时，**只有真库校验算证据**；静态门禁只能证明「这条约束在文档和 SQL 里都写着」。
+
 - CI 红处理顺序：建 issue → 切分支修复 → PR 用 Fixes #N 关联 → 本地检查 + CI 绿 → 走 review。
 - CI 红、review 未通过、issue 未关联时禁止合并；管理员也不例外。
 
