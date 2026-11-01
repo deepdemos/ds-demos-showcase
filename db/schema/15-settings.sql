@@ -85,15 +85,20 @@ CREATE TABLE user_preferences (
     )
 );
 
--- ===== 首批参数（19 行：site 16 + user 3；加参数 = 这里加一行，不改表结构、不改接口） =====
+-- ===== 首批参数（18 行：site 15 + user 3；加参数 = 这里加一行，不改表结构、不改接口） =====
 -- 默认值只写在这里一次。代码里不许再出现第二份默认值（IDN-005 / NTF-008 的反面）。
 -- 改默认值 = 改注册表行 + 一条 migration；不改已存在的值行（值行是「管理员改过」的证据）。
 --
--- 这批的来历（v1.1，2026-11-01）：前 8 行来自 SET-001 / IDN-005 / NTF-008 / SET-007；
--- 后 11 行来自一次全仓盘点（docs/运行手册-可变常量.md），把散在各域正文里的
--- 运营性上限收进来，让 GEN-012「上限只在一处」第一次真的成立。
+-- 这批的来历（v1.2，2026-11-01）：前 8 行来自 SET-001 / IDN-005 / NTF-008 / SET-007；
+-- 后 10 行来自一次全仓盘点，把散在各域正文里的运营性上限收进来，
+-- 让 GEN-012「上限只在一处」第一次真的成立。
 -- 注意：结构性上限（封面内联 32 KiB、username 3–20 等）不进这里，它们要 migration，
--- 登记在运行手册的「结构性上限」一节。
+-- 登记在 docs/运行手册-可变常量.md 的「结构性上限」一节。
+--
+-- 为什么没有 history.max_entries_local：它约束的是**浏览器本机**存多少条历史，
+-- 值由前端读、由前端裁剪，后端存一份既不参与判定也不省任何事——改后端值前端不重读
+-- 等于没改。所以它是**前端偏好**（用户可自己调，存本机），不是站点参数。
+-- 判据见设置域设计 §4.1：只影响本机展示、后端不参与判定的，一律不进注册表。
 INSERT INTO setting_keys (key, scope, value_type, default_value, description) VALUES
     -- ① 审核与上架（SET-001）
     ('demo.auto_approve',             'site', 'boolean', 'false'::jsonb, '全局自动上架：新提交的作品跳过审核直接上架（SET-001）'),
@@ -109,7 +114,6 @@ INSERT INTO setting_keys (key, scope, value_type, default_value, description) VA
     ('collection.max_per_account',    'site', 'number',  '20'::jsonb,    '每个账号可建的收藏夹数量上限（COL-004）'),
     ('collection.max_items',          'site', 'number',  '500'::jsonb,   '每个收藏夹可收藏的作品数量上限（COL-004）'),
     ('history.max_entries_account',   'site', 'number',  '200'::jsonb,   '账号浏览历史保留条数上限（HIST-006）'),
-    ('history.max_entries_local',     'site', 'number',  '100'::jsonb,   '本机浏览历史保留条数上限，前端读取（HIST-006）'),
     -- ⑤ 生命周期（L1）
     ('lifecycle.restore_window_days', 'site', 'number',  '30'::jsonb,    '软删除后可恢复的天数；只影响后续恢复判定，不回溯（生命周期 §13 L1）'),
     -- ⑥ 外部模型目录同步（模型域 §6.3）
