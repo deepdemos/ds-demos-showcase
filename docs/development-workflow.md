@@ -126,6 +126,21 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 - required checks：backend、frontend、ui-contract、file-size、contract、pr-guard（三个长期分支都启用）。`contract` 自 2026-11-01 起加入（ruleset `protect-dev` / `protect-main-release` 同步更新）。
 - 所有 job 失败时会输出指引，要求先读本文件。
 
+### 接口契约
+
+`api/openapi.yaml` 是接口的唯一事实源。改接口的顺序固定，不要反过来：
+
+```bash
+# 1. 改契约
+$EDITOR api/openapi.yaml
+# 2. 重新生成（需要 oapi-codegen 在 PATH 上，安装见 api/README.md）
+pnpm gen:api:go
+# 3. 再改实现
+```
+
+CI 会重新生成一遍并 `git diff --exit-code backend/internal/api`——产物与契约不一致就红。
+这条是为了让「禁止手改生成目录」不靠自觉，和真库校验是同一个思路。
+
 ### contract job 里的两类校验
 
 | | 证明什么 | 不证明什么 |
