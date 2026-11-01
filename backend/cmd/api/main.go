@@ -10,18 +10,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/httpapi"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/config"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/database"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/httpserver"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg := config.Load()
 
-	// pinger 是 nil 接口表示「未配置数据库」。注意不能把 *pgxpool.Pool 的 nil 值
-	// 直接赋给接口——那会得到一个非 nil 的接口，里面装着 nil 指针。
-	var pinger httpserver.Pinger
+	// 两个变量都保持 nil，表示「未配置数据库」。注意不能把 *pgxpool.Pool 的 nil 值
+	// 直接赋给接口——那会得到「非 nil 接口装着 nil 指针」，后面的 nil 判断全部失效。
+	var pinger httpapi.Pinger
+	var queries *store.Queries
+
 	if cfg.HasDatabase() {
 		pool, err := database.Open(context.Background(), cfg.DatabaseURL)
 		if err != nil {
@@ -31,13 +35,14 @@ func main() {
 		}
 		defer pool.Close()
 		pinger = pool
+		queries = store.New(pool)
 	} else {
-		logger.Warn("DATABASE_URL 未配置：服务可启动，但依赖数据库的能力不可用")
+		logger.Warn("DATABASE_URL 未配置：/healthz 仍可用，业务端点返回 503")
 	}
 
 	server := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           httpserver.NewRouter(pinger),
+		Handler:           httpserver.NewRouter(httpapi.New(pinger, queries)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
