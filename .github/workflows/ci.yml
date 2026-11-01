@@ -108,7 +108,7 @@ jobs:
   # 契约门禁：目录表是唯一事实源——权限键、审计动作、审计实体类型、GC 对象类型，
   # 以及生命周期 registry.yaml 对它们的引用；表结构与可变常量两道静态门禁；
   # 外加一道**真库**校验（PGlite / PG 18 wasm：把 db/schema/*.sql 灌进去逐条断言）。
-  # 以及一道契约生成校验：重新跑 oapi-codegen，产物与 api/openapi.yaml 不一致就红。
+  # 以及一道契约生成校验：重新跑 oapi-codegen（Go）与 orval（前端），产物与 api/openapi.yaml 不一致就红。
   # 静态与真库的分工：静态证明「文件之间互相对得上」，真库证明「数据库真的会拒绝」。
   # 2026-11-01 起是 required check（ruleset protect-dev / protect-main-release 已加入），
   # 红了就不能合并。
@@ -144,15 +144,21 @@ jobs:
         run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.0
       # 重新生成一遍再比 diff：这是「禁止手改生成目录」唯一可执行的实现。
       # 版本与 api/README.md 里写的 go install 版本必须一致，否则产物会漂。
-      - name: 接口契约须与生成产物一致
+      - name: 接口契约须与生成产物一致（Go）
         run: |
           cd api
           "$(go env GOPATH)/bin/oapi-codegen" -config oapi-codegen.yaml openapi.yaml
           cd ..
           git diff --exit-code backend/internal/api
+      # 前端客户端同理：orval 版本钉在脚本里（根 package.json 的 gen:api:web），
+      # 不放进 devDependencies 是因为 83 个传递依赖会让 lockfile 涨 1600 多行，过不了 pr-guard。
+      - name: 接口契约须与生成产物一致（前端）
+        run: |
+          npm run gen:api:web
+          git diff --exit-code web/src/api/gen
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 接口契约与生成产物不一致——改了 api/openapi.yaml 却没重新生成，或手改了 backend/internal/api/）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
+        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 接口契约与生成产物不一致——改了 api/openapi.yaml 却没重新生成，或手改了 backend/internal/api/ 与 web/src/api/gen/）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
 
   pr-guard:
     if: github.event_name == 'pull_request'

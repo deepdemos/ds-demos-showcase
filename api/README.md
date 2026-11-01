@@ -28,20 +28,29 @@ CI 会重新生成一遍并比对，产物与契约不一致就是红的。
 | `/api/v1/demos` | GET | 作品列表 | 查询参数、分页（默认 50 / 上限 200）、排序枚举 |
 | `/api/v1/demos/{slug}` | GET | 作品详情 | 路径参数、格式校验、404 语义、可空字段 |
 
+前端生成的客户端在 `web/src/api/gen/index.ts`，导出 `getHealthz` / `listDemos` / `getDemo`
+三个函数，返回值是 `{ data, status }` 联合类型——按 `status` 收窄即可拿到对应结构。
+
 三个端点覆盖了会反复遇到的形状：无参、查询参数、路径参数、分页、可空字段、错误响应。
 **业务实现尚未接入**——目前只到接口与类型。
 
 ## 生成
 
-Go 侧（产物 `backend/internal/api/api.gen.go`，**入库**）：
+两侧产物都**入库**，CI 会重新生成并比对，不一致就红。
 
 ```bash
-go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.0   # 只需一次
-pnpm gen:api:go
+npm run gen:api        # 两侧一起
+npm run gen:api:go     # 只生成 Go
+npm run gen:api:web    # 只生成前端
 ```
 
-`oapi-codegen` 版本写死在上面的 `go install` 里，与生成文件头部的版本号一致；
-升级要重生成一次并 review 差异。
+| 侧 | 工具 | 产物 | 版本钉在哪 |
+| --- | --- | --- | --- |
+| Go | `oapi-codegen` | `backend/internal/api/api.gen.go` | 根 `package.json` 的 `gen:api:go` 前面的 `go install` 说明 + 生成文件头部 |
+| 前端 | `orval` | `web/src/api/gen/index.ts` | 根 `package.json` 的 `gen:api:web`（`npx --yes orval@8.46.0`） |
+
+`orval` 没有放进 `devDependencies`，是因为它带 83 个传递依赖、会让 lockfile 涨 1600 多行，
+过不了 500 行的 PR 上限。版本钉在脚本里同样确定，代价是每次生成要联网拉一次。
 
 ## 404 与墓碑
 
