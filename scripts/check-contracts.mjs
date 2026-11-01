@@ -74,7 +74,7 @@ export function parseSeeds(text, table) {
 }
 
 /** 正文里「**N 条**」这种声明（取离 `anchor` 最近的那一处）。 */
-export function parseDeclaredCount(text, anchor, pattern = /\*\*(\d+)\s*条\*\*/) {
+export function parseDeclaredCount(text, anchor, pattern = /\*\*(\d+)\s*条/) {
   const at = text.indexOf(anchor);
   if (at < 0) return null;
   const window = text.slice(at, at + 1200);
@@ -99,7 +99,7 @@ export function parseCheckValues(text, column) {
   return [...match[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
 }
 
-export function inspectContracts(docs) {
+export function inspectContracts(docs, root = process.cwd()) {
   const problems = [];
   const push = (msg) => problems.push(msg);
 
@@ -125,35 +125,44 @@ export function inspectContracts(docs) {
     }
   }
 
+  // 目录表的种子与 CHECK 取值域都在 db/schema 里（表结构搬迁后，文档只留「N 条」声明）
+  const schema = docs.schema ?? [...(function* () {
+    const dir = path.join(root, 'db', 'schema');
+    if (!fs.existsSync(dir)) return;
+    for (const f of fs.readdirSync(dir).sort()) {
+      if (f.endsWith('.sql')) yield fs.readFileSync(path.join(dir, f), 'utf8');
+    }
+  })()].join('\n');
+
   // B 审计动作
-  const actions = parseSeeds(docs.standard, 'audit_actions');
-  if (!actions) push('标准对象 §EN-5: 没有解析到 audit_actions 种子');
+  const actions = parseSeeds(schema, 'audit_actions');
+  if (!actions) push('db/schema/20-governance.sql: 没有解析到 audit_actions 种子');
   else {
     const dup = actions.filter((k, i) => actions.indexOf(k) !== i);
     for (const key of new Set(dup)) push(`标准对象 §EN-5: 审计动作重复 \`${key}\``);
     for (const key of actions) {
       if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$/.test(key)) push(`标准对象 §EN-5: 审计动作 \`${key}\` 不合命名（小写 snake_case，必要时一段点分）`);
     }
-    const declaredCount = parseDeclaredCount(docs.standard, 'INSERT INTO audit_actions');
+    const declaredCount = parseDeclaredCount(docs.standard, '§EN-5');
     if (declaredCount !== null && declaredCount !== actions.length) {
       push(`标准对象 §EN-5: 正文写「${declaredCount} 条」，种子实际 ${actions.length} 条`);
     }
   }
 
   // C 审计实体类型
-  const entities = parseSeeds(docs.standard, 'audit_entity_types');
-  if (!entities) push('标准对象 §EN-6: 没有解析到 audit_entity_types 种子');
+  const entities = parseSeeds(schema, 'audit_entity_types');
+  if (!entities) push('db/schema/20-governance.sql: 没有解析到 audit_entity_types 种子');
   else {
     const dup = entities.filter((k, i) => entities.indexOf(k) !== i);
     for (const key of new Set(dup)) push(`标准对象 §EN-6: 审计实体类型重复 \`${key}\``);
-    const declaredCount = parseDeclaredCount(docs.standard, 'INSERT INTO audit_entity_types');
+    const declaredCount = parseDeclaredCount(docs.standard, '§EN-6');
     if (declaredCount !== null && declaredCount !== entities.length) {
       push(`标准对象 §EN-6: 正文写「${declaredCount} 条」，种子实际 ${entities.length} 条`);
     }
   }
 
   // D GC 对象类型 + 注册表引用
-  const gcKinds = parseSeeds(docs.standard, 'gc_kinds');
+  const gcKinds = parseSeeds(schema, 'gc_kinds');
   if (!gcKinds) push('标准对象 §EN-7: 没有解析到 gc_kinds 种子（别再写成散文了，散文没法被机器校验）');
   const registry = parseRegistryRefs(docs.lifecycle);
   if (gcKinds) {
@@ -166,7 +175,8 @@ export function inspectContracts(docs) {
       if (!entities.includes(type)) push(`生命周期 registry.yaml: entity_type \`${type}\` 不在 §EN-6 的 audit_entity_types 里`);
     }
   }
-  const checkValues = parseCheckValues(docs.governance, 'reason');
+  // db/schema 是事实源；拿不到时（单测 fixture / 迁移期文档）退回文档里的 DDL
+  const checkValues = parseCheckValues(schema, 'reason') ?? parseCheckValues(docs.governance ?? '', 'reason');
   const declaredReasons = docs.standard.match(/^取值域\s*[：:]\s*(.+)$/m);
   if (checkValues && declaredReasons) {
     const fromDoc = [...declaredReasons[1].matchAll(/`([a-z_]+)`/g)].map((m) => m[1]).sort();
@@ -193,7 +203,7 @@ export function run(root = process.cwd()) {
   for (const [name, text] of Object.entries(docs)) {
     if (!text) delete docs[name];
   }
-  return { problems: inspectContracts(docs), docs: Object.keys(docs) };
+  return { problems: inspectContracts(docs, root), docs: Object.keys(docs) };
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('check-contracts.mjs')) {

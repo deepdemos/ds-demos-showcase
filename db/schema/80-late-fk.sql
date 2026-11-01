@@ -1,0 +1,77 @@
+-- 90-late-fk.sql —— 全部外键（所有表建完之后统一添加）
+-- 为什么集中：跨域外键存在循环，建表顺序无法同时满足——
+--   accounts.role → roles（治理域）与 audit_log.actor_id → accounts（身份域）互为先后；
+--   demos.current_revision_id → demo_revisions 与 demo_revisions.demo_id → demos 同理。
+-- 集中添加的另一个好处：一眼看出哪些边是跨域的。由 scripts/check-schema.mjs 校验。
+
+ALTER TABLE credentials ADD CONSTRAINT fk_credentials_account_id0 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE account_emails ADD CONSTRAINT fk_account_emails_account_id1 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE sessions ADD CONSTRAINT fk_sessions_account_id2 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE account_marks ADD CONSTRAINT fk_account_marks_account_id3 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE auth_events ADD CONSTRAINT fk_auth_events_account_id4 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE profiles ADD CONSTRAINT fk_profiles_account_id5 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE avatars ADD CONSTRAINT fk_avatars_account_id6 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE username_history ADD CONSTRAINT fk_username_history_account_id7 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE group_members ADD CONSTRAINT fk_group_members_group_id8 FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE;
+ALTER TABLE group_members ADD CONSTRAINT fk_group_members_account_id9 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE clients ADD CONSTRAINT fk_clients_client_id10 FOREIGN KEY (client_id) REFERENCES clients (client_id) ON DELETE SET NULL;
+ALTER TABLE consents ADD CONSTRAINT fk_consents_account_id11 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE consents ADD CONSTRAINT fk_consents_client_id12 FOREIGN KEY (client_id) REFERENCES clients (client_id) ON DELETE CASCADE;
+ALTER TABLE external_links ADD CONSTRAINT fk_external_links_account_id13 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE external_links ADD CONSTRAINT fk_external_links_client_id14 FOREIGN KEY (client_id) REFERENCES clients (client_id) ON DELETE CASCADE;
+ALTER TABLE outbox_events ADD CONSTRAINT fk_outbox_events_account_id15 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+ALTER TABLE role_permissions ADD CONSTRAINT fk_role_permissions_role_key16 FOREIGN KEY (role_key) REFERENCES roles (key) ON DELETE CASCADE;
+ALTER TABLE role_permissions ADD CONSTRAINT fk_role_permissions_permission_key17 FOREIGN KEY (permission_key) REFERENCES permissions (key) ON DELETE CASCADE;
+ALTER TABLE audit_log ADD CONSTRAINT fk_audit_log_actor_id18 FOREIGN KEY (actor_id) REFERENCES accounts (id) ON DELETE SET NULL;
+ALTER TABLE audit_log ADD CONSTRAINT fk_audit_log_action19 FOREIGN KEY (action) REFERENCES audit_actions (key) ON DELETE RESTRICT;
+ALTER TABLE audit_log ADD CONSTRAINT fk_audit_log_entity_type20 FOREIGN KEY (entity_type) REFERENCES audit_entity_types (key) ON DELETE RESTRICT;
+ALTER TABLE gc_queue ADD CONSTRAINT fk_gc_queue_kind21 FOREIGN KEY (kind) REFERENCES gc_kinds (key) ON DELETE RESTRICT;
+ALTER TABLE gc_queue ADD CONSTRAINT fk_gc_queue_entity_type22 FOREIGN KEY (entity_type) REFERENCES audit_entity_types (key) ON DELETE RESTRICT;
+ALTER TABLE review_kinds ADD CONSTRAINT fk_review_kinds_entity_type23 FOREIGN KEY (entity_type) REFERENCES audit_entity_types (key) ON DELETE RESTRICT;
+ALTER TABLE reports ADD CONSTRAINT fk_reports_reporter_id24 FOREIGN KEY (reporter_id) REFERENCES accounts (id) ON DELETE SET NULL;
+ALTER TABLE reports ADD CONSTRAINT fk_reports_handled_by25 FOREIGN KEY (handled_by) REFERENCES accounts (id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD CONSTRAINT fk_tasks_merged_into_id26 FOREIGN KEY (merged_into_id) REFERENCES tasks (id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD CONSTRAINT fk_tasks_created_by27 FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE task_prompts ADD CONSTRAINT fk_task_prompts_task_id28 FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE;
+ALTER TABLE task_prompts ADD CONSTRAINT fk_task_prompts_prompt_id29 FOREIGN KEY (prompt_id) REFERENCES prompts (id) ON DELETE CASCADE;
+ALTER TABLE task_prompts ADD CONSTRAINT fk_task_prompts_created_by30 FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE prompts ADD CONSTRAINT fk_prompts_created_by31 FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE prompt_library_entries ADD CONSTRAINT fk_prompt_library_entries_prompt_id32 FOREIGN KEY (prompt_id) REFERENCES prompts (id) ON DELETE CASCADE;
+ALTER TABLE prompt_library_entries ADD CONSTRAINT fk_prompt_library_entries_created_by33 FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE task_slug_history ADD CONSTRAINT fk_task_slug_history_task_id34 FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE;
+ALTER TABLE proposals ADD CONSTRAINT fk_proposals_created_by35 FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE proposals ADD CONSTRAINT fk_proposals_reviewed_by36 FOREIGN KEY (reviewed_by) REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE proposal_refs ADD CONSTRAINT fk_proposal_refs_proposal_id37 FOREIGN KEY (proposal_id) REFERENCES proposals (id) ON DELETE CASCADE;
+ALTER TABLE proposal_refs ADD CONSTRAINT fk_proposal_refs_demo_id38 FOREIGN KEY (demo_id) REFERENCES demos (id) ON DELETE CASCADE;
+ALTER TABLE proposal_refs ADD CONSTRAINT fk_proposal_refs_task_id39 FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE;
+ALTER TABLE proposal_refs ADD CONSTRAINT fk_proposal_refs_model_id40 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE CASCADE;
+ALTER TABLE demo_task_overrides ADD CONSTRAINT fk_demo_task_overrides_demo_id41 FOREIGN KEY (demo_id) REFERENCES demos (id) ON DELETE CASCADE;
+ALTER TABLE demo_task_overrides ADD CONSTRAINT fk_demo_task_overrides_task_id42 FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE;
+ALTER TABLE demo_task_overrides ADD CONSTRAINT fk_demo_task_overrides_created_by43 FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE classifications ADD CONSTRAINT fk_classifications_parent_id44 FOREIGN KEY (parent_id) REFERENCES classifications (id) ON DELETE SET NULL;
+ALTER TABLE classifications ADD CONSTRAINT fk_classifications_merged_into_id45 FOREIGN KEY (merged_into_id) REFERENCES classifications (id) ON DELETE SET NULL;
+ALTER TABLE demo_classifications ADD CONSTRAINT fk_demo_classifications_dimension_classification_id46 FOREIGN KEY (dimension, classification_id) REFERENCES classifications (dimension, id) ON DELETE CASCADE;
+ALTER TABLE demo_classifications ADD CONSTRAINT fk_demo_classifications_demo_id47 FOREIGN KEY (demo_id) REFERENCES demos (id) ON DELETE CASCADE;
+ALTER TABLE platforms ADD CONSTRAINT fk_platforms_vendor_id48 FOREIGN KEY (vendor_id) REFERENCES vendors (id) ON DELETE SET NULL;
+ALTER TABLE platform_forms ADD CONSTRAINT fk_platform_forms_platform_id49 FOREIGN KEY (platform_id) REFERENCES platforms (id) ON DELETE CASCADE;
+ALTER TABLE demo_revision_platforms ADD CONSTRAINT fk_demo_revision_platforms_revision_id50 FOREIGN KEY (revision_id) REFERENCES demo_revisions (id) ON DELETE CASCADE;
+ALTER TABLE demo_revision_platforms ADD CONSTRAINT fk_demo_revision_platforms_platform_id51 FOREIGN KEY (platform_id) REFERENCES platforms (id) ON DELETE RESTRICT;
+ALTER TABLE platform_configs ADD CONSTRAINT fk_platform_configs_platform_id52 FOREIGN KEY (platform_id) REFERENCES platforms (id) ON DELETE CASCADE;
+ALTER TABLE demo_revision_platform_configs ADD CONSTRAINT fk_demo_revision_platform_configs_revision_id53 FOREIGN KEY (revision_id) REFERENCES demo_revisions (id) ON DELETE CASCADE;
+ALTER TABLE demo_revision_platform_configs ADD CONSTRAINT fk_demo_revision_platform_configs_config_id54 FOREIGN KEY (config_id) REFERENCES platform_configs (id) ON DELETE RESTRICT;
+ALTER TABLE mcp_servers ADD CONSTRAINT fk_mcp_servers_vendor_id55 FOREIGN KEY (vendor_id) REFERENCES vendors (id) ON DELETE SET NULL;
+ALTER TABLE demo_revision_mcp_servers ADD CONSTRAINT fk_demo_revision_mcp_servers_revision_id56 FOREIGN KEY (revision_id) REFERENCES demo_revisions (id) ON DELETE CASCADE;
+ALTER TABLE demo_revision_mcp_servers ADD CONSTRAINT fk_demo_revision_mcp_servers_mcp_server_id57 FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT;
+ALTER TABLE demo_revision_skills ADD CONSTRAINT fk_demo_revision_skills_revision_id58 FOREIGN KEY (revision_id) REFERENCES demo_revisions (id) ON DELETE CASCADE;
+ALTER TABLE demo_revision_skills ADD CONSTRAINT fk_demo_revision_skills_skill_id59 FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE RESTRICT;
+ALTER TABLE demo_revision_models ADD CONSTRAINT fk_demo_revision_models_revision_id60 FOREIGN KEY (revision_id) REFERENCES demo_revisions (id) ON DELETE CASCADE;
+ALTER TABLE demo_revision_models ADD CONSTRAINT fk_demo_revision_models_model_id61 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE RESTRICT;
+ALTER TABLE demo_revision_models ADD CONSTRAINT fk_demo_revision_models_provider_id62 FOREIGN KEY (provider_id) REFERENCES providers (id) ON DELETE SET NULL;
+ALTER TABLE providers ADD CONSTRAINT fk_providers_vendor_id63 FOREIGN KEY (vendor_id) REFERENCES vendors (id);
+ALTER TABLE model_specs ADD CONSTRAINT fk_model_specs_model_id64 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE CASCADE;
+ALTER TABLE benchmark_versions ADD CONSTRAINT fk_benchmark_versions_benchmark_id65 FOREIGN KEY (benchmark_id) REFERENCES benchmarks (id) ON DELETE CASCADE;
+ALTER TABLE benchmark_metrics ADD CONSTRAINT fk_benchmark_metrics_version_id66 FOREIGN KEY (version_id) REFERENCES benchmark_versions (id) ON DELETE CASCADE;
+ALTER TABLE benchmark_scores ADD CONSTRAINT fk_benchmark_scores_metric_id67 FOREIGN KEY (metric_id) REFERENCES benchmark_metrics (id) ON DELETE CASCADE;
+ALTER TABLE benchmark_scores ADD CONSTRAINT fk_benchmark_scores_model_id68 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE SET NULL;
+ALTER TABLE model_external_refs ADD CONSTRAINT fk_model_external_refs_model_id69 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE CASCADE;
+ALTER TABLE model_spec_fields ADD CONSTRAINT fk_model_spec_fields_model_id70 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE CASCADE;
