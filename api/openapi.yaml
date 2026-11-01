@@ -1,0 +1,227 @@
+openapi: 3.0.3
+
+info:
+  title: DeepDemos API
+  version: 0.1.0
+  description: |
+    本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
+
+    当前范围：站点可用性 + 作品列表 + 作品详情三个端点。它们把会反复遇到的形状都覆盖了一遍
+    ——无参、查询参数、路径参数、分页、可空字段、错误响应。业务实现尚未接入。
+
+    写成中文的部分是给人看的说明；`description` 会进入生成的注释，所以也写中文。
+
+    **为什么是 3.0.3 而不是 3.1**：选 3.1 时没有验证工具链。实测 `oapi-codegen` v2.5.0
+    至今不支持 3.1（上游 issue #373），3.1 的 `type: [string, 'null']` 写法会直接生成失败；
+    若改用 3.0 的 `nullable` 关键字又会让文件既不是 3.1 也不是 3.0。
+    两者取其一是干净的：降到 3.0.3。3.1 相对 3.0 的主要增益（webhooks、
+    JSON Schema 2020-12 对齐）本项目当前一点没用到，降级不损失表达力。
+
+servers:
+  - url: /
+    description: 同域反代（Nginx 静态 + Go API）
+
+tags:
+  - name: 系统
+    description: 运行状态检查
+  - name: 作品
+    description: 作品列表与详情
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      tags: [系统]
+      summary: 站点可用性
+      description: |
+        返回站点是否可用。**不得携带任何配置值、账号信息或内部依赖细节**（SET-006）。
+        核心资料暂不可访问时应当返回非 200，而不是 200 加一个字段说明——运行检查只看状态码。
+      responses:
+        '200':
+          description: 站点可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Healthz'
+        '503':
+          description: 站点不可用（核心资料暂不可访问）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos:
+    get:
+      operationId: listDemos
+      tags: [作品]
+      summary: 作品列表
+      description: |
+        分页返回已公开的作品。分页参数口径与治理域 §P5 一致：默认 50，上限 200。
+        超过上限直接 400，不静默截断——静默截断会让调用方以为拿到了全部。
+      parameters:
+        - name: q
+          in: query
+          description: 关键词，匹配标题与描述
+          schema:
+            type: string
+            maxLength: 100
+        - name: page
+          in: query
+          description: 页码，从 1 开始
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每页条数
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: sort
+          in: query
+          description: 排序口径
+          schema:
+            type: string
+            enum: [latest, hot]
+            default: latest
+      responses:
+        '200':
+          description: 分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoList'
+        '400':
+          description: 参数非法（含 pageSize 超上限）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}:
+    get:
+      operationId: getDemo
+      tags: [作品]
+      summary: 作品详情
+      description: |
+        `slug` 的格式与长度来自 `db/schema/30-demo.sql` 的 `ck_demos_slug_len`（1–128）。
+
+        **404 的语义要和墓碑口径一致**：曾经公开过、后来被作者归档或被管理员移除的作品，
+        仍然返回 200 的墓碑态（标题等字段可空、带 `lifecycleState`），不返回 404；
+        只有「从未公开过」或「已擦除」才返回 404。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$'
+            minLength: 1
+            maxLength: 128
+      responses:
+        '200':
+          description: 详情；曾公开过但已归档/移除的返回墓碑态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoDetail'
+        '404':
+          description: 不存在，或从未公开过，或已擦除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [not_found, invalid_param, forbidden, rate_limited, unavailable]
+          description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
+        message:
+          type: string
+          description: 中文说明，可直接展示
+
+    Healthz:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    DemoSummary:
+      type: object
+      additionalProperties: false
+      required: [slug, title, coverUrl, createdAt, lifecycleState]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: 墓碑态为 null
+        coverUrl:
+          type: string
+          nullable: true
+          maxLength: 500
+        createdAt:
+          type: string
+          format: date-time
+        lifecycleState:
+          $ref: '#/components/schemas/LifecycleState'
+
+    DemoDetail:
+      allOf:
+        - $ref: '#/components/schemas/DemoSummary'
+        - type: object
+          additionalProperties: false
+          required: [description, updatedAt]
+          properties:
+            description:
+              type: string
+              nullable: true
+              description: 墓碑态为 null
+            updatedAt:
+              type: string
+              format: date-time
+
+    DemoList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DemoSummary'
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          minimum: 0
+          description: 满足条件的总条数（不是当前页条数）
+
+    LifecycleState:
+      type: string
+      description: |
+        作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
+        `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
+        `archived` / `removed` 可见但为墓碑态。
+      enum: [draft, pending, published, rejected, archived, removed]
