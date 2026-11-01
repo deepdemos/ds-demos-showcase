@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-14",
+  "public_requirement_file": "docs/ai-fullstack-eval/DeepDemos-全站业务需求.md",
+  "checks": {
+    "sections": 32,
+    "numbered_requirement_items": 523,
+    "open_rules": 13,
+    "characters": 34073,
+    "utf8_bytes": 82304,
+    "duplicate_ids": [],
+    "implementation_leaks": [],
+    "families": 43,
+    "organizer_local_links": "valid"
+  },
+  "scope": "文档静态核对；不是现站业务运行验收结果",
+  "public_requirement_sha256": "473881878d2ad6aaf29f16572fca2cd15090ad3d0051b8247159ce22518c53b3"
+}

@@ -5,7 +5,9 @@
 配套设计：**`docs/模型域设计.md` v1.0（2026-10-25 定稿）**。
 本文只做「什么时候做什么、先后约束是什么」，不重复设计细节。
 
-状态：**已提交到 GitHub（2026-10-25）**：milestone M3–M9 已创建，issue #21–#42 已建，[#16](https://github.com/deepdemos/ds-demos-showcase/issues/16) 已收敛为总索引。
+状态：**已退役（2026-10-28）**：本文的 milestone M3–M9 与 issue #21–#42 **已全部关闭**——它们是**基于旧栈（`main`：FastAPI + Vue）代码结构**编排的，而仓库已转入 `dev` 的 Go + React 重写，旧栈实现不再维护。相关工作若仍需推进，会在新栈设计文档（[`设计决策台账.md`](./设计决策台账.md) 与各域设计）下重新开 issue。以下是**关闭时的历史记录**，保留作为决策依据（尤其「为什么先做审计再回填」这类顺序论证仍然成立）：
+
+状态（历史）：**已提交到 GitHub（2026-10-25）**：milestone M3–M9 已创建，issue #21–#42 已建，[#16](https://github.com/deepdemos/ds-demos-showcase/issues/16) 已收敛为总索引。
 
 ## 一、编排原则
 

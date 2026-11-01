@@ -1,6 +1,16 @@
-# Demo 域细化建模 v1.0
+# Demo 域细化建模 v1.3
 
-**适用范围**：本文是 Demo 域的目标模型。DDL 基于 SQLite；`dev` 为 Go + 新前端，落库时需按新栈 ORM 复核。§2.2 的取舍（模型归属挂 Demo 级）与技术栈无关。
+**本版变更（v1.3，2026-10-28）**：**DDL 方言统一为 PostgreSQL 18**（台账 **C2**）——本文原为全 SQLite 方言（`INTEGER` / `TEXT(n)` / `DATETIME`），本版把 **§3.x 字段表 · §4 类图 · §5 ER** 三处的类型逐列换成 PG 类型（`bigint` / `int` / `text` / `timestamptz` / `boolean` / `numeric(3,2)`），类型映射见 **§0.1**。**无结构变化**：列名、约束、主键语义、注释文字一律未改。
+
+**本版变更（v1.2，2026-10-28）**：落地台账 **G18**「Demo 完全抽象为 Demo 站的作品本身；模型生成的内容 / 功能下放到 revision」。**§2.2 由方案 A 改采方案 B**（`demo_revision_models`）：模型 / 平台 / 平台配置 / 技能 / MCP 全部挂 revision 层，demo 层同名表改**视图**；§3.2 新增 **§3.2.1「revision 的生成条件关联表」**（5 张表 + 四条规则）；§3.8 / §4 / §5 的关联节点与边随之改到 `DemoRevision`；§9 撤销「历史版本模型归属不提供」那一条不变量；§11 回填口径改为「回填到各自的 `current_revision_id`」。目标态定义、其余决策编号与 §11 步骤顺序未改动。
+
+**同日修订（v1.2 内，对齐 G18 已定细节）**：`gen_platform` 按 G18 全面退场——§0 运行元数据行、§3.1 去向表、§3.2 字段表、§4 类图、§6.5 可更正白名单共 5 处同步（白名单由 4 列减为 3 列；平台证据改由 `demo_revision_platforms` 表达）；`mcp_servers` 的口径由「待确认」改为引用《标签域数据结构设计》§3.6.1（v1.8）。版本号不变。
+
+**同日修订（v1.2 内，审计修正 10 处）**：① `demo_models` 视图列集补齐为权威的 5 列——§4 类图补 `serving_note` / `source`，§5.3 ER 补 `provider_id` / `serving_note` / `source` 并去掉视图上的 `PK`（依据《模型域设计》§3.3 的 `CREATE VIEW demo_models`）；② §5.3 `DEMO_REVISION_MODELS` 补 `source`；③ §14.2 归宿表的 `platform` / `plugin`·`preset` / `skills` 三行由 demo 级视图改为 revision 级真表；④ 两处引用改指——`《模型域设计》§3.8` → **§11.1**、`《标签域数据结构设计》§3.6` → **§3.6.1**（含上段那处）；⑤ §2.1 把两个 `VIEW` 移入新子图「派生视图（不存数据）」，边改虚线并补要点一条；⑥ §6.4 与 §6.5 对调，节号不再倒序；⑦ §5.3 `DEMO_TASKS`（同为视图，G7）一并去掉 `PK`。版本号不变。
+
+**本版变更（v1.1，2026-10-28）**：按台账 **G16**「设计文档正文只放目标态，过渡态下沉」，把过渡期结构、现状 → 目标对照与旧栈实现细节下沉到文末新增的 **§14 过渡期与退役（非目标态）**。目标态定义（表 / 列 / 约束 / 不变量）、决策编号、跨文档引用与 §11 迁移路线顺序均未改动，正文其余内容只调整位置。
+
+**适用范围**：本文是 Demo 域的目标模型。**DDL 方言 = PostgreSQL 18**（C2，类型映射见 §0.1）；`dev` 为 Go + 新前端，落库时需按新栈 ORM 复核。§2.2 的取舍（**生成条件挂 revision**）与技术栈无关。
 
 本文是 Demo 域的**目标模型**（细化到字段级），与现状的差异和迁移路径另见 §11。
 
@@ -14,15 +24,35 @@
 |---|---|
 | 逻辑作品名 | **`Demo`**（保留） |
 | 版本载体 | **`DemoRevision`**：不可变内容快照，编辑产生新版本，不复制整行 |
+| 运行元数据 | **可更正**（`gen_rounds` / `gen_minutes` / `model_hint`，作者本人，留痕）；内容列仍不可变（§6.5） |
 | 内容存储 | **内容寻址**：`Blob`（sha256 命名）+ `DemoRevisionFile`（清单） |
 | 发布渠道 | **`DemoChannel`**：渠道、可见性、语言、精选位，与审核状态正交 |
 | 审核 | **`Demo.moderation_state`** 全局一次；渠道只管「在不在该渠道露」 |
 | 生命周期 | **`Demo.lifecycle_state`**：draft / published / archived / removed |
 | 统计 | **`DemoStat`** 独立表，可重建，不作为权威 |
 | 评分 | **`DemoRating`** 只增不改（撤销是 delete），聚合进 `DemoStat` |
-| 模型关联 | **保留在 `Demo` 级**（见 §2.2 的取舍说明） |
+| 模型关联 | **挂 `DemoRevision`**（方案 B，见 §2.2 / §3.2.1）；demo 层 `demo_models` 是视图 |
 | 删除 | **软删除**（`deleted_at` + tombstone），物理清理走 GC |
 | 社区 | **`DemoExternalThread`** 只存外链标识，不复制帖子 |
+
+### 0.1 DDL 方言与类型映射（C2）
+
+本文的 DDL 与字段表**统一用 PostgreSQL 18 方言**（台账 **C2**，2026-10-28）。原为 SQLite 方言（`INTEGER` / `TEXT(n)` / `DATETIME`），已按下列映射逐列替换，**无结构变化**（列名、约束、语义均未改动）：
+
+| SQLite（原） | PostgreSQL 18（现） | 适用列 |
+|---|---|---|
+| `INTEGER PRIMARY KEY`（自增） | `bigint` + `GENERATED ALWAYS AS IDENTITY`；字段表写作 `bigint PK`、「默认」列保留「自增」 | 主键 |
+| `INTEGER`（FK / 行计数 / 字节数 / id 类） | `bigint` | 外键、`*_count`、`*_bytes`、`size` |
+| `INTEGER`（有序号或有界小范围） | `int`（PG 里 `int` ≡ `integer`） | `rev_no` / `score` / `featured_order` / `gen_rounds` / `gen_minutes` |
+| `INTEGER`（0/1 标志） | `boolean`（默认 `false`） | `featured`（§4 类图与 §5 ER 原本已写作 `bool`，本版统一到 `boolean`；§3.5 的 `featured=1` 相应改写为 `featured = true`） |
+| `TEXT` / `TEXT(n)` | `text`（长度上限 `n` 写进注释，或落库时用 `CHECK (length(x) <= n)`，**不用 `varchar(n)`**） | 全部字符串列 |
+| `DATETIME` | `timestamptz`；建表一律 `NOT NULL DEFAULT now()`（可空列除外） | 全部时间列 |
+| `REAL` | `numeric(3,2)` | `rating_avg`（1–5 分，两位小数） |
+| JSON | `jsonb` | 本文暂无 JSON 列（`payload` 类列在实体域） |
+
+**表格约定**：「类型」列只写类型名；PK / FK / 唯一性写在类型名之后（`bigint PK`、`bigint FK→demos`），自增由 DDL 层的 `GENERATED ALWAYS AS IDENTITY` 表达。**§4 类图与 §5 ER 的属性类型与 DDL 同名**（`+bigint` / `text` / `timestamptz` / `boolean` / `numeric`）。
+
+**跨域对齐**：`demo_revision_models` 的类型与《模型域设计》§3.3 一致（`revision_id bigint` / `model_id bigint` / `provider_id bigint`）；其余照《标签域数据结构设计》《实体域数据结构设计》的写法（`bigint` / `text` / `timestamptz` / `boolean` / `jsonb`）。
 
 ## 1. 为什么现在改
 
@@ -49,10 +79,11 @@ flowchart TB
         R --> F
     end
     subgraph 强关联["强关联（随 Demo 存亡）"]
-        DT["DemoTag"]
-        DM["DemoModel"]
-        DTask["DemoTask"]
         TL["DemoTimeline"]
+    end
+    subgraph 派生["派生视图（不存数据，按当前 revision 计算）"]
+        DM["DemoModel<br/>（VIEW）"]
+        DTask["DemoTask<br/>（VIEW）"]
     end
     subgraph 独立聚合["独立聚合"]
         C["DemoChannel<br/>渠道发布"]
@@ -63,10 +94,9 @@ flowchart TB
         B["Blob<br/>内容寻址"]
         X["DemoExternalThread<br/>社区外链"]
     end
-    D --> DT
-    D --> DM
-    D --> DTask
     D --> TL
+    D -.-> DM
+    D -.-> DTask
     D --> C
     D --> S
     D --> RT
@@ -77,29 +107,37 @@ flowchart TB
 要点：
 
 - **`DemoRevision` 属于聚合内部**：它的生命周期被 `Demo` 完全拥有，删除作品时一起走
+- **`DemoModel` / `DemoTask` 是派生视图、不是表**（G18 / G7）：不存数据、没有独立生命周期，按 `current_revision_id` 计算，因此单列一个子图、不与「强关联」混放
 - **`DemoChannel` / `DemoStat` / `DemoRating` 是独立聚合**：各自的事务边界，可以独立重建或清理
 - **`Blob` 不属于任何聚合**：它是共享的存储层，靠引用关系存活
 
-### 2.2 必须现在决定的冲突：模型关联挂在哪一层
+### 2.2 生成条件挂在哪一层：revision（方案 B，G18）
 
-模型域设计（v1.0 §3.3）把 `demo_models` 定为「作品 ↔ 模型」的唯一事实源，并加了 `provider_id`。但引入 `DemoRevision` 后，一个更「正确」的位置是**版本**——因为一次生成运行对应一个版本。
+模型域设计（v1.0 §3.3）把 `demo_models` 定为「作品 ↔ 模型」的唯一事实源，并加了 `provider_id`。引入 `DemoRevision` 后，更「正确」的位置是**版本**——因为一次生成运行对应一个版本。
 
 两种做法：
 
 | 方案 | 结构 | 优点 | 代价 |
 |---|---|---|---|
-| **A（采用）** | `demo_models(demo_id, model_id, provider_id)` 保持现状层 | 不动模型域设计；列表/模型页查询不用改；实现简单 | 一个 Demo 跨版本换模型时，历史版本归谁说不清 |
-| B | `demo_revision_models(revision_id, model_id, provider_id)` | 每个版本都有准确归属，证据链完整 | 模型域设计要改；「某模型的所有作品」多一层 JOIN |
+| A（放弃） | `demo_models(demo_id, model_id, provider_id)` 挂在 demo 层 | 不动模型域设计；列表/模型页查询不用改；实现简单 | **一个 Demo 跨版本换模型时，历史版本归谁说不清**——等于把历史归属永久丢失 |
+| **B（采用）** | `demo_revision_models(revision_id, model_id, provider_id)` 挂在 revision 层 | 每个版本都有准确归属，证据链完整；历史可追溯 | 模型域读路径多一层 JOIN；demo 层要派生「当前」 |
 
-**采用 A**，理由：
+**采用 B**（台账 **G18**，2026-10-28）。判据是用户给出的总原则：
 
-1. 现实语料里「同一作品换模型」是极少数；换模型更接近「另一件作品」
-2. 真要表达换模型，用「新 Demo + `version-of`」即可，语义清晰
-3. 避免同时大改两个域，降低交叉风险
+> **「Demo 完全抽象为 Demo 站的作品本身；模型生成的内容 / 功能下放到 revision。」**
 
-**代价要写进不变量**：`Demo` 的模型归属代表「当前版本由谁生成」，历史版本的模型归属**不提供**。`DemoRevision` 只保留 `prompt_id` 与运行元数据（轮数/耗时/平台）。
+理由：
 
-如果将来这条不能满足，再走 B——那时 `demo_models` 已经有 `provider_id`，迁移只需加一列 `revision_id` 并回填。
+1. **「更新 demo 时用了新模型」是真实场景**，不是极少数。方案 A 的取舍自己也写明了代价「一个 Demo 跨版本换模型时历史版本归谁说不清」——当时判断它可接受，用户给出反例后该判断不成立。
+2. **生成条件与运行元数据同类**：`model` / `platform` / `platform_config` / `skill` / `mcp` 和 `prompt` / `gen_rounds` / `gen_minutes` 一样，都回答「这一次生成用了什么 / 怎么生成的」；同一类事实放两个层，会出现两套归属规则。
+3. **demo 层要的只是派生值**：demo 层只回答「当前版本用了什么」，那是 `demos ⋈ demo_revisions(current) ⋈ demo_revision_*` 的结果——与 **G7** 把 `DemoTask` 由表改视图同构。
+4. **迁移成本已在原设计里预留**：`demo_models` 已有 `provider_id`，改成 revision 级只需加一列 `revision_id` 并回填到各自的 `current_revision_id`（§11 D2）。原方案 A 的「将来这条不能满足再走 B」只是提前到本版执行。
+
+**代价**：「某模型的所有作品」多一层 JOIN，demo 层读路径改为读视图。可接受——读路径 SQL 形状不变、只是基表换成视图，模型域 / 标签域不用重写。
+
+**历史归属怎么表达**：`Demo` 层面的「模型归属」代表**当前版本**（纯派生，不加冗余列）；历史版本的模型归属由各自的 revision 关联行提供，**可追溯**（不变量 §9 #12）。
+
+五个维度的关联表与四条规则见 §3.2.1；demo 层同名表改视图的写法见 §3.8。
 
 ## 3. 实体设计（字段级）
 
@@ -107,30 +145,31 @@ flowchart TB
 
 | 字段 | 类型 | 空 | 默认 | 说明 |
 |---|---|---|---|---|
-| `id` | INTEGER PK | 否 | 自增 | |
-| `slug` | TEXT(128) | 否 | — | **唯一且永久**；改名留历史见 §3.10 |
-| `title` | TEXT(200) | 否 | — | 展示用；同时快照进 revision |
-| `description` | TEXT | 否 | `''` | 可编辑 |
-| `cover_url` | TEXT(500) | 否 | `''` | 当前版本封面（便于列表直读） |
-| `cover_thumb_url` | TEXT(500) | 否 | `''` | 200 档小图 |
-| `author_id` | INTEGER FK→users | 是 | NULL | NULL = 匿名 |
-| `guest_name` | TEXT(64) | 是 | NULL | 匿名展示名 |
-| `current_revision_id` | INTEGER FK→demo_revisions | 是 | NULL | 建库时可能还没有版本 |
-| `moderation_state` | TEXT(16) | 否 | `pending` | `pending` / `approved` / `rejected` |
-| `lifecycle_state` | TEXT(16) | 否 | `draft` | `draft` / `published` / `archived` / `removed` |
-| `idempotency_key` | TEXT(128) | 是 | NULL | 唯一，agent 重试去重 |
-| `created_at` | DATETIME | 否 | utcnow | |
-| `updated_at` | DATETIME | 否 | utcnow | **无 onupdate**，仅内容变更时显式赋值 |
-| `deleted_at` | DATETIME | 是 | NULL | 软删除时间 |
-| `delete_reason` | TEXT(200) | 否 | `''` | 删除/下架理由 |
+| `id` | bigint PK | 否 | 自增 | |
+| `slug` | text | 否 | — | **唯一且永久**；改名留历史见 §3.10（≤128 字符） |
+| `title` | text | 否 | — | 展示用；同时快照进 revision（≤200 字符） |
+| `description` | text | 否 | `''` | 可编辑 |
+| `cover_url` | text | 否 | `''` | 当前版本封面（便于列表直读；≤500 字符） |
+| `cover_thumb_url` | text | 否 | `''` | 200 档小图（≤500 字符） |
+| `author_id` | bigint FK→users | 是 | NULL | NULL = 匿名 |
+| `guest_name` | text | 是 | NULL | 匿名展示名（≤64 字符） |
+| `current_revision_id` | bigint FK→demo_revisions | 是 | NULL | 建库时可能还没有版本 |
+| `moderation_state` | text | 否 | `pending` | `pending` / `approved` / `rejected`（≤16 字符） |
+| `lifecycle_state` | text | 否 | `draft` | `draft` / `published` / `archived` / `removed`（≤16 字符） |
+| `idempotency_key` | text | 是 | NULL | 唯一，agent 重试去重（≤128 字符） |
+| `created_at` | timestamptz | 否 | `now()` | |
+| `updated_at` | timestamptz | 否 | `now()` | **无 onupdate**，仅内容变更时显式赋值 |
+| `deleted_at` | timestamptz | 是 | NULL | 软删除时间 |
+| `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符） |
 
-**不再放在 `Demo` 上的字段**（迁移到 revision 或 channel）：
+**这些关注点不在 `Demo` 上**（各自的家如下；左侧沿用旧栈列名，便于对照迁移）：
 
-| 原字段 | 去向 |
+| 关注点 | 家 |
 |---|---|
 | `demo_type` `single_file` `external_url` | → `DemoRevision`（内容属性） |
 | `prompt` `prompt_id` `video_url` | → `DemoRevision` |
-| `model_hint` `gen_rounds` `gen_minutes` `gen_platform` | → `DemoRevision`（运行证据） |
+| `model_hint` `gen_rounds` `gen_minutes` | → `DemoRevision`（运行证据） |
+| `gen_platform` | **退场**（平台证据改由 `demo_revision_platforms` 表达，G18） |
 | `content_hash` | → `DemoRevision.manifest_hash` |
 | `status` | 拆成 `moderation_state` + `lifecycle_state` |
 | `sites` `lang` `featured` `featured_order` | → `DemoChannel` |
@@ -142,29 +181,28 @@ flowchart TB
 
 | 字段 | 类型 | 空 | 默认 | 说明 |
 |---|---|---|---|---|
-| `id` | INTEGER PK | 否 | 自增 | |
-| `demo_id` | INTEGER FK→demos | 否 | — | CASCADE |
-| `rev_no` | INTEGER | 否 | — | 1 起连续；`UNIQUE(demo_id, rev_no)` |
-| `title` | TEXT(200) | 否 | — | 该版本的标题快照 |
-| `description` | TEXT | 否 | `''` | |
-| `cover_url` | TEXT(500) | 否 | `''` | |
-| `demo_type` | TEXT(16) | 否 | `web` | `web` / `zip` / `link` / `image` |
-| `single_file` | TEXT(8) | 是 | NULL | `html` / `svg` |
-| `external_url` | TEXT(2000) | 是 | NULL | link 类型 |
-| `entry_path` | TEXT(500) | 否 | `''` | 入口文件，如 `index.html` |
-| `manifest_hash` | TEXT(64) | 否 | — | 清单哈希（**预览版本号来源**） |
-| `file_count` | INTEGER | 否 | 0 | |
-| `total_bytes` | INTEGER | 否 | 0 | |
-| `prompt` | TEXT | 否 | `''` | 第一轮提示词原文 |
-| `prompt_id` | INTEGER FK→prompts | 是 | NULL | 规范化去重实体 |
-| `video_url` | TEXT(2000) | 是 | NULL | |
-| `model_hint` | TEXT(500) | 否 | `''` | 兜底型号依据 |
-| `gen_rounds` | INTEGER | 是 | NULL | |
-| `gen_minutes` | INTEGER | 是 | NULL | |
-| `gen_platform` | TEXT(32) | 是 | NULL | |
-| `source` | TEXT(16) | 否 | `upload` | `upload` / `url_import` / `rollback` |
-| `created_by` | INTEGER FK→users | 是 | NULL | |
-| `created_at` | DATETIME | 否 | utcnow | |
+| `id` | bigint PK | 否 | 自增 | |
+| `demo_id` | bigint FK→demos | 否 | — | CASCADE |
+| `rev_no` | int | 否 | — | 1 起连续；`UNIQUE(demo_id, rev_no)` |
+| `title` | text | 否 | — | 该版本的标题快照（≤200 字符） |
+| `description` | text | 否 | `''` | |
+| `cover_url` | text | 否 | `''` | （≤500 字符） |
+| `demo_type` | text | 否 | `web` | `web` / `zip` / `link` / `image`（≤16 字符） |
+| `single_file` | text | 是 | NULL | `html` / `svg`（≤8 字符） |
+| `external_url` | text | 是 | NULL | link 类型（≤2000 字符） |
+| `entry_path` | text | 否 | `''` | 入口文件，如 `index.html`（≤500 字符） |
+| `manifest_hash` | text | 否 | — | 清单哈希（**预览版本号来源**；≤64 字符） |
+| `file_count` | bigint | 否 | 0 | |
+| `total_bytes` | bigint | 否 | 0 | |
+| `prompt` | text | 否 | `''` | 第一轮提示词原文 |
+| `prompt_id` | bigint FK→prompts | 是 | NULL | 规范化去重实体 |
+| `video_url` | text | 是 | NULL | （≤2000 字符） |
+| `model_hint` | text | 否 | `''` | 兜底型号依据；**可更正**（§6.5）（≤500 字符） |
+| `gen_rounds` | int | 是 | NULL | **可更正**（§6.5） |
+| `gen_minutes` | int | 是 | NULL | **可更正**（§6.5） |
+| `source` | text | 否 | `upload` | `upload` / `url_import` / `rollback`（≤16 字符） |
+| `created_by` | bigint FK→users | 是 | NULL | |
+| `created_at` | timestamptz | 否 | `now()` | |
 
 **不可变**：任何字段写入后不再修改。要改内容 → 新增一条 revision。
 
@@ -177,16 +215,39 @@ manifest_hash = sha256(canonical)
 
 与 zip 如何打包无关——同样内容重新打包，`manifest_hash` 不变，预览 URL 也不变。
 
+#### 3.2.1 revision 的生成条件关联表（G18）
+
+「这一版用了什么模型 / 平台 / 平台配置 / 技能 / MCP」是 **revision 级事实**，由 5 张关联表表达。**表定义在模型域 / 标签域，本域只引用关系，不重复 DDL**：
+
+| # | 关联表 | 关联到 | 定义方 | demo 层派生（视图） |
+|---|---|---|---|---|
+| 1 | `demo_revision_models` | `models` / `providers` | 模型域 | `demo_models` |
+| 2 | `demo_revision_platforms` | `platforms` | 标签域 | `demo_platforms` |
+| 3 | `demo_revision_platform_configs` | `platform_configs` | 标签域 | `demo_platform_configs` |
+| 4 | `demo_revision_skills` | `skills` | 标签域 | `demo_skills` |
+| 5 | `demo_revision_mcp_servers` | `mcp_servers` | 标签域 | —（MCP 无 demo 级表） |
+
+> `mcp_servers` 的实体定义见《标签域数据结构设计》**§3.6.1（v1.8）**（跨平台：`id` / `slug` / `name` / `description` / `transport` / `endpoint` / `vendor_id?` / `status`）。本表只引用关系，不重复 DDL。
+
+**四条规则**：
+
+1. **多值**：每个维度都可多条——「多个模型接力完成」是常态；同一件作品可同时用多个平台 / 配置 / 技能。`demo_revision_models` 的 PK = `(revision_id, model_id)`：同一模型经不同 provider 用过**算一条**，`provider_id` 只是属性（可空）。
+2. **每版只记本版**：数据模型层**不做继承 / 追加**。新增 revision 时由**前端自动预填**上一版的数据——「追加」是 UI 行为，不是数据模型行为（G18）。
+3. **「当前」= `Demo.current_revision_id`**：demo 层的「当前版本用了什么」是**纯派生值**，不加冗余列。`?model=` 筛选、`model_counts` 计数、平台归属全部按当前 revision 算，回滚后跟着回滚——与 **G7**（题目归属按当前 revision）同构。
+4. **demo 层同名表改为视图**：`demo_models` / `demo_platforms` / `demo_platform_configs` / `demo_skills` **保留表名，但由表改为视图**（`demos ⋈ demo_revisions(current) ⋈ demo_revision_*`），由各自拥有域定义；本域只依赖视图形状，读路径 SQL 不用重写。
+
+`platform` 维度取代 `DemoRevision.gen_platform` `text` 列（G18：该列退场）。
+
 ### 3.3 `DemoRevisionFile`（清单）
 
 | 字段 | 类型 | 空 | 说明 |
 |---|---|---|---|
-| `id` | INTEGER PK | 否 | |
-| `revision_id` | INTEGER FK→demo_revisions | 否 | CASCADE |
-| `path` | TEXT(500) | 否 | 相对路径，正斜杠 |
-| `blob_hash` | TEXT(64) | 否 | FK→blobs.sha256 |
-| `size` | INTEGER | 否 | |
-| `mime` | TEXT(128) | 否 | |
+| `id` | bigint PK | 否 | |
+| `revision_id` | bigint FK→demo_revisions | 否 | CASCADE |
+| `path` | text | 否 | 相对路径，正斜杠（≤500 字符） |
+| `blob_hash` | text | 否 | FK→blobs.sha256（≤64 字符） |
+| `size` | bigint | 否 | |
+| `mime` | text | 否 | （≤128 字符） |
 
 ```text
 UNIQUE (revision_id, path)
@@ -197,13 +258,13 @@ INDEX  (blob_hash)   -- GC 反查
 
 | 字段 | 类型 | 空 | 说明 |
 |---|---|---|---|
-| `sha256` | TEXT(64) PK | 否 | 内容哈希 |
-| `size` | INTEGER | 否 | 字节数 |
-| `mime` | TEXT(128) | 否 | |
-| `storage_key` | TEXT(500) | 否 | 物理位置，如 `blobs/ab/cd/abcd…` |
-| `backend` | TEXT(16) | 否 | `local` / `oss` |
-| `created_at` | DATETIME | 否 | |
-| `last_ref_at` | DATETIME | 否 | GC 用：最近一次被引用 |
+| `sha256` | text PK | 否 | 内容哈希（≤64 字符） |
+| `size` | bigint | 否 | 字节数 |
+| `mime` | text | 否 | （≤128 字符） |
+| `storage_key` | text | 否 | 物理位置，如 `blobs/ab/cd/abcd…`（≤500 字符） |
+| `backend` | text | 否 | `local` / `oss`（≤16 字符） |
+| `created_at` | timestamptz | 否 | |
+| `last_ref_at` | timestamptz | 否 | GC 用：最近一次被引用 |
 
 **不可变**：同一 sha256 永远同一内容。上传时若已存在则**只加引用，不重复写**。
 
@@ -211,16 +272,16 @@ INDEX  (blob_hash)   -- GC 反查
 
 | 字段 | 类型 | 空 | 默认 | 说明 |
 |---|---|---|---|---|
-| `id` | INTEGER PK | 否 | 自增 | |
-| `demo_id` | INTEGER FK→demos | 否 | — | CASCADE |
-| `channel` | TEXT(32) | 否 | — | `deep` / `astra` / 未来渠道 |
-| `visibility` | TEXT(16) | 否 | `listed` | `listed` / `unlisted` / `hidden` |
-| `lang` | TEXT(8) | 否 | `zh` | 该渠道的语言标记 |
-| `featured` | INTEGER | 否 | 0 | 精选位 |
-| `featured_order` | INTEGER | 是 | NULL | 1 起连续 |
-| `published_at` | DATETIME | 是 | NULL | |
-| `curated_by` | INTEGER FK→users | 是 | NULL | 策展人 |
-| `created_at` / `updated_at` | DATETIME | 否 | utcnow | |
+| `id` | bigint PK | 否 | 自增 | |
+| `demo_id` | bigint FK→demos | 否 | — | CASCADE |
+| `channel` | text | 否 | — | `deep` / `astra` / 未来渠道（≤32 字符） |
+| `visibility` | text | 否 | `listed` | `listed` / `unlisted` / `hidden`（≤16 字符） |
+| `lang` | text | 否 | `zh` | 该渠道的语言标记（≤8 字符） |
+| `featured` | boolean | 否 | `false` | 精选位 |
+| `featured_order` | int | 是 | NULL | 1 起连续 |
+| `published_at` | timestamptz | 是 | NULL | |
+| `curated_by` | bigint FK→users | 是 | NULL | 策展人 |
+| `created_at` / `updated_at` | timestamptz | 否 | `now()` | |
 
 ```text
 UNIQUE (demo_id, channel)
@@ -231,21 +292,21 @@ INDEX  (channel, visibility, featured_order)
 
 - 作品可以在 `deep` 上 `listed`，同时在 `astra` 上不存在（无行）
 - `astra` 要求 `lang='en'`，这是**渠道规则**，由发布时校验，不是全局字段
-- 首页精选 = `featured=1` + `visibility='listed'`
+- 首页精选 = `featured=true` + `visibility='listed'`
 
 ### 3.6 `DemoStat`（可重建聚合）
 
 | 字段 | 类型 | 空 | 默认 | 说明 |
 |---|---|---|---|---|
-| `demo_id` | INTEGER PK FK→demos | 否 | — | CASCADE |
-| `view_count` | INTEGER | 否 | 0 | |
-| `download_count` | INTEGER | 否 | 0 | |
-| `rating_sum` | INTEGER | 否 | 0 | 票分总和 |
-| `rating_count` | INTEGER | 否 | 0 | |
-| `rating_avg` | REAL | 否 | 0 | 冗余：sum/count |
-| `rating_god` | INTEGER | 否 | 0 | 5 分票数 |
-| `rating_ghost` | INTEGER | 否 | 0 | 1 分票数 |
-| `updated_at` | DATETIME | 否 | utcnow | |
+| `demo_id` | bigint PK FK→demos | 否 | — | CASCADE |
+| `view_count` | bigint | 否 | 0 | |
+| `download_count` | bigint | 否 | 0 | |
+| `rating_sum` | bigint | 否 | 0 | 票分总和 |
+| `rating_count` | bigint | 否 | 0 | |
+| `rating_avg` | numeric(3,2) | 否 | 0 | 冗余：sum/count |
+| `rating_god` | bigint | 否 | 0 | 5 分票数 |
+| `rating_ghost` | bigint | 否 | 0 | 1 分票数 |
+| `updated_at` | timestamptz | 否 | `now()` | |
 
 **不作为权威**：任何时候都可以从 `DemoRating` 与事件流水重建。提供 `scripts/rebuild_demo_stats.py`。
 
@@ -253,12 +314,12 @@ INDEX  (channel, visibility, featured_order)
 
 | 字段 | 类型 | 空 | 说明 |
 |---|---|---|---|
-| `id` | INTEGER PK | 否 | |
-| `demo_id` | INTEGER FK→demos | 否 | CASCADE |
-| `user_id` | INTEGER FK→users | 是 | 登录用户 |
-| `rater_key` | TEXT(128) | 否 | 匿名指纹 `sha256(device|ip|salt)` |
-| `score` | INTEGER | 否 | 1–5 |
-| `created_at` / `updated_at` | DATETIME | 否 | |
+| `id` | bigint PK | 否 | |
+| `demo_id` | bigint FK→demos | 否 | CASCADE |
+| `user_id` | bigint FK→users | 是 | 登录用户 |
+| `rater_key` | text | 否 | 匿名指纹 `sha256(device|ip|salt)`（≤128 字符） |
+| `score` | int | 否 | 1–5 |
+| `created_at` / `updated_at` | timestamptz | 否 | |
 
 ```text
 UNIQUE (demo_id, rater_key)
@@ -268,43 +329,56 @@ UNIQUE (demo_id, rater_key)
 
 ### 3.8 关联表
 
-**`DemoTag`**：`(demo_id, tag_id)` 复合主键，不变。
+**Demo ↔ 分类的关联表由标签域拥有**（`demo_classifications`），本域不重复定义。
 
-**`DemoModel`**：模型域设计的落点。
+**生成条件（模型 / 平台 / 平台配置 / 技能 / MCP）的真表在 revision 层**：5 张 `demo_revision_*` 见 §3.2.1，表定义在模型域 / 标签域，本域只引用关系。demo 层同名表**保留表名但由表改为视图**（G18）：
+
+```text
+demo_models           = demos ⋈ demo_revisions(current) ⋈ demo_revision_models
+demo_platforms        = demos ⋈ demo_revisions(current) ⋈ demo_revision_platforms
+demo_platform_configs = demos ⋈ demo_revisions(current) ⋈ demo_revision_platform_configs
+demo_skills           = demos ⋈ demo_revisions(current) ⋈ demo_revision_skills
+```
+
+> `demo_mcp_servers` **不需要**：MCP 从来没有 demo 级表，只有 revision 级 → 无 demo 层视图。`mcp_servers` 实体定义见《标签域数据结构设计》§3.6.1（v1.8）。
+
+**`DemoRevisionModel`（revision 级真表，模型域设计的落点）**：字段定义以模型域为准，此处列出是为说明主键与多值语义。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `demo_id` | INTEGER FK | PK 之一 |
-| `model_id` | INTEGER FK→models | PK 之一 |
-| `provider_id` | INTEGER FK→providers | **可空 = 来源未标注** |
-| `serving_note` | TEXT(100) | `fp8` / `free tier` |
-| `source` | TEXT(16) | `api` / `legacy_tag` / `migration` / `attribution` / `merge` |
-| `created_at` | DATETIME | |
+| `revision_id` | bigint FK→demo_revisions | PK 之一（CASCADE） |
+| `model_id` | bigint FK→models | PK 之一 |
+| `provider_id` | bigint FK→providers | **可空 = 来源未标注**；同一模型经不同 provider 用过算一条 |
+| `serving_note` | text | `fp8` / `free tier`（≤100 字符） |
+| `source` | text | `api` / `legacy_tag` / `migration` / `attribution` / `merge`（≤16 字符） |
+| `created_at` | timestamptz | |
 
-**`DemoTask`**：`(demo_id, task_id)`，不变。
+**`DemoModel`（demo 层）**：**不再是表，改为视图**（G18）——定义 = `demos ⋈ demo_revisions(current) ⋈ demo_revision_models`，只按当前 revision 派生，供列表 / 模型页读路径沿用。
+
+**`DemoTask`**：**不再是表，改为视图**（G7）。定义 = `demos ⋈ demo_revisions(当前) ⋈ task_prompts`，只按当前 revision 派生；详见《实体域数据结构设计》§1.3 / §3.6。
 
 **`DemoTimeline`**：只记「事件」不记「版本」——版本由 revision 表达。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `id` | INTEGER PK | |
-| `demo_id` | INTEGER FK | CASCADE |
-| `kind` | TEXT(16) | `create` / `approve` / `reject` / `archive` / `restore` / `slug_change` / `merge` |
-| `message` | TEXT(500) | |
-| `actor_id` | INTEGER FK→users | 可空 = 系统 |
-| `created_at` | DATETIME | |
+| `id` | bigint PK | |
+| `demo_id` | bigint FK | CASCADE |
+| `kind` | text | `create` / `approve` / `reject` / `archive` / `restore` / `slug_change` / `merge`（≤16 字符） |
+| `message` | text | （≤500 字符） |
+| `actor_id` | bigint FK→users | 可空 = 系统 |
+| `created_at` | timestamptz | |
 
 ### 3.9 `DemoExternalThread`（社区外链）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `demo_id` | INTEGER PK FK→demos | CASCADE |
-| `provider` | TEXT(32) | `discourse` / `mastodon` / … |
-| `host` | TEXT(200) | 实例域名 |
-| `topic_id` | TEXT(64) | 外部 ID |
-| `url` | TEXT(500) | |
-| `post_count` | INTEGER | 缓存的回复数（用于作品卡显示） |
-| `synced_at` | DATETIME | |
+| `demo_id` | bigint PK FK→demos | CASCADE |
+| `provider` | text | `discourse` / `mastodon` / …（≤32 字符） |
+| `host` | text | 实例域名（≤200 字符） |
+| `topic_id` | text | 外部 ID（≤64 字符） |
+| `url` | text | （≤500 字符） |
+| `post_count` | bigint | 缓存的回复数（用于作品卡显示） |
+| `synced_at` | timestamptz | |
 
 ```text
 UNIQUE (provider, host, topic_id)
@@ -316,9 +390,9 @@ UNIQUE (provider, host, topic_id)
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `slug` | TEXT(128) PK | 旧 slug |
-| `demo_id` | INTEGER FK→demos | |
-| `created_at` | DATETIME | |
+| `slug` | text PK | 旧 slug（≤128 字符） |
+| `demo_id` | bigint FK→demos | |
+| `created_at` | timestamptz | |
 
 访问旧 slug → 301 到当前 slug。这样 `slug` 可以唯一且永久，同时支持改名。
 
@@ -327,111 +401,115 @@ UNIQUE (provider, host, topic_id)
 ```mermaid
 classDiagram
     class Demo {
-        +int id
-        +string slug
-        +string title
-        +string description
-        +string cover_url
-        +string cover_thumb_url
-        +int author_id
-        +string guest_name
-        +int current_revision_id
+        +bigint id
+        +text slug
+        +text title
+        +text description
+        +text cover_url
+        +text cover_thumb_url
+        +bigint author_id
+        +text guest_name
+        +bigint current_revision_id
         +ModerationState moderation_state
         +LifecycleState lifecycle_state
-        +datetime deleted_at
-        +datetime created_at
-        +datetime updated_at
+        +timestamptz deleted_at
+        +timestamptz created_at
+        +timestamptz updated_at
         +currentRevision() DemoRevision
         +channels() DemoChannel[]
     }
     class DemoRevision {
-        +int id
-        +int demo_id
+        +bigint id
+        +bigint demo_id
         +int rev_no
-        +string title
+        +text title
         +DemoType demo_type
-        +string single_file
-        +string entry_path
-        +string manifest_hash
-        +int file_count
-        +int total_bytes
-        +string prompt
-        +int prompt_id
+        +text single_file
+        +text entry_path
+        +text manifest_hash
+        +bigint file_count
+        +bigint total_bytes
+        +text prompt
+        +bigint prompt_id
         +int gen_rounds
         +int gen_minutes
-        +string gen_platform
-        +datetime created_at
+        +timestamptz created_at
         +files() DemoRevisionFile[]
         +previewUrl() string
     }
     class DemoRevisionFile {
-        +int revision_id
-        +string path
-        +string blob_hash
-        +int size
-        +string mime
+        +bigint revision_id
+        +text path
+        +text blob_hash
+        +bigint size
+        +text mime
     }
     class Blob {
-        +string sha256
-        +int size
-        +string mime
-        +string storage_key
-        +string backend
+        +text sha256
+        +bigint size
+        +text mime
+        +text storage_key
+        +text backend
     }
     class DemoChannel {
-        +int demo_id
-        +string channel
+        +bigint demo_id
+        +text channel
         +Visibility visibility
-        +string lang
-        +bool featured
+        +text lang
+        +boolean featured
         +int featured_order
-        +datetime published_at
+        +timestamptz published_at
     }
     class DemoStat {
-        +int demo_id
-        +int view_count
-        +int download_count
-        +int rating_sum
-        +int rating_count
-        +float rating_avg
+        +bigint demo_id
+        +bigint view_count
+        +bigint download_count
+        +bigint rating_sum
+        +bigint rating_count
+        +numeric rating_avg
     }
     class DemoRating {
-        +int demo_id
-        +string rater_key
+        +bigint demo_id
+        +text rater_key
         +int score
-        +datetime created_at
+        +timestamptz created_at
     }
-    class DemoTag {
-        +int demo_id
-        +int tag_id
+    class DemoRevisionModel {
+        +bigint revision_id
+        +bigint model_id
+        +bigint provider_id
+        +text serving_note
+        +text source
     }
     class DemoModel {
-        +int demo_id
-        +int model_id
-        +int provider_id
-        +string serving_note
-        +string source
+        <<view>>
+        +bigint demo_id
+        +bigint model_id
+        +bigint provider_id
+        +text serving_note
+        +text source
     }
     class DemoTask {
-        +int demo_id
-        +int task_id
+        <<view>>
+        +bigint demo_id
+        +bigint task_id
     }
     class DemoTimeline {
-        +int demo_id
-        +string kind
-        +string message
-        +datetime created_at
+        +bigint demo_id
+        +text kind
+        +text message
+        +timestamptz created_at
     }
     class DemoExternalThread {
-        +int demo_id
-        +string provider
-        +string host
-        +string topic_id
-        +int post_count
+        +bigint demo_id
+        +text provider
+        +text host
+        +text topic_id
+        +bigint post_count
     }
     class DemoSlugHistory {
-        +string slug
-        +int demo_id
+        +text slug
+        +bigint demo_id
     }
 
     Demo "1" *-- "1..*" DemoRevision
@@ -440,9 +518,9 @@ classDiagram
     Demo "1" *-- "0..*" DemoChannel
     Demo "1" *-- "1" DemoStat
     Demo "1" *-- "0..*" DemoRating
-    Demo "1" *-- "0..*" DemoTag
-    Demo "1" *-- "0..*" DemoModel
-    Demo "1" *-- "0..*" DemoTask
+    DemoRevision "1" *-- "0..*" DemoRevisionModel
+    Demo "1" ..> "0..*" DemoModel : 派生（VIEW）
+    Demo "1" ..> "0..*" DemoTask : 派生（VIEW）
     Demo "1" *-- "0..*" DemoTimeline
     Demo "1" o-- "0..1" DemoExternalThread
     Demo "1" o-- "0..*" DemoSlugHistory
@@ -455,35 +533,35 @@ classDiagram
 ```mermaid
 erDiagram
     DEMOS {
-        int id PK
-        string slug UK
-        string title
-        int current_revision_id FK
-        string moderation_state
-        string lifecycle_state
-        datetime deleted_at
+        bigint id PK
+        text slug UK
+        text title
+        bigint current_revision_id FK
+        text moderation_state
+        text lifecycle_state
+        timestamptz deleted_at
     }
     DEMO_REVISIONS {
-        int id PK
-        int demo_id FK
+        bigint id PK
+        bigint demo_id FK
         int rev_no
-        string manifest_hash
-        string demo_type
-        string prompt
-        int prompt_id FK
+        text manifest_hash
+        text demo_type
+        text prompt
+        bigint prompt_id FK
     }
     DEMO_REVISION_FILES {
-        int id PK
-        int revision_id FK
-        string path
-        string blob_hash FK
+        bigint id PK
+        bigint revision_id FK
+        text path
+        text blob_hash FK
     }
     BLOBS {
-        string sha256 PK
-        int size
-        string mime
-        string storage_key
-        string backend
+        text sha256 PK
+        bigint size
+        text mime
+        text storage_key
+        text backend
     }
     DEMOS ||--o{ DEMO_REVISIONS : has
     DEMO_REVISIONS ||--o{ DEMO_REVISION_FILES : lists
@@ -495,35 +573,35 @@ erDiagram
 ```mermaid
 erDiagram
     DEMOS {
-        int id PK
-        string slug UK
+        bigint id PK
+        text slug UK
     }
     DEMO_CHANNELS {
-        int id PK
-        int demo_id FK
-        string channel
-        string visibility
-        string lang
-        bool featured
+        bigint id PK
+        bigint demo_id FK
+        text channel
+        text visibility
+        text lang
+        boolean featured
     }
     DEMO_STATS {
-        int demo_id PK
-        int view_count
-        int download_count
-        int rating_count
-        float rating_avg
+        bigint demo_id PK
+        bigint view_count
+        bigint download_count
+        bigint rating_count
+        numeric rating_avg
     }
     DEMO_RATINGS {
-        int id PK
-        int demo_id FK
-        string rater_key
+        bigint id PK
+        bigint demo_id FK
+        text rater_key
         int score
     }
     DEMO_EXTERNAL_THREADS {
-        int demo_id PK
-        string provider
-        string topic_id
-        int post_count
+        bigint demo_id PK
+        text provider
+        text topic_id
+        bigint post_count
     }
     DEMOS ||--o{ DEMO_CHANNELS : published_to
     DEMOS ||--|| DEMO_STATS : aggregates
@@ -531,48 +609,85 @@ erDiagram
     DEMOS ||--o| DEMO_EXTERNAL_THREADS : discussed_in
 ```
 
-### 5.3 与模型域/标签/题目的接缝
+### 5.3 与模型域 / 题目的接缝
+
+> 作品↔分类的关联表（`demo_classifications`）由**标签域**拥有；生成条件的真表在 revision 级（模型域 / 标签域拥有），demo 层同名表是视图（§3.2.1 / §3.8）。本图只画模型维度，其余四张见 §5.4。
 
 ```mermaid
 erDiagram
     DEMOS {
-        int id PK
+        bigint id PK
+    }
+    DEMO_REVISIONS {
+        bigint id PK
+    }
+    DEMO_REVISION_MODELS {
+        bigint revision_id PK
+        bigint model_id PK
+        bigint provider_id FK
+        text serving_note
+        text source
     }
     DEMO_MODELS {
-        int demo_id PK
-        int model_id PK
-        int provider_id FK
-        string serving_note
-    }
-    DEMO_TAGS {
-        int demo_id PK
-        int tag_id PK
+        bigint demo_id "VIEW 派生列"
+        bigint model_id "VIEW 派生列"
+        bigint provider_id "VIEW 派生列"
+        text serving_note "VIEW 派生列"
+        text source "VIEW 派生列"
     }
     DEMO_TASKS {
-        int demo_id PK
-        int task_id PK
+        bigint demo_id "VIEW 派生列"
+        bigint task_id "VIEW 派生列"
     }
     MODELS {
-        int id PK
-        int vendor_id FK
+        bigint id PK
+        bigint vendor_id FK
     }
     PROVIDERS {
-        int id PK
-        int vendor_id FK
-    }
-    TAGS {
-        int id PK
+        bigint id PK
+        bigint vendor_id FK
     }
     TASKS {
-        int id PK
+        bigint id PK
     }
-    DEMOS ||--o{ DEMO_MODELS : made_by
-    DEMOS ||--o{ DEMO_TAGS : classified
-    DEMOS ||--o{ DEMO_TASKS : responds_to
-    MODELS ||--o{ DEMO_MODELS : used_in
-    PROVIDERS ||--o{ DEMO_MODELS : served_by
-    TAGS ||--o{ DEMO_TAGS : tags
-    TASKS ||--o{ DEMO_TASKS : includes
+    DEMOS ||--o{ DEMO_REVISIONS : has
+    DEMO_REVISIONS ||--o{ DEMO_REVISION_MODELS : generated_with
+    DEMOS ||--o{ DEMO_MODELS : "派生（VIEW）"
+    DEMOS ||--o{ DEMO_TASKS : "派生（VIEW）"
+    MODELS ||--o{ DEMO_REVISION_MODELS : used_in
+    PROVIDERS ||--o{ DEMO_REVISION_MODELS : served_by
+    TASKS ||--o{ DEMO_TASKS : "派生（VIEW）"
+```
+
+### 5.4 revision 的生成条件（余下四张，G18）
+
+`platform` / `platform_config` / `skill` / `mcp` 与 `model` 同构：**真表在 revision 级**，目标侧实体（`platforms` / `platform_configs` / `skills` / `mcp_servers`）由标签域拥有、不在本图内；demo 层同名表是视图（§3.8）。
+
+```mermaid
+erDiagram
+    DEMO_REVISIONS {
+        bigint id PK
+    }
+    DEMO_REVISION_PLATFORMS {
+        bigint revision_id PK
+        bigint platform_id PK
+    }
+    DEMO_REVISION_PLATFORM_CONFIGS {
+        bigint revision_id PK
+        bigint config_id PK
+    }
+    DEMO_REVISION_SKILLS {
+        bigint revision_id PK
+        bigint skill_id PK
+    }
+    DEMO_REVISION_MCP_SERVERS {
+        bigint revision_id PK
+        bigint mcp_server_id PK
+    }
+    DEMO_REVISIONS ||--o{ DEMO_REVISION_PLATFORMS : ran_on
+    DEMO_REVISIONS ||--o{ DEMO_REVISION_PLATFORM_CONFIGS : configured_with
+    DEMO_REVISIONS ||--o{ DEMO_REVISION_SKILLS : used_skill
+    DEMO_REVISIONS ||--o{ DEMO_REVISION_MCP_SERVERS : used_mcp
 ```
 
 ## 6. 状态机
@@ -600,7 +715,7 @@ stateDiagram-v2
     [*] --> draft: 存草稿
     [*] --> published: 直接发布
     draft --> published: 发布
-    published --> archived: 作者下架（链接仍可访问）
+    published --> archived: 作者下架（直访返回 tombstone）
     archived --> published: 恢复
     published --> removed: 违规下架
     archived --> removed: 违规下架
@@ -608,9 +723,13 @@ stateDiagram-v2
     published --> deleted: 软删除
     archived --> deleted: 软删除
     deleted --> [*]: GC 物理清理
+    note right of archived
+        tombstone：作者已下架
+        slug / 标题 / 下架时间 / 可恢复
+    end note
     note right of removed
-        保留 tombstone：
-        slug / 标题 / 原因
+        tombstone：因违规被移除
+        slug / 标题 / 处理时间 / 申诉入口
     end note
 ```
 
@@ -623,12 +742,52 @@ stateDiagram-v2
     rev2 --> rev3: 编辑
     rev3 --> rev2: 回滚（复用旧快照内容，生成新 rev_no）
     note right of rev2
-        revision 本身不可变
+        内容不可变（清单 / prompt）
+        运行元数据可更正（§6.5）
         "回滚" = 用旧清单新建一条 revision
     end note
 ```
 
 **回滚不删除历史**：`rev4.source='rollback'`，内容指向 `rev2` 的清单（同一批 blob，零拷贝）。
+
+### 6.4 下架与 tombstone（决议 G1，2026-10-28）
+
+**本节修订 §6.2 原「作者下架（链接仍可访问）」的表述**：`archived` 与 `removed` 都**不再提供内容**，按 slug 直访返回 **HTTP 200 + tombstone 页**。
+
+| 状态 | 触发 | 响应 | tombstone 内容 | 可执行动作 |
+|---|---|---|---|---|
+| `archived` | 作者主动下架 | 200 | slug / 标题 / 下架时间 / 「作者已下架该作品」 | 「查看作者其它作品」「返回列表」；作者本人另有「恢复发布」 |
+| `removed` | 平台违规处置 | 200 | slug / 标题 / 处理时间 / 「该作品因违规被移除」/ 依据条款 | 「提交申诉」「查看社区规范」 |
+| `pending` / `rejected` / `draft` | 未公开 | **404** | — | 作者本人与管理员走**带权限读路径**（不套公开谓词） |
+| `deleted`（软删） | 作者/管理员删除 | 404 | — | GC 前管理员仍可查 |
+| GC 之后 | 物理清理 | 404 | — | — |
+
+**tombstone 页一律不出**：作品内容、预览 iframe、下载、评分、评论/讨论入口、会话日志、时间线。
+
+**列表 / 计数**只算公开可见：`moderation_state='approved' AND lifecycle_state='published' AND deleted_at IS NULL` + 渠道 `visibility='listed'`（谓词定义见《实体域数据结构设计》§5.0，决议 G1）。
+
+**为什么两类 tombstone 必须不同**：`archived` 是作者自主行为（可恢复、无申诉），`removed` 是平台处置（有申诉、有条款依据）。合成一个页面会让用户既不知道能不能申诉，也不知道作品会不会回来。
+
+### 6.5 运行元数据的更正（G11，2026-10-28）
+
+**规则：内容不可变，运行元数据可更正。**
+
+| 列 | 可更正？ | 谁能改 |
+|---|---|---|
+| `manifest_hash` / `file_count` / `total_bytes` / `entry_path` / `demo_type` / `single_file` / `external_url` | ❌ 内容 | 改 = 新 revision |
+| `title` / `description` / `cover_url` / `prompt` / `prompt_id`（版本快照） | ❌ 内容 | 改 = 新 revision |
+| **`gen_rounds` / `gen_minutes` / `model_hint`** | ✅ **运行元数据** | 作者本人（管理端亦可） |
+
+**为什么**：`gen_rounds` / `gen_minutes` 是「这一次生成跑了多少轮 / 多久」的**录入记录**，`model_hint`（兜底型号依据）同理，都不是内容本身。用户填错了，让它去新建一个「内容完全相同的 revision」是错的（版本号语义被污染）；而只让管理员改库则是漏设计——用户连自己填错的数字都改不了。
+
+**平台维度同理**（同属录入事实），但它已由 `demo_revision_platforms` 关联表表达（G18），不在本节的列白名单内。
+
+**约束**：
+
+- 只允许改这 3 列的**白名单**，其余列一律拒绝（应用层校验；DB 层可选 trigger 兜底）；
+- 每次更正写 `audit_log(action='update', entity_type='demo_revision', before, after)`；
+- 更正**不触发重新审核**（不改内容，也不改可见性）；
+- 更正后 `demos.updated_at` 显式赋值（列表排序依赖它）。
 
 ## 7. 时序
 
@@ -757,7 +916,7 @@ sequenceDiagram
     U->>R: DELETE /demos/{slug}
     R->>DB: UPDATE demos.deleted_at, delete_reason（软删除）
     R->>DB: UPDATE demo_channels.visibility=hidden
-    R-->>U: 204（slug 返回 410 或 404 带 tombstone）
+    R-->>U: 204（该 slug 之后按 §6.4 返回 404）
 
     Note over G: 定期任务
     G->>DB: 找 deleted_at 超过保留期的 demo
@@ -774,16 +933,12 @@ sequenceDiagram
 {STORAGE_DIR}/
 ├── blobs/
 │   └── ab/cd/abcdef0123456789…      ← 内容块，无扩展名（mime 在 DB）
-├── demos/{slug}/                     ← 过渡期物化（硬链接，见 §11）
-│   └── files/index.html -> ../../blobs/ab/cd/…
 └── media/
     ├── covers/{hash}.webp
     │   ├── {hash}-thumb.webp
     │   └── {hash}-card.webp
     └── avatars/
 ```
-
-**硬链接过渡**：现有 `_serve_preview` 按路径直读文件，硬链接能让它一行不改；等清单缓存稳定后，再去掉物化目录。
 
 ## 9. 不变量
 
@@ -798,28 +953,30 @@ sequenceDiagram
 9. `DemoStat` 可随时从 `DemoRating` 重建；不得作为唯一数据源。
 10. `Demo.slug` 永久唯一；改名写入 `DemoSlugHistory` 并 301。
 11. 软删除的 `Demo` 不出现在任何公开查询；物理删除只由 GC 执行。
-12. `Demo` 的模型归属代表当前版本；历史版本的模型归属不提供（见 §2.2）。
+12. 生成条件（模型 / 平台 / 平台配置 / 技能 / MCP）是 **revision 级事实**：每个 revision 的关联行只描述该版本；**历史版本可追溯**。demo 层只提供「当前版本」（`current_revision_id`）的派生值，不得作为独立事实源（见 §2.2 / §3.2.1）。
 
 ## 10. 与模型域的衔接
 
 | 模型域设计 | Demo 域落点 |
 |---|---|
-| `demo_models` 唯一事实源 | 保持不变，挂在 `Demo` 级 |
-| `provider_id` 可空 | `DemoModel.provider_id` |
-| 标签退场 T1–T6 | 不受本文影响；`DemoTag` 结构不变 |
-| `vendors` / `providers` | `DemoModel.provider_id` → `providers.id` |
+| `demo_models` 唯一事实源 | **改为 revision 级 `demo_revision_models`**（G18）；demo 层 `demo_models` 是视图（§3.2.1 / §3.8） |
+| `provider_id` 可空 | `DemoRevisionModel.provider_id`（同一模型经不同 provider 用过算一条） |
+| 标签退场（`T1–T6` = M8） | 不受本文影响；过渡期口径与归宿见 **§14**（台账 G4；《标签域数据结构设计》§9.2 / §6.5 阶段④） |
+| `vendors` / `providers` | `DemoRevisionModel.provider_id` → `providers.id` |
 | 第三方基准 | 与 Demo 无直接关系（按模型聚合） |
 
-**唯一交叉点**：`DemoModel` 的写入由 `DemoModelWriter` 统一负责（模型域 T2），Demo 域不新增第二条写入路径。
+**唯一交叉点**：`DemoRevisionModel` 的写入由 `DemoModelWriter` 统一负责（模型域 T2），Demo 域不新增第二条写入路径。
 
-## 11. 迁移路线（expand → contract）
+**与论坛外置的衔接（G12）**：Demo 域**不新建** `external_events`（webhook 收件箱 → 论坛外置）与 `external_identities`（身份映射 → 身份域）。`DemoExternalThread` 与标签域 `external_threads` 是**同一张表的两份定义**——G5 已定以标签域为准，Demo 域侧如何收敛见 **B1（待拍板）**。
+
+## 11. 迁移路线（expand → contract）（= **M12**，建议待确认）
 
 现状与目标差距较大，但**可以分五步，每步独立可发布**。
 
 | 步 | 变更 | 读路径 | 写路径 | 回滚 |
 |---|---|---|---|---|
-| **D1** | 建新表（revisions / files / blobs / channels / stats / slug_history / external_threads），不写入 | 不变 | 不变 | 删表 |
-| **D2** | 回填：现有 demo 各生成一条 `rev_no=1`；文件算 hash 入 blobs；`sites`→channels；`rating_*`/`view_count`→stats | 不变 | 双写（新+旧） | 删新表数据 |
+| **D1** | 建新表（revisions / files / blobs / channels / stats / slug_history）——**不含 `external_threads`**（G12：归标签域；Demo 域只保留读侧投影 `DemoExternalThread`），不写入 | 不变 | 不变 | 删表 |
+| **D2** | 回填：现有 demo 各生成一条 `rev_no=1`；文件算 hash 入 blobs；`sites`→channels；`rating_*`/`view_count`→stats；**生成条件（模型 / 平台 / 平台配置 / 技能 / MCP）由 demo 级行搬到 5 张 `demo_revision_*` 表，`revision_id` = 各自的 `current_revision_id`**（G18） | 不变 | 双写（新+旧） | 删新表数据 |
 | **D3** | 读路径切到新表（列表 JOIN revision、详情读 revision、预览按 manifest_hash） | 新 | 双写 | 切回旧列 |
 | **D4** | 写路径切到新表（编辑产生 revision，不再 `copytree`；`keep_old_version` 语义变成「打 tag 指向旧 rev」） | 新 | 新 | 保留旧列一个周期 |
 | **D5** | 退场旧列（`demos.demo_type` / `prompt` / `sites` / `rating_*` 等） | 新 | 新 | 需备份 |
@@ -839,8 +996,6 @@ sequenceDiagram
 
 - **不改 `Demo` 这个名字**（`Work` 只是早期讨论代号）
 - **不在本系统为帖子建模**：社区外置，只留 `DemoExternalThread`
-- **不把模型关联移到 revision**（§2.2 方案 A）
-- **不拆 `DemoTag` / `DemoTask`**：结构已足够
 - **不做多语言内容表**：`lang` 仍是渠道属性；真要做 i18n 内容另立设计
 - **不做实时协同编辑**：版本是提交式的，不是 CRDT
 
@@ -848,5 +1003,90 @@ sequenceDiagram
 
 1. 软删除保留期（默认建议 30 天）
 2. `astra` 渠道是否允许 `unlisted`（现在只有 `listed` / 不存在）
-3. 回填是否顺带把历史 `version-of` 快照合并成 revision（可能减少作品库噪音）
-4. `Blob` 是否引入引用计数列（现在靠 `DemoRevisionFile` 反查，量大时再引入）
+3. `Blob` 是否引入引用计数列（现在靠 `DemoRevisionFile` 反查，量大时再引入）
+
+**已定（G15，2026-10-28）**：历史 `version-of` 快照**合并成原作的一个 revision**，**不再引入 `demos.version_of_id`**（`version-of` 只有 2 条引用、其中 1 条已断链 `lofi-studio-32d3fa31`）。Demo 域从此是**作品版本链的唯一事实源**；「A 是 B 的二创 / 衍生」这类跨作品关系若将来需要，另立引用表，不复用 `version_of`。
+
+## 14. 过渡期与退役（非目标态）
+
+> 本节的**一切内容都不是目标态**，只为迁移期实现与 review 提供上下文（台账 **G16**：设计文档正文只放目标态，过渡态下沉）。
+> 类别标记：**①** 过渡期才存在的结构 · **②** 现状 → 目标对照 · **③** 旧栈实现细节 · **④** 一次性留痕物。
+
+### 14.1 目标图里移除的过渡对象：`DemoTag`（①，原 §2.1 聚合图 / §4 全景类图 / §5.3 ER 图）
+
+`DemoTag` 只在过渡期存在，已从三张目标图中移除，以免读者把它当成目标模型的一部分：
+
+| 目标图 | 移除的内容 |
+|---|---|
+| §2.1 聚合图 | 强关联子图里的 `DT["DemoTag"]` 节点与 `D --> DT` 边 |
+| §4 全景类图 | `class DemoTag { +int demo_id; +int tag_id }` 与 `Demo "1" *-- "0..*" DemoTag` |
+| §5.3 ER 图 | `DEMO_TAGS` 实体块、`DEMOS \|\|--o{ DEMO_TAGS : classified`、`TAGS \|\|--o{ DEMO_TAGS : tags`；`TAGS` 实体块因再无其它引用一并移除（`DEMO_TASKS` 是视图，保留） |
+
+**过渡期图**（①；合并原 §4 的 `DemoTag` 类与 §5.3 的 `TAGS` 实体——它们在目标图里的位置已删除）：
+
+> **本图的属性类型刻意保留旧栈的 SQLite / Java 风格**（`+int` / `+string`）：它画的是**旧栈实体**（`demo_tags` / `tags`）的实际形状，不是目标态。**不要**按 §0.1 的 PG 映射表去改——改了反而失真。（v1.3 的 C2 转换刻意跳过本图。）
+
+```mermaid
+classDiagram
+    class Demo {
+        +int id
+    }
+    class DemoTag {
+        +int demo_id
+        +int tag_id
+    }
+    class Tag {
+        +int id
+        +string key
+        +string value
+    }
+    Demo "1" *-- "0..*" DemoTag
+    DemoTag "0..*" --> "1" Tag
+```
+
+### 14.2 `DemoTag` 的过渡期定义与归宿（①，原 §3.8）
+
+**过渡期定义**（原文）：`DemoTag`：`(demo_id, tag_id)` 复合主键，不变。
+
+**归宿**：`tags` 表的 12 个键各有落点，`DemoTag` 因此拆解为 **4 组关联表**（`demo_classifications` + revision 级的平台 / 配置 / 技能三表）**+ `demos` 的列 + revision 的运行元数据**：
+
+| 旧键 | 去向 | 归属域 |
+|---|---|---|
+| `author` | `demos.author_id` 列 | Demo 域 |
+| `version-of` | 由 `DemoRevision` 取代，**不迁移**（G15） | Demo 域 |
+| `rounds` / `time` | `demo_revisions.gen_rounds` / `gen_minutes`（运行元数据） | Demo 域 |
+| `type` / `category` / `game` | `demo_classifications` | 标签域 |
+| `platform` | `demo_revision_platforms`（demo 层 `demo_platforms` 是视图） | 标签域 |
+| `plugin` / `preset` | `demo_revision_platform_configs`（demo 层 `demo_platform_configs` 是视图） | 标签域 |
+| `skills` | `demo_revision_skills`（demo 层 `demo_skills` 是视图） | 标签域 |
+| `model` | 按《模型域设计》**§11.1** 的 M8 / A6 单独退场 | 模型域 |
+
+**终态**：`DemoTag` 随 `tags` + `tag_keys` 一起删除——先退 `key='model'` 的行，其余随标签域切完读写路径、观察 2 周后删表（台账 **G4**；《标签域数据结构设计》**§6.5 阶段④** 的 `DROP TABLE demo_tags; DROP TABLE tags; DROP TABLE tag_keys;`，删表前逐键确认该节的前置条件表）。
+
+### 14.3 `DemoTask` 的旧栈实现（③，原 §3.8）
+
+旧栈它是真表（`models.py` 的 `DemoTask`），双写导致「改 prompt 后 `demo_tasks` 没跟着变」的矛盾。目标态为**视图**（G7），见 §3.8 与《实体域数据结构设计》§1.3 / §3.6。
+
+### 14.4 预览目录的硬链接物化（① ③，原 §8）
+
+存储布局里的过渡条目（原文）：
+
+```text
+├── demos/{slug}/                     ← 过渡期物化（硬链接，见 §11）
+│   └── files/index.html -> ../../blobs/ab/cd/…
+```
+
+**硬链接过渡**（原文）：现有 `_serve_preview` 按路径直读文件，硬链接能让它一行不改；等清单缓存稳定后，再去掉物化目录。
+
+### 14.5 标签退场与本文的关系（① ②，原 §10 衔接表）
+
+**原文**：「标签退场 T1–T6 ｜ 不受本文影响；`DemoTag` 结构在 T6 前不变，最终随 G4 删表（标签域 §9.2）」。
+
+§10 衔接表该行已改为指向本节；决策编号 **G4** 与跨文档引用《标签域数据结构设计》§9.2 / §6.5 阶段④ 不变。
+
+### 14.6 「不拆 `DemoTag` / `DemoTask`」的原文（①，原 §12 明确不做）
+
+**原文**：「不拆 `DemoTag` / `DemoTask`：`DemoTask` 已由表改为**视图**（G7）；`DemoTag` 保留现有结构，删表计划见标签域 G4」。分两段读：
+
+- **过渡期**：`DemoTag` 结构不变，它仍是这一阶段的**打标写入面**（`?tag=` 兼容层与上传打标都走它）。
+- **终态**：`DemoTag` 随 `tags` + `tag_keys` 删除（标签域 §6.5 阶段④ + G4，见 §14.2）；`DemoTask` 作为**视图**保留，属目标态（G7，见 §3.8）。
