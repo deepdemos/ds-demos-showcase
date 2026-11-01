@@ -9,6 +9,7 @@ import { isDocsOnly, validatePullRequest } from './check-pr.mjs';
 import { hasReviewComment } from './check-review.mjs';
 import { inspectDocument as inspectStandardObjects, inspectYamlFences, parseAuthority as parseStandardObjects, run as runStandardObjects } from './check-objects.mjs';
 import { inspectContracts } from './check-contracts.mjs';
+import { inspectSchema } from './check-schema.mjs';
 
 test('文件行数阈值：500/501/800/801', () => {
   assert.equal(classifyLines(500), 'ok');
@@ -313,6 +314,8 @@ const contractDocs = () => ({
   governance: CONTRACT_GOV,
   standard: CONTRACT_STD,
   lifecycle: CONTRACT_LIFECYCLE,
+  // 目录表种子与 CHECK 取值域的事实源已搬到 db/schema；测试用同一份 fixture 喂给 schema 位
+  schema: CONTRACT_STD,
 });
 
 test('标准对象门禁：章节级锚点必须写在副本之前', () => {
@@ -369,7 +372,8 @@ test('契约门禁：注册表里的 kind / entity_type 必须在目录表里', 
   assert.ok(inspectContracts(badEntity).some((p) => p.includes('account')));
 
   const duplicated = contractDocs();
-  duplicated.standard = duplicated.standard.replace("('create', '新建')", "('create', '新建'), ('create', '重复')");
+  duplicated.schema = duplicated.schema.replace("('create', '新建')", "('create', '新建'), ('create', '重复')");
+  duplicated.standard = duplicated.schema;
   assert.ok(inspectContracts(duplicated).some((p) => p.includes('重复')));
 });
 
@@ -377,4 +381,32 @@ test('契约门禁：gc_queue.reason 的 CHECK 必须与 §EN-8 取值域一致'
   const mismatch = contractDocs();
   mismatch.governance = mismatch.governance.replace("('delete','erase')", "('delete','erase','purge')");
   assert.ok(inspectContracts(mismatch).some((p) => p.includes('gc_queue.reason')));
+});
+
+test('表结构门禁：文档里出现 CREATE TABLE 要被拦（迁移占位与史料文档豁免）', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'schema-gate-'));
+  fs.mkdirSync(path.join(tmp, 'db', 'schema'), { recursive: true });
+  fs.mkdirSync(path.join(tmp, 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'db', 'schema', '10-a.sql'),
+    'CREATE TABLE t (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY);\n');
+  fs.writeFileSync(path.join(tmp, 'docs', 'a.md'), '建表如下：\n\n```sql\nCREATE TABLE t (id bigint);\n```\n');
+  const problems = inspectSchema(tmp);
+  assert.ok(problems.some((p) => p.includes('手写')), problems.join('; '));
+
+  // 迁移占位写法不算手写
+  fs.writeFileSync(path.join(tmp, 'docs', 'a.md'), '```sql\nCREATE TABLE t (...);\n```\n');
+  assert.deepEqual(inspectSchema(tmp).filter((p) => p.includes('手写')), []);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('表结构门禁：引用了不存在的 schema 文件要报', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'schema-ref-'));
+  fs.mkdirSync(path.join(tmp, 'db', 'schema'), { recursive: true });
+  fs.mkdirSync(path.join(tmp, 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'db', 'schema', '10-a.sql'),
+    'CREATE TABLE t (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY);\n');
+  fs.writeFileSync(path.join(tmp, 'docs', 'a.md'), '见 [x](../db/schema/99-missing.sql)。\n');
+  const problems = inspectSchema(tmp);
+  assert.ok(problems.some((p) => p.includes('99-missing.sql')), problems.join('; '));
+  fs.rmSync(tmp, { recursive: true, force: true });
 });

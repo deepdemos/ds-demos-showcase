@@ -120,6 +120,8 @@ jobs:
         run: node --test scripts/checks.test.mjs
       - name: 契约门禁（权限键 / 审计动作 / 审计实体类型 / GC 对象类型）
         run: node scripts/check-contracts.mjs
+      - name: 表结构门禁（db/schema 静态检查 + 文档里不许再手写 DDL）
+        run: node scripts/check-schema.mjs
       - name: 失败处理指引
         if: failure()
         run: echo "::error title=CI 门禁::contract 失败（目录表与引用不一致 / 权限没绑全 admin / registry.yaml 引用了不存在的 kind 或 entity_type）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"

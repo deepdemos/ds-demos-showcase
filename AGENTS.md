@@ -112,6 +112,7 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 - 样式：简单布局/自定义用 Tailwind utilities，复杂样式用 CSS Modules；不要在页面里绕开控件库直接使用第三方 UI。
 - API 以 `api/openapi.yaml`（OpenAPI 3.1）为唯一事实源：先改契约 → 重新生成 → 再改实现；禁止手改生成目录。
 - 数据库变更只加新 migration，禁止修改已合入的 migration。
+- **表结构的唯一事实源是 `db/schema/*.sql`**（按 `NN-` 前缀顺序应用；外键集中在 `80-late-fk.sql`）。设计文档只写字段语义、状态机与「DDL 见 xxx.sql」的指针，**不复制建表语句**——由 `scripts/check-schema.mjs` 门禁拦截；本地可跑 `node scripts/apply-schema.mjs` 在真 PG 上验一遍。
 - 依赖：能用标准库 / 现有依赖解决的不加新依赖；新依赖需在 PR 说明理由与体积影响。Ring UI 只允许在控件库内使用。
 - 注释只写代码无法表达的“为什么”，用中文；标识符用英文。
 
