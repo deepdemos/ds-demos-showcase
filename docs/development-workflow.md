@@ -141,6 +141,24 @@ pnpm gen:api:go
 CI 会重新生成一遍并 `git diff --exit-code backend/internal/api`——产物与契约不一致就红。
 这条是为了让「禁止手改生成目录」不靠自觉，和真库校验是同一个思路。
 
+### 本地跑集成测试（可选）
+
+后端有依赖 PostgreSQL 的集成测试。**默认不需要装库**：没设 `TEST_DATABASE_URL` 时它们会 skip
+并打印原因，`go test ./...` 依然全绿。
+
+想本地真跑：
+
+```bash
+docker compose up -d db          # 或自备 PostgreSQL 18
+npm run apply:schema             # 灌 db/schema/*.sql
+TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable \
+  go test ./... -run Integration
+```
+
+CI 里用 `services: postgres` 起库，所以**集成测试只在 CI 强制执行**。这是有意的取舍：
+不为少数人要跑的测试强迫所有人装数据库。代价是可能出现「本地绿、CI 红」，
+承担这个代价的方式是：CI 红时先看是不是集成测试，再判断是不是自己的改动引起的。
+
 ### contract job 里的两类校验
 
 | | 证明什么 | 不证明什么 |
