@@ -11,7 +11,11 @@ CREATE TABLE accounts (
     previous_status text    CHECK (previous_status IN ('active', 'suspended')),
     role        text        NOT NULL DEFAULT 'user',
                                                      -- 前提是两域同库（治理域 §12 第 3 步）。拆独立库（形态 C）时退回应用层校验。
-    level       smallint    NOT NULL DEFAULT 0 CHECK (level BETWEEN 0 AND 6),  -- 投影镜像（事实源在成长/积分域）
+    level       smallint    NOT NULL DEFAULT 0
+                             -- 投影镜像（事实源在成长/积分域）。
+                             -- 只有下界没有上界：EXP-001 定「级数不封顶」，级名跟 DeepSeek 模型代际走。
+                             -- v1.1（2026-11-01）去掉原先的 BETWEEN 0 AND 6，与 EXP-001 对齐。
+                             CONSTRAINT ck_accounts_level_nonneg CHECK (level >= 0),
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),
     email_hmac  text,                                   -- L2：注销时留的邮箱键控哈希；密钥不入库，核验后清空

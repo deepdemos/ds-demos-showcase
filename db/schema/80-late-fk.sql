@@ -83,3 +83,7 @@ ALTER TABLE site_settings ADD CONSTRAINT fk_site_settings_key71 FOREIGN KEY (key
 ALTER TABLE site_settings ADD CONSTRAINT fk_site_settings_updated_by72 FOREIGN KEY (updated_by) REFERENCES accounts (id) ON DELETE SET NULL;
 ALTER TABLE user_preferences ADD CONSTRAINT fk_user_preferences_key73 FOREIGN KEY (key, scope, value_type) REFERENCES setting_keys (key, scope, value_type);
 ALTER TABLE user_preferences ADD CONSTRAINT fk_user_preferences_account_id74 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+
+-- ===== Demo 域：作品类型（30-demo.sql 的 demo_types）=====
+-- DEMO-001：类型清单是主数据，加类型 = 加一行，不是改约束。
+ALTER TABLE demo_revisions ADD CONSTRAINT fk_demo_revisions_demo_type75 FOREIGN KEY (demo_type) REFERENCES demo_types (code);
