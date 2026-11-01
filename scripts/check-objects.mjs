@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 标准对象门禁：跨域共享的取值域只允许在 docs/标准对象.md 里定义一次。
+// 标准对象门禁：跨域共享的取值域只允许在 docs/标准对象.md 与 docs/标准对象/ 分册里定义一次。
 //
 // 三条断言：
 //   A 重复枚举 —— 其他文档里出现与标准对象**集合完全相同**的取值枚举时，该行或上方 3 行内必须有
@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const AUTHORITY = 'docs/标准对象.md';
+export const VOLUME_DIR = 'docs/标准对象';
 const ROOT = process.cwd();
 const KEY_PATTERN = /^§(ST|EN|ID|TS|P)-(\d+)$/;
 const ANCHOR_PATTERN = /标准对象\s*§?(ST|EN|ID|TS|P)-(\d+)/;
@@ -109,12 +110,26 @@ function listDocs(dir = path.join(ROOT, 'docs')) {
   return files;
 }
 
+/** 权威文件 = 索引（登记表）+ 分册目录下的每一册（对象正文）。 */
+export function authorityFiles(root = ROOT) {
+  const files = [path.join(root, AUTHORITY)];
+  const volumeDir = path.join(root, VOLUME_DIR);
+  if (fs.existsSync(volumeDir)) {
+    for (const name of fs.readdirSync(volumeDir).filter((n) => n.endsWith('.md')).sort()) {
+      files.push(path.join(volumeDir, name));
+    }
+  }
+  return files;
+}
+
 export function run(root = ROOT) {
+  const authorities = authorityFiles(root).filter((file) => fs.existsSync(file));
   const authorityPath = path.join(root, AUTHORITY);
-  const authority = parseAuthority(fs.readFileSync(authorityPath, 'utf8'));
+  const authority = parseAuthority(authorities.map((file) => fs.readFileSync(file, 'utf8')).join('\n'));
   const problems = [];
   if (authority.objects.length === 0) problems.push('标准对象.md: 没有解析到任何已展开对象的取值域');
-  const files = listDocs(path.join(root, 'docs')).filter((file) => path.resolve(file) !== path.resolve(authorityPath));
+  const excluded = new Set(authorities.map((file) => path.resolve(file)));
+  const files = listDocs(path.join(root, 'docs')).filter((file) => !excluded.has(path.resolve(file)));
   for (const file of [...files, path.join(root, 'AGENTS.md')]) {
     if (!fs.existsSync(file)) continue;
     problems.push(...inspectDocument(path.relative(root, file), fs.readFileSync(file, 'utf8'), authority));
@@ -127,7 +142,7 @@ if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith
   if (problems.length > 0) {
     console.error('标准对象门禁失败：');
     for (const problem of problems) console.error(`  - ${problem}`);
-    console.error('\n修法：取值域只在 docs/标准对象.md 定义一次；删掉这里的重复枚举，改成 `标准对象 §<键>` 指针。');
+    console.error('\n修法：取值域只在 docs/标准对象*.md 定义一次；删掉这里的重复枚举，改成 `标准对象 §<键>` 指针。');
     process.exit(1);
   }
   console.log(`标准对象门禁通过（${objects.length} 个已展开对象：${objects.map((o) => o.key).join(', ')}）`);
