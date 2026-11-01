@@ -3,7 +3,7 @@
 > **本文只描述目标态。** 现状对照、迁移路线与过渡期结构见 [`../Demo域设计.md`](../Demo域设计.md)（完整版，含迁移与变更史）。
 > 本文与完整版的章节对应见[附录 A](#附录-a-新旧章节对照)。
 
-**DDL 方言 = PostgreSQL 18**；运行栈为 Go + 新前端，落库时按新栈 ORM 复核。
+**DDL 方言 = PostgreSQL 18**，统一约定见 [`DDL 约定`](../DDL约定.md)；运行栈为 Go + 新前端，落库时按新栈 ORM 复核。
 
 **范围内**：Demo 域自身的实体（作品 / 版本 / 清单 / 内容块 / 渠道 / 统计 / 评分 / 时间线 / slug 历史）与其状态规则。
 **范围外**：分类与标签（标签域）、模型与厂商（模型域）、题目与提案（实体域）——本文只写与它们的**接缝**。
@@ -115,22 +115,9 @@ flowchart TB
 
 ## 4. DDL 约定
 
-DDL 与字段表**统一用 PostgreSQL 18 方言**。按语义取类型：
+本文所有 DDL、字段表与图**统一遵循 [`DDL 约定`](../DDL约定.md)**——方言（PostgreSQL 18）、语义 → 类型映射、字段表写法、图与 DDL 的关系都在那一份里。**本域无偏差**，因此不再重复。
 
-| 语义 | 落库类型 | 适用列 |
-|---|---|---|
-| 主键 | `bigint` + `GENERATED ALWAYS AS IDENTITY`；字段表写作 `bigint PK`、「默认」列写「自增」 | 全部 `id` |
-| 外键 / 行计数 / 字节数 | `bigint` | `*_id`、`*_count`、`*_bytes`、`size` |
-| 有序号或有界小范围 | `int`（PG 里 `int` ≡ `integer`） | `rev_no` / `score` / `featured_order` / `gen_rounds` / `gen_minutes` |
-| 0/1 标志 | `boolean`（默认 `false`） | `featured`（§6 类图与 §7 ER 写作 `boolean`） |
-| 字符串 | `text`；长度上限写进注释，或落库时用 `CHECK (length(x) <= n)`（**不用 `varchar(n)`**） | 全部字符串列 |
-| 时间点 | `timestamptz`；建表一律 `NOT NULL DEFAULT now()`（可空列除外） | 全部时间列 |
-| 比率 / 小数 | `numeric(3,2)` | `rating_avg`（1–5 分，两位小数） |
-| 结构化数据 | `jsonb` | 本文暂无 JSON 列（`payload` 类列在实体域） |
-
-**表格约定**：「类型」列只写类型名；PK / FK / 唯一性写在类型名之后（`bigint PK`、`bigint FK→demos`），自增由 DDL 层的 `GENERATED ALWAYS AS IDENTITY` 表达。**§6 类图与 §7 ER 的属性类型与 DDL 同名**（`+bigint` / `text` / `timestamptz` / `boolean` / `numeric`）。
-
-**跨域对齐**：`demo_revision_models` 的类型与《模型域设计》§3.3 一致（`revision_id bigint` / `model_id bigint` / `provider_id bigint`）；其余照《标签域数据结构设计》《实体域数据结构设计》的写法（`bigint` / `text` / `timestamptz` / `boolean` / `jsonb`）。
+本域只保留一条跨域对齐：`demo_revision_models` 的列类型以《模型域设计》§3.3 为准（`revision_id bigint` / `model_id bigint` / `provider_id bigint`）。
 
 ## 5. 实体设计（字段级）
 

@@ -10,7 +10,7 @@
 
 **本版变更（v1.1，2026-10-28）**：按台账 **G16**「设计文档正文只放目标态，过渡态下沉」，把过渡期结构、现状 → 目标对照与旧栈实现细节下沉到文末新增的 **§14 过渡期与退役（非目标态）**。目标态定义（表 / 列 / 约束 / 不变量）、决策编号、跨文档引用与 §11 迁移路线顺序均未改动，正文其余内容只调整位置。
 
-**适用范围**：本文是 Demo 域的目标模型。**DDL 方言 = PostgreSQL 18**（C2，类型映射见 §0.1）；`dev` 为 Go + 新前端，落库时需按新栈 ORM 复核。§2.2 的取舍（**生成条件挂 revision**）与技术栈无关。
+**适用范围**：本文是 Demo 域的目标模型。**DDL 方言 = PostgreSQL 18**（C2；统一约定见 [DDL约定.md](./DDL约定.md)，§0.1 只留指针）；`dev` 为 Go + 新前端，落库时需按新栈 ORM 复核。§2.2 的取舍（**生成条件挂 revision**）与技术栈无关。
 
 本文是 Demo 域的**目标模型**（细化到字段级），与现状的差异和迁移路径另见 §11。
 
@@ -37,22 +37,9 @@
 
 ### 0.1 DDL 方言与类型映射（C2）
 
-本文的 DDL 与字段表**统一用 PostgreSQL 18 方言**（台账 **C2**，2026-10-28）。原为 SQLite 方言（`INTEGER` / `TEXT(n)` / `DATETIME`），已按下列映射逐列替换，**无结构变化**（列名、约束、语义均未改动）：
+**已抽出为全仓统一约定**：[`DDL约定.md`](./DDL约定.md)。方言、语义 → 类型映射、字段表写法、图与 DDL 的关系、索引/约束命名都在那一份里；**本域无偏差**，不再重复。
 
-| SQLite（原） | PostgreSQL 18（现） | 适用列 |
-|---|---|---|
-| `INTEGER PRIMARY KEY`（自增） | `bigint` + `GENERATED ALWAYS AS IDENTITY`；字段表写作 `bigint PK`、「默认」列保留「自增」 | 主键 |
-| `INTEGER`（FK / 行计数 / 字节数 / id 类） | `bigint` | 外键、`*_count`、`*_bytes`、`size` |
-| `INTEGER`（有序号或有界小范围） | `int`（PG 里 `int` ≡ `integer`） | `rev_no` / `score` / `featured_order` / `gen_rounds` / `gen_minutes` |
-| `INTEGER`（0/1 标志） | `boolean`（默认 `false`） | `featured`（§4 类图与 §5 ER 原本已写作 `bool`，本版统一到 `boolean`；§3.5 的 `featured=1` 相应改写为 `featured = true`） |
-| `TEXT` / `TEXT(n)` | `text`（长度上限 `n` 写进注释，或落库时用 `CHECK (length(x) <= n)`，**不用 `varchar(n)`**） | 全部字符串列 |
-| `DATETIME` | `timestamptz`；建表一律 `NOT NULL DEFAULT now()`（可空列除外） | 全部时间列 |
-| `REAL` | `numeric(3,2)` | `rating_avg`（1–5 分，两位小数） |
-| JSON | `jsonb` | 本文暂无 JSON 列（`payload` 类列在实体域） |
-
-**表格约定**：「类型」列只写类型名；PK / FK / 唯一性写在类型名之后（`bigint PK`、`bigint FK→demos`），自增由 DDL 层的 `GENERATED ALWAYS AS IDENTITY` 表达。**§4 类图与 §5 ER 的属性类型与 DDL 同名**（`+bigint` / `text` / `timestamptz` / `boolean` / `numeric`）。
-
-**跨域对齐**：`demo_revision_models` 的类型与《模型域设计》§3.3 一致（`revision_id bigint` / `model_id bigint` / `provider_id bigint`）；其余照《标签域数据结构设计》《实体域数据结构设计》的写法（`bigint` / `text` / `timestamptz` / `boolean` / `jsonb`）。
+从旧栈 SQLite 迁入时的「原类型 → 现类型」逐条对照见该文 **附录 A**（含「现状字段清单里的 `Integer` / `String(n)` 是 SQLAlchemy 类型名、不要按对照表修正」的说明）。
 
 ## 1. 为什么现在改
 
