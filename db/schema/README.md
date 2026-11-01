@@ -13,14 +13,14 @@
 | 文件 | 内容 | 表的归属 |
 |---|---|---|
 | `10-identity.sql` | 身份域 **17 张**：`accounts` / `credentials` / `account_emails` / `sessions` / `account_marks` / `auth_events` / `profiles` / `avatars` / `username_history` / `groups` / `group_members` / `clients` / `consents` / `external_links` / `outbox_events`，以及 demo 站投影 `users` 与 demo 站会话 `web_sessions`；另有 `auth_events_default` 分区（`PARTITION OF`，门禁不计入表数） | 身份域 |
-| `15-settings.sql` | 设置域 **3 张**：`setting_keys`（参数注册表 = 白名单 + 类型 + 默认值）/ `site_settings`（站点级取值）/ `user_preferences`（用户级取值），以及 8 条首批参数种子 | 设置域 |
+| `15-settings.sql` | 设置域 **3 张**：`setting_keys`（参数注册表 = 白名单 + 类型 + 默认值）/ `site_settings`（站点级取值）/ `user_preferences`（用户级取值），以及 **19 条**首批参数种子（site 16 + user 3） | 设置域 |
 | `20-governance.sql` | 治理域 **10 张**：`roles` / `permissions` / `role_permissions` / `audit_log`（另有 `audit_log_default` 与当月分区 `audit_log_p2026_10` 两个 `PARTITION OF`，门禁不计入表数）/ `audit_actions` / `audit_entity_types` / `gc_kinds` / `gc_queue` / `review_kinds` / `reports`，以及四张目录表的种子 | 治理域 |
-| `30-demo.sql` | Demo 域 **12 张**：`demos` / `demo_revisions` / `blobs` / `demo_revision_files` / `demo_channels` / `demo_stats` / `demo_ratings` / `demo_timeline` / `demo_slug_history` / `demo_task_overrides` / `demo_capabilities` / `demo_grants` | Demo 域 |
+| `30-demo.sql` | Demo 域 **13 张**：`demos` / `demo_revisions` / `demo_types`（作品类型主数据，4 行种子）/ `blobs` / `demo_revision_files` / `demo_channels` / `demo_stats` / `demo_ratings` / `demo_timeline` / `demo_slug_history` / `demo_task_overrides` / `demo_capabilities` / `demo_grants` | Demo 域 |
 | `40-entity.sql` | 实体域 **7 张**：`tasks` / `task_prompts` / `task_slug_history` / `prompts` / `prompt_library_entries` / `proposals` / `proposal_refs` | 实体域 |
 | `50-classification.sql` | 标签域 **14 张**：`classifications` / `classification_dimensions` / `demo_classifications` / `platforms` / `platform_forms` / `demo_revision_platforms` / `platform_configs` / `demo_revision_platform_configs` / `skills` / `demo_revision_skills` / `mcp_servers` / `demo_revision_mcp_servers` / `external_threads` / `external_events` | 标签域 |
 | `60-model.sql` | 模型域 **15 张**：`vendors` / `providers` / `models` / `model_aliases` / `model_specs` / `model_spec_fields` / `model_catalog_items` / `model_external_refs` / `model_source_sync` / `model_tag_archive` / `benchmarks` / `benchmark_versions` / `benchmark_metrics` / `benchmark_scores` / `demo_revision_models` | 模型域 |
 | `70-views.sql` | **5 个视图**：`demo_tasks` / `demo_platforms` / `demo_platform_configs` / `demo_skills` / `demo_models`（G18：demo 层同名表改视图） | 标签 / 模型域 |
-| `80-late-fk.sql` | **全部 75 条外键**（建完所有表后统一 `ALTER TABLE … ADD CONSTRAINT`） | 跨域 |
+| `80-late-fk.sql` | **全部 76 条外键**（建完所有表后统一 `ALTER TABLE … ADD CONSTRAINT`） | 跨域 |
 | `90-extensions.sql` | 需要 contrib 扩展的对象（`pg_trgm` + 模糊检索索引）；缺扩展的环境整块跳过 | 横切 |
 
 ## 为什么外键集中在 `80-late-fk.sql`
@@ -58,9 +58,9 @@ node scripts/apply-schema.mjs          # 按文件名顺序执行 db/schema/*.sq
 
 最后一句会打印 `tables / views / fks / indexes` 计数与 `server_version`。
 
-**当前基线（2026-11-01，`node scripts/check-schema.mjs` 静态计数）：10 个文件 · 78 表 · 5 视图 · 75 外键。**
+**当前基线（2026-11-01，`node scripts/check-schema.mjs` 静态计数）：10 个文件 · 79 表 · 5 视图 · 76 外键。**
 
-> 上一版这里写的是 `tables=75 · views=5 · fks=78 · indexes=199`，与实物不符：实测是 **71 条外键**（设置域落地后 75 条），表数也不是 75（设置域落地后 78）。本版按门禁实测值改正。**`indexes` 门禁不统计，本轮未复核，故不再列数**。真库计数会**多 3 张 = 81**——`auth_events_default`（身份域）+ `audit_log_default` / `audit_log_p2026_10`（治理域）三个分区是 `PARTITION OF` 写法，门禁的解析器不认，不计入 78。
+> 上一版这里写的是 `tables=75 · views=5 · fks=78 · indexes=199`，与实物不符：实测是 **71 条外键**（设置域落地后 75 条，`demo_types` 落地后 76 条），表数也不是 75（设置域落地后 78，`demo_types` 落地后 79）。本版按门禁实测值改正。**`indexes` 门禁不统计，本轮未复核，故不再列数**。真库计数会**多 3 张 = 82**——`auth_events_default`（身份域）+ `audit_log_default` / `audit_log_p2026_10`（治理域）三个分区是 `PARTITION OF` 写法，门禁的解析器不认，不计入 79。
 
 ## 与设计文档的对应关系
 
