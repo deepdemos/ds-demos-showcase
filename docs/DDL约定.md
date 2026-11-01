@@ -102,6 +102,7 @@ erased_at   timestamptz,   -- 擦除（字段已清空，不可恢复）；NULL 
 | 文件 | 内容 |
 |---|---|
 | [`10-identity.sql`](../db/schema/10-identity.sql) … [`60-model.sql`](../db/schema/60-model.sql) | 各域建表语句（每个文件对应哪个域见 [`db/schema/README.md`](../db/schema/README.md)） |
+| [`15-settings.sql`](../db/schema/15-settings.sql) | 设置域三张表：`setting_keys`（参数注册表）+ `site_settings` / `user_preferences`（两张值表），以及 8 条首批参数种子 |
 | [`70-views.sql`](../db/schema/70-views.sql) | demo 层视图（G18：同名表改视图） |
 | [`80-late-fk.sql`](../db/schema/80-late-fk.sql) | **全部外键**集中在建表之后添加——因为跨域存在环（`accounts.role→roles` 与 `audit_log.actor_id→accounts`；`demos.current_revision_id↔demo_revisions.demo_id`），建表顺序无法同时满足 |
 | [`90-extensions.sql`](../db/schema/90-extensions.sql) | 需要 contrib 扩展的对象（`pg_trgm` + 模糊检索索引），缺扩展的环境整块跳过 |
