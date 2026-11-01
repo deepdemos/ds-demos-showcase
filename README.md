@@ -52,7 +52,7 @@ cd backend && go test ./...
 ## 目录
 
 ```text
-api/                        OpenAPI 契约（下一步接入生成链）
+api/                        OpenAPI 契约（唯一事实源；Go 侧生成已接入）
 backend/
   cmd/api/                  HTTP 入口
   internal/platform/        config / httpserver（后续加 db、auth、storage、jobs）
@@ -89,7 +89,7 @@ scripts/check-pr.mjs          PR issue / 类型 / 规模门禁
 | UI | Ring UI 7（`@jetbrains/ring-ui-built`）+ Tailwind CSS 4.3 + CSS Modules |
 | 后端 | Go 1.27.3 + chi 5.5 + slog |
 | 数据 | PostgreSQL 18（自托管）+ sqlc + pgx |
-| 接口 | OpenAPI 3.1，oapi-codegen + orval（下一步接入） |
+| 接口 | OpenAPI 3.0.3（3.1 待工具支持），oapi-codegen 已接入 / orval 待接入 |
 | 部署 | Nginx 静态 + Go API 同域反代；OSS 预签名直传 |
 
-尚未接入：OpenAPI 生成链、数据库 schema/migration、登录会话、上传、业务页面。下一步先做契约与 schema，不写业务代码。
+尚未接入：orval（TS 客户端生成）、数据库 migration、登录会话、上传、业务页面。契约与 schema 已落地，业务实现尚未开始。

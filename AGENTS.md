@@ -7,7 +7,7 @@
 
 - 本仓库正在**完全重构**：后端 Go 1.27 + chi，前端 React 18.3 + Ring UI 7。旧的 Vue 3 + FastAPI 实现只保留在 `main` 历史中，不再维护。
 - `dev` 上已有基础脚手架：`backend/`（chi + `/healthz`）、`web/`（Vite 8 + React Router 7 + TanStack Query 5 + Ring UI + Tailwind CSS 4）、Dev Room（分类、分页、浅色/暗色）与 `ui-contract` 检查；尚无业务代码。
-- 已定方向：PostgreSQL 18 + sqlc/pgx、OpenAPI 3.1 契约生成、Nginx 静态 + Go API 同域反代、OSS 预签名直传；按里程碑接入。
+- 已定方向：PostgreSQL 18 + sqlc/pgx、OpenAPI 契约生成、Nginx 静态 + Go API 同域反代、OSS 预签名直传；按里程碑接入。
 - 未经讨论不要改架构、加依赖或跳过上面的接入顺序。
 
 ## 旧栈源码参考（只读，不在版本控制内）
@@ -110,7 +110,8 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 - Go：`gofmt` / `goimports` 干净；`golangci-lint run` 零告警；错误用 `%w` 包装上下文；可预期错误不 panic；并发代码必须有 race 测试路径。
 - TypeScript / React 18：`eslint` + `prettier` 干净；`tsc --noEmit` 通过；组件 PascalCase，hooks 以 `use` 开头；服务端状态统一走 TanStack Query 5，不手写缓存层。
 - 样式：简单布局/自定义用 Tailwind utilities，复杂样式用 CSS Modules；不要在页面里绕开控件库直接使用第三方 UI。
-- API 以 `api/openapi.yaml`（OpenAPI 3.1）为唯一事实源：先改契约 → 重新生成 → 再改实现；禁止手改生成目录。
+- API 以 `api/openapi.yaml` 为唯一事实源：先改契约 → 重新生成（`pnpm gen:api:go`）→ 再改实现；禁止手改生成目录 `backend/internal/api/`。CI 会重新生成并比对，不一致就红。
+- **契约是 OpenAPI 3.0.3，不是 3.1**：`oapi-codegen` 至今不支持 3.1（上游 issue #373），选 3.1 会让生成直接失败。理由写在 `api/README.md`「为什么是 3.0.3」；等工具支持后再升。
 - 数据库变更只加新 migration，禁止修改已合入的 migration。
 - **表结构的唯一事实源是 `db/schema/*.sql`**（按 `NN-` 前缀顺序应用；外键集中在 `80-late-fk.sql`）。设计文档只写字段语义、状态机与「DDL 见 xxx.sql」的指针，**不复制建表语句**——由 `scripts/check-schema.mjs` 门禁拦截；本地可跑 `node scripts/apply-schema.mjs` 在真 PG 上验一遍。
 - 依赖：能用标准库 / 现有依赖解决的不加新依赖；新依赖需在 PR 说明理由与体积影响。Ring UI 只允许在控件库内使用。
