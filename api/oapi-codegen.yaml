@@ -1,0 +1,21 @@
+# oapi-codegen 配置：把 api/openapi.yaml 生成 Go 接口与类型。
+#
+# 用法（在 api/ 目录里跑，output 路径相对 api/）：
+#   cd api && oapi-codegen -config oapi-codegen.yaml openapi.yaml
+# 仓库根的快捷命令：pnpm gen:api:go
+#
+# 生成产物 **入库**：review 时能直接看到契约改动对 Go 类型的影响。
+# CI 会重新生成并比对，产物与契约不一致就红（见 .github/workflows/ci.yml）。
+package: api
+output: ../backend/internal/api/api.gen.go   # 相对 **api/ 目录**（从 api/ 里跑）
+
+generate:
+  # 只生成服务端接口与模型；客户端以后按需再加
+  chi-server: true
+  models: true
+  # 不内嵌 spec：本文件就在仓库里，没必要再烤一份进二进制
+  embedded-spec: false
+
+output-options:
+  # 未在 paths 里引用、但被 components 引用的类型也要保留
+  skip-prune: false

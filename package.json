@@ -8,9 +8,10 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test scripts/",
+    "test": "node --test scripts/*.test.mjs",
     "verify:schema": "node scripts/verify-schema.mjs",
-    "apply:schema": "node scripts/apply-schema.mjs"
+    "apply:schema": "node scripts/apply-schema.mjs",
+    "gen:api:go": "cd api && oapi-codegen -config oapi-codegen.yaml openapi.yaml"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.14"
