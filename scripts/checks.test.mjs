@@ -10,6 +10,7 @@ import { hasReviewComment } from './check-review.mjs';
 import { inspectDocument as inspectStandardObjects, inspectYamlFences, parseAuthority as parseStandardObjects, run as runStandardObjects } from './check-objects.mjs';
 import { inspectContracts } from './check-contracts.mjs';
 import { inspectSchema } from './check-schema.mjs';
+import { inspectConstants, parseAnchor, parseRunbook } from './check-constants.mjs';
 
 test('文件行数阈值：500/501/800/801', () => {
   assert.equal(classifyLines(500), 'ok');
@@ -408,5 +409,64 @@ test('表结构门禁：引用了不存在的 schema 文件要报', () => {
   fs.writeFileSync(path.join(tmp, 'docs', 'a.md'), '见 [x](../db/schema/99-missing.sql)。\n');
   const problems = inspectSchema(tmp);
   assert.ok(problems.some((p) => p.includes('99-missing.sql')), problems.join('; '));
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('可变常量门禁：解析条数声明与编号行', () => {
+  const text = [
+    '> 版本 v1.0。共登记 **2 条**。',
+    '',
+    '| # | 常量 | 值 | 唯一改动点 | 改了会怎样 |',
+    '|---|---|---|---|---|',
+    '| 1 | 甲 | 1 | `docs/a.md` · `锚点甲` | — |',
+    '| 2 | 乙 | 2 | `docs/a.md` · `锚点乙` | — |',
+  ].join('\n');
+  const { declared, rows } = parseRunbook(text);
+  assert.equal(declared, 2);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].name, '甲');
+  assert.equal(rows[1].where, '`docs/a.md` · `锚点乙`');
+});
+
+test('可变常量门禁：从一格抽出路径与锚点', () => {
+  assert.deepEqual(parseAnchor('`db/schema/30-demo.sql` · `ck_demos_slug_len`'),
+    { spans: ['db/schema/30-demo.sql', 'ck_demos_slug_len'], file: 'db/schema/30-demo.sql', token: 'ck_demos_slug_len' });
+  // 只有路径没有锚点也算合法（锚点可省）
+  assert.deepEqual(parseAnchor('`docs/a.md`'),
+    { spans: ['docs/a.md'], file: 'docs/a.md', token: null });
+  // 一格什么都没有 = 没登记
+  assert.deepEqual(parseAnchor('代码未实现'), { spans: [], file: null, token: null });
+});
+
+test('可变常量门禁：锚点还在就通过，锚点被删就报', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'constants-'));
+  const docs = path.join(tmp, 'docs');
+  fs.mkdirSync(docs, { recursive: true });
+  const runbook = (anchor) => [
+    '> 共登记 **1 条**。',
+    '',
+    '| # | 常量 | 值 | 唯一改动点 | 改了会怎样 |',
+    '|---|---|---|---|---|',
+    `| 1 | 甲 | 1 | \`docs/a.md\` · \`${anchor}\` | — |`,
+  ].join('\n');
+  fs.writeFileSync(path.join(docs, 'a.md'), '这里有一个 CONTRACT_ANCHOR 锚点。\n');
+
+  fs.writeFileSync(path.join(docs, '运行手册-可变常量.md'), runbook('CONTRACT_ANCHOR'));
+  assert.deepEqual(inspectConstants(tmp), []);
+
+  fs.writeFileSync(path.join(docs, '运行手册-可变常量.md'), runbook('GONE_ANCHOR'));
+  const problems = inspectConstants(tmp);
+  assert.ok(problems.some((p) => p.includes('GONE_ANCHOR')), problems.join('; '));
+
+  // 声明的条数与实际行数不符要报
+  fs.writeFileSync(path.join(docs, '运行手册-可变常量.md'),
+    runbook('CONTRACT_ANCHOR').replace('共登记 **1 条**', '共登记 **3 条**'));
+  assert.ok(inspectConstants(tmp).some((p) => p.includes('声明 3 条')), inspectConstants(tmp).join('; '));
+
+  // 文件被删要报
+  fs.writeFileSync(path.join(docs, '运行手册-可变常量.md'),
+    runbook('CONTRACT_ANCHOR').replace('`docs/a.md`', '`docs/missing.md`'));
+  assert.ok(inspectConstants(tmp).some((p) => p.includes('missing.md')), inspectConstants(tmp).join('; '));
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
