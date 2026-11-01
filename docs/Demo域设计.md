@@ -1,4 +1,8 @@
-# Demo 域细化建模 v1.3
+# Demo 域细化建模 v1.5
+
+**本版变更（v1.5，2026-10-30）：§13 待定第 1 条结案。** 「软删除保留期」不再是待定项——生命周期 **L1 = A**、治理域 §9.2 已写死 **30 天**，本域 §13 的「默认建议 30 天」随之改成定案口径。**本版只改这一处**，正文（表结构 / 状态机 / 不变量）一律未动。
+
+**本版变更（v1.4，2026-10-30）**：接 [`数据生命周期设计.md`](./数据生命周期设计.md) **v1.1**（台账 **G20**）——把**擦除**接进本域。三件事：① `demos` 加 **`erased_at`**，`demo_revisions` 加 **`deleted_at` + `erased_at`**；② **13 个内容列放宽 `NOT NULL` / 去掉 `DEFAULT ''`**（不放开，擦除写 `NULL` 会被数据库直接拒），依据 `数据生命周期 §11.1 B`；③ §6.4 / §7.6 / §9 补擦除与「行永久保留、只回收派生物」的口径（原文 §7.6 写「物理删除 demo / revisions / files」，与台账 G19 Q11「软删行永久保留」冲突，本版改正）。§0 摘要同步。
 
 **本版变更（v1.3，2026-10-28）**：**DDL 方言统一为 PostgreSQL 18**（台账 **C2**）——本文原为全 SQLite 方言（`INTEGER` / `TEXT(n)` / `DATETIME`），本版把 **§3.x 字段表 · §4 类图 · §5 ER** 三处的类型逐列换成 PG 类型（`bigint` / `int` / `text` / `timestamptz` / `boolean` / `numeric(3,2)`），类型映射见 **§0.1**。**无结构变化**：列名、约束、主键语义、注释文字一律未改。
 
@@ -32,7 +36,7 @@
 | 统计 | **`DemoStat`** 独立表，可重建，不作为权威 |
 | 评分 | **`DemoRating`** 只增不改（撤销是 delete），聚合进 `DemoStat` |
 | 模型关联 | **挂 `DemoRevision`**（方案 B，见 §2.2 / §3.2.1）；demo 层 `demo_models` 是视图 |
-| 删除 | **软删除**（`deleted_at` + tombstone），物理清理走 GC |
+| 删除 | **软删除**（`deleted_at` + tombstone，30 天内可恢复）；**擦除**（`erased_at`，内容列清成 `NULL`、行永久保留）；派生物（目录 / OSS / blob）走 GC |
 | 社区 | **`DemoExternalThread`** 只存外链标识，不复制帖子 |
 
 ### 0.1 DDL 方言与类型映射（C2）
@@ -134,10 +138,10 @@ flowchart TB
 |---|---|---|---|---|
 | `id` | bigint PK | 否 | 自增 | |
 | `slug` | text | 否 | — | **唯一且永久**；改名留历史见 §3.10（≤128 字符） |
-| `title` | text | 否 | — | 展示用；同时快照进 revision（≤200 字符） |
-| `description` | text | 否 | `''` | 可编辑 |
-| `cover_url` | text | 否 | `''` | 当前版本封面（便于列表直读；≤500 字符） |
-| `cover_thumb_url` | text | 否 | `''` | 200 档小图（≤500 字符） |
+| `title` | text | **是** | NULL | 展示用；同时快照进 revision（≤200 字符）。**内容列：擦除置 `NULL`** |
+| `description` | text | **是** | NULL | 可编辑。**内容列** |
+| `cover_url` | text | **是** | NULL | 当前版本封面（便于列表直读；≤500 字符）。**内容列** |
+| `cover_thumb_url` | text | **是** | NULL | 200 档小图（≤500 字符）。**内容列** |
 | `author_id` | bigint FK→users | 是 | NULL | NULL = 匿名 |
 | `guest_name` | text | 是 | NULL | 匿名展示名（≤64 字符） |
 | `current_revision_id` | bigint FK→demo_revisions | 是 | NULL | 建库时可能还没有版本 |
@@ -146,8 +150,9 @@ flowchart TB
 | `idempotency_key` | text | 是 | NULL | 唯一，agent 重试去重（≤128 字符） |
 | `created_at` | timestamptz | 否 | `now()` | |
 | `updated_at` | timestamptz | 否 | `now()` | **无 onupdate**，仅内容变更时显式赋值 |
-| `deleted_at` | timestamptz | 是 | NULL | 软删除时间 |
-| `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符） |
+| `deleted_at` | timestamptz | 是 | NULL | 软删除时间（可恢复，30 天窗口） |
+| `erased_at` | timestamptz | 是 | NULL | **擦除时间**（内容列已清空、不可恢复；非空必然蕴含 `deleted_at` 非空） |
+| `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符；治理列，擦除不动） |
 
 **这些关注点不在 `Demo` 上**（各自的家如下；左侧沿用旧栈列名，便于对照迁移）：
 
@@ -171,27 +176,31 @@ flowchart TB
 | `id` | bigint PK | 否 | 自增 | |
 | `demo_id` | bigint FK→demos | 否 | — | CASCADE |
 | `rev_no` | int | 否 | — | 1 起连续；`UNIQUE(demo_id, rev_no)` |
-| `title` | text | 否 | — | 该版本的标题快照（≤200 字符） |
-| `description` | text | 否 | `''` | |
-| `cover_url` | text | 否 | `''` | （≤500 字符） |
+| `title` | text | **是** | NULL | 该版本的标题快照（≤200 字符）。**内容列** |
+| `description` | text | **是** | NULL | **内容列** |
+| `cover_url` | text | **是** | NULL | （≤500 字符）。**内容列** |
 | `demo_type` | text | 否 | `web` | `web` / `zip` / `link` / `image`（≤16 字符） |
 | `single_file` | text | 是 | NULL | `html` / `svg`（≤8 字符） |
 | `external_url` | text | 是 | NULL | link 类型（≤2000 字符） |
-| `entry_path` | text | 否 | `''` | 入口文件，如 `index.html`（≤500 字符） |
-| `manifest_hash` | text | 否 | — | 清单哈希（**预览版本号来源**；≤64 字符） |
-| `file_count` | bigint | 否 | 0 | |
-| `total_bytes` | bigint | 否 | 0 | |
-| `prompt` | text | 否 | `''` | 第一轮提示词原文 |
-| `prompt_id` | bigint FK→prompts | 是 | NULL | 规范化去重实体 |
+| `entry_path` | text | **是** | NULL | 入口文件，如 `index.html`（≤500 字符）。**内容列** |
+| `manifest_hash` | text | **是** | NULL | 清单哈希（**预览版本号来源**；≤64 字符）。**内容列** |
+| `file_count` | bigint | **是** | NULL | **内容列**：擦除后是「不可知」，不是 0 |
+| `total_bytes` | bigint | **是** | NULL | 同上 |
+| `prompt` | text | **是** | NULL | 第一轮提示词原文。**内容列** |
+| `prompt_id` | bigint FK→prompts | 是 | NULL | 规范化去重实体（擦除不动：只断 `prompt` 文本） |
 | `video_url` | text | 是 | NULL | （≤2000 字符） |
-| `model_hint` | text | 否 | `''` | 兜底型号依据；**可更正**（§6.5）（≤500 字符） |
+| `model_hint` | text | **是** | NULL | 兜底型号依据；**可更正**（§6.5）（≤500 字符）。**内容列** |
 | `gen_rounds` | int | 是 | NULL | **可更正**（§6.5） |
 | `gen_minutes` | int | 是 | NULL | **可更正**（§6.5） |
 | `source` | text | 否 | `upload` | `upload` / `url_import` / `rollback`（≤16 字符） |
 | `created_by` | bigint FK→users | 是 | NULL | |
 | `created_at` | timestamptz | 否 | `now()` | |
+| `deleted_at` | timestamptz | 是 | NULL | 软删（平时跟着 `demos` 判定；两列是为「单个版本被单独处理」留口） |
+| `erased_at` | timestamptz | 是 | NULL | 擦除；擦除时与 `deleted_at` **一起写** |
 
-**不可变**：任何字段写入后不再修改。要改内容 → 新增一条 revision。
+**不可变**：任何字段写入后不再修改。要改内容 → 新增一条 revision。**例外只有生命周期两列**（`deleted_at` / `erased_at`）：它们由系统写，不属于「内容」。
+
+**为什么内容列必须可空、且不能带 `DEFAULT ''`**：擦除要把它们写成 `NULL`（[`数据生命周期设计.md`](./数据生命周期设计.md) §6.2）。若列是 `NOT NULL DEFAULT ''`，写 `NULL` 被拒、写 `''` 又让「已擦除」与「刚建的空行」在数据上完全一样——验收 SQL 分不出来，§6.4 的 404 也就无从判定。规则见 [`DDL约定.md`](./DDL约定.md) §7。
 
 `manifest_hash` 计算：
 
@@ -400,6 +409,7 @@ classDiagram
         +ModerationState moderation_state
         +LifecycleState lifecycle_state
         +timestamptz deleted_at
+        +timestamptz erased_at
         +timestamptz created_at
         +timestamptz updated_at
         +currentRevision() DemoRevision
@@ -420,6 +430,8 @@ classDiagram
         +bigint prompt_id
         +int gen_rounds
         +int gen_minutes
+        +timestamptz deleted_at
+        +timestamptz erased_at
         +timestamptz created_at
         +files() DemoRevisionFile[]
         +previewUrl() string
@@ -527,6 +539,7 @@ erDiagram
         text moderation_state
         text lifecycle_state
         timestamptz deleted_at
+        timestamptz erased_at
     }
     DEMO_REVISIONS {
         bigint id PK
@@ -536,6 +549,8 @@ erDiagram
         text demo_type
         text prompt
         bigint prompt_id FK
+        timestamptz deleted_at
+        timestamptz erased_at
     }
     DEMO_REVISION_FILES {
         bigint id PK
@@ -709,7 +724,12 @@ stateDiagram-v2
     removed --> published: 申诉通过
     published --> deleted: 软删除
     archived --> deleted: 软删除
-    deleted --> [*]: GC 物理清理
+    deleted --> [*]: 行永久保留（GC 只清派生物）
+    note right of deleted
+        30 天内可恢复
+        过期后 GC 只删派生文件
+        行与两时间戳永远留着（Q11）
+    end note
     note right of archived
         tombstone：作者已下架
         slug / 标题 / 下架时间 / 可恢复
@@ -746,8 +766,9 @@ stateDiagram-v2
 | `archived` | 作者主动下架 | 200 | slug / 标题 / 下架时间 / 「作者已下架该作品」 | 「查看作者其它作品」「返回列表」；作者本人另有「恢复发布」 |
 | `removed` | 平台违规处置 | 200 | slug / 标题 / 处理时间 / 「该作品因违规被移除」/ 依据条款 | 「提交申诉」「查看社区规范」 |
 | `pending` / `rejected` / `draft` | 未公开 | **404** | — | 作者本人与管理员走**带权限读路径**（不套公开谓词） |
-| `deleted`（软删） | 作者/管理员删除 | 404 | — | GC 前管理员仍可查 |
-| GC 之后 | 物理清理 | 404 | — | — |
+| `deleted`（软删） | 作者/管理员删除 | 404 | — | 30 天内作者可恢复；管理员仍可查 |
+| **已擦除**（`erased_at` 非空） | 作者申请数据删除 | **404** | — | 内容列已 `NULL`，**不可恢复**；行仍在（Q11） |
+| GC 之后（派生物已删） | 派生物真删 | 404 | — | **行仍在**；目录 / OSS / blob 已不在，恢复只得空壳（409，治理域 §9.2） |
 
 **tombstone 页一律不出**：作品内容、预览 iframe、下载、评分、评论/讨论入口、会话日志、时间线。
 
@@ -903,16 +924,22 @@ sequenceDiagram
     U->>R: DELETE /demos/{slug}
     R->>DB: UPDATE demos.deleted_at, delete_reason（软删除）
     R->>DB: UPDATE demo_channels.visibility=hidden
+    R->>DB: INSERT gc_queue(kind=demo_dir/oss_object, reason=delete, purge_after=+30天)
     R-->>U: 204（该 slug 之后按 §6.4 返回 404）
 
-    Note over G: 定期任务
-    G->>DB: 找 deleted_at 超过保留期的 demo
-    G->>DB: 物理删除 demo / revisions / files / 关联
-    G->>DB: blobs 中无任何 revision_file 引用的行
-    G->>G: 删除 blob 物理文件
+    Note over G: 定期任务（治理域 §9.3）
+    G->>DB: 找 gc_queue 到期的行（purge_after <= now() AND purged_at IS NULL）
+    G->>G: 删目录 / OSS 对象 / 无引用的 blob
+    G->>DB: UPDATE gc_queue.purged_at（+ 写 audit purge）
 ```
 
-**可恢复**：软删除期间 `restore` 即可；只有过了保留期才真正消失。
+**可恢复**：30 天内 `restore` 即可（清 `deleted_at`、恢复渠道可见性、GC 出队）。
+
+**过期之后行仍然在**（台账 G19 **Q11 = A**）：GC **只清派生物，不删 `demos` / `demo_revisions` / `demo_revision_files` 的行**。所以：
+
+- 不存在「物理删除 demo」这一步——原文这里写过「物理删除 demo / revisions / files / 关联」，与 Q11 冲突，v1.4 已改。
+- 恢复接口在派生物已删时返回 **409**（行还在、东西没了），不是 404。
+- 擦除走 `数据生命周期 §7.5`：一个事务里 `UPDATE ... SET erased_at, deleted_at, <内容列>=NULL` + 入队 `reason='erase'`（`purge_after=now()`），**不等 30 天窗口**。
 
 ## 8. 存储布局
 
@@ -935,11 +962,13 @@ sequenceDiagram
 4. `rev_no` 在同一 demo 内从 1 连续递增，不跳号不复用。
 5. `manifest_hash` 只由清单内容决定，与打包方式无关。
 6. `DemoRevisionFile.blob_hash` 必须存在于 `Blob`。
+7. **`erased_at` 非空 ⟹ `deleted_at` 非空，且全部内容列为 `NULL`**（`title` / `description` / `cover_url` / `cover_thumb_url`；revision 侧再加 `entry_path` / `manifest_hash` / `file_count` / `total_bytes` / `prompt` / `model_hint`）。由 §11.1 验收 SQL 守（[`数据生命周期设计.md`](./数据生命周期设计.md) 附录 A.5）。
+8. **行永不物理删除**（Q11）：`demos` / `demo_revisions` / `demo_revision_files` 都不做 `DELETE`，只有 GC 删派生物。
 7. `Blob` 不可变：同 sha256 永远同内容；写盘前必须校验。
 8. `DemoChannel.(demo_id, channel)` 唯一；`visibility='listed'` 要求 `moderation_state='approved'`。
 9. `DemoStat` 可随时从 `DemoRating` 重建；不得作为唯一数据源。
 10. `Demo.slug` 永久唯一；改名写入 `DemoSlugHistory` 并 301。
-11. 软删除的 `Demo` 不出现在任何公开查询；物理删除只由 GC 执行。
+11. 软删除的 `Demo` 不出现在任何公开查询；**行永不物理删除**（台账 G19 Q11）——GC 只清派生物（目录 / OSS 对象 / 无引用 blob），擦除只清内容字段。已擦除的 `Demo` 与 revision 一律按 404（§6.4）。
 12. 生成条件（模型 / 平台 / 平台配置 / 技能 / MCP）是 **revision 级事实**：每个 revision 的关联行只描述该版本；**历史版本可追溯**。demo 层只提供「当前版本」（`current_revision_id`）的派生值，不得作为独立事实源（见 §2.2 / §3.2.1）。
 
 ## 10. 与模型域的衔接
@@ -988,7 +1017,7 @@ sequenceDiagram
 
 ## 13. 待定
 
-1. 软删除保留期（默认建议 30 天）
+1. ~~软删除保留期~~（**已定：30 天**，治理域 §9.2 与生命周期 L1 = A，2026-10-30）
 2. `astra` 渠道是否允许 `unlisted`（现在只有 `listed` / 不存在）
 3. `Blob` 是否引入引用计数列（现在靠 `DemoRevisionFile` 反查，量大时再引入）
 

@@ -56,6 +56,45 @@
 
 有偏差时在该域显式写「**本域偏离**：… + 理由」，不要静默改写法。目前所有域文档均无偏差。
 
+## 7. 内容表与生命周期列（2026-10-30 新增）
+
+来源：[`数据生命周期设计.md`](./数据生命周期设计.md) §11.1。**这一节是硬约束**——内容表不按它写，「擦除」在数据库层根本写不进去（擦除要把内容列写成 `NULL`，而这些列如果带着 `NOT NULL DEFAULT ''`，写 `NULL` 直接被拒，写 `''` 又与「新建的空行」不可区分）。
+
+### 7.1 三类表，只有第一类受本节约束
+
+| 类别 | 判据 | 例子 | 要不要生命周期列 |
+|---|---|---|---|
+| **内容表** | 用户发布的、能单独下架的行 | `demos` / `demo_revisions` / `proposals` / `prompt_library_entries` | **要** |
+| 主数据表 | 后台维护、影响面广的共享数据 | `tasks` / `classifications` / `providers` / `model_catalog_items` / `platforms` / `skills` / `mcp_servers` | 不要（删除走 `status` / `merged_into_id`，不做擦除） |
+| 共享内容寻址实体 | 多行共用、按内容哈希去重 | `prompts` / `blobs` | 不要（擦除只断引用，见数据生命周期 §6.2） |
+
+### 7.2 内容表必须有的两列
+
+```sql
+deleted_at  timestamptz,   -- 软删（可恢复）；NULL = 正常
+erased_at   timestamptz,   -- 擦除（字段已清空，不可恢复）；NULL = 未擦除
+```
+
+- 两列**都可空、都不给默认值**；`erased_at IS NOT NULL` 蕴含 `deleted_at IS NOT NULL`（擦除必须同时软删，否则详情页还会 200）。
+- 需要记「为什么删」时加 `delete_reason text`（`demos` 已经有）；不需要就不加，别为对称性造列。
+- **不要**用 `status='deleted'` 代替 `deleted_at`：状态列表达业务状态，删除是生命周期，混在一列里会让状态机与谓词互相污染。
+
+### 7.3 内容列不得 `NOT NULL`、不得 `DEFAULT ''`
+
+「内容列」= 承载用户文本、地址、计数的那几列（标题、描述、封面、入口路径、清单哈希、题面、模型提示、文件数、字节数…）。
+
+- **一律 `NOT NULL` 去掉**，`DEFAULT ''` / `DEFAULT 0` **一起去掉**。留着默认值，擦除后同一张表里「已擦除」与「刚插入的空行」字节级相同——验收 SQL 就分不出来了。
+- **例外：状态 / 归属 / 时间列照旧 `NOT NULL`**（`moderation_state`、`lifecycle_state`、`author_id`、`created_at`）——它们不是用户内容，擦除不动。
+- 计数类（`file_count` / `total_bytes`）擦除后是**「不可知」而不是 0**：留 0 会把擦除的作品算进「零文件作品」的统计。
+
+### 7.4 逐表清单不在这里
+
+哪张表哪几列要改，唯一权威清单是 [`数据生命周期设计.md`](./数据生命周期设计.md) **§11.1**（A 加列 / B 放宽 14 列 / C 注销路径不放宽 / D `ck_proposals_payload` 加空值分支 / E 身份域两处 / F 各域文档改动表）。本文只给**规则**，不给清单——两处都写清单必然漂移。
+
+### 7.5 接入方式：注册表，不靠人记
+
+每张内容表在 `internal/lifecycle/registry.yaml` 登记（`deleted_col` / `erased_col` / `content_cols` / `derivatives` / `listing_predicate` / `endpoints`），CI 断言五条（列存在且可空 / 有 `deleted_at` 的表必须登记 / 通用用例在真 PG 上跑 / 与 `audit_*` 目录对齐 / 端点与 `api/openapi.yaml` 一致）。细则见数据生命周期 §11.4。
+
 ## 附录 A 从 SQLite 迁入的对照（C2 迁移期参考）
 
 旧栈（`main`，SQLite）的列类型 → 现行类型。**只在迁移辨认旧列时使用**；新表按 §2 取类型。
