@@ -105,6 +105,25 @@ jobs:
         if: failure()
         run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行 / 标准对象取值域出现重复或走样 / 门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
 
+  # 契约门禁（文档级）：目录表是唯一事实源——权限键、审计动作、审计实体类型、GC 对象类型，
+  # 以及生命周期 registry.yaml 对它们的引用。后端接上之后这里再扩「代码常量 ↔ 目录表」比对。
+  # 目前不是 required check（ruleset 由管理员维护），但 PR 上会红。
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: 门禁脚本自检
+        run: node --test scripts/checks.test.mjs
+      - name: 契约门禁（权限键 / 审计动作 / 审计实体类型 / GC 对象类型）
+        run: node scripts/check-contracts.mjs
+      - name: 失败处理指引
+        if: failure()
+        run: echo "::error title=CI 门禁::contract 失败（目录表与引用不一致 / 权限没绑全 admin / registry.yaml 引用了不存在的 kind 或 entity_type）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
+
   pr-guard:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
