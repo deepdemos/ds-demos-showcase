@@ -156,9 +156,21 @@ jobs:
         run: |
           npm run gen:api:web
           git diff --exit-code web/src/api/gen
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: 安装 sqlc
+        run: CGO_ENABLED=0 go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
+      - name: SQL 查询须与生成产物一致
+        run: |
+          cd backend
+          "$(go env GOPATH)/bin/sqlc" generate
+          cd ..
+          git diff --exit-code backend/internal/store
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 接口契约与生成产物不一致——改了 api/openapi.yaml 却没重新生成，或手改了 backend/internal/api/ 与 web/src/api/gen/）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
+        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 生成产物与源不一致——改了 api/openapi.yaml 或 backend/db/queries/*.sql 却没重新生成，或手改了 backend/internal/api/、web/src/api/gen/、backend/internal/store/）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
 
   pr-guard:
     if: github.event_name == 'pull_request'
