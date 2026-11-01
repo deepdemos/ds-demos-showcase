@@ -1,4 +1,4 @@
--- 90-late-fk.sql —— 全部外键（所有表建完之后统一添加）
+-- 80-late-fk.sql —— 全部外键（所有表建完之后统一添加）
 -- 为什么集中：跨域外键存在循环，建表顺序无法同时满足——
 --   accounts.role → roles（治理域）与 audit_log.actor_id → accounts（身份域）互为先后；
 --   demos.current_revision_id → demo_revisions 与 demo_revisions.demo_id → demos 同理。
@@ -75,3 +75,11 @@ ALTER TABLE benchmark_scores ADD CONSTRAINT fk_benchmark_scores_metric_id67 FORE
 ALTER TABLE benchmark_scores ADD CONSTRAINT fk_benchmark_scores_model_id68 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE SET NULL;
 ALTER TABLE model_external_refs ADD CONSTRAINT fk_model_external_refs_model_id69 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE CASCADE;
 ALTER TABLE model_spec_fields ADD CONSTRAINT fk_model_spec_fields_model_id70 FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE CASCADE;
+
+-- ===== 设置域（15-settings.sql）=====
+-- 复合外键把「值行只能落在已登记的 (key, scope) 上」变成数据库约束：
+-- 未登记的键写不进去（SET-010），站点参数写不进 user_preferences（D4）。
+ALTER TABLE site_settings ADD CONSTRAINT fk_site_settings_key71 FOREIGN KEY (key, scope, value_type) REFERENCES setting_keys (key, scope, value_type);
+ALTER TABLE site_settings ADD CONSTRAINT fk_site_settings_updated_by72 FOREIGN KEY (updated_by) REFERENCES accounts (id) ON DELETE SET NULL;
+ALTER TABLE user_preferences ADD CONSTRAINT fk_user_preferences_key73 FOREIGN KEY (key, scope, value_type) REFERENCES setting_keys (key, scope, value_type);
+ALTER TABLE user_preferences ADD CONSTRAINT fk_user_preferences_account_id74 FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
