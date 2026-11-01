@@ -1,2 +1,4 @@
 dist
 pnpm-lock.yaml
+# 契约生成物：格式由 orval 自己决定，不要用本仓库的 prettier 规则去改它
+src/api/gen
