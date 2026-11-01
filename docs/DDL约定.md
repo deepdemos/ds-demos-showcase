@@ -95,6 +95,19 @@ erased_at   timestamptz,   -- 擦除（字段已清空，不可恢复）；NULL 
 
 每张内容表在 `internal/lifecycle/registry.yaml` 登记（`deleted_col` / `erased_col` / `content_cols` / `derivatives` / `visibility` / `domain_state` / `endpoints`），CI 断言六条（列存在且可空 / **有 `erased_at` 的表必须登记或带 `reason` 豁免** / 通用用例在真 PG 上跑 / 与 `audit_*` 目录对齐 / 端点按五个字面值存在 / 可见性谓词逐字包含 ST-2 两句）。细则见数据生命周期 §11.4。
 
+## 附录 A′ 表结构落在哪里（2026-10-31 起）
+
+**所有表结构都在 [`db/schema/`](../db/schema/) 里，本文只定口径、不抄 DDL。**
+
+| 文件 | 内容 |
+|---|---|
+| [`10-identity.sql`](../db/schema/10-identity.sql) … [`60-model.sql`](../db/schema/60-model.sql) | 各域建表语句（每个文件对应哪个域见 [`db/schema/README.md`](../db/schema/README.md)） |
+| [`70-views.sql`](../db/schema/70-views.sql) | demo 层视图（G18：同名表改视图） |
+| [`80-late-fk.sql`](../db/schema/80-late-fk.sql) | **全部外键**集中在建表之后添加——因为跨域存在环（`accounts.role→roles` 与 `audit_log.actor_id→accounts`；`demos.current_revision_id↔demo_revisions.demo_id`），建表顺序无法同时满足 |
+| [`90-extensions.sql`](../db/schema/90-extensions.sql) | 需要 contrib 扩展的对象（`pg_trgm` + 模糊检索索引），缺扩展的环境整块跳过 |
+
+写文档时的规矩：**表结构只引用、不复制**。字段语义、状态规则、为什么这么设计——写文档；列、类型、约束、索引、外键——写 SQL。两者冲突以 SQL 为准，并顺手改掉文档那句。CI 的 `schema` job 会拦「文档里又出现 `CREATE TABLE`」。
+
 ## 附录 A 从 SQLite 迁入的对照（C2 迁移期参考）
 
 旧栈（`main`，SQLite）的列类型 → 现行类型。**只在迁移辨认旧列时使用**；新表按 §2 取类型。

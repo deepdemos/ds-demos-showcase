@@ -727,23 +727,11 @@ erDiagram
 
 **`demo_tasks` 视图定义**（v2.2：经**当前** revision 派生，台账 **G7**）：
 
-```sql
-CREATE VIEW demo_tasks AS
-SELECT d.id AS demo_id, tp.task_id
-FROM demos d
-JOIN demo_revisions r ON r.id = d.current_revision_id
-JOIN task_prompts tp ON tp.prompt_id = r.prompt_id
-WHERE r.prompt_id IS NOT NULL;
-```
+> **DDL 见 [70-views.sql](../db/schema/70-views.sql)**（本节涉及的 1 张表/视图：`demo_tasks`）。表结构以 SQL 文件为准，文档不再复制。
 
 **`demo_models` 视图定义**（v2.7：由**表改视图**，台账 **G18**；权威定义见《模型域设计》v1.2 §3.3）：
 
-```sql
-CREATE VIEW demo_models AS
-SELECT d.id AS demo_id, rm.model_id, rm.provider_id, rm.serving_note, rm.source
-  FROM demos d
-  JOIN demo_revision_models rm ON rm.revision_id = d.current_revision_id;
-```
+> **DDL 见 [70-views.sql](../db/schema/70-views.sql)**（本节涉及的 1 张表/视图：`demo_models`）。表结构以 SQL 文件为准，文档不再复制。
 
 - **只读**：写入一律走 `demo_revision_models`（模型域的 `DemoModelWriter`）；迁移时先 `DROP TABLE demo_models` 再建视图。
 - **「当前」就是 `demos.current_revision_id`**：回滚后筛选与计数**跟着回滚**——与 `demo_tasks`（G7）同构。
