@@ -38,7 +38,6 @@ const (
 
 // Defines values for ListDemosParamsSort.
 const (
-	Hot    ListDemosParamsSort = "hot"
 	Latest ListDemosParamsSort = "latest"
 )
 
@@ -122,7 +121,8 @@ type ListDemosParams struct {
 	// PageSize 每页条数
 	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 
-	// Sort 排序口径
+	// Sort 排序口径。目前只有「最新」一种——`hot` 需要热度数据（浏览/收藏/评分），
+	// 那批指标还没落地，所以先不放进枚举：契约里有的值必须真能算出来。
 	Sort *ListDemosParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
 }
 

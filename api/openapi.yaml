@@ -82,10 +82,12 @@ paths:
             default: 50
         - name: sort
           in: query
-          description: 排序口径
+          description: |
+            排序口径。目前只有「最新」一种——`hot` 需要热度数据（浏览/收藏/评分），
+            那批指标还没落地，所以先不放进枚举：契约里有的值必须真能算出来。
           schema:
             type: string
-            enum: [latest, hot]
+            enum: [latest]
             default: latest
       responses:
         '200':
@@ -96,6 +98,12 @@ paths:
                 $ref: '#/components/schemas/DemoList'
         '400':
           description: 参数非法（含 pageSize 超上限）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
           content:
             application/json:
               schema:
@@ -130,6 +138,12 @@ paths:
                 $ref: '#/components/schemas/DemoDetail'
         '404':
           description: 不存在，或从未公开过，或已擦除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
           content:
             application/json:
               schema:
