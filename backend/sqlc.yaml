@@ -1,0 +1,26 @@
+version: "2"
+
+# sqlc：从 db/schema/*.sql 读表结构，把 db/queries/*.sql 里的查询生成类型安全的 Go 代码。
+#
+# 用法（在 backend/ 里）：
+#   sqlc generate
+# 产物：internal/store/（**入库**，CI 会重新生成并比对）
+#
+# 为什么 schema 指向 ../db/schema 而不是复制一份：表结构只有一个事实源。
+# 复制一份到 backend/ 就等于制造第二份，改表时必然有一边忘了改。
+sql:
+  - engine: "postgresql"
+    schema: "../db/schema"
+    queries: "db/queries"
+    gen:
+      go:
+        package: "store"
+        out: "internal/store"
+        sql_package: "pgx/v5"
+        emit_json_tags: false
+        emit_empty_slices: true
+        # 不加接口抽象：现在只有一个实现，加接口只会多一层跳转
+        emit_interface: false
+        # 只生成查询用到的表的模型。不加这条会把 79 张表全生成一遍（956 行），
+        # 而实际用到的只有 demos 一张。加表时它会自动补上。
+        omit_unused_structs: true
