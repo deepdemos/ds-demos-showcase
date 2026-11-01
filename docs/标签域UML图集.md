@@ -665,7 +665,7 @@ erDiagram
 |---|---|---|
 | `external_threads`（主体↔主题） | **本文 §3.8**（G5，已泛化到 **7 类主体**：含 `mcp_server`） | ✅ 画（本节 ER 里） |
 | `external_events`（webhook 事件收件箱） | 《论坛外置选型对比》 | ❌ 不画（不在本域） |
-| `external_identities`（身份映射） | 《身份服务模型设计》（B2 待拍板：可能与 `external_links` / `account_links` 合并） | ❌ 不画（不在本域） |
+| `external_identities`（身份映射） | 《身份服务模型设计》——**已定不单独建表**，并入 `external_links`（§6.4） | ❌ 不画（不在本域） |
 
 **`DEMOS` / `MODELS` / `USERS` 是外部实体的投影**：本域**只画自己依赖的列**，完整列以《实体域 UML 图集》**v2.7**、《Demo域设计》**v1.3**、《模型域设计》**v1.3** 为准。
 

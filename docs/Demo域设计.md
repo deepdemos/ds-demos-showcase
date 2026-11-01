@@ -142,6 +142,7 @@ flowchart TB
 | `description` | text | **是** | NULL | 可编辑。**内容列** |
 | `cover_url` | text | **是** | NULL | 当前版本封面（便于列表直读；≤500 字符）。**内容列** |
 | `cover_thumb_url` | text | **是** | NULL | 200 档小图（≤500 字符）。**内容列** |
+| `cover_inline` | bytea | **是** | NULL | ≤32 KiB 的内联封面（生命周期 §8.3）；超过就走 OSS。**内容列**，擦除置 NULL |
 | `author_id` | bigint FK→users | 是 | NULL | NULL = 匿名 |
 | `guest_name` | text | 是 | NULL | 匿名展示名（≤64 字符） |
 | `current_revision_id` | bigint FK→demo_revisions | 是 | NULL | 建库时可能还没有版本 |
@@ -152,7 +153,7 @@ flowchart TB
 | `updated_at` | timestamptz | 否 | `now()` | **无 onupdate**，仅内容变更时显式赋值 |
 | `deleted_at` | timestamptz | 是 | NULL | 软删除时间（可恢复，30 天窗口） |
 | `erased_at` | timestamptz | 是 | NULL | **擦除时间**（内容列已清空、不可恢复；非空必然蕴含 `deleted_at` 非空） |
-| `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符；治理列，擦除不动） |
+| `delete_reason` | text | 否 | `''` | 删除/下架理由（≤200 字符；治理列，**擦除不动**——这是口径豁免：它记的是「为什么删」，不是作品正文；生命周期 §9.2 的「审计不存内容原文」针对的是标题/正文/文件） |
 
 这两列都是受限枚举，取值集合与迁移矩阵在 `标准对象 §ST-4` / `标准对象 §ST-5`，本节只落可执行的约束——建表时随列一起加，别只写在注释里：
 
@@ -186,6 +187,7 @@ CHECK (lifecycle_state  IN ('draft', 'published', 'archived', 'removed'))
 | `title` | text | **是** | NULL | 该版本的标题快照（≤200 字符）。**内容列** |
 | `description` | text | **是** | NULL | **内容列** |
 | `cover_url` | text | **是** | NULL | （≤500 字符）。**内容列** |
+| `cover_inline` | bytea | **是** | NULL | ≤32 KiB 内联封面快照。**内容列** |
 | `demo_type` | text | 否 | `web` | `web` / `zip` / `link` / `image`（≤16 字符） |
 | `single_file` | text | 是 | NULL | `html` / `svg`（≤8 字符） |
 | `external_url` | text | 是 | NULL | link 类型（≤2000 字符） |

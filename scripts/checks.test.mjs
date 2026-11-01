@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { classifyLines, countTextLines, listSourceFiles } from './check-file-size.mjs';
 import { isDocsOnly, validatePullRequest } from './check-pr.mjs';
 import { hasReviewComment } from './check-review.mjs';
-import { inspectDocument as inspectStandardObjects, parseAuthority as parseStandardObjects, run as runStandardObjects } from './check-objects.mjs';
+import { inspectDocument as inspectStandardObjects, inspectYamlFences, parseAuthority as parseStandardObjects, run as runStandardObjects } from './check-objects.mjs';
 
 test('文件行数阈值：500/501/800/801', () => {
   assert.equal(classifyLines(500), 'ok');
@@ -258,4 +258,18 @@ test('标准对象门禁：章节级锚点必须写在副本之前', () => {
   const copyLine = '档位：`a1` / `a2` / `a3`';
   const after = '## 某节\n' + copyLine + '\n' + filler + '见 标准对象 §ST-9。\n';
   assert.ok(inspectStandardObjects('a.md', after, authority).some((p) => p.includes('缺')));
+});
+
+test('标准对象门禁：YAML 围栏顶层结构混用要被拦（映射键 + 序列项同级）', () => {
+  const mixed = ['```yaml', 'version: 1', 'not_content_tables: [tasks]', '- table: demos', '```', ''].join('\n');
+  const problems = inspectYamlFences(mixed);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes('混用'));
+
+  const clean = ['```yaml', 'version: 1', 'tables:', '  - a', 'not_content_tables:', '  - tasks', '```', ''].join('\n');
+  assert.deepEqual(inspectYamlFences(clean), []);
+
+  // 纯序列、带注释、带 --- 也算干净；非 yaml 围栏不参与
+  assert.deepEqual(inspectYamlFences(['```yaml', '# 注释', '- a', '- b', '```'].join('\n')), []);
+  assert.deepEqual(inspectYamlFences(['```sql', 'not_content_tables: [x]', '- y', '```'].join('\n')), []);
 });

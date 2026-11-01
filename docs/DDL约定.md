@@ -45,7 +45,7 @@
 ## 5. 索引与约束命名（现状写法，未单独立规）
 
 - **索引**：`ix_<表或缩写>_<列或用途>` —— 全库 **54** 个索引名一致，例：`ix_models_vendor`、`ix_demo_revision_models_model`、`ix_prompts_content_trgm`、`ix_ext_threads_subject`。
-- **CHECK**：`ck_<表>_<语义>` —— 现有 5 个：`ck_proposals`、`ck_proposals_payload`、`ck_proposals_review`、`ck_classifications_shape`、`ck_proposal_refs_exactly_one`。
+- **CHECK**：`ck_<表>_<语义>` —— 例：`ck_proposals_payload`、`ck_classifications_shape`、`ck_accounts_previous_status`、`ck_accounts_closed_status`、`ck_review_decisions`、`ck_audit_entity_route`（不写总数：每加一域就会漂）。
 - **主键 / 外键 / 唯一约束不单独命名**：内联 `PRIMARY KEY (...)` / `REFERENCES ...` / `UNIQUE (...)`。
 
 ## 6. 各域怎么引用
@@ -93,7 +93,7 @@ erased_at   timestamptz,   -- 擦除（字段已清空，不可恢复）；NULL 
 
 ### 7.5 接入方式：注册表，不靠人记
 
-每张内容表在 `internal/lifecycle/registry.yaml` 登记（`deleted_col` / `erased_col` / `content_cols` / `derivatives` / `listing_predicate` / `endpoints`），CI 断言五条（列存在且可空 / 有 `deleted_at` 的表必须登记 / 通用用例在真 PG 上跑 / 与 `audit_*` 目录对齐 / 端点与 `api/openapi.yaml` 一致）。细则见数据生命周期 §11.4。
+每张内容表在 `internal/lifecycle/registry.yaml` 登记（`deleted_col` / `erased_col` / `content_cols` / `derivatives` / `visibility` / `domain_state` / `endpoints`），CI 断言六条（列存在且可空 / **有 `erased_at` 的表必须登记或带 `reason` 豁免** / 通用用例在真 PG 上跑 / 与 `audit_*` 目录对齐 / 端点按五个字面值存在 / 可见性谓词逐字包含 ST-2 两句）。细则见数据生命周期 §11.4。
 
 ## 附录 A 从 SQLite 迁入的对照（C2 迁移期参考）
 
