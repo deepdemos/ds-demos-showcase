@@ -78,7 +78,8 @@ INSERT INTO audit_entity_types (key, description, table_name, route_template) VA
     ('platform_config', '平台配置',    'platform_configs', '/admin/platform-configs/{id}'),
     ('skill',           '技能',        'skills',           '/admin/skills/{id}'),
     ('mcp_server',      'MCP',         'mcp_servers',      '/admin/mcp-servers/{id}'),
-    ('report',          '举报（预留）', NULL,               NULL);
+    ('report',          '举报（预留）', NULL,               NULL),
+    ('setting',         '站点设置',    'site_settings',    '/admin/settings/{id}');
 
 -- ===== gc_kinds  (docs/标准对象/20-枚举值域.md:227) =====
 -- 治理域 §5.3（v1.13 起本表归标准对象）
@@ -245,7 +246,8 @@ INSERT INTO permissions (key, description) VALUES
     ('user.status',          '改账号状态（suspend / ban / restore）'),
     ('user.role',            '改账号角色'),
     ('audit.read',           '读审计'),
-    ('ops.run',              '巡检、OSS 同步、GC 触发、类型细分预览');
+    ('ops.run',              '巡检、OSS 同步、GC 触发、类型细分预览'),
+    ('setting.write',        '改站点参数（设置域，v1.14 随该域落地）');
 
 -- ===== role_permissions：admin 全绑，moderator 五条 =====
 INSERT INTO role_permissions (role_key, permission_key)

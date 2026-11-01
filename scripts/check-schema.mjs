@@ -77,11 +77,11 @@ function parseSchema(root) {
     }
   }
 
-  // 前缀连续
+  // 前缀两位数字、严格递增。不要求等于 10*(i+1)：允许 15 这种插队文件，
+  // 只要文件名排序与建表依赖顺序一致即可（15-settings 要在 20-governance 之前建）。
   fileNos.sort((a, b) => a - b);
-  for (let i = 0; i < fileNos.length; i++) {
-    const expect = 10 * (i + 1);
-    if (fileNos[i] !== expect) { problems.push(`db/schema 前缀不连续：第 ${i + 1} 个文件前缀是 ${fileNos[i]}，应为 ${expect}`); break; }
+  for (let i = 1; i < fileNos.length; i++) {
+    if (fileNos[i] <= fileNos[i - 1]) { problems.push(`db/schema 前缀不严格递增：${fileNos[i - 1]} → ${fileNos[i]}`); break; }
   }
 
   // 每表必须有主键

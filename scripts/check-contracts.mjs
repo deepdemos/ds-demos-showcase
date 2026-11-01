@@ -19,7 +19,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const RETIRED_PREFIXES = ['tag', 'setting', 'announcement'];
+// setting 已于 2026-11-01 随设置域落地（setting.write 登记进 §4.3），不再是退役前缀
+const RETIRED_PREFIXES = ['tag', 'announcement'];
 
 function read(root, rel) {
   const full = path.join(root, rel);
@@ -121,7 +122,7 @@ export function inspectContracts(docs, root = process.cwd()) {
   for (const [name, text] of Object.entries(docs)) {
     if (!text) continue;
     for (const ref of new Set(parsePermissionRefs(text, prefixes, verbs))) {
-      if (!seen.has(ref)) push(`${name}: 引用了未登记的权限键 \`${ref}\`（§4.3 里没有；已退役的前缀 tag./setting./announcement. 也不允许）`);
+      if (!seen.has(ref)) push(`${name}: 引用了未登记的权限键 \`${ref}\`（§4.3 里没有；已退役的前缀 tag./announcement. 也不允许）`);
     }
   }
 
