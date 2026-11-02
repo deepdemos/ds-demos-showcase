@@ -27,6 +27,7 @@ export const ErrorCode = {
   not_found: 'not_found',
   invalid_param: 'invalid_param',
   forbidden: 'forbidden',
+  unauthorized: 'unauthorized',
   rate_limited: 'rate_limited',
   unavailable: 'unavailable',
 } as const;
@@ -107,6 +108,40 @@ export interface DemoList {
      * @minimum 0
      */
   total: number;
+}
+
+/**
+ * 账号状态取值域，见标准对象 §ST-1
+ */
+export type AccountStatus = typeof AccountStatus[keyof typeof AccountStatus];
+
+
+export const AccountStatus = {
+  pending: 'pending',
+  active: 'active',
+  suspended: 'suspended',
+  banned: 'banned',
+  deleted: 'deleted',
+} as const;
+
+export interface Me {
+  /** 对外不可变 ID（base32(128 bit)，26 字符），不暴露自增主键 */
+  sub: string;
+  /** @maxLength 20 */
+  username: string;
+  /** @maxLength 50 */
+  displayName: string;
+  /** 只有本人看得到自己的邮箱 */
+  email: string;
+  /** 角色快照，权限判定不只看它 */
+  role: string;
+  status: AccountStatus;
+  /**
+     * 等级投影镜像，级数不封顶（EXP-001）
+     * @minimum 0
+     */
+  level: number;
+  createdAt: string;
 }
 
 export type ListDemosParams = {
@@ -312,4 +347,62 @@ export const getDemo = async (slug: string, options?: RequestInit): Promise<getD
 
   const data: getDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getDemoResponse
+}
+
+
+
+export type getMeResponse200 = {
+  data: Me
+  status: 200
+}
+
+export type getMeResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getMeResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getMeResponseSuccess = (getMeResponse200) & {
+  headers: Headers;
+};
+export type getMeResponseError = (getMeResponse401 | getMeResponse503) & {
+  headers: Headers;
+};
+
+export type getMeResponse = (getMeResponseSuccess | getMeResponseError)
+
+export const getGetMeUrl = () => {
+
+
+
+
+  return `/api/v1/me`
+}
+
+/**
+ * 会话是**服务端**的：cookie 只装不透明串，服务端每次查 `web_sessions`，
+ * 所以登出能让 cookie 立刻失效。「没带 cookie / 不存在 / 过期 / 已吊销」
+ * **故意都 401 且不区分**——区分了等于送一个免费的会话探测器。
+ * @summary 当前登录者
+ */
+export const getMe = async ( options?: RequestInit): Promise<getMeResponse> => {
+
+  const res = await fetch(getGetMeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getMeResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getMeResponse
 }

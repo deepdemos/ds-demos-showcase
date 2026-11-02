@@ -25,6 +25,10 @@ func (s *stub) GetDemo(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "detail:"+slug)
 }
 
+func (s *stub) GetMe(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "me")
+}
+
 // TestRouterUsesContractPaths 守住一条不变式：路由表来自契约，而不是人手写的地址清单。
 // 契约改了路径而生成物没重跑、或有人绕过生成物手写路由，这里就会红。
 func TestRouterUsesContractPaths(t *testing.T) {
@@ -38,6 +42,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{"/healthz", "healthz"},
 		{"/api/v1/demos", "list"},
 		{"/api/v1/demos/some-slug", "detail:some-slug"},
+		{"/api/v1/me", "me"},
 	}
 
 	for _, tc := range cases {
