@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { classifyLines, countTextLines, listSourceFiles } from './check-file-size.mjs';
 import {
-  handwrittenSize,
+  handwrittenFiles,
   isDocsOnly,
   isGeneratedFile,
   parseChangedFiles,
@@ -67,7 +67,7 @@ test('PR 门禁：合法输入', () => {
   );
 });
 
-test('PR 门禁：无 issue / 标题不合法 / 超规模', () => {
+test('PR 门禁：无 issue / 标题不合法 / 文件数超限', () => {
   const errors = validatePullRequest({
     title: 'update stuff',
     body: 'no issue',
@@ -75,10 +75,9 @@ test('PR 门禁：无 issue / 标题不合法 / 超规模', () => {
     deletions: 0,
     changed_files: 21,
   });
-  assert.equal(errors.length, 4);
+  assert.equal(errors.length, 3);
   assert.ok(errors.some((error) => error.includes('issue')));
   assert.ok(errors.some((error) => error.includes('标题')));
-  assert.ok(errors.some((error) => error.includes('行上限')));
   assert.ok(errors.some((error) => error.includes('文件上限')));
 });
 
@@ -124,68 +123,74 @@ test('isDocsOnly：拒绝越界路径段', () => {
   assert.equal(isDocsOnly(['docs/a.md', '../secrets.md']), false);
 });
 
-test('PR 门禁：文件清单混入代码时恢复规模校验', () => {
+test('PR 门禁：文件清单混入代码时不按纯文档放行', () => {
+  // 21 个代码文件（不含生成物）→ 超文件数上限。
+  const files = ['docs/a.md', ...Array.from({ length: 21 }, (_, i) => `backend/f${i}.go`)];
   const errors = validatePullRequest({
     title: 'docs(model): 设计文档入库',
     body: 'Refs #100',
-    additions: 600,
-    deletions: 0,
-    changed_files: 2,
-    files: ['docs/a.md', 'backend/main.go'],
+    files,
   });
-  assert.ok(errors.some((error) => error.includes('行上限')));
+  assert.ok(errors.some((error) => error.includes('文件上限')));
 });
 
-test('PR 门禁：生成物不计入规模', () => {
-  // 手写 352 行 + 生成物 240 行：汇总 592 超限，但手写部分没超。
+test('PR 门禁：生成物不计入文件数', () => {
+  // 3 个生成物 + 9 个手写 = 12 个文件；只有手写的 9 个算数。
   const files = [
-    { path: 'api/openapi.yaml', additions: 80, deletions: 1 },
-    { path: 'backend/internal/api/api.gen.go', additions: 79, deletions: 6 },
-    { path: 'backend/internal/store/identity.sql.go', additions: 63, deletions: 0 },
-    { path: 'web/src/api/gen/index.ts', additions: 93, deletions: 0 },
-    { path: 'backend/internal/httpapi/identity.go', additions: 82, deletions: 0 },
-    { path: 'backend/internal/httpapi/integration_test.go', additions: 81, deletions: 1 },
-    { path: 'backend/internal/domain/identity/service.go', additions: 46, deletions: 0 },
-    { path: 'backend/db/queries/identity.sql', additions: 20, deletions: 0 },
-    { path: 'backend/internal/httpapi/handlers.go', additions: 11, deletions: 9 },
-    { path: 'backend/cmd/api/main.go', additions: 4, deletions: 1 },
+    'backend/internal/api/api.gen.go',
+    'backend/internal/store/identity.sql.go',
+    'web/src/api/gen/index.ts',
+    'api/openapi.yaml',
+    'backend/internal/httpapi/identity.go',
+    'backend/internal/httpapi/integration_test.go',
+    'backend/internal/domain/identity/service.go',
+    'backend/db/queries/identity.sql',
+    'backend/internal/httpapi/handlers.go',
+    'backend/cmd/api/main.go',
+    'docs/开发环境.md',
+    'AGENTS.md',
   ];
-  const size = handwrittenSize(files);
-  assert.equal(size.hasStats, true);
+  const size = handwrittenFiles(files);
+  assert.equal(size.files, 9);
   assert.equal(size.skipped.length, 3);
-  assert.ok(size.lines < 500, `手写部分 ${size.lines} 行应低于上限`);
   assert.deepEqual(
     validatePullRequest({ title: 'feat(identity): 新增端点', body: 'Refs #140', files }),
     [],
   );
 });
 
-test('PR 门禁：手写部分仍然超限就报错（生成物不背锅）', () => {
+test('PR 门禁：不再按行数拦截（行数只记录）', () => {
+  // 手写 3000 行、12 个文件：行数不限，文件数没超 → 放行。
+  const files = Array.from({ length: 12 }, (_, i) => `backend/f${i}.go`);
+  assert.deepEqual(
+    validatePullRequest({
+      title: 'feat(api): 大批量',
+      body: 'Refs #1',
+      additions: 3000,
+      deletions: 0,
+      changed_files: 12,
+      files,
+    }),
+    [],
+  );
+});
+
+test('PR 门禁：手写文件数仍超限要报错（生成物不背锅）', () => {
   const files = [
-    { path: 'backend/internal/api/api.gen.go', additions: 5000, deletions: 0 },
-    { path: 'backend/main.go', additions: 501, deletions: 0 },
+    'backend/internal/api/api.gen.go',
+    ...Array.from({ length: 21 }, (_, i) => `backend/f${i}.go`),
   ];
   const errors = validatePullRequest({ title: 'feat(api): 大改动', body: 'Refs #1', files });
-  assert.ok(errors.some((error) => error.includes('行上限')));
+  assert.ok(errors.some((error) => error.includes('文件上限')));
 });
 
-test('PR 门禁：清单只有路径、没有每文件行数时不给豁免（fail-closed）', () => {
-  const errors = validatePullRequest({
-    title: 'feat(identity): 新增端点',
-    body: 'Refs #140',
-    additions: 592,
-    deletions: 0,
-    changed_files: 10,
-    files: ['api/openapi.yaml', 'backend/internal/api/api.gen.go'],
-  });
-  assert.ok(errors.some((error) => error.includes('行上限')));
-});
-
-test('PR 门禁：只有生成物的 PR 规模记 0', () => {
-  const files = [{ path: 'web/src/api/gen/index.ts', additions: 9000, deletions: 0 }];
-  const size = handwrittenSize(files);
+test('PR 门禁：只有生成物的 PR 手写文件数记 0', () => {
+  const size = handwrittenFiles([
+    'web/src/api/gen/index.ts',
+    'backend/internal/api/api.gen.go',
+  ]);
   assert.equal(size.files, 0);
-  assert.equal(size.lines, 0);
+  assert.equal(size.skipped.length, 2);
 });
 
 test('isGeneratedFile：只认三个已知生成目录', () => {
@@ -197,12 +202,15 @@ test('isGeneratedFile：只认三个已知生成目录', () => {
   assert.equal(isGeneratedFile(undefined), false);
 });
 
-test('parseChangedFiles：解析 path|additions|deletions', () => {
+test('parseChangedFiles：清单带不带行数都接受', () => {
   const nl = String.fromCharCode(10);
-  const files = parseChangedFiles(`api/openapi.yaml|80|1${nl}backend/main.go|5|0${nl}`);
-  assert.deepEqual(files, [
-    { path: 'api/openapi.yaml', additions: 80, deletions: 1 },
-    { path: 'backend/main.go', additions: 5, deletions: 0 },
+  assert.deepEqual(parseChangedFiles(`api/openapi.yaml|80|1${nl}backend/main.go|5|0${nl}`), [
+    'api/openapi.yaml',
+    'backend/main.go',
+  ]);
+  assert.deepEqual(parseChangedFiles(`api/openapi.yaml${nl}backend/main.go${nl}`), [
+    'api/openapi.yaml',
+    'backend/main.go',
   ]);
 });
 
