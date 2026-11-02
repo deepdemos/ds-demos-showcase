@@ -26,6 +26,8 @@ tags:
     description: 运行状态检查
   - name: 作品
     description: 作品列表与详情
+  - name: 身份
+    description: 会话与当前登录者
 
 paths:
   /healthz:
@@ -149,6 +151,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/me:
+    get:
+      operationId: getMe
+      tags: [身份]
+      summary: 当前登录者
+      description: |
+        会话是**服务端**的：cookie 只装不透明串，服务端每次查 `web_sessions`，
+        所以登出能让 cookie 立刻失效。「没带 cookie / 不存在 / 过期 / 已吊销」
+        **故意都 401 且不区分**——区分了等于送一个免费的会话探测器。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 已登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          description: 未登录或会话已失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   schemas:
     Error:
@@ -158,7 +191,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, invalid_param, forbidden, rate_limited, unavailable]
+          enum: [not_found, invalid_param, forbidden, unauthorized, rate_limited, unavailable]
           description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
         message:
           type: string
@@ -239,3 +272,49 @@ components:
         `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
         `archived` / `removed` 可见但为墓碑态。
       enum: [draft, pending, published, rejected, archived, removed]
+
+    Me:
+      type: object
+      additionalProperties: false
+      required: [sub, username, displayName, email, role, status, level, createdAt]
+      properties:
+        sub:
+          type: string
+          description: 对外不可变 ID（base32(128 bit)，26 字符），不暴露自增主键
+        username:
+          type: string
+          maxLength: 20
+        displayName:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+          description: 只有本人看得到自己的邮箱
+        role:
+          type: string
+          description: 角色快照，权限判定不只看它
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+        level:
+          type: integer
+          minimum: 0
+          description: 等级投影镜像，级数不封顶（EXP-001）
+        createdAt:
+          type: string
+          format: date-time
+
+    AccountStatus:
+      type: string
+      enum: [pending, active, suspended, banned, deleted]
+      description: 账号状态取值域，见标准对象 §ST-1
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-demo_session
+      description: |
+        不透明随机串（不是 JWT）。`__Host-` 前缀由浏览器强制 `Secure` + `Path=/` +
+        **不设 Domain**；设了 Domain 就等于把会话暴露给 `cdn.` 与 `*.sandbox.` 等
+        所有子域（身份域 §11.1）。

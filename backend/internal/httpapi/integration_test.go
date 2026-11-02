@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -77,7 +78,7 @@ func TestIntegrationListAndDetail(t *testing.T) {
 	pool := integrationPool(t)
 	seed(t, pool)
 
-	h := New(pool, store.New(pool))
+	h := New(pool, store.New(pool), identity.New(pool))
 
 	// 列表：只有 published 且未擦除的那一条。
 	listRec := httptest.NewRecorder()
@@ -113,6 +114,85 @@ func TestIntegrationListAndDetail(t *testing.T) {
 			if body["title"] != nil {
 				t.Fatalf("墓碑态 title 必须为 null，实际 %v", body["title"])
 			}
+		}
+	}
+}
+
+// seedMe 造一个「已登录」的最小现场：账号 + 资料 + 主邮箱 + 一条有效会话。
+func seedMe(t *testing.T, pool *pgxpool.Pool, sessionID string) {
+	t.Helper()
+	ctx := context.Background()
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("%s 失败: %v", q, err)
+		}
+	}
+	// 用一个 CTE 一次装完四张表。PostgreSQL 的数据修改型 CTE 即使没人读也会执行完，
+	// 所以 p / e 不需要被主语句引用。少填任何一个 NOT NULL 列都会在这里当场报错。
+	const seedSQL = `
+WITH a AS (
+    INSERT INTO accounts (sub, status, role, level)
+    VALUES ('ITSESSION0000000000000000AA', 'active', 'admin', 3) RETURNING id
+), p AS (
+    INSERT INTO profiles (account_id, username, display_name)
+    SELECT id, 'it-me', '集成测试' FROM a
+), e AS (
+    INSERT INTO account_emails (account_id, email, is_primary, verified_at)
+    SELECT id, 'it-me@example.com', true, now() FROM a
+)
+INSERT INTO web_sessions (id, account_sub, username, display_name, role, status, verified_at)
+SELECT $1, 'ITSESSION0000000000000000AA', 'it-me', '集成测试', 'admin', 'active', now() FROM a`
+	if _, err := pool.Exec(ctx, seedSQL, sessionID); err != nil {
+		t.Fatalf("装配账号失败: %v", err)
+	}
+}
+
+func TestIntegrationGetMe(t *testing.T) {
+	pool := integrationPool(t)
+	const sid = "it-session-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	seedMe(t, pool, sid)
+	h := New(pool, store.New(pool), identity.New(pool))
+	call := func(cookie string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: cookie})
+		rec := httptest.NewRecorder()
+		h.GetMe(rec, req)
+		return rec
+	}
+
+	rec := call(sid)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("有效会话应 200，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	var me api.Me
+	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil {
+		t.Fatalf("响应不是合法 Me: %v", err)
+	}
+	if me.Username != "it-me" || me.Role != "admin" || me.Status != api.AccountStatusActive ||
+		me.Email != "it-me@example.com" || me.Level != 3 {
+		t.Fatalf("字段不对: %+v", me)
+	}
+
+	// 401 的各种情况必须给出逐字节相同的响应体——任何差异都等于会话探测器。
+	want := call("").Body.String()
+	for _, tc := range []struct{ name, cookie, mutate string }{
+		{"未知会话", "it-does-not-exist", ""},
+		// 注销账号的会话必须失效，不能指望「注销流程记得吊销」。
+		{"已注销账号", sid, `UPDATE accounts SET status = 'deleted', closed_at = now()
+			WHERE sub = 'ITSESSION0000000000000000AA'`},
+		{"已吊销", sid, `UPDATE web_sessions SET revoked_at = now() WHERE id = '` + sid + `'`},
+	} {
+		if tc.mutate != "" {
+			if _, err := pool.Exec(context.Background(), tc.mutate); err != nil {
+				t.Fatalf("%s：改数据失败: %v", tc.name, err)
+			}
+		}
+		rec := call(tc.cookie)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s 应 401，实际 %d", tc.name, rec.Code)
+		}
+		if rec.Body.String() != want {
+			t.Fatalf("%s 与未登录的响应体不一致：%q vs %q", tc.name, rec.Body.String(), want)
 		}
 	}
 }

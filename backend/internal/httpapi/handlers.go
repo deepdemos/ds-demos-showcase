@@ -1,7 +1,7 @@
-// Package httpapi 实现 api/openapi.yaml 定义的三个端点。
+// Package httpapi 实现 api/openapi.yaml 定义的端点。
 //
 // 分层：这个包只负责「HTTP ↔ 领域判定」，SQL 在 internal/store（sqlc 生成）。
-// 路由注册不在这里，在 internal/platform/httpserver——那里把实现塞进生成的路由表。
+// 路由注册不在这里，在 internal/httpapi/router.go——那里把实现塞进生成的路由表。
 package httpapi
 
 import (
@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -37,13 +38,14 @@ type Pinger interface {
 
 // Handler 实现 api.ServerInterface。
 type Handler struct {
-	pinger  Pinger
-	queries *store.Queries // nil 表示未配置数据库
+	pinger   Pinger
+	queries  *store.Queries    // nil 表示未配置数据库
+	identity *identity.Service // nil 表示身份域未接线
 }
 
 // New 组装处理器。queries 可以为 nil（未配置数据库），此时业务端点返回 503。
-func New(pinger Pinger, queries *store.Queries) *Handler {
-	return &Handler{pinger: pinger, queries: queries}
+func New(pinger Pinger, queries *store.Queries, identitySvc *identity.Service) *Handler {
+	return &Handler{pinger: pinger, queries: queries, identity: identitySvc}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
@@ -173,7 +175,7 @@ func summaryOf(row store.ListPublishedDemosRow) api.DemoSummary {
 		Title:          textPtr(row.Title),
 		CoverUrl:       textPtr(row.CoverUrl),
 		CreatedAt:      row.CreatedAt.Time,
-		LifecycleState: api.Published,
+		LifecycleState: api.LifecycleStatePublished,
 	}
 }
 
@@ -188,11 +190,11 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 	}
 	// 从未公开过。
 	switch state {
-	case api.Draft, api.Pending, api.Rejected:
+	case api.LifecycleStateDraft, api.LifecycleStatePending, api.LifecycleStateRejected:
 		return api.DemoDetail{}, false
 	}
 
-	tombstone := row.DeletedAt.Valid || state == api.Archived || state == api.Removed
+	tombstone := row.DeletedAt.Valid || state == api.LifecycleStateArchived || state == api.LifecycleStateRemoved
 
 	detail := api.DemoDetail{
 		Slug:           row.Slug,

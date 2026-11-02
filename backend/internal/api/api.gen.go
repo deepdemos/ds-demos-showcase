@@ -4,12 +4,27 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
+)
+
+const (
+	SessionCookieScopes = "sessionCookie.Scopes"
+)
+
+// Defines values for AccountStatus.
+const (
+	AccountStatusActive    AccountStatus = "active"
+	AccountStatusBanned    AccountStatus = "banned"
+	AccountStatusDeleted   AccountStatus = "deleted"
+	AccountStatusPending   AccountStatus = "pending"
+	AccountStatusSuspended AccountStatus = "suspended"
 )
 
 // Defines values for ErrorCode.
@@ -18,6 +33,7 @@ const (
 	InvalidParam ErrorCode = "invalid_param"
 	NotFound     ErrorCode = "not_found"
 	RateLimited  ErrorCode = "rate_limited"
+	Unauthorized ErrorCode = "unauthorized"
 	Unavailable  ErrorCode = "unavailable"
 )
 
@@ -28,18 +44,21 @@ const (
 
 // Defines values for LifecycleState.
 const (
-	Archived  LifecycleState = "archived"
-	Draft     LifecycleState = "draft"
-	Pending   LifecycleState = "pending"
-	Published LifecycleState = "published"
-	Rejected  LifecycleState = "rejected"
-	Removed   LifecycleState = "removed"
+	LifecycleStateArchived  LifecycleState = "archived"
+	LifecycleStateDraft     LifecycleState = "draft"
+	LifecycleStatePending   LifecycleState = "pending"
+	LifecycleStatePublished LifecycleState = "published"
+	LifecycleStateRejected  LifecycleState = "rejected"
+	LifecycleStateRemoved   LifecycleState = "removed"
 )
 
 // Defines values for ListDemosParamsSort.
 const (
 	Latest ListDemosParamsSort = "latest"
 )
+
+// AccountStatus 账号状态取值域，见标准对象 §ST-1
+type AccountStatus string
 
 // DemoDetail defines model for DemoDetail.
 type DemoDetail struct {
@@ -110,6 +129,28 @@ type HealthzStatus string
 // `archived` / `removed` 可见但为墓碑态。
 type LifecycleState string
 
+// Me defines model for Me.
+type Me struct {
+	CreatedAt   time.Time `json:"createdAt"`
+	DisplayName string    `json:"displayName"`
+
+	// Email 只有本人看得到自己的邮箱
+	Email openapi_types.Email `json:"email"`
+
+	// Level 等级投影镜像，级数不封顶（EXP-001）
+	Level int `json:"level"`
+
+	// Role 角色快照，权限判定不只看它
+	Role string `json:"role"`
+
+	// Status 账号状态取值域，见标准对象 §ST-1
+	Status AccountStatus `json:"status"`
+
+	// Sub 对外不可变 ID（base32(128 bit)，26 字符），不暴露自增主键
+	Sub      string `json:"sub"`
+	Username string `json:"username"`
+}
+
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
 	// Q 关键词，匹配标题与描述
@@ -137,6 +178,9 @@ type ServerInterface interface {
 	// 作品详情
 	// (GET /api/v1/demos/{slug})
 	GetDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 当前登录者
+	// (GET /api/v1/me)
+	GetMe(w http.ResponseWriter, r *http.Request)
 	// 站点可用性
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -155,6 +199,12 @@ func (_ Unimplemented) ListDemos(w http.ResponseWriter, r *http.Request, params 
 // 作品详情
 // (GET /api/v1/demos/{slug})
 func (_ Unimplemented) GetDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 当前登录者
+// (GET /api/v1/me)
+func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -240,6 +290,26 @@ func (siw *ServerInterfaceWrapper) GetDemo(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetDemo(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMe(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -381,6 +451,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demos/{slug}", wrapper.GetDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.GetHealthz)

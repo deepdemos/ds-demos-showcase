@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/httpapi"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/config"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/database"
@@ -24,6 +25,7 @@ func main() {
 	// 直接赋给接口——那会得到「非 nil 接口装着 nil 指针」，后面的 nil 判断全部失效。
 	var pinger httpapi.Pinger
 	var queries *store.Queries
+	var identitySvc *identity.Service
 
 	if cfg.HasDatabase() {
 		pool, err := database.Open(context.Background(), cfg.DatabaseURL)
@@ -35,13 +37,14 @@ func main() {
 		defer pool.Close()
 		pinger = pool
 		queries = store.New(pool)
+		identitySvc = identity.New(pool)
 	} else {
 		logger.Warn("DATABASE_URL 未配置：/healthz 仍可用，业务端点返回 503")
 	}
 
 	server := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries)),
+		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries, identitySvc)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

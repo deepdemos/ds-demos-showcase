@@ -80,7 +80,7 @@ func decode(t *testing.T, body []byte) map[string]any {
 
 func TestHealthzWithoutPinger(t *testing.T) {
 	response := httptest.NewRecorder()
-	New(nil, nil).GetHealthz(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	New(nil, nil, nil).GetHealthz(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", response.Code)
@@ -93,7 +93,7 @@ func TestHealthzWithoutPinger(t *testing.T) {
 func TestHealthzDatabaseDownDoesNotLeak(t *testing.T) {
 	const secret = "postgres://user:pass@10.1.2.3:5432/deepdemos"
 	response := httptest.NewRecorder()
-	New(failingPinger{msg: secret}, nil).
+	New(failingPinger{msg: secret}, nil, nil).
 		GetHealthz(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
 	if response.Code != http.StatusServiceUnavailable {
@@ -112,7 +112,7 @@ func TestHealthzDatabaseDownDoesNotLeak(t *testing.T) {
 
 func TestListDemosWithoutDatabase(t *testing.T) {
 	response := httptest.NewRecorder()
-	New(nil, nil).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
+	New(nil, nil, nil).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
 		api.ListDemosParams{})
 
 	if response.Code != http.StatusServiceUnavailable {
@@ -126,7 +126,7 @@ func TestListDemosRejectsOversizedPageSize(t *testing.T) {
 	queries := store.New(fakeDB{})
 	tooBig := 201
 	response := httptest.NewRecorder()
-	New(nil, queries).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
+	New(nil, queries, nil).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
 		api.ListDemosParams{PageSize: &tooBig})
 
 	if response.Code != http.StatusBadRequest {
@@ -161,7 +161,7 @@ func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorde
 	New(nil, store.New(fakeDB{row: fakeRow{values: []any{
 		row.ID, row.Slug, row.Title, row.Description, row.CoverUrl,
 		row.LifecycleState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
-	}}})).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
+	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
 	return response
 }
 
@@ -223,7 +223,7 @@ func TestGetDemoErasedIs404(t *testing.T) {
 
 func TestGetDemoNotFound(t *testing.T) {
 	response := httptest.NewRecorder()
-	New(nil, store.New(fakeDB{row: fakeRow{err: pgx.ErrNoRows}})).
+	New(nil, store.New(fakeDB{row: fakeRow{err: pgx.ErrNoRows}}), nil).
 		GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/x", nil), "x")
 
 	if response.Code != http.StatusNotFound {
