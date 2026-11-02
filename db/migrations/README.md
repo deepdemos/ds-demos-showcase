@@ -62,3 +62,8 @@ DATABASE_URL=postgres://... go run ./cmd/migrate up       # 应用待跑的
 | `sqlc generate` | 查询类型跟着变；CI 会比对生成物 |
 | 文档里的字段语义 | 设计文档只写「DDL 见 xxx.sql」，不抄建表语句 |
 | 运行手册 | 结构性上限（长度、精度）登记在 `docs/运行手册-可变常量.md` |
+
+## 种子数据不在这里
+
+开发用的假作品放在 [`db/seeds/`](../seeds/)（`npm run db:seed`），**不进迁移链**：
+迁移会被带进任何真实库，而种子只有显式执行才会生效。见 [`db/seeds/README.md`](../seeds/README.md)。

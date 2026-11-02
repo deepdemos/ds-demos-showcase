@@ -234,6 +234,53 @@ await rejects('route_template 不以 / 开头被拒',
   "INSERT INTO audit_entity_types (key, description, route_template) VALUES ('verifybad2','x','admin/{id}')",
   'ck_audit_entity_route');
 
+// ---------- 8. 开发种子（db/seeds）：能应用、幂等、边界行齐全 ----------
+// 种子本身是开发数据，但它踩的每一条约束都是真的。如果 schema 改了却没改种子，
+// 这里会红 —— 比等到有人本地 db:seed 时才发现要好。
+console.log('--- 开发种子 ---');
+{
+  const seedDir = path.join(root, 'db/seeds');
+  const seedFiles = fs.existsSync(seedDir)
+    ? fs.readdirSync(seedDir).filter((f) => f.endsWith('.sql')).sort()
+    : [];
+  let appliedSeeds = 0;
+  for (const f of seedFiles) {
+    const body = fs.readFileSync(path.join(seedDir, f), 'utf8');
+    for (const stmt of statements(body)) {
+      await db.exec(stmt);
+    }
+    appliedSeeds++;
+  }
+  record(appliedSeeds > 0, '种子文件已应用', String(appliedSeeds));
+
+  const visible = Number((await db.query(
+    "SELECT count(*) AS n FROM demos WHERE lifecycle_state='published' AND deleted_at IS NULL AND erased_at IS NULL",
+  )).rows[0].n);
+  record(visible >= 20, '种子提供了足够铺满两页的已发布作品', String(visible));
+
+  const before = Number((await db.query('SELECT count(*) AS n FROM demos')).rows[0].n);
+  for (const f of seedFiles) {
+    const body = fs.readFileSync(path.join(seedDir, f), 'utf8');
+    for (const stmt of statements(body)) {
+      await db.exec(stmt);
+    }
+  }
+  const after = Number((await db.query('SELECT count(*) AS n FROM demos')).rows[0].n);
+  record(before === after, '种子可重复应用（幂等）', before + ' → ' + after);
+
+  for (const [slug, why] of [
+    ['edge-no-description', '空描述'],
+    ['edge-long-title', '超长标题'],
+    ['edge-archived', '归档墓碑'],
+    ['edge-removed', '移除墓碑'],
+    ['edge-soft-deleted', '软删墓碑'],
+    ['edge-erased', '已擦除'],
+  ]) {
+    const n = Number((await db.query('SELECT count(*) AS n FROM demos WHERE slug=$1', [slug])).rows[0].n);
+    record(n === 1, '边界行存在：' + why, slug);
+  }
+}
+
 console.log('\n应用文件 %d 个（跳过 %d 个），断言 %d 条通过 / %d 条失败',
   appliedFiles.length, skipped.length, pass, fail);
 if (fail) {
