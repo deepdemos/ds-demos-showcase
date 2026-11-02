@@ -29,6 +29,10 @@ func (s *stub) GetMe(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "me")
 }
 
+func (s *stub) PostAuthRegister(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "register")
+}
+
 // TestRouterUsesContractPaths 守住一条不变式：路由表来自契约，而不是人手写的地址清单。
 // 契约改了路径而生成物没重跑、或有人绕过生成物手写路由，这里就会红。
 func TestRouterUsesContractPaths(t *testing.T) {
@@ -36,20 +40,22 @@ func TestRouterUsesContractPaths(t *testing.T) {
 	router := NewRouter(s)
 
 	cases := []struct {
-		path string
-		want string
+		method string
+		path   string
+		want   string
 	}{
-		{"/healthz", "healthz"},
-		{"/api/v1/demos", "list"},
-		{"/api/v1/demos/some-slug", "detail:some-slug"},
-		{"/api/v1/me", "me"},
+		{http.MethodGet, "/healthz", "healthz"},
+		{http.MethodGet, "/api/v1/demos", "list"},
+		{http.MethodGet, "/api/v1/demos/some-slug", "detail:some-slug"},
+		{http.MethodGet, "/api/v1/me", "me"},
+		{http.MethodPost, "/api/v1/auth/register", "register"},
 	}
 
 	for _, tc := range cases {
 		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		router.ServeHTTP(response, httptest.NewRequest(tc.method, tc.path, nil))
 		if response.Code != http.StatusOK {
-			t.Fatalf("%s: expected 200, got %d", tc.path, response.Code)
+			t.Fatalf("%s %s: expected 200, got %d", tc.method, tc.path, response.Code)
 		}
 	}
 

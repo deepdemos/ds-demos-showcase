@@ -28,6 +28,7 @@ export const ErrorCode = {
   invalid_param: 'invalid_param',
   forbidden: 'forbidden',
   unauthorized: 'unauthorized',
+  conflict: 'conflict',
   rate_limited: 'rate_limited',
   unavailable: 'unavailable',
 } as const;
@@ -108,6 +109,29 @@ export interface DemoList {
      * @minimum 0
      */
   total: number;
+}
+
+export interface RegisterRequest {
+  /** @maxLength 254 */
+  email: string;
+  /**
+     * 只以 argon2id 哈希入库，接口从不回显
+     * @minLength 10
+     * @maxLength 128
+     */
+  password: string;
+  /**
+     * 不区分大小写唯一（标准对象 §ID-2）
+     * @minLength 3
+     * @maxLength 20
+     * @pattern ^[A-Za-z0-9_-]+$
+     */
+  username: string;
+  /**
+     * 可为空串，展示时回退到 username
+     * @maxLength 50
+     */
+  displayName: string;
 }
 
 /**
@@ -347,6 +371,86 @@ export const getDemo = async (slug: string, options?: RequestInit): Promise<getD
 
   const data: getDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getDemoResponse
+}
+
+
+
+export type postAuthRegisterResponse201 = {
+  data: Me
+  status: 201
+}
+
+export type postAuthRegisterResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type postAuthRegisterResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type postAuthRegisterResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type postAuthRegisterResponseSuccess = (postAuthRegisterResponse201) & {
+  headers: Headers;
+};
+export type postAuthRegisterResponseError = (postAuthRegisterResponse400 | postAuthRegisterResponse409 | postAuthRegisterResponse503) & {
+  headers: Headers;
+};
+
+export type postAuthRegisterResponse = (postAuthRegisterResponseSuccess | postAuthRegisterResponseError)
+
+export const getPostAuthRegisterUrl = () => {
+
+
+
+
+  return `/api/v1/auth/register`
+}
+
+/**
+ * 建账号并直接给一个会话——注册完就是登录态，前端不需要再调一次登录。
+ *
+ * **邮箱与用户名都不区分大小写判重**（数据库上是 `lower(...)` 唯一索引），
+ * 所以 `Alice` 与 `alice` 会撞 409，而不是建出两个账号。
+ *
+ * 密码只以 argon2id 哈希入库，接口从不回显。
+ * @summary 注册
+ */
+export const postAuthRegister = async (registerRequest: RegisterRequest, options?: RequestInit): Promise<postAuthRegisterResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPostAuthRegisterUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(registerRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthRegisterResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as postAuthRegisterResponse
 }
 
 

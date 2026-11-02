@@ -151,6 +151,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/auth/register:
+    post:
+      operationId: postAuthRegister
+      tags: [身份]
+      summary: 注册
+      description: |
+        建账号并直接给一个会话——注册完就是登录态，前端不需要再调一次登录。
+
+        **邮箱与用户名都不区分大小写判重**（数据库上是 `lower(...)` 唯一索引），
+        所以 `Alice` 与 `alice` 会撞 409，而不是建出两个账号。
+
+        密码只以 argon2id 哈希入库，接口从不回显。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功，`Set-Cookie` 下发会话
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          description: 输入不合法（邮箱格式、密码长度、用户名规则）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 邮箱或用户名已被占用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/me:
     get:
       operationId: getMe
@@ -191,7 +238,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, invalid_param, forbidden, unauthorized, rate_limited, unavailable]
+          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable]
           description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
         message:
           type: string
@@ -272,6 +319,31 @@ components:
         `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
         `archived` / `removed` 可见但为墓碑态。
       enum: [draft, pending, published, rejected, archived, removed]
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, username, displayName]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+          description: 只以 argon2id 哈希入库，接口从不回显
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: 不区分大小写唯一（标准对象 §ID-2）
+        displayName:
+          type: string
+          maxLength: 50
+          description: 可为空串，展示时回退到 username
 
     Me:
       type: object

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -25,6 +26,9 @@ const (
 	healthzTimeout = 2 * time.Second
 	// queryTimeout 是业务查询的上限。请求已经被客户端取消了也没关系，context 会先断。
 	queryTimeout = 5 * time.Second
+	// registerTimeout 比 queryTimeout 宽：注册要跑一次 argon2id（64 MiB / 3 轮），
+	// 在慢机器上一次性占掉几百毫秒到一秒，5 秒会误杀。
+	registerTimeout = 15 * time.Second
 
 	// 分页口径与治理域 §P5 一致：默认 50，上限 200。
 	defaultPageSize = 50
@@ -54,6 +58,25 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		slog.Error("write json failed", "err", err)
 	}
+}
+
+// decodeJSON 读请求体并拒绝未知字段。
+//
+// 拒绝未知字段是刻意的：客户端把 `username` 写成 `userName` 时，静默忽略会建出一个
+// 用户名为空的账号，而错误信息会在很后面才出现。这里直接 400。
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	// 传 w 而不是 nil：超限时 net/http 才会给这次请求打上「连接该关」的标记。
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	// 只允许一个 JSON 值：后面还有东西说明客户端发错了，静默忽略会让排查变难。
+	// 正常的单值请求在这里读到的是 io.EOF，那是成功。
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("请求体只能包含一个 JSON 值")
+	}
+	return nil
 }
 
 func writeError(w http.ResponseWriter, status int, code api.ErrorCode, message string) {
