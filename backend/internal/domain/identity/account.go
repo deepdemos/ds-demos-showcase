@@ -1,0 +1,81 @@
+// Package identity 是身份域的业务逻辑。
+//
+// 它不认识 HTTP：不 import net/http，也不 import 生成的 api 包。
+// 这一条由 check-layering 的 L2 强制——业务规则不该被传输层的形状绑架。
+package identity
+
+import (
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// 业务错误。传输层按它们映射状态码——domain 不认识 HTTP 状态码。
+var (
+	// ErrInvalidInput 是「用户填的不对」，带一句可直接展示的中文原因。
+	ErrInvalidInput = errors.New("identity: 输入不合法")
+	// ErrEmailTaken / ErrUsernameTaken 分开，是因为前端要把错误标在不同输入框上。
+	ErrEmailTaken    = errors.New("identity: 邮箱已被使用")
+	ErrUsernameTaken = errors.New("identity: 用户名已被使用")
+	// ErrUnauthorized 是「没登录 / 会话失效」。**不区分原因**——区分了就是给攻击者送信息。
+	ErrUnauthorized = errors.New("identity: 未登录")
+)
+
+// 用户名规则与 db/schema/10-identity.sql 的 ck 同口径：3–20、[A-Za-z0-9_-]、
+// 按小写唯一（标准对象 §ID-2）。两边必须一致——只在一处收紧等于没有约束。
+var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{3,20}$`)
+
+const (
+	minPasswordLen = 10
+	maxPasswordLen = 128
+	maxDisplayName = 50
+	maxEmailLen    = 254
+)
+
+// Account 是 domain 眼中的「一个人」。它不认识 api.Me——那一层的形状属于传输层。
+type Account struct {
+	Sub         string
+	Username    string
+	DisplayName string
+	Email       string
+	Role        string
+	Status      string
+	Level       int32
+	CreatedAt   time.Time
+}
+
+// RegisterInput 是注册需要的东西。
+type RegisterInput struct {
+	Email       string
+	Password    string
+	Username    string
+	DisplayName string
+}
+
+// Validate 把「用户填错了」与「系统坏了」分开。
+//
+// 顺序有意：先校验格式再查重（查重在用到它的那层）。反过来的话，一个格式非法的邮箱
+// 也会打到数据库，既浪费一次查询，也让「格式错」和「已占用」两种错误混在一起。
+func (in RegisterInput) Validate() error {
+	email := strings.TrimSpace(in.Email)
+	if email == "" || len(email) > maxEmailLen || !strings.Contains(email, "@") ||
+		strings.HasPrefix(email, "@") || strings.HasSuffix(email, "@") {
+		return fmt.Errorf("%w: 邮箱格式不对", ErrInvalidInput)
+	}
+	if strings.ContainsAny(email, " \t\r\n") {
+		return fmt.Errorf("%w: 邮箱不能包含空白字符", ErrInvalidInput)
+	}
+	// 密码长度按字节算——对中文密码来说这比按字符算更严格，是安全的一侧。
+	if n := len(in.Password); n < minPasswordLen || n > maxPasswordLen {
+		return fmt.Errorf("%w: 密码长度必须是 %d–%d 个字符", ErrInvalidInput, minPasswordLen, maxPasswordLen)
+	}
+	if !usernamePattern.MatchString(in.Username) {
+		return fmt.Errorf("%w: 用户名只能是 3–20 个字母、数字、下划线或连字符", ErrInvalidInput)
+	}
+	if len([]rune(in.DisplayName)) > maxDisplayName {
+		return fmt.Errorf("%w: 展示名最多 %d 个字符", ErrInvalidInput, maxDisplayName)
+	}
+	return nil
+}
