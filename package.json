@@ -10,10 +10,13 @@
   "scripts": {
     "test": "node --test scripts/*.test.mjs",
     "verify:schema": "node scripts/verify-schema.mjs",
-    "apply:schema": "node scripts/apply-schema.mjs",
     "gen:api:go": "cd api && oapi-codegen -config oapi-codegen.yaml openapi.yaml",
     "gen:api:web": "npx --yes orval@8.46.0 --config web/orval.config.ts",
-    "gen:api": "npm run gen:api:go && npm run gen:api:web"
+    "gen:api": "npm run gen:api:go && npm run gen:api:web",
+    "db:up": "cd backend && go run ./cmd/migrate up",
+    "db:status": "cd backend && go run ./cmd/migrate status",
+    "db:seal": "node scripts/check-migrations.mjs --seal",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.14"

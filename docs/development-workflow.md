@@ -150,7 +150,7 @@ CI 会重新生成一遍并 `git diff --exit-code backend/internal/api`——产
 
 ```bash
 docker compose up -d db          # 或自备 PostgreSQL 18
-npm run apply:schema             # 灌 db/schema/*.sql
+npm run db:up                    # 跑基线 + 待应用的迁移
 TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable \
   go test ./... -run Integration
 ```
