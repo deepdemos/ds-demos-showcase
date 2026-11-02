@@ -21,6 +21,15 @@ export const controlCategories = [
   { id: 'feedback', name: '反馈' },
 ] as const;
 
+/**
+ * 展示型控件：只负责渲染，不接受任何交互回调。
+ *
+ * 它们没有「接线」这个概念——`Skeleton` 不会响应用户，`EmptyState` 的动作是可选的。
+ * 门禁 `check-ui-contract.mjs` 对这里列出的控件跳过接线检查。**加进来的代价**是
+ * 这个控件从此不能承载交互，所以只在真的没有交互时才列。
+ */
+export const presentationalControls = ['Skeleton', 'EmptyState'] as const;
+
 export type ControlCategoryId = (typeof controlCategories)[number]['id'];
 
 export interface ControlSpec {
