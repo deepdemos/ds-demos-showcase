@@ -6,6 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/oapi-codegen/runtime v1.8.0
+	github.com/wneessen/go-mail v0.8.1
 	golang.org/x/crypto v0.58.0
 )
 

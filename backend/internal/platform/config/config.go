@@ -18,6 +18,18 @@ type Config struct {
 	// 未配置时进程内随机生成一把并打 WARN：单实例开发够用，但重启后
 	// 历史 ip_hash 就对不上了，多实例之间也互相看不见。
 	IPHashSecret string
+
+	// 发信配置。它们是**部署拓扑**（用哪家邮件服务商、什么凭据），不是运营参数，
+	// 所以不进设置域。全为空时程序仍能启动：邮件会由 logMailer 记一条告警而不发出。
+	SMTPHost string
+	SMTPPort string
+	SMTPUser string
+	SMTPPass string
+	SMTPFrom string
+
+	// MailLogCodes 只在没配 SMTP 时生效：是否把邮件正文（含验证码）写进日志。
+	// 默认 false——验证码进日志在生产上是泄漏。
+	MailLogCodes bool
 }
 
 // Load 从环境变量读取配置。
@@ -26,6 +38,13 @@ func Load() Config {
 		Port:         getenv("PORT", "8080"),
 		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		IPHashSecret: os.Getenv("IP_HASH_SECRET"),
+
+		SMTPHost:     os.Getenv("SMTP_HOST"),
+		SMTPPort:     os.Getenv("SMTP_PORT"),
+		SMTPUser:     os.Getenv("SMTP_USER"),
+		SMTPPass:     os.Getenv("SMTP_PASS"),
+		SMTPFrom:     os.Getenv("SMTP_FROM"),
+		MailLogCodes: os.Getenv("MAIL_LOG_CODES") == "1",
 	}
 }
 
