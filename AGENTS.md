@@ -110,6 +110,7 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 - Go：`gofmt` / `goimports` 干净；`golangci-lint run` 零告警；错误用 `%w` 包装上下文；可预期错误不 panic；并发代码必须有 race 测试路径。
 - TypeScript / React 18：`eslint` + `prettier` 干净；`tsc --noEmit` 通过；组件 PascalCase，hooks 以 `use` 开头；服务端状态统一走 TanStack Query 5，不手写缓存层。
 - 样式：简单布局/自定义用 Tailwind utilities，复杂样式用 CSS Modules；不要在页面里绕开控件库直接使用第三方 UI。
+- **改契约先想兼容性**：删字段、删枚举值、可空变必填、删端点会打断调用方，门禁 `node scripts/check-api-compat.mjs` 会红；判定表与「它抓不到什么」见 `api/COMPATIBILITY.md`。
 - API 以 `api/openapi.yaml` 为唯一事实源：先改契约 → 重新生成（`pnpm gen:api:go`）→ 再改实现；禁止手改生成目录 `backend/internal/api/`。CI 会重新生成并比对，不一致就红。
 - **契约是 OpenAPI 3.0.3，不是 3.1**：`oapi-codegen` 至今不支持 3.1（上游 issue #373），选 3.1 会让生成直接失败。理由写在 `api/README.md`「为什么是 3.0.3」；等工具支持后再升。
 - 数据库变更只加新 migration，禁止修改已合入的 migration。
