@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { Button, ThemeToggle, type Theme } from '@/components/ui';
 import { controlCategories, controls, type ControlCategoryId } from '@/components/ui/registry';
 
-const PAGE_SIZE = 6;
+export const PAGE_SIZE = 6;
 const THEME_KEY = 'dev-room-theme';
 
 function readTheme(): Theme {
@@ -114,7 +114,10 @@ export function DevRoomPage() {
           ))}
         </div>
 
-        <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+        <nav
+          aria-label="控件分页"
+          className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800"
+        >
           <span className="text-sm text-neutral-500 dark:text-neutral-400">
             第 {page} / {totalPages} 页
           </span>
@@ -126,7 +129,7 @@ export function DevRoomPage() {
               下一页
             </Button>
           </div>
-        </footer>
+        </nav>
       </div>
     </div>
   );
