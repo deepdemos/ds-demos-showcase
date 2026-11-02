@@ -48,7 +48,7 @@
 - 每个 PR 必须关联 issue（`Closes #N` / `Fixes #N` / `Refs #N`）；CI 红或发现 bug 必须先建 issue，再修复。
 - 每个 PR 必须经过独立 review，review 结果必须用 `gh pr review` 回复在 PR 上（普通 issue comment 不算）；review 评论必须晚于最新 commit，push 后必须重新 review。有潜在问题禁止合并。不强制其他 owner approve，作者可在无阻断项后自行合并。CI `pr-guard` 会检查该 review 评论。
 - 不确定先 ask：需求、边界、技术选型、数据/安全取舍等任何不确定问题，必须先问用户/负责人，不得自行假设或替用户拍板；review 时也必须检查这一点。
-- 一个 PR 只做一类修改；修改超过 500 行或 20 个文件会被 `pr-guard` 直接打回。
+- 一个 PR 只做一类修改；**手写部分**修改超过 500 行或 20 个文件会被 `pr-guard` 直接打回。生成物（`backend/internal/api/`、`backend/internal/store/`、`web/src/api/gen/`）不计入规模——它们由 `contract` job 的「重新生成后 diff 为空」校验，不靠行数限制。
 - 单文件超过 500 行报告过耦合风险（不红）；超过 800 行 `file-size` 直接失败，必须拆分。
 
 ## 前端开发规范（硬约束）
