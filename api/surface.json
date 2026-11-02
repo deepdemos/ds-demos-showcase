@@ -1,0 +1,130 @@
+{
+  "models": {
+    "DemoDetail": {
+      "coverUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "lifecycleState": {
+        "type": "LifecycleState",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
+      },
+      "updatedAt": {
+        "type": "time.Time",
+        "optional": false
+      }
+    },
+    "DemoList": {
+      "items": {
+        "type": "[]DemoSummary",
+        "optional": false
+      },
+      "page": {
+        "type": "int",
+        "optional": false
+      },
+      "pageSize": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "DemoSummary": {
+      "coverUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "lifecycleState": {
+        "type": "LifecycleState",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "Error": {
+      "code": {
+        "type": "ErrorCode",
+        "optional": false
+      },
+      "message": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "Healthz": {
+      "status": {
+        "type": "HealthzStatus",
+        "optional": false
+      }
+    }
+  },
+  "enums": {
+    "ErrorCode": [
+      "forbidden",
+      "invalid_param",
+      "not_found",
+      "rate_limited",
+      "unavailable"
+    ],
+    "HealthzStatus": [
+      "ok"
+    ],
+    "LifecycleState": [
+      "archived",
+      "draft",
+      "pending",
+      "published",
+      "rejected",
+      "removed"
+    ],
+    "ListDemosParamsSort": [
+      "latest"
+    ]
+  },
+  "endpoints": {
+    "GET /api/v1/demos": {
+      "method": "ListDemos",
+      "pathParams": 0,
+      "params": "ListDemosParams"
+    },
+    "GET /api/v1/demos/{slug}": {
+      "method": "GetDemo",
+      "pathParams": 1,
+      "params": null
+    },
+    "GET /healthz": {
+      "method": "GetHealthz",
+      "pathParams": 0,
+      "params": null
+    }
+  }
+}
