@@ -18,7 +18,8 @@
     "db:up": "cd backend && go run ./cmd/migrate up",
     "db:status": "cd backend && go run ./cmd/migrate status",
     "db:seal": "node scripts/check-migrations.mjs --seal",
-    "check:migrations": "node scripts/check-migrations.mjs"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "check:layering": "node scripts/check-layering.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.14"

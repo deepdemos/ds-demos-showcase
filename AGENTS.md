@@ -107,6 +107,7 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 
 ## 代码规范
 
+- **后端分层只能单向依赖**：`cmd` → `httpapi` → `domain` → `platform`。`platform` 不得 import 业务；`domain` 不得 import `httpapi` / `net/http`；域之间不得互相 import；生成物 `internal/api`、`internal/store` 不得 import 本仓库其它包。门禁 `node scripts/check-layering.mjs`，约定见 `docs/后端分层约定.md`。
 - Go：`gofmt` / `goimports` 干净；`golangci-lint run` 零告警；错误用 `%w` 包装上下文；可预期错误不 panic；并发代码必须有 race 测试路径。
 - TypeScript / React 18：`eslint` + `prettier` 干净；`tsc --noEmit` 通过；组件 PascalCase，hooks 以 `use` 开头；服务端状态统一走 TanStack Query 5，不手写缓存层。
 - 样式：简单布局/自定义用 Tailwind utilities，复杂样式用 CSS Modules；不要在页面里绕开控件库直接使用第三方 UI。

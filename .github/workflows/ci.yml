@@ -45,6 +45,13 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: gofmt
         run: test -z "$(gofmt -l .)"
+      # 分层门禁放 gofmt 之后：格式先过关，再看结构。
+      # 规则与「它抓不到什么」见 docs/后端分层约定.md。
+      # 本 job 默认在 backend/ 下跑，而脚本在仓库根。注意：step 级 working-directory
+      # 是相对 $GITHUB_WORKSPACE 解析的，写 `..` 会跑到仓库外（实测报 Cannot find module）。
+      - name: 分层门禁（platform / domain / httpapi 的 import 方向）
+        working-directory: ${{ github.workspace }}
+        run: node scripts/check-layering.mjs
       - name: vet
         run: go vet ./...
       - name: 准备测试库（跑迁移）
@@ -59,7 +66,7 @@ jobs:
         run: go build ./...
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::CI 失败。先读 docs/development-workflow.md：CI 红或发现 bug 必须先提交 issue，再修复；PR 必须关联 issue。"
+        run: echo "::error title=CI 门禁::CI 失败（含后端分层越界：platform 依赖业务、domain 依赖 HTTP、域之间互相 import，约定见 docs/后端分层约定.md）。先读 docs/development-workflow.md：CI 红或发现 bug 必须先提交 issue，再修复；PR 必须关联 issue。"
 
   frontend:
     runs-on: ubuntu-latest

@@ -54,6 +54,7 @@
     node scripts/check-constants.mjs
     node scripts/check-migrations.mjs
     node scripts/check-api-compat.mjs  # 契约兼容，见 api/COMPATIBILITY.md
+    node scripts/check-layering.mjs    # 后端分层，见 后端分层约定.md
     node scripts/verify-schema.mjs   # 真库校验，见下
 
 **为什么根目录是 npm、`web/` 是 pnpm**：根目录只有一件事要做——把 `db/schema/*.sql` 灌进一个
@@ -118,7 +119,7 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 
 | Job | 作用 |
 | --- | --- |
-| backend | gofmt / vet / test -race / build |
+| backend | gofmt / 分层（import 方向）/ vet / test -race / build |
 | frontend | format / lint / typecheck / test / build |
 | ui-contract | 控件库、Dev Room、注册名、接线检查 |
 | file-size | 单文件 >500 警告，>800 失败；脚本自检 |
