@@ -61,13 +61,21 @@ export function DemosPage() {
 
       {data && data.items.length > 0 && (
         <>
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
             {data.items.map((demo) => (
               <li key={demo.slug}>
                 <Link
                   to={`/demos/${demo.slug}`}
-                  className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 hover:border-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
+                  className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
                 >
+                  {/* 封面区固定 16:9：有没有封面都占同样高度，否则网格会参差不齐 */}
+                  <div className="mb-3 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-xs text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+                    {demo.coverUrl ? (
+                      <img src={demo.coverUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      '无封面'
+                    )}
+                  </div>
                   <h2 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900 dark:text-gray-100">
                     {demo.title ?? '（无标题）'}
                   </h2>
