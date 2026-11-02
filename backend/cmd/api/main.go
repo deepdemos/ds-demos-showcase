@@ -13,7 +13,6 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/httpapi"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/config"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/database"
-	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/httpserver"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -42,7 +41,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           httpserver.NewRouter(httpapi.New(pinger, queries)),
+		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
