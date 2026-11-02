@@ -8,9 +8,14 @@ version: "2"
 #
 # 为什么 schema 指向 ../db/schema 而不是复制一份：表结构只有一个事实源。
 # 复制一份到 backend/ 就等于制造第二份，改表时必然有一边忘了改。
+#
+# 同时读 db/migrations：基线是冻结的，新表只能通过迁移加进来。不读迁移的话，
+# 「库里有的表」和「sqlc 认识的表」会分叉，只能靠手写 SQL 绕过类型检查。
 sql:
   - engine: "postgresql"
-    schema: "../db/schema"
+    schema:
+      - "../db/schema"
+      - "../db/migrations"
     queries: "db/queries"
     gen:
       go:

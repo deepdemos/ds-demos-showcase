@@ -69,3 +69,41 @@ WHERE lower(p.username) = lower($1);
 
 -- name: RevokeWebSession :exec
 UPDATE web_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL;
+
+-- ===== 登录限流（身份域 §11.3）=====
+
+-- name: CountLoginFailures :one
+-- 一次查询算完四层口径。account_id 传 NULL 时账号维度恒为 0（`account_id = NULL` 不成立），
+-- IP 维度照常计数——这正是「无效邮箱也要被 IP 层看到」的实现方式。
+--
+-- 账号维度的「成功登录清零」靠 `created_at > 最后一次成功` 表达，而不是删行：
+-- 行是不可变的证据，删了就说不清「这个 IP 之前试过什么」。
+WITH last_ok AS (
+    SELECT COALESCE(max(created_at), '-infinity'::timestamptz) AS at
+    FROM login_attempts
+    WHERE account_id = sqlc.narg(account_id)::bigint AND succeeded
+)
+SELECT
+    count(*) FILTER (
+        WHERE account_id = sqlc.narg(account_id)::bigint
+          AND ip_hash = sqlc.arg(ip_hash)::text
+    )::int AS account_ip_fails,
+    count(*) FILTER (
+        WHERE account_id = sqlc.narg(account_id)::bigint
+          AND created_at > last_ok.at
+    )::int AS account_fails,
+    count(*) FILTER (WHERE ip_hash = sqlc.arg(ip_hash)::text)::int AS ip_fails,
+    count(*) FILTER (
+        WHERE ip_hash = sqlc.arg(ip_hash)::text
+          AND created_at > now() - interval '1 hour'
+    )::int AS ip_fails_hour
+FROM login_attempts, last_ok
+WHERE succeeded = false
+  AND created_at > now() - interval '10 minutes';
+
+-- name: RecordLoginAttempt :exec
+INSERT INTO login_attempts (ip_hash, account_id, succeeded)
+VALUES (sqlc.arg(ip_hash), sqlc.narg(account_id), sqlc.arg(succeeded));
+
+-- name: PurgeLoginAttempts :exec
+DELETE FROM login_attempts WHERE created_at < now() - interval '1 hour';

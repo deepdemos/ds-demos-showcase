@@ -11,6 +11,62 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLoginFailures = `-- name: CountLoginFailures :one
+
+WITH last_ok AS (
+    SELECT COALESCE(max(created_at), '-infinity'::timestamptz) AS at
+    FROM login_attempts
+    WHERE account_id = $1::bigint AND succeeded
+)
+SELECT
+    count(*) FILTER (
+        WHERE account_id = $1::bigint
+          AND ip_hash = $2::text
+    )::int AS account_ip_fails,
+    count(*) FILTER (
+        WHERE account_id = $1::bigint
+          AND created_at > last_ok.at
+    )::int AS account_fails,
+    count(*) FILTER (WHERE ip_hash = $2::text)::int AS ip_fails,
+    count(*) FILTER (
+        WHERE ip_hash = $2::text
+          AND created_at > now() - interval '1 hour'
+    )::int AS ip_fails_hour
+FROM login_attempts, last_ok
+WHERE succeeded = false
+  AND created_at > now() - interval '10 minutes'
+`
+
+type CountLoginFailuresParams struct {
+	AccountID pgtype.Int8
+	IpHash    string
+}
+
+type CountLoginFailuresRow struct {
+	AccountIpFails int32
+	AccountFails   int32
+	IpFails        int32
+	IpFailsHour    int32
+}
+
+// ===== 登录限流（身份域 §11.3）=====
+// 一次查询算完四层口径。account_id 传 NULL 时账号维度恒为 0（`account_id = NULL` 不成立），
+// IP 维度照常计数——这正是「无效邮箱也要被 IP 层看到」的实现方式。
+//
+// 账号维度的「成功登录清零」靠 `created_at > 最后一次成功` 表达，而不是删行：
+// 行是不可变的证据，删了就说不清「这个 IP 之前试过什么」。
+func (q *Queries) CountLoginFailures(ctx context.Context, arg CountLoginFailuresParams) (CountLoginFailuresRow, error) {
+	row := q.db.QueryRow(ctx, countLoginFailures, arg.AccountID, arg.IpHash)
+	var i CountLoginFailuresRow
+	err := row.Scan(
+		&i.AccountIpFails,
+		&i.AccountFails,
+		&i.IpFails,
+		&i.IpFailsHour,
+	)
+	return i, err
+}
+
 const createAccount = `-- name: CreateAccount :one
 
 INSERT INTO accounts (sub, status, role)
@@ -239,6 +295,31 @@ func (q *Queries) GetMeBySession(ctx context.Context, id string) (GetMeBySession
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const purgeLoginAttempts = `-- name: PurgeLoginAttempts :exec
+DELETE FROM login_attempts WHERE created_at < now() - interval '1 hour'
+`
+
+func (q *Queries) PurgeLoginAttempts(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, purgeLoginAttempts)
+	return err
+}
+
+const recordLoginAttempt = `-- name: RecordLoginAttempt :exec
+INSERT INTO login_attempts (ip_hash, account_id, succeeded)
+VALUES ($1, $2, $3)
+`
+
+type RecordLoginAttemptParams struct {
+	IpHash    string
+	AccountID pgtype.Int8
+	Succeeded bool
+}
+
+func (q *Queries) RecordLoginAttempt(ctx context.Context, arg RecordLoginAttemptParams) error {
+	_, err := q.db.Exec(ctx, recordLoginAttempt, arg.IpHash, arg.AccountID, arg.Succeeded)
+	return err
 }
 
 const revokeWebSession = `-- name: RevokeWebSession :exec

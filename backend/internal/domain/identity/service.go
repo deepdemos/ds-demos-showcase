@@ -2,6 +2,9 @@ package identity
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -12,12 +15,25 @@ import (
 )
 
 type Service struct {
-	pool *pgxpool.Pool
-	q    *store.Queries
+	pool     *pgxpool.Pool
+	q        *store.Queries
+	ipSecret []byte
 }
 
-func New(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool, q: store.New(pool)}
+// New 组装身份域。ipSecret 用于把客户端 IP 变成不可逆的 ip_hash——
+// 明文 IP 不落库（身份域 §11.3 / §6）。
+func New(pool *pgxpool.Pool, ipSecret []byte) *Service {
+	return &Service{pool: pool, q: store.New(pool), ipSecret: ipSecret}
+}
+
+// hashIP 把客户端 IP 变成不可逆的 ip_hash。
+//
+// 用 HMAC 而不是裸 SHA-256：IPv4 只有 2^32 种取值，裸哈希可以枚举反推。
+// 密钥只在进程内，不入库、不出现在日志里。
+func (s *Service) hashIP(ip string) string {
+	mac := hmac.New(sha256.New, s.ipSecret)
+	mac.Write([]byte(ip))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 // Me 用会话 ID 换回当前账号。查不到就是没登录——「不存在 / 过期 / 已吊销」

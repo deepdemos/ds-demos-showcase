@@ -268,6 +268,23 @@ console.log('--- 开发种子 ---');
   const after = Number((await db.query('SELECT count(*) AS n FROM demos')).rows[0].n);
   record(before === after, '种子可重复应用（幂等）', before + ' → ' + after);
 
+  // ---- 登录限流表（迁移 0001 加的，不在冻结基线里）----
+  await ok(
+    'login_attempts 存在（迁移 0001）',
+    "SELECT count(*) FROM information_schema.tables WHERE table_name = 'login_attempts'",
+    '1',
+  );
+  // 记不了「账号不存在」的失败，整套 IP 限流就是瞎的——这条是那张表存在的理由。
+  await accepts(
+    'login_attempts 允许无主试（account_id 可空）',
+    "INSERT INTO login_attempts (ip_hash, account_id, succeeded) VALUES ('it-null-account', NULL, false)",
+  );
+  await ok(
+    'login_attempts 两个部分索引都在',
+    "SELECT count(*) FROM pg_indexes WHERE tablename = 'login_attempts' AND indexdef LIKE '%WHERE%'",
+    '2',
+  );
+
   for (const [slug, why] of [
     ['edge-no-description', '空描述'],
     ['edge-long-title', '超长标题'],
