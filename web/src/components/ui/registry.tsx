@@ -6,13 +6,19 @@ import {
   ButtonPrimaryDemo,
 } from './button.demo';
 import { CheckboxDefaultDemo, CheckboxDisabledDemo } from './checkbox.demo';
+import { EmptyStateDefaultDemo, EmptyStateWithActionDemo } from './empty-state.demo';
+import { ErrorStateDefaultDemo, ErrorStateWithRetryDemo } from './error-state.demo';
 import { InputDefaultDemo, InputDisabledDemo, InputErrorDemo } from './input.demo';
+import { PaginationDefaultDemo, PaginationDisabledDemo } from './pagination.demo';
+import { SkeletonDefaultDemo, SkeletonCardDemo } from './skeleton.demo';
 import { ThemeToggleDemo } from './theme-toggle.demo';
 
 export const controlCategories = [
   { id: 'action', name: '操作' },
   { id: 'input', name: '输入' },
   { id: 'selection', name: '选择' },
+  { id: 'navigation', name: '导航' },
+  { id: 'feedback', name: '反馈' },
 ] as const;
 
 export type ControlCategoryId = (typeof controlCategories)[number]['id'];
@@ -108,5 +114,69 @@ export const controls: ControlSpec[] = [
     category: 'action',
     description: '浅色 / 深色模式切换。',
     Demo: ThemeToggleDemo,
+  },
+  {
+    id: 'pagination/default',
+    component: 'Pagination',
+    name: '分页器',
+    category: 'navigation',
+    description: '首 / 上一页 / 当前页 / 下一页 / 末页。页码只在 1..pageCount 之间变化。',
+    Demo: PaginationDefaultDemo,
+  },
+  {
+    id: 'pagination/disabled',
+    component: 'Pagination',
+    name: '禁用分页器',
+    category: 'navigation',
+    description: '加载中或不可翻页时整组禁用。',
+    Demo: PaginationDisabledDemo,
+  },
+  {
+    id: 'empty-state/default',
+    component: 'EmptyState',
+    name: '空状态',
+    category: 'feedback',
+    description: '说清「这里为什么是空的」，而不是只写「暂无数据」。',
+    Demo: EmptyStateDefaultDemo,
+  },
+  {
+    id: 'empty-state/with-action',
+    component: 'EmptyState',
+    name: '带操作的空状态',
+    category: 'feedback',
+    description: '空态下给一个下一步动作，例如清空筛选。',
+    Demo: EmptyStateWithActionDemo,
+  },
+  {
+    id: 'skeleton/default',
+    component: 'Skeleton',
+    name: '骨架屏',
+    category: 'feedback',
+    description: '首屏未拿到数据时的占位。已有数据刷新时不要用（会闪）。',
+    Demo: SkeletonDefaultDemo,
+  },
+  {
+    id: 'skeleton/card',
+    component: 'Skeleton',
+    name: '卡片骨架',
+    category: 'feedback',
+    description: '更高的行高，模拟卡片布局。',
+    Demo: SkeletonCardDemo,
+  },
+  {
+    id: 'error-state/default',
+    component: 'ErrorState',
+    name: '错误状态',
+    category: 'feedback',
+    description: '说清发生了什么，不要贴后端错误原文。',
+    Demo: ErrorStateDefaultDemo,
+  },
+  {
+    id: 'error-state/with-retry',
+    component: 'ErrorState',
+    name: '带重试的错误状态',
+    category: 'feedback',
+    description: '错误态必须有出路：能重试就给重试。',
+    Demo: ErrorStateWithRetryDemo,
   },
 ];
