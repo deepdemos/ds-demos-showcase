@@ -276,3 +276,92 @@ func TestIntegrationRegister(t *testing.T) {
 		t.Fatalf("失败路径不应留下账号行，实际 %d 条", n)
 	}
 }
+
+func TestIntegrationLoginLogout(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("%s 失败: %v", q, err)
+		}
+	}
+	h := New(pool, store.New(pool), identity.New(pool))
+
+	post := func(path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if path == "/api/v1/auth/register" {
+			h.PostAuthRegister(rec, req)
+		} else {
+			h.PostAuthLogin(rec, req)
+		}
+		return rec
+	}
+
+	if rec := post("/api/v1/auth/register", `{"email":"it-login@example.com","password":"correct-horse-battery","username":"it-login","displayName":"登录测试"}`); rec.Code != http.StatusCreated {
+		t.Fatalf("注册应 201，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+
+	// 邮箱、用户名、大小写变体都能登进去，且每次发的是不同会话。
+	for _, id := range []string{"it-login@example.com", "IT-LOGIN@example.com", "it-login", "IT-LOGIN"} {
+		rec := post("/api/v1/auth/login", `{"identifier":"`+id+`","password":"correct-horse-battery"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s 登录应 200，实际 %d（body=%s）", id, rec.Code, rec.Body.String())
+		}
+		cookies := rec.Result().Cookies()
+		if len(cookies) != 1 || !cookies[0].HttpOnly || !cookies[0].Secure {
+			t.Fatalf("%s 的会话 cookie 不对: %+v", id, cookies)
+		}
+		meReq := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+		meReq.AddCookie(cookies[0])
+		meRec := httptest.NewRecorder()
+		h.GetMe(meRec, meReq)
+		if meRec.Code != http.StatusOK {
+			t.Fatalf("%s 登录后 /me 应 200，实际 %d", id, meRec.Code)
+		}
+	}
+
+	// 密码错 / 账号不存在：都是 401，且**响应体相同**（不给账号枚举留信号）。
+	wrong := post("/api/v1/auth/login", `{"identifier":"it-login","password":"wrong-password-xx"}`)
+	nobody := post("/api/v1/auth/login", `{"identifier":"nobody-here","password":"wrong-password-xx"}`)
+	if wrong.Code != http.StatusUnauthorized || nobody.Code != http.StatusUnauthorized {
+		t.Fatalf("都应 401，实际 %d / %d", wrong.Code, nobody.Code)
+	}
+	if wrong.Body.String() != nobody.Body.String() {
+		t.Fatalf("密码错与账号不存在的响应体必须一致：%q vs %q", wrong.Body.String(), nobody.Body.String())
+	}
+
+	// 登出：204 + 清 cookie；服务端会话立刻失效；重复登出仍然 204。
+	loginRec := post("/api/v1/auth/login", `{"identifier":"it-login","password":"correct-horse-battery"}`)
+	cookie := loginRec.Result().Cookies()[0]
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutReq.AddCookie(cookie)
+	logoutRec := httptest.NewRecorder()
+	h.PostAuthLogout(logoutRec, logoutReq)
+	if logoutRec.Code != http.StatusNoContent {
+		t.Fatalf("登出应 204，实际 %d", logoutRec.Code)
+	}
+	cleared := logoutRec.Result().Cookies()
+	if len(cleared) != 1 || cleared[0].MaxAge != -1 {
+		t.Fatalf("登出应下发 Max-Age=-1 的清除 cookie，实际 %+v", cleared)
+	}
+
+	// 关键：**即使客户端保留旧 cookie**，服务端会话也已吊销。
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	meReq.AddCookie(cookie)
+	meRec := httptest.NewRecorder()
+	h.GetMe(meRec, meReq)
+	if meRec.Code != http.StatusUnauthorized {
+		t.Fatalf("登出后旧 cookie 必须失效，实际 %d", meRec.Code)
+	}
+
+	again := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	again.AddCookie(cookie)
+	againRec := httptest.NewRecorder()
+	h.PostAuthLogout(againRec, again)
+	if againRec.Code != http.StatusNoContent {
+		t.Fatalf("重复登出应仍然 204，实际 %d", againRec.Code)
+	}
+}

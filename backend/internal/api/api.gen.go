@@ -130,6 +130,13 @@ type HealthzStatus string
 // `archived` / `removed` 可见但为墓碑态。
 type LifecycleState string
 
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	// Identifier 邮箱或用户名，不区分大小写
+	Identifier string `json:"identifier"`
+	Password   string `json:"password"`
+}
+
 // Me defines model for Me.
 type Me struct {
 	CreatedAt   time.Time `json:"createdAt"`
@@ -184,11 +191,20 @@ type ListDemosParams struct {
 // ListDemosParamsSort defines parameters for ListDemos.
 type ListDemosParamsSort string
 
+// PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
+type PostAuthLoginJSONRequestBody = LoginRequest
+
 // PostAuthRegisterJSONRequestBody defines body for PostAuthRegister for application/json ContentType.
 type PostAuthRegisterJSONRequestBody = RegisterRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// 登录
+	// (POST /api/v1/auth/login)
+	PostAuthLogin(w http.ResponseWriter, r *http.Request)
+	// 登出
+	// (POST /api/v1/auth/logout)
+	PostAuthLogout(w http.ResponseWriter, r *http.Request)
 	// 注册
 	// (POST /api/v1/auth/register)
 	PostAuthRegister(w http.ResponseWriter, r *http.Request)
@@ -209,6 +225,18 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// 登录
+// (POST /api/v1/auth/login)
+func (_ Unimplemented) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 登出
+// (POST /api/v1/auth/logout)
+func (_ Unimplemented) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // 注册
 // (POST /api/v1/auth/register)
@@ -248,6 +276,34 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// PostAuthLogin operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthLogin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthLogout operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthLogout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // PostAuthRegister operation middleware
 func (siw *ServerInterfaceWrapper) PostAuthRegister(w http.ResponseWriter, r *http.Request) {
@@ -486,6 +542,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/login", wrapper.PostAuthLogin)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/logout", wrapper.PostAuthLogout)
+	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/register", wrapper.PostAuthRegister)
 	})

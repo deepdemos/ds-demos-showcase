@@ -105,6 +105,92 @@ func (q *Queries) CreateWebSession(ctx context.Context, arg CreateWebSessionPara
 	return err
 }
 
+const getLoginByEmail = `-- name: GetLoginByEmail :one
+
+SELECT a.id, a.sub, a.status, a.role, a.level, a.created_at,
+       p.username, p.display_name, e.email, c.secret_hash
+FROM accounts a
+JOIN profiles p ON p.account_id = a.id
+JOIN account_emails e ON e.account_id = a.id AND e.is_primary
+JOIN credentials c ON c.account_id = a.id AND c.kind = 'password'
+WHERE lower(e.email) = lower($1)
+`
+
+type GetLoginByEmailRow struct {
+	ID          int64
+	Sub         string
+	Status      string
+	Role        string
+	Level       int16
+	CreatedAt   pgtype.Timestamptz
+	Username    string
+	DisplayName string
+	Email       string
+	SecretHash  string
+}
+
+// ===== 登录 / 登出 =====
+// 登录标识是邮箱或用户名，先按邮箱找，找不到再按用户名——两条分开查是为了避免
+// 「某人的用户名恰好等于另一个人的邮箱」时命中错的那个人。
+func (q *Queries) GetLoginByEmail(ctx context.Context, lower string) (GetLoginByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getLoginByEmail, lower)
+	var i GetLoginByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sub,
+		&i.Status,
+		&i.Role,
+		&i.Level,
+		&i.CreatedAt,
+		&i.Username,
+		&i.DisplayName,
+		&i.Email,
+		&i.SecretHash,
+	)
+	return i, err
+}
+
+const getLoginByUsername = `-- name: GetLoginByUsername :one
+SELECT a.id, a.sub, a.status, a.role, a.level, a.created_at,
+       p.username, p.display_name, e.email, c.secret_hash
+FROM accounts a
+JOIN profiles p ON p.account_id = a.id
+JOIN account_emails e ON e.account_id = a.id AND e.is_primary
+JOIN credentials c ON c.account_id = a.id AND c.kind = 'password'
+WHERE lower(p.username) = lower($1)
+`
+
+type GetLoginByUsernameRow struct {
+	ID          int64
+	Sub         string
+	Status      string
+	Role        string
+	Level       int16
+	CreatedAt   pgtype.Timestamptz
+	Username    string
+	DisplayName string
+	Email       string
+	SecretHash  string
+}
+
+func (q *Queries) GetLoginByUsername(ctx context.Context, lower string) (GetLoginByUsernameRow, error) {
+	row := q.db.QueryRow(ctx, getLoginByUsername, lower)
+	var i GetLoginByUsernameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sub,
+		&i.Status,
+		&i.Role,
+		&i.Level,
+		&i.CreatedAt,
+		&i.Username,
+		&i.DisplayName,
+		&i.Email,
+		&i.SecretHash,
+	)
+	return i, err
+}
+
 const getMeBySession = `-- name: GetMeBySession :one
 
 SELECT a.sub,
@@ -153,4 +239,13 @@ func (q *Queries) GetMeBySession(ctx context.Context, id string) (GetMeBySession
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const revokeWebSession = `-- name: RevokeWebSession :exec
+UPDATE web_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeWebSession(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, revokeWebSession, id)
+	return err
 }

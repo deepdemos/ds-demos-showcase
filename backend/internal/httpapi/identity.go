@@ -127,3 +127,61 @@ func (h *Handler) PostAuthRegister(w http.ResponseWriter, r *http.Request) {
 	setSessionCookie(w, sessionID, sessionMaxAgeSeconds)
 	writeJSON(w, http.StatusCreated, toMe(account))
 }
+
+// PostAuthLogin 实现 POST /api/v1/auth/login。
+func (h *Handler) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
+	if h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+	var body api.PostAuthLoginJSONRequestBody
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体不是合法的 JSON")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), registerTimeout)
+	defer cancel()
+
+	account, sessionID, err := h.identity.Login(ctx, identity.LoginInput{
+		Identifier: body.Identifier,
+		Password:   body.Password,
+	})
+	if err != nil {
+		h.writeIdentityError(w, err)
+		return
+	}
+	setSessionCookie(w, sessionID, sessionMaxAgeSeconds)
+	writeJSON(w, http.StatusOK, toMe(account))
+}
+
+// PostAuthLogout 实现 POST /api/v1/auth/logout。幂等，总是 204。
+func (h *Handler) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+	sessionID := readSessionCookie(r)
+	if h.identity != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+		defer cancel()
+		if err := h.identity.Logout(ctx, sessionID); err != nil {
+			// 登出失败也不阻断：cookie 仍然要清掉，否则用户会卡在「退不出去」的状态。
+			slog.Error("logout failed", "err", err)
+		}
+	}
+	clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// clearSessionCookie 让浏览器立刻丢掉会话 cookie。
+//
+// 属性必须与下发时**逐字一致**（`__Host-` 前缀要求 Path=/ 且无 Domain），
+// 否则浏览器不会认为是同一个 cookie，会留下一个还能用的旧值。
+func clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
