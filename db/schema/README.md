@@ -1,3 +1,7 @@
+> ⚠️ **本目录是冻结基线，不要再往里加表、也不要改建表语句。**
+> 它等价于「0000 号迁移」，基线之后的变化一律加到 `db/migrations/`。
+> 规则见 [`db/migrations/README.md`](../migrations/README.md)。
+
 # `db/schema` —— 表结构的唯一事实源
 
 这里的 `.sql` 是**唯一**的表结构事实源。设计文档（`docs/`）不再手抄 DDL，只写「这张表为什么长这样」和字段语义；**列、类型、约束、索引、外键、视图、目录表种子**一律以本目录为准。
@@ -52,11 +56,19 @@
 门禁是静态的，最终仍要在 PostgreSQL 上跑一遍。仓库不引入运行时依赖，用 WASM 版 PG 即可（无需装服务）：
 
 ```bash
-npm i -D @electric-sql/pglite          # 仅本地，不要提交 package.json 变更时省略 -D 讨论
-node scripts/apply-schema.mjs          # 按文件名顺序执行 db/schema/*.sql
+npm i -D @electric-sql/pglite   # 仅本地
+node scripts/verify-schema.mjs  # 基线 + 迁移全灌一遍，跑 47 条断言
 ```
 
-最后一句会打印 `tables / views / fks / indexes` 计数与 `server_version`。
+真库（需要 PostgreSQL）用 Go 的迁移器：
+
+```bash
+cd backend && DATABASE_URL=postgres://... go run ./cmd/migrate up
+cd backend && DATABASE_URL=postgres://... go run ./cmd/migrate status
+```
+
+> 上一版这里写的是 `node scripts/apply-schema.mjs`，那个脚本已被 `cmd/migrate` 取代
+> （它只能「从零建库」，而迁移器知道「这个库跑到第几版了」）。
 
 **当前基线（2026-11-01，`node scripts/check-schema.mjs` 静态计数）：10 个文件 · 79 表 · 5 视图 · 76 外键。**
 

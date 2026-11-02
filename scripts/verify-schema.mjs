@@ -1,4 +1,4 @@
-// 真库校验：把 db/schema/*.sql 灌进 PostgreSQL 18（WASM 版 PGlite），然后逐条验证
+// 真库校验：把 db/schema 基线 + db/migrations 增量灌进 PostgreSQL 18（WASM 版 PGlite），然后逐条验证
 // 「设计文档说不允许的事，数据库真的不允许」。
 //
 // 用法：
@@ -14,6 +14,9 @@
 //           注册表里的键与设计文档 §4 一致。
 //   不能证明：业务代码怎么用这些表；性能；事务边界；`90-extensions.sql` 里那类扩展相关的东西
 //           （PGlite 无 contrib，该文件在缺扩展的环境整块跳过）。
+//
+// 注意：这里**不写 schema_migrations 表**——它只对真库有意义（记录跑到第几版），
+// 而每次校验都是全新的空库。迁移文件的执行顺序就是它的版本顺序。
 import fs from 'node:fs';
 import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
@@ -113,6 +116,25 @@ for (const f of files) {
   if (applied >= 0) console.log('  applied', f, applied, 'statements');
 }
 console.log('  skipped:', skipped.length ? skipped.join(', ') : '(none)');
+
+// 基线之后：按序号应用 db/migrations（这里不登记，只按顺序执行）
+const migDir = path.join(root, 'db', 'migrations');
+const migFiles = fs.existsSync(migDir)
+  ? fs.readdirSync(migDir).filter((f) => f.endsWith('.sql')).sort()
+  : [];
+if (migFiles.length) console.log('--- 应用 db/migrations/*.sql ---');
+for (const f of migFiles) {
+  const sql = fs.readFileSync(path.join(migDir, f), 'utf8');
+  for (const st of statements(sql)) {
+    try {
+      await db.exec(st);
+    } catch (e) {
+      console.log('  APPLY FAIL', f, '::', String(e.message).slice(0, 300));
+      process.exit(1);
+    }
+  }
+  console.log('  applied', f);
+}
 
 // 记下实际应用了几条（用于下面的计数自证：脚本真的跑了，不是空过）
 const appliedFiles = files.filter((f) => !skipped.some((s) => s.startsWith(f)));

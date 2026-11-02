@@ -37,6 +37,9 @@ export function classifyLines(lines) {
 
 export function collectOversizedFiles(cwd = process.cwd()) {
   return listSourceFiles(cwd)
+    // `git ls-files` 会继续列出「已删但尚未 stage」的文件；这里跳过，否则门禁会甩一段
+    // ENOENT 堆栈而不是给出结论。删文件还没提交时门禁不该崩。
+    .filter((file) => fs.existsSync(path.join(cwd, file)))
     .map((file) => ({
       file,
       lines: countTextLines(fs.readFileSync(path.join(cwd, file), 'utf8')),

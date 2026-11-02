@@ -113,7 +113,8 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 - API 以 `api/openapi.yaml` 为唯一事实源：先改契约 → 重新生成（`pnpm gen:api:go`）→ 再改实现；禁止手改生成目录 `backend/internal/api/`。CI 会重新生成并比对，不一致就红。
 - **契约是 OpenAPI 3.0.3，不是 3.1**：`oapi-codegen` 至今不支持 3.1（上游 issue #373），选 3.1 会让生成直接失败。理由写在 `api/README.md`「为什么是 3.0.3」；等工具支持后再升。
 - 数据库变更只加新 migration，禁止修改已合入的 migration。
-- **表结构的唯一事实源是 `db/schema/*.sql`**（按 `NN-` 前缀顺序应用；外键集中在 `80-late-fk.sql`）。设计文档只写字段语义、状态机与「DDL 见 xxx.sql」的指针，**不复制建表语句**——由 `scripts/check-schema.mjs` 门禁拦截；本地可跑 `node scripts/apply-schema.mjs` 在真 PG 上验一遍。
+- **表结构是两段式历史**：`db/schema/*.sql` 是**冻结基线**（等价于「0000 号迁移」，永不再改），`db/migrations/NNNN_*.sql` 是基线之后的全部变化（只增不改）。**改表只有一条路：加一条迁移**，见 `db/migrations/README.md`。
+- 设计文档只写字段语义、状态机与「DDL 见 xxx.sql」的指针，**不复制建表语句**——由 `scripts/check-schema.mjs` 门禁拦截。迁移的命名与校验和由 `scripts/check-migrations.mjs` 守（改了已合入的迁移会红）。本地验真库：`npm run db:up` + `node scripts/verify-schema.mjs`。
 - 依赖：能用标准库 / 现有依赖解决的不加新依赖；新依赖需在 PR 说明理由与体积影响。Ring UI 只允许在控件库内使用。
 - 注释只写代码无法表达的“为什么”，用中文；标识符用英文。
 

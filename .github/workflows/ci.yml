@@ -47,14 +47,10 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: vet
         run: go vet ./...
-      - name: 准备测试库（灌 db/schema）
+      - name: 准备测试库（跑迁移）
         env:
-          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable
-        run: |
-          for f in ../db/schema/*.sql; do
-            echo "applying $f"
-            psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
-          done
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable
+        run: go run ./cmd/migrate up
       - name: test（含集成测试）
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable
@@ -160,6 +156,8 @@ jobs:
         run: node scripts/check-schema.mjs
       - name: 可变常量门禁（运行手册里每个「唯一改动点」锚点必须还活着）
         run: node scripts/check-constants.mjs
+      - name: 迁移门禁（命名 / 序号连续 / 校验和；改已合入的迁移会红）
+        run: node scripts/check-migrations.mjs
       - name: 真库校验（PG 18：白名单外键 / 类型 / 枚举 / 级联 / 审计路由模板）
         run: node scripts/verify-schema.mjs
       - uses: actions/setup-go@v7
@@ -196,7 +194,7 @@ jobs:
           git diff --exit-code backend/internal/store
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 生成产物与源不一致——改了 api/openapi.yaml 或 backend/db/queries/*.sql 却没重新生成，或手改了 backend/internal/api/、web/src/api/gen/、backend/internal/store/）。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
+        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 生成产物与源不一致——改了 api/openapi.yaml 或 backend/db/queries/*.sql 却没重新生成，或手改了 backend/internal/api/、web/src/api/gen/、backend/internal/store/；⑥ 迁移文件命名/序号不对，或改了已合入的迁移（校验和对不上））。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
 
   pr-guard:
     if: github.event_name == 'pull_request'
