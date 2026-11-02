@@ -44,3 +44,28 @@ VALUES ($1, 'password', '', $2);
 -- 在 Go 里再写一份就等于两个数字迟早对不上（运行手册 §3 记的是这条线的 anchor）。
 INSERT INTO web_sessions (id, account_sub, username, display_name, role, status, verified_at)
 VALUES ($1, $2, $3, $4, $5, $6, now());
+
+-- ===== 登录 / 登出 =====
+
+-- name: GetLoginByEmail :one
+-- 登录标识是邮箱或用户名，先按邮箱找，找不到再按用户名——两条分开查是为了避免
+-- 「某人的用户名恰好等于另一个人的邮箱」时命中错的那个人。
+SELECT a.id, a.sub, a.status, a.role, a.level, a.created_at,
+       p.username, p.display_name, e.email, c.secret_hash
+FROM accounts a
+JOIN profiles p ON p.account_id = a.id
+JOIN account_emails e ON e.account_id = a.id AND e.is_primary
+JOIN credentials c ON c.account_id = a.id AND c.kind = 'password'
+WHERE lower(e.email) = lower($1);
+
+-- name: GetLoginByUsername :one
+SELECT a.id, a.sub, a.status, a.role, a.level, a.created_at,
+       p.username, p.display_name, e.email, c.secret_hash
+FROM accounts a
+JOIN profiles p ON p.account_id = a.id
+JOIN account_emails e ON e.account_id = a.id AND e.is_primary
+JOIN credentials c ON c.account_id = a.id AND c.kind = 'password'
+WHERE lower(p.username) = lower($1);
+
+-- name: RevokeWebSession :exec
+UPDATE web_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL;

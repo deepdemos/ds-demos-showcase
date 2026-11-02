@@ -111,6 +111,12 @@ export interface DemoList {
   total: number;
 }
 
+export interface LoginRequest {
+  /** 邮箱或用户名，不区分大小写 */
+  identifier: string;
+  password: string;
+}
+
 export interface RegisterRequest {
   /** @maxLength 254 */
   email: string;
@@ -451,6 +457,131 @@ const res = await fetch(getPostAuthRegisterUrl(),
 
   const data: postAuthRegisterResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as postAuthRegisterResponse
+}
+
+
+
+export type postAuthLoginResponse200 = {
+  data: Me
+  status: 200
+}
+
+export type postAuthLoginResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type postAuthLoginResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type postAuthLoginResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type postAuthLoginResponseSuccess = (postAuthLoginResponse200) & {
+  headers: Headers;
+};
+export type postAuthLoginResponseError = (postAuthLoginResponse400 | postAuthLoginResponse401 | postAuthLoginResponse503) & {
+  headers: Headers;
+};
+
+export type postAuthLoginResponse = (postAuthLoginResponseSuccess | postAuthLoginResponseError)
+
+export const getPostAuthLoginUrl = () => {
+
+
+
+
+  return `/api/v1/auth/login`
+}
+
+/**
+ * `identifier` 可以是邮箱或用户名，都不区分大小写。
+ *
+ * **失败一律 401，不区分「没这个账号」与「密码错」**——区分了就等于提供一个
+ * 免费的账号枚举接口。标识符不存在时也会跑一次同等代价的哈希校验，避免用
+ * 响应时间把注册邮箱探出来。
+ * @summary 登录
+ */
+export const postAuthLogin = async (loginRequest: LoginRequest, options?: RequestInit): Promise<postAuthLoginResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPostAuthLoginUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(loginRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthLoginResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as postAuthLoginResponse
+}
+
+
+
+export type postAuthLogoutResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postAuthLogoutResponseSuccess = (postAuthLogoutResponse204) & {
+  headers: Headers;
+};
+;
+
+export type postAuthLogoutResponse = (postAuthLogoutResponseSuccess)
+
+export const getPostAuthLogoutUrl = () => {
+
+
+
+
+  return `/api/v1/auth/logout`
+}
+
+/**
+ * 吊销服务端会话并清掉 cookie。**幂等**：没带 cookie、会话已失效、ID 是伪造的，
+ * 一律返回 204——登出失败对用户没有可执行的动作，而「这个会话不存在」
+ * 又是一个可以拿来做探测的信号。
+ * @summary 登出
+ */
+export const postAuthLogout = async ( options?: RequestInit): Promise<postAuthLogoutResponse> => {
+
+  const res = await fetch(getPostAuthLogoutUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthLogoutResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as postAuthLogoutResponse
 }
 
 

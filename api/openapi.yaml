@@ -198,6 +198,65 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/auth/login:
+    post:
+      operationId: postAuthLogin
+      tags: [身份]
+      summary: 登录
+      description: |
+        `identifier` 可以是邮箱或用户名，都不区分大小写。
+
+        **失败一律 401，不区分「没这个账号」与「密码错」**——区分了就等于提供一个
+        免费的账号枚举接口。标识符不存在时也会跑一次同等代价的哈希校验，避免用
+        响应时间把注册邮箱探出来。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功，`Set-Cookie` 下发新会话
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          description: 账号或密码为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 账号或密码不对
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags: [身份]
+      summary: 登出
+      description: |
+        吊销服务端会话并清掉 cookie。**幂等**：没带 cookie、会话已失效、ID 是伪造的，
+        一律返回 204——登出失败对用户没有可执行的动作，而「这个会话不存在」
+        又是一个可以拿来做探测的信号。
+      responses:
+        '204':
+          description: 已登出（无论之前是否有有效会话）
+
   /api/v1/me:
     get:
       operationId: getMe
@@ -319,6 +378,17 @@ components:
         `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
         `archived` / `removed` 可见但为墓碑态。
       enum: [draft, pending, published, rejected, archived, removed]
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [identifier, password]
+      properties:
+        identifier:
+          type: string
+          description: 邮箱或用户名，不区分大小写
+        password:
+          type: string
 
     RegisterRequest:
       type: object
