@@ -12,13 +12,20 @@ type Config struct {
 	// DatabaseURL 是 PostgreSQL 连接串。空字符串表示**未配置数据库**：
 	// 服务仍然会起，/healthz 也仍然返回 200（当前阶段 API 还没有依赖库的能力）。
 	DatabaseURL string
+	// IPHashSecret 是给客户端 IP 做 HMAC 的密钥。明文 IP 不落库，但裸 SHA-256
+	// 对 IPv4 只有 2^32 种取值，可以枚举反推，所以必须带密钥（身份域 §6）。
+	//
+	// 未配置时进程内随机生成一把并打 WARN：单实例开发够用，但重启后
+	// 历史 ip_hash 就对不上了，多实例之间也互相看不见。
+	IPHashSecret string
 }
 
 // Load 从环境变量读取配置。
 func Load() Config {
 	return Config{
-		Port:        getenv("PORT", "8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		Port:         getenv("PORT", "8080"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		IPHashSecret: os.Getenv("IP_HASH_SECRET"),
 	}
 }
 

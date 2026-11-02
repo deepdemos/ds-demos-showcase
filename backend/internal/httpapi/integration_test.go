@@ -79,7 +79,7 @@ func TestIntegrationListAndDetail(t *testing.T) {
 	pool := integrationPool(t)
 	seed(t, pool)
 
-	h := New(pool, store.New(pool), identity.New(pool))
+	h := New(pool, store.New(pool), identity.New(pool, []byte("test-ip-secret")))
 
 	// 列表：只有 published 且未擦除的那一条。
 	listRec := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestIntegrationGetMe(t *testing.T) {
 	pool := integrationPool(t)
 	const sid = "it-session-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	seedMe(t, pool, sid)
-	h := New(pool, store.New(pool), identity.New(pool))
+	h := New(pool, store.New(pool), identity.New(pool, []byte("test-ip-secret")))
 	call := func(cookie string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
 		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: cookie})
@@ -206,7 +206,7 @@ func TestIntegrationRegister(t *testing.T) {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
 	}
-	h := New(pool, store.New(pool), identity.New(pool))
+	h := New(pool, store.New(pool), identity.New(pool, []byte("test-ip-secret")))
 
 	register := func(body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
@@ -285,7 +285,7 @@ func TestIntegrationLoginLogout(t *testing.T) {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
 	}
-	h := New(pool, store.New(pool), identity.New(pool))
+	h := New(pool, store.New(pool), identity.New(pool, []byte("test-ip-secret")))
 
 	post := func(path, body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
@@ -363,5 +363,72 @@ func TestIntegrationLoginLogout(t *testing.T) {
 	h.PostAuthLogout(againRec, again)
 	if againRec.Code != http.StatusNoContent {
 		t.Fatalf("重复登出应仍然 204，实际 %d", againRec.Code)
+	}
+}
+
+func TestIntegrationLoginRateLimit(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	for _, q := range []string{
+		"DELETE FROM login_attempts", "DELETE FROM web_sessions", "DELETE FROM accounts",
+	} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("%s 失败: %v", q, err)
+		}
+	}
+	h := New(pool, store.New(pool), identity.New(pool, []byte("test-ip-secret")))
+
+	register := httptest.NewRecorder()
+	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		strings.NewReader(`{"email":"it-limit@example.com","password":"correct-horse-battery","username":"it-limit","displayName":"限流测试"}`))
+	regReq.Header.Set("Content-Type", "application/json")
+	h.PostAuthRegister(register, regReq)
+	if register.Code != http.StatusCreated {
+		t.Fatalf("注册应 201，实际 %d（body=%s）", register.Code, register.Body.String())
+	}
+
+	// 同一个 IP、同一个账号连试 10 次错密码 → 第 11 次必须 429 且带 Retry-After。
+	login := func(password string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+			strings.NewReader(`{"identifier":"it-limit","password":"`+password+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "203.0.113.7:5555"
+		h.PostAuthLogin(rec, req)
+		return rec
+	}
+	for i := 0; i < 10; i++ {
+		if rec := login("wrong-password-xx"); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("第 %d 次错误密码应 401，实际 %d（body=%s）", i+1, rec.Code, rec.Body.String())
+		}
+	}
+	blocked := login("correct-horse-battery")
+	if blocked.Code != http.StatusTooManyRequests {
+		t.Fatalf("达到阈值后即使密码正确也应 429，实际 %d（body=%s）", blocked.Code, blocked.Body.String())
+	}
+	if blocked.Header().Get("Retry-After") == "" {
+		t.Fatal("429 必须带 Retry-After")
+	}
+
+	// 换一个 IP 仍然被拦（第 1 层是「账号+IP」，但账号维度…）
+	// 注意：§11.3 第 1 层是账号+IP，第 2 层（验证码）未实现，所以换 IP 的账号维度
+	// 现在**不拦**——这是已知缺口，测试把当前行为钉住，等第 2 层落地时改这里。
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		strings.NewReader(`{"identifier":"it-limit","password":"correct-horse-battery"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "198.51.100.9:5555"
+	h.PostAuthLogin(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("换 IP 后按当前实现应能登录（第 2 层未做），实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+
+	// 第 1 层是**时间锁**：锁住的 15 分钟内，即使密码正确、即使账号刚在别处登录成功，
+	// 同一个 IP 仍然拿不到 429。这是 §11.3 表里「429，锁 15 分钟」的直接含义。
+	//
+	// 而「成功登录清零」清的是**账号维度**（第 2 层的验证码门槛），不是这一层——
+	// 第 2 层还没做，所以那条口径目前没有代码路径可验。
+	if rec := login("correct-horse-battery"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("锁定期内应保持 429，实际 %d（body=%s）", rec.Code, rec.Body.String())
 	}
 }

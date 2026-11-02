@@ -8,5 +8,6 @@
   "db/schema/60-model.sql": "9d611931039b76c9d757f7aafb9e8c80a11adca141119523acd0370efd676ea3",
   "db/schema/70-views.sql": "c327a9d0fd30ed3ab9a6ccd900bc33cc87560177e2adb0a8638a37c3b7e8ca92",
   "db/schema/80-late-fk.sql": "556590875ad6c255b7d2de669038a1f7ca24714803ab55831b7486d1a6b803fa",
-  "db/schema/90-extensions.sql": "5a41cd134542c40c60603f8b59a3c9bdf86bb4357e0e09e03ca990d085db16f9"
+  "db/schema/90-extensions.sql": "5a41cd134542c40c60603f8b59a3c9bdf86bb4357e0e09e03ca990d085db16f9",
+  "db/migrations/0001_login_attempts.sql": "ceb244a2bbd4ccf90fb3a0215bce7045937aa68e7b3ecd6a2494bbf329434f84"
 }

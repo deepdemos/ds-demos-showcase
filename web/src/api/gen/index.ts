@@ -476,6 +476,11 @@ export type postAuthLoginResponse401 = {
   status: 401
 }
 
+export type postAuthLoginResponse429 = {
+  data: Error
+  status: 429
+}
+
 export type postAuthLoginResponse503 = {
   data: Error
   status: 503
@@ -484,7 +489,7 @@ export type postAuthLoginResponse503 = {
 export type postAuthLoginResponseSuccess = (postAuthLoginResponse200) & {
   headers: Headers;
 };
-export type postAuthLoginResponseError = (postAuthLoginResponse400 | postAuthLoginResponse401 | postAuthLoginResponse503) & {
+export type postAuthLoginResponseError = (postAuthLoginResponse400 | postAuthLoginResponse401 | postAuthLoginResponse429 | postAuthLoginResponse503) & {
   headers: Headers;
 };
 

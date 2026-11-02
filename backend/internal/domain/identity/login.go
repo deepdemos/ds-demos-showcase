@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
@@ -22,7 +25,21 @@ const dummyHash = "$argon2id$v=19$m=65536,t=3,p=2$YWJjZGVmZ2hpamtsbW5vcA$7n0m3Hk
 type LoginInput struct {
 	Identifier string
 	Password   string
+	// IP 是客户端 IP 原文。它只在本域里被 hash 成 ip_hash，不落库、不进日志。
+	IP string
 }
+
+// 限流阈值（身份域 §11.3）。这些是安全下限，不是运营旋钮——
+// 登记在 docs/运行手册-可变常量.md §3。
+const (
+	failWindow       = 10 * time.Minute
+	accountIPLimit   = 10  // 同账号 + 同 IP，10 次失败 → 锁
+	ipBurstLimit     = 50  // 同 IP，10 次失败窗口内 50 次 → 延迟
+	ipHourlyLimit    = 200 // 同 IP，1 小时 200 次失败 → 封
+	accountFailLimit = 5   // 账号维度：留作验证码门槛，见下方说明
+	ipThrottleDelay  = 2 * time.Second
+	lockDuration     = 15 * time.Minute
+)
 
 // Login 校验凭据并发一个会话。
 //
@@ -38,9 +55,21 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 	if err != nil {
 		return Account{}, "", err
 	}
+
+	ipHash := s.hashIP(in.IP)
+	var accountID pgtype.Int8
+	if found {
+		accountID = pgtype.Int8{Int64: row.ID, Valid: true}
+	}
+	limits, err := s.checkRateLimits(ctx, ipHash, accountID)
+	if err != nil {
+		return Account{}, "", err
+	}
+
 	if !found {
 		// 走一遍同样的校验代价，再统一报 401。
 		_, _ = VerifyPassword(in.Password, dummyHash)
+		limits.record(ctx, s, ipHash, accountID, false)
 		return Account{}, "", ErrUnauthorized
 	}
 
@@ -51,11 +80,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 		return Account{}, "", ErrUnauthorized
 	}
 	if !ok {
+		limits.record(ctx, s, ipHash, accountID, false)
 		return Account{}, "", ErrUnauthorized
 	}
 	// 已注销的账号不能登录。其余状态（pending / suspended / banned）一律放行，
 	// 让用户能读到自己的状态——前端要显示「你被封了」而不是「密码错误」。
 	if row.Status == "deleted" {
+		limits.record(ctx, s, ipHash, accountID, false)
 		return Account{}, "", ErrUnauthorized
 	}
 
@@ -63,6 +94,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 	if err != nil {
 		return Account{}, "", err
 	}
+	// 成功：记一条 succeeded=true（账号维度的「清零」靠 `created_at > 最后一次成功`
+	// 表达，IP 维度不受影响），顺手清掉一小时前的旧行。
+	limits.record(ctx, s, ipHash, accountID, true)
+	if err := s.q.PurgeLoginAttempts(ctx); err != nil {
+		slog.Warn("清理登录尝试记录失败", "err", err)
+	}
+
 	if err := s.q.CreateWebSession(ctx, store.CreateWebSessionParams{
 		ID:          sessionID,
 		AccountSub:  row.Sub,
@@ -120,4 +158,79 @@ func (s *Service) findForLogin(ctx context.Context, identifier string) (store.Ge
 		return store.GetLoginByEmailRow{}, false, fmt.Errorf("identity: 查登录账号失败: %w", err)
 	}
 	return store.GetLoginByEmailRow(byName), true, nil
+}
+
+// RateLimitError 带「建议等待多久」，传输层据此写 Retry-After。
+type RateLimitError struct {
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitError) Error() string { return "identity: 尝试太频繁" }
+
+// Unwrap 让 errors.Is(err, ErrRateLimited) 也能成立——调用方不用关心具体是哪一层触发的。
+func (e *RateLimitError) Unwrap() error { return ErrRateLimited }
+
+// ErrRateLimited 是「试太快了」。
+var ErrRateLimited = errors.New("identity: 尝试太频繁")
+
+// loginLimits 是一次登录判定出来的四个计数。
+type loginLimits struct {
+	accountIP int32
+	account   int32
+	ip        int32
+	ipHour    int32
+}
+
+// checkRateLimits 按 §11.3 的三层判定。
+//
+// 顺序有意：先判能不能进（硬封），再谈延迟。反过来的话，被硬封的请求
+// 还要白等 2 秒才收到 429。
+func (s *Service) checkRateLimits(ctx context.Context, ipHash string, accountID pgtype.Int8) (loginLimits, error) {
+	row, err := s.q.CountLoginFailures(ctx, store.CountLoginFailuresParams{
+		AccountID: accountID,
+		IpHash:    ipHash,
+	})
+	if err != nil {
+		return loginLimits{}, fmt.Errorf("identity: 读限流计数失败: %w", err)
+	}
+	l := loginLimits{
+		accountIP: row.AccountIpFails,
+		account:   row.AccountFails,
+		ip:        row.IpFails,
+		ipHour:    row.IpFailsHour,
+	}
+
+	// 第 3 层（上界）：一小时 200 次失败 → 封一小时。
+	if l.ipHour >= ipHourlyLimit {
+		return l, &RateLimitError{RetryAfter: time.Hour}
+	}
+	// 第 1 层：同账号 + 同 IP 10 次 → 锁 15 分钟。
+	if l.accountIP >= accountIPLimit {
+		return l, &RateLimitError{RetryAfter: lockDuration}
+	}
+	// 第 3 层（下界）：同 IP 短时间 50 次 → 每个请求多花 2 秒。
+	//
+	// 这里**不 sleep**：用 select 等，让 context 取消能立刻退出。占着 goroutine
+	// 睡 2 秒，一波攻击就能把连接池和 goroutine 一起耗干。
+	if l.ip >= ipBurstLimit {
+		timer := time.NewTimer(ipThrottleDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return l, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return l, nil
+}
+
+// record 写一条尝试记录。写失败不影响登录本身——限流是加固，不是正确性前提。
+func (l loginLimits) record(ctx context.Context, s *Service, ipHash string, accountID pgtype.Int8, succeeded bool) {
+	if err := s.q.RecordLoginAttempt(ctx, store.RecordLoginAttemptParams{
+		IpHash:    ipHash,
+		AccountID: accountID,
+		Succeeded: succeeded,
+	}); err != nil {
+		slog.Warn("记录登录尝试失败", "err", err)
+	}
 }

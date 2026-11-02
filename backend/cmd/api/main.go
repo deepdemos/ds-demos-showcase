@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,8 @@ func main() {
 
 	// 两个变量都保持 nil，表示「未配置数据库」。注意不能把 *pgxpool.Pool 的 nil 值
 	// 直接赋给接口——那会得到「非 nil 接口装着 nil 指针」，后面的 nil 判断全部失效。
+	ipSecret := loadIPSecret(cfg)
+
 	var pinger httpapi.Pinger
 	var queries *store.Queries
 	var identitySvc *identity.Service
@@ -37,7 +40,7 @@ func main() {
 		defer pool.Close()
 		pinger = pool
 		queries = store.New(pool)
-		identitySvc = identity.New(pool)
+		identitySvc = identity.New(pool, ipSecret)
 	} else {
 		logger.Warn("DATABASE_URL 未配置：/healthz 仍可用，业务端点返回 503")
 	}
@@ -65,4 +68,21 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Error("shutdown failed", "err", err)
 	}
+}
+
+// loadIPSecret 取 IP 哈希密钥。没配就当场生成一把并告警。
+//
+// 为什么不直接启动失败：本地开发和 CI 里没人会去配这个变量，而它缺失只影响
+// 「跨重启、跨实例的限流计数是否连续」，不影响登录正确性。但必须 WARN——
+// 否则生产上漏配会表现成「限流时灵时不灵」，那是最难查的一类问题。
+func loadIPSecret(cfg config.Config) []byte {
+	if cfg.IPHashSecret != "" {
+		return []byte(cfg.IPHashSecret)
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		panic("生成 IP 哈希密钥失败: " + err.Error())
+	}
+	slog.Warn("IP_HASH_SECRET 未配置：本进程临时生成一把。重启后历史 ip_hash 不再可比，多实例之间也互不可见")
+	return secret
 }

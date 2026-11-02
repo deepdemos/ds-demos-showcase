@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -65,7 +67,13 @@ func (h *Handler) writeIdentityError(w http.ResponseWriter, err error) {
 		// 409 而不是 400：格式没问题，是**这个值已经被占了**。前端据此把错误标在对应输入框。
 		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
 	case errors.Is(err, identity.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, api.Unauthorized, "请先登录")
+		writeError(w, http.StatusUnauthorized, api.Unauthorized, "邮箱或密码不对")
+	case errors.Is(err, identity.ErrRateLimited):
+		var limited *identity.RateLimitError
+		if errors.As(err, &limited) {
+			w.Header().Set("Retry-After", strconv.Itoa(int(limited.RetryAfter.Seconds())))
+		}
+		writeError(w, http.StatusTooManyRequests, api.RateLimited, "尝试太频繁，请稍后再试")
 	default:
 		slog.Error("identity request failed", "err", err) // 原文可能带 SQL 或连接串，只进日志
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
@@ -146,6 +154,7 @@ func (h *Handler) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
 	account, sessionID, err := h.identity.Login(ctx, identity.LoginInput{
 		Identifier: body.Identifier,
 		Password:   body.Password,
+		IP:         clientIP(r),
 	})
 	if err != nil {
 		h.writeIdentityError(w, err)
@@ -184,4 +193,17 @@ func clearSessionCookie(w http.ResponseWriter) {
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// clientIP 取客户端地址。
+//
+// **不读 X-Forwarded-For**：那是个可以由客户端随便写的头，读了就等于把限流
+// 的键交给攻击者——他每次换一个假 IP 就能绕开所有阈值。等真正上了反代，
+// 再按「只信已知代理的 XFF」显式配置，而不是现在默认信任。
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
