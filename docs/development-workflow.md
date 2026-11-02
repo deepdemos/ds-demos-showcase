@@ -62,6 +62,8 @@ PostgreSQL 18 跑断言。唯一依赖是 `@electric-sql/pglite`（WASM 版 PG�
 裸 `node`（无构建、无打包）。给它引一套 pnpm workspace 只会让「跑个门禁」多两步。两套包管理
 互不 import、互不影响：`web/` 的 `pnpm-lock.yaml` 和根目录的 `package-lock.json` 各自独立。
 
+本地怎么把库、API、前端跑起来，以及两个本机常见的踩坑（pnpm EPERM / vite 端口被排除），见 [`开发环境.md`](开发环境.md)。
+
 ### 单文件行数
 
 file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css），排除 .d.ts；门禁脚本用 node --test 自检：
