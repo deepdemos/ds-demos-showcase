@@ -52,6 +52,8 @@
     node scripts/check-contracts.mjs
     node scripts/check-schema.mjs
     node scripts/check-constants.mjs
+    node scripts/check-migrations.mjs
+    node scripts/check-api-compat.mjs  # 契约兼容，见 api/COMPATIBILITY.md
     node scripts/verify-schema.mjs   # 真库校验，见下
 
 **为什么根目录是 npm、`web/` 是 pnpm**：根目录只有一件事要做——把 `db/schema/*.sql` 灌进一个
@@ -120,7 +122,7 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 | frontend | format / lint / typecheck / test / build |
 | ui-contract | 控件库、Dev Room、注册名、接线检查 |
 | file-size | 单文件 >500 警告，>800 失败；脚本自检 |
-| contract | 契约（目录表引用一致）、表结构静态检查、可变常量锚点、**真库校验** |
+| contract | 契约（目录表引用一致）、表结构静态检查、可变常量锚点、迁移门禁、**契约兼容**、**真库校验** |
 | pr-guard | issue 关联、单一标题、规模 ≤500 行 / ≤20 文件、必须存在晚于最新 commit 的 review 评论 |
 
 - required checks：backend、frontend、ui-contract、file-size、contract、pr-guard（三个长期分支都启用）。`contract` 自 2026-11-01 起加入（ruleset `protect-dev` / `protect-main-release` 同步更新）。
@@ -163,11 +165,12 @@ CI 红时先看是不是集成测试，再判断是不是自己的改动引起�
 增删表结构后要同步确认 CI 里灌得进去：`db/schema/*.sql` 是被**逐个文件** `psql -f` 的，
 顺序错、缺扩展都会在 `准备测试库` 那一步红。
 
-### contract job 里的两类校验
+### contract job 里的三类校验
 
 | | 证明什么 | 不证明什么 |
 | --- | --- | --- |
 | 静态（`check-contracts` / `check-schema` / `check-constants`） | 文件之间互相对得上：权限键绑全 admin、文档引用的目录表行存在、`db/schema` 与文档里的表名一致、运行手册每个锚点还在 | 数据库**真的会拒绝**某条非法数据 |
+| 兼容（`check-api-compat`） | 生成出来的 Go 类型表面与基线相比**没有破坏性变更**：没删字段、没删枚举值、没把可空改必填、没删端点 | 同名改语义（`page` 从 1 起改 0 起）、约束收紧（`maxLength` / `maximum`）、加枚举值导致客户端 `switch` 不穷尽——这三类必须靠 review 看，判定细节见 [`api/COMPATIBILITY.md`](../api/COMPATIBILITY.md) |
 | 真库（`verify-schema`） | 把 `db/schema/*.sql` 灌进 PostgreSQL 18（PGlite wasm），逐条断言：白名单外键、值类型、枚举、级联删除、审计路由模板、结构性上限 | 业务代码怎么用这些表；性能；事务边界；`90-extensions.sql`（PGlite 无 contrib，该文件在缺扩展的环境整块跳过） |
 
 写「某个约束一定生效」这类结论时，**只有真库校验算证据**；静态门禁只能证明「这条约束在文档和 SQL 里都写着」。

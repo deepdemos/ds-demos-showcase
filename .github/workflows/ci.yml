@@ -174,6 +174,10 @@ jobs:
           "$(go env GOPATH)/bin/oapi-codegen" -config oapi-codegen.yaml openapi.yaml
           cd ..
           git diff --exit-code backend/internal/api
+      # 兼容门禁放这一步之后：先确认生成物是最新的，再拿它跟基线比。
+      # 比的是 Go 类型表面而不是 YAML —— 判定表与「抓不到什么」见 api/COMPATIBILITY.md。
+      - name: 契约兼容门禁（不许删字段 / 删枚举值 / 可空变必填）
+        run: node scripts/check-api-compat.mjs
       # 前端客户端同理：orval 版本钉在脚本里（根 package.json 的 gen:api:web），
       # 不放进 devDependencies 是因为 83 个传递依赖会让 lockfile 涨 1600 多行，过不了 pr-guard。
       - name: 接口契约须与生成产物一致（前端）
@@ -194,7 +198,7 @@ jobs:
           git diff --exit-code backend/internal/store
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::contract 失败（四件事之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 生成产物与源不一致——改了 api/openapi.yaml 或 backend/db/queries/*.sql 却没重新生成，或手改了 backend/internal/api/、web/src/api/gen/、backend/internal/store/；⑥ 迁移文件命名/序号不对，或改了已合入的迁移（校验和对不上））。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
+        run: echo "::error title=CI 门禁::contract 失败（七类之一：① 目录表与引用不一致——权限没绑全 admin、registry.yaml 引用了不存在的 kind 或 entity_type；② db/schema 静态检查不过，或文档里又出现了手写 DDL；③ 运行手册某条「唯一改动点」的锚点失效——文件被删或被改名；④ 真库校验失败——某条约束/外键/级联在 PG 18 上没生效，或 db/schema 在真库根本跑不起来；⑤ 生成产物与源不一致——改了 api/openapi.yaml 或 backend/db/queries/*.sql 却没重新生成，或手改了 backend/internal/api/、web/src/api/gen/、backend/internal/store/；⑥ 迁移文件命名/序号不对，或改了已合入的迁移（校验和对不上）；⑦ 契约出现破坏性变更——删了字段/枚举值、把可空改成必填、删了端点（判定表见 api/COMPATIBILITY.md，确认要有意破坏后再 --update 重签基线））。先读 docs/development-workflow.md：先改目录表种子，再让引用跟着改；CI 红或发现 bug 必须先建 issue。"
 
   pr-guard:
     if: github.event_name == 'pull_request'
