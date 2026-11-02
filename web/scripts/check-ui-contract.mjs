@@ -112,6 +112,32 @@ registry.forEachChild((node) => {
 });
 if (categories.size === 0) errors.push('registry 缺少 controlCategories 分类定义');
 
+// 2.2 读取展示型控件名单：这些只渲染、不接受交互，接线检查跳过它们。
+// 名单放在 registry 里而不是脚本里，是为了让它和控件定义出现在同一个 diff 里。
+const presentational = new Set();
+registry.forEachChild((node) => {
+  if (!ts.isVariableStatement(node)) return;
+  for (const declaration of node.declarationList.declarations) {
+    let initializer = declaration.initializer;
+    while (
+      initializer &&
+      (ts.isAsExpression(initializer) || ts.isParenthesizedExpression(initializer))
+    ) {
+      initializer = initializer.expression;
+    }
+    if (
+      ts.isIdentifier(declaration.name) &&
+      declaration.name.text === 'presentationalControls' &&
+      initializer &&
+      ts.isArrayLiteralExpression(initializer)
+    ) {
+      for (const element of initializer.elements) {
+        if (ts.isStringLiteral(element)) presentational.add(element.text);
+      }
+    }
+  }
+});
+
 const entries = [];
 const visitRegistry = (node) => {
   if (ts.isObjectLiteralExpression(node)) {
@@ -177,6 +203,11 @@ for (const component of registeredComponents) {
     errors.push(`Dev Room registry 引用了未导出的控件 ${component}`);
   }
 }
+for (const name of presentational) {
+  if (!registeredComponents.has(name)) {
+    errors.push(`presentationalControls 里的 "${name}" 不是已注册的控件——拼错了？`);
+  }
+}
 for (const [id, count] of ids) {
   if (count > 1) errors.push(`Dev Room 控件注册名重复: ${id}`);
 }
@@ -191,17 +222,16 @@ if (
   errors.push('DevRoomPage 没有渲染 data-control-id，Dev Room 控件无法被精确定位');
 }
 
-// 4) Dev Room 之外的控件必须接线（至少一个真实交互属性）。
-const interactionProps = new Set([
-  'onClick',
-  'onChange',
-  'onSubmit',
-  'onSelect',
-  'onCheckedChange',
-  'onOpenChange',
-  'href',
-  'to',
-]);
+// 4) Dev Room 之外的**交互型**控件必须接线。
+//
+// 「接线」= 收到一个 React 事件回调（`onXxx`）或一个导航目标（`href` / `to` / `type=submit`）。
+// 不按固定属性名单判，因为控件的回调名本来就应该由门禁决定（`onPageChange`、`onRetry`
+// 都合理）；按 `on[A-Z]` 判定既覆盖了全部 React 事件约定，也不会放行一个纯字面量属性。
+//
+// 展示型控件（`presentationalControls`）跳过这一条：Skeleton 不响应用户，EmptyState 的动作
+// 是可选的。它们没有「接线」这个概念。
+const interactionProps = new Set(['href', 'to']);
+const isHandlerProp = (name) => /^on[A-Z]/.test(name);
 
 for (const file of sourceFiles) {
   if (isInside(file, uiRoot) || isInside(file, devRoomRoot) || isInside(file, testRoot)) continue;
@@ -226,11 +256,11 @@ for (const file of sourceFiles) {
   const checkJsx = (node) => {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
       const tag = node.tagName;
-      if (ts.isIdentifier(tag) && controlImports.has(tag.text)) {
+      if (ts.isIdentifier(tag) && controlImports.has(tag.text) && !presentational.has(tag.text)) {
         const wired = node.attributes.properties.some((attribute) => {
           if (!ts.isJsxAttribute(attribute)) return false;
           const name = attribute.name.getText(sf);
-          if (interactionProps.has(name)) return true;
+          if (interactionProps.has(name) || isHandlerProp(name)) return true;
           return (
             name === 'type' &&
             attribute.initializer &&

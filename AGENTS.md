@@ -72,7 +72,8 @@
 
 ### 接线
 
-- **Dev Room 之外的所有功能控件必须已接线**：点击/提交/跳转/受控状态必须连接到真实的 handler、路由或 API。
+- **Dev Room 之外的交互型控件必须已接线**：点击/提交/跳转/受控状态必须连接到真实的 handler、路由或 API。判定口径是「收到一个 React 事件回调（`onXxx`）或一个导航目标（`href` / `to` / `type=submit`）」。
+- **纯展示型控件可以没有回调**，但必须在 `web/src/components/ui/registry.tsx` 的 `presentationalControls` 里显式列出（当前是 `Skeleton` / `EmptyState`）。这份名单放在 registry 而不是门禁脚本里，是为了让它和控件定义出现在同一个 diff 里、有人 review。**往名单里加一个控件 = 声明它不承载交互**，所以只在真的没有交互时才加。
 - 禁止占位实现：空 `onClick`、`TODO`、仅 `console.log`、只有样式没有行为的按钮，一律不允许合入。
 - 演示用途的未接线控件只允许存在于 Dev Room。
 
@@ -82,7 +83,7 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 
 1. 页面/功能代码直接 import Ring UI 或第三方 UI 控件（ESLint `no-restricted-imports`，只允许控件库 import）。
 2. 控件库导出与 Dev Room 注册项不一致（每个导出至少一个注册项，每个注册项的 `component` 必须已导出；一个控件允许多个注册项）。
-3. Dev Room 之外存在未接线控件（AST/自定义 lint 规则检查事件处理器、路由跳转或表单绑定；无法判定时按失败处理）。
+3. Dev Room 之外存在未接线的**交互型**控件（AST 检查事件回调 / 路由跳转 / 表单绑定；`presentationalControls` 里声明的展示型控件除外；无法判定时按失败处理）。
 4. 新增控件未同时提交 Dev Room 示例。
 5. 注册名缺失/格式错误/重复、分类未定义，或 Dev Room 未渲染 `data-control-id`。
 
