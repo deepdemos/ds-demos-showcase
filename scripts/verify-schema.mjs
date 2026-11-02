@@ -279,6 +279,29 @@ console.log('--- 开发种子 ---');
     'login_attempts 允许无主试（account_id 可空）',
     "INSERT INTO login_attempts (ip_hash, account_id, succeeded) VALUES ('it-null-account', NULL, false)",
   );
+  // ---- 通用验证码表（迁移 0002）----
+  await ok(
+    'verification_codes 存在（迁移 0002）',
+    "SELECT count(*) FROM information_schema.tables WHERE table_name = 'verification_codes'",
+    '1',
+  );
+  await accepts(
+    'verification_codes 允许无账号的验证码（account_id 可空）',
+    "INSERT INTO verification_codes (purpose, identifier_hash, code_hash, expires_at) " +
+      "VALUES ('it-purpose', 'it-key', 'it-hash', now() + interval '5 minutes')",
+  );
+  // 同一串码在不同 purpose 下必须是两条独立记录（跨场景不能重放的前提）。
+  await accepts(
+    'verification_codes 同一标识符可有多用途记录',
+    "INSERT INTO verification_codes (purpose, identifier_hash, code_hash, expires_at) " +
+      "VALUES ('it-purpose-2', 'it-key', 'it-hash', now() + interval '5 minutes')",
+  );
+  await ok(
+    'verification_codes 有效码的查找索引存在',
+    "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_verification_codes_lookup'",
+    '1',
+  );
+
   await ok(
     'login_attempts 两个部分索引都在',
     "SELECT count(*) FROM pg_indexes WHERE tablename = 'login_attempts' AND indexdef LIKE '%WHERE%'",

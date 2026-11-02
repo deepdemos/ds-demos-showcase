@@ -20,6 +20,7 @@ export function layerOf(file) {
   if (!inner) return null;
   const [, top, sub] = inner;
   if (top === 'domain') return sub ? `domain:${sub}` : 'domain';
+  if (top === 'kernel') return sub ? `kernel:${sub}` : 'kernel';
   return top; // platform / httpapi / api / store
 }
 
@@ -48,16 +49,30 @@ export function violation(from, to) {
   // 生成物：只依赖公共库。它们被谁 import 由别人负责。
   if (from === 'api' || from === 'store') {
     if (to === from) return null; // 同包不同文件，不产生 import
-    if (['api', 'store', 'httpapi', 'platform'].includes(base(to)) || base(to) === 'domain') {
+    if (['api', 'store', 'httpapi', 'platform', 'kernel'].includes(base(to)) || base(to) === 'domain') {
       return `生成物不该 import 本仓库其它包（${to}）——重新生成会把它覆盖掉`;
     }
     return null;
   }
 
-  // 基础设施：不知道业务的存在。
+  // 基础设施：不知道业务的存在，也不知道 kernel。
   if (from === 'platform') {
-    if (['api', 'store', 'httpapi'].includes(base(to)) || base(to) === 'domain') {
+    if (['api', 'store', 'httpapi', 'kernel'].includes(base(to)) || base(to) === 'domain') {
       return `platform 不得依赖 ${to}：基础设施一旦知道业务，业务就再也换不掉它`;
+    }
+    return null;
+  }
+
+  // kernel：可以有机制，但不得知道任何具体业务域；子包之间也互相独立。
+  if (base(from) === 'kernel') {
+    if (base(to) === 'domain') {
+      return `kernel 不得依赖 ${to}：kernel 是所有域共用的机制，认识某个域就再也共用不了`;
+    }
+    if (['api', 'httpapi'].includes(base(to))) {
+      return `kernel 不得依赖 ${to}：机制不该知道 HTTP 或契约长什么样`;
+    }
+    if (base(to) === 'kernel' && to !== from) {
+      return `${from} 不得 import ${to}：kernel 子包各自独立，串起来就会变成第二个 domain`;
     }
     return null;
   }
