@@ -30,7 +30,8 @@
 - 临时分支只存在于个人 fork，不得推送到上游仓库；上游出现临时分支即违规，须立即删除。
 - PR 标题必须是单一 Conventional Commit 类型（scope 允许字母/数字/点/连字符，可用 !）。
 - 一个 PR 只允许一类修改：功能、重构、格式化、文档不能混在一起；review 必须确认。
-- pr-guard 规模上限：修改 ≤500 行（增+删）、≤20 个文件；超过直接打回，按“一类一 PR”拆分。
+- pr-guard 规模上限：**手写部分**修改 ≤500 行（增+删）、≤20 个文件；超过直接打回，按“一类一 PR”拆分。
+- **生成物不计入规模**：`backend/internal/api/`（oapi-codegen）、`backend/internal/store/`（sqlc）、`web/src/api/gen/`（orval）三个目录下的文件不参与行数与文件数统计。理由：改一次契约必然重生成这些产物，谁写都一样；它们不靠人眼 review，而是由 `contract` job「重新生成后 `git diff --exit-code`」校验，那道门禁比行数限制可靠得多。若要往这份白名单加路径，等于声明该目录不再手写，需在 PR 说明里讲清。
 - **纯文档 PR 豁免规模上限**：改动全部位于 `docs/` 下时只校验标题类型与 issue 关联，不校验行数与文件数——设计文档天然上千行，按 500 行切会把一份连贯的设计切碎。混入任何非 `docs/` 文件即恢复规模校验（fail-closed）。
 - PR 描述至少包含：关联 issue、变更类型/范围、为什么、验证、风险、影响面、review 结果。
 
@@ -107,7 +108,7 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 
 - [ ] 关联 issue，issue 与改动一致。
 - [ ] 只有一类修改；无混入的无关重构/格式化。
-- [ ] 修改 ≤500 行、≤20 文件；否则要求拆分。
+- [ ] 手写部分修改 ≤500 行、≤20 文件（三个生成目录不计入）；否则要求拆分。
 - [ ] file-size 警告文件是否被触碰；>800 行是否拆分。
 - [ ] CI 全绿：backend / frontend / ui-contract / file-size / contract / pr-guard。
 - [ ] review 评论晚于最新 commit；push 后已重新 review。
@@ -126,7 +127,7 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 | ui-contract | 控件库、Dev Room、注册名、接线检查 |
 | file-size | 单文件 >500 警告，>800 失败；脚本自检 |
 | contract | 契约（目录表引用一致）、表结构静态检查、可变常量锚点、迁移门禁、**契约兼容**、**真库校验** |
-| pr-guard | issue 关联、单一标题、规模 ≤500 行 / ≤20 文件、必须存在晚于最新 commit 的 review 评论 |
+| pr-guard | issue 关联、单一标题、手写部分 ≤500 行 / ≤20 文件（生成物不计）、必须存在晚于最新 commit 的 review 评论 |
 
 - required checks：backend、frontend、ui-contract、file-size、contract、pr-guard（三个长期分支都启用）。`contract` 自 2026-11-01 起加入（ruleset `protect-dev` / `protect-main-release` 同步更新）。
 - 所有 job 失败时会输出指引，要求先读本文件。
