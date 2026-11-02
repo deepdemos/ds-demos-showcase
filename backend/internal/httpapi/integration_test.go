@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -194,5 +195,84 @@ func TestIntegrationGetMe(t *testing.T) {
 		if rec.Body.String() != want {
 			t.Fatalf("%s 与未登录的响应体不一致：%q vs %q", tc.name, rec.Body.String(), want)
 		}
+	}
+}
+
+func TestIntegrationRegister(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("%s 失败: %v", q, err)
+		}
+	}
+	h := New(pool, store.New(pool), identity.New(pool))
+
+	register := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		h.PostAuthRegister(rec, req)
+		return rec
+	}
+
+	// 正常注册：201 + 会话 cookie + 不回声密码。
+	rec := register(`{"email":"it-reg@example.com","password":"correct-horse-battery","username":"it-reg","displayName":"注册测试"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("注册应 201，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != sessionCookie || !cookies[0].HttpOnly || !cookies[0].Secure {
+		t.Fatalf("会话 cookie 不对: %+v", cookies)
+	}
+	if strings.Contains(rec.Body.String(), "correct-horse-battery") {
+		t.Fatal("响应体里出现了明文密码")
+	}
+	var me api.Me
+	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil {
+		t.Fatalf("响应不是合法 Me: %v", err)
+	}
+	if me.Username != "it-reg" || me.Status != api.AccountStatusActive || me.Sub == "" {
+		t.Fatalf("字段不对: %+v", me)
+	}
+
+	// 刚注册拿到的 cookie 必须立刻能用。
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	meReq.AddCookie(cookies[0])
+	meRec := httptest.NewRecorder()
+	h.GetMe(meRec, meReq)
+	if meRec.Code != http.StatusOK {
+		t.Fatalf("注册后 /me 应 200，实际 %d（body=%s）", meRec.Code, meRec.Body.String())
+	}
+
+	// 数据库里只留哈希：明文不得入库。
+	var stored string
+	if err := pool.QueryRow(ctx, `
+		SELECT c.secret_hash FROM credentials c
+		JOIN accounts a ON a.id = c.account_id WHERE a.sub = $1`, me.Sub).Scan(&stored); err != nil {
+		t.Fatalf("查凭证失败: %v", err)
+	}
+	if !strings.HasPrefix(stored, "$argon2id$") || strings.Contains(stored, "correct-horse-battery") {
+		t.Fatalf("凭证不是 argon2id 哈希: %q", stored)
+	}
+
+	// 邮箱撞车（大小写不同也算）：409。
+	if rec := register(`{"email":"IT-REG@example.com","password":"correct-horse-battery","username":"other-one","displayName":"x"}`); rec.Code != http.StatusConflict {
+		t.Fatalf("邮箱重复应 409，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	// 用户名撞车（大小写不同也算）：409。
+	if rec := register(`{"email":"other@example.com","password":"correct-horse-battery","username":"IT-REG","displayName":"x"}`); rec.Code != http.StatusConflict {
+		t.Fatalf("用户名重复应 409，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	// 密码太短：400，且**没有建出半个账号**。
+	if rec := register(`{"email":"short@example.com","password":"short","username":"it-short","displayName":"x"}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("短密码应 400，实际 %d", rec.Code)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM profiles WHERE lower(username) IN ('it-reg','other-one','it-short')`).Scan(&n); err != nil {
+		t.Fatalf("计数失败: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("失败路径不应留下账号行，实际 %d 条", n)
 	}
 }

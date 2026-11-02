@@ -61,6 +61,9 @@ func (h *Handler) writeIdentityError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, identity.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, api.InvalidParam, messageOf(err))
+	case errors.Is(err, identity.ErrEmailTaken), errors.Is(err, identity.ErrUsernameTaken):
+		// 409 而不是 400：格式没问题，是**这个值已经被占了**。前端据此把错误标在对应输入框。
+		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
 	case errors.Is(err, identity.ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, api.Unauthorized, "请先登录")
 	default:
@@ -77,4 +80,50 @@ func messageOf(err error) string {
 		return rest
 	}
 	return msg
+}
+
+// setSessionCookie 下发会话。属性见 sessionCookie 的注释：`__Host-` 要求 Secure + Path=/ + 无 Domain。
+func setSessionCookie(w http.ResponseWriter, sessionID string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    sessionID,
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// sessionMaxAgeSeconds 与 web_sessions.expires_at 的默认值同源：30 天。
+// 两边必须一起改——cookie 活得比会话久，前端会以为自己还登着。
+const sessionMaxAgeSeconds = 30 * 24 * 60 * 60
+
+// PostAuthRegister 实现 POST /api/v1/auth/register。
+func (h *Handler) PostAuthRegister(w http.ResponseWriter, r *http.Request) {
+	if h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+	var body api.PostAuthRegisterJSONRequestBody
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体不是合法的 JSON")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), registerTimeout)
+	defer cancel()
+
+	account, sessionID, err := h.identity.Register(ctx, identity.RegisterInput{
+		Email:       string(body.Email),
+		Password:    body.Password,
+		Username:    body.Username,
+		DisplayName: body.DisplayName,
+	})
+	if err != nil {
+		h.writeIdentityError(w, err)
+		return
+	}
+	setSessionCookie(w, sessionID, sessionMaxAgeSeconds)
+	writeJSON(w, http.StatusCreated, toMe(account))
 }

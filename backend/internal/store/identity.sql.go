@@ -11,6 +11,100 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createAccount = `-- name: CreateAccount :one
+
+INSERT INTO accounts (sub, status, role)
+VALUES ($1, 'active', 'user')
+RETURNING id, created_at
+`
+
+type CreateAccountRow struct {
+	ID        int64
+	CreatedAt pgtype.Timestamptz
+}
+
+// ===== 注册（一事务五张表）=====
+func (q *Queries) CreateAccount(ctx context.Context, sub string) (CreateAccountRow, error) {
+	row := q.db.QueryRow(ctx, createAccount, sub)
+	var i CreateAccountRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
+}
+
+const createPasswordCredential = `-- name: CreatePasswordCredential :exec
+INSERT INTO credentials (account_id, kind, identifier, secret_hash)
+VALUES ($1, 'password', '', $2)
+`
+
+type CreatePasswordCredentialParams struct {
+	AccountID  int64
+	SecretHash string
+}
+
+func (q *Queries) CreatePasswordCredential(ctx context.Context, arg CreatePasswordCredentialParams) error {
+	_, err := q.db.Exec(ctx, createPasswordCredential, arg.AccountID, arg.SecretHash)
+	return err
+}
+
+const createPrimaryEmail = `-- name: CreatePrimaryEmail :exec
+INSERT INTO account_emails (account_id, email, is_primary, verified_at)
+VALUES ($1, $2, true, NULL)
+`
+
+type CreatePrimaryEmailParams struct {
+	AccountID int64
+	Email     string
+}
+
+func (q *Queries) CreatePrimaryEmail(ctx context.Context, arg CreatePrimaryEmailParams) error {
+	_, err := q.db.Exec(ctx, createPrimaryEmail, arg.AccountID, arg.Email)
+	return err
+}
+
+const createProfile = `-- name: CreateProfile :exec
+INSERT INTO profiles (account_id, username, display_name)
+VALUES ($1, $2, $3)
+`
+
+type CreateProfileParams struct {
+	AccountID   int64
+	Username    string
+	DisplayName string
+}
+
+func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) error {
+	_, err := q.db.Exec(ctx, createProfile, arg.AccountID, arg.Username, arg.DisplayName)
+	return err
+}
+
+const createWebSession = `-- name: CreateWebSession :exec
+INSERT INTO web_sessions (id, account_sub, username, display_name, role, status, verified_at)
+VALUES ($1, $2, $3, $4, $5, $6, now())
+`
+
+type CreateWebSessionParams struct {
+	ID          string
+	AccountSub  string
+	Username    string
+	DisplayName string
+	Role        string
+	Status      string
+}
+
+// 不写 expires_at：表上有 DEFAULT now() + interval '30 days'。绝对寿命只有那一个来源，
+// 在 Go 里再写一份就等于两个数字迟早对不上（运行手册 §3 记的是这条线的 anchor）。
+func (q *Queries) CreateWebSession(ctx context.Context, arg CreateWebSessionParams) error {
+	_, err := q.db.Exec(ctx, createWebSession,
+		arg.ID,
+		arg.AccountSub,
+		arg.Username,
+		arg.DisplayName,
+		arg.Role,
+		arg.Status,
+	)
+	return err
+}
+
 const getMeBySession = `-- name: GetMeBySession :one
 
 SELECT a.sub,

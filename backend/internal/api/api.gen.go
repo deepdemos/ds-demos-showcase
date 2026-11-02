@@ -29,6 +29,7 @@ const (
 
 // Defines values for ErrorCode.
 const (
+	Conflict     ErrorCode = "conflict"
 	Forbidden    ErrorCode = "forbidden"
 	InvalidParam ErrorCode = "invalid_param"
 	NotFound     ErrorCode = "not_found"
@@ -151,6 +152,19 @@ type Me struct {
 	Username string `json:"username"`
 }
 
+// RegisterRequest defines model for RegisterRequest.
+type RegisterRequest struct {
+	// DisplayName 可为空串，展示时回退到 username
+	DisplayName string              `json:"displayName"`
+	Email       openapi_types.Email `json:"email"`
+
+	// Password 只以 argon2id 哈希入库，接口从不回显
+	Password string `json:"password"`
+
+	// Username 不区分大小写唯一（标准对象 §ID-2）
+	Username string `json:"username"`
+}
+
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
 	// Q 关键词，匹配标题与描述
@@ -170,8 +184,14 @@ type ListDemosParams struct {
 // ListDemosParamsSort defines parameters for ListDemos.
 type ListDemosParamsSort string
 
+// PostAuthRegisterJSONRequestBody defines body for PostAuthRegister for application/json ContentType.
+type PostAuthRegisterJSONRequestBody = RegisterRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// 注册
+	// (POST /api/v1/auth/register)
+	PostAuthRegister(w http.ResponseWriter, r *http.Request)
 	// 作品列表
 	// (GET /api/v1/demos)
 	ListDemos(w http.ResponseWriter, r *http.Request, params ListDemosParams)
@@ -189,6 +209,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// 注册
+// (POST /api/v1/auth/register)
+func (_ Unimplemented) PostAuthRegister(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // 作品列表
 // (GET /api/v1/demos)
@@ -222,6 +248,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// PostAuthRegister operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthRegister(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthRegister(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ListDemos operation middleware
 func (siw *ServerInterfaceWrapper) ListDemos(w http.ResponseWriter, r *http.Request) {
@@ -446,6 +486,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/register", wrapper.PostAuthRegister)
+	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demos", wrapper.ListDemos)
 	})
