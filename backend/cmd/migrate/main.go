@@ -39,9 +39,10 @@ const (
 
 func main() {
 	var (
-		mode       = flag.String("mode", "up", "up | status")
+		mode       = flag.String("mode", "up", "up | status | seed")
 		schemaDir  = flag.String("schema", "../db/schema", "冻结基线目录")
 		migrateDir = flag.String("migrations", "../db/migrations", "增量迁移目录")
+		seedDir    = flag.String("seeds", "../db/seeds", "开发种子目录")
 	)
 	flag.Parse()
 
@@ -64,8 +65,10 @@ func main() {
 		status(ctx, conn, *schemaDir, *migrateDir)
 	case "up":
 		applyUp(ctx, conn, *schemaDir, *migrateDir)
+	case "seed":
+		applySeeds(ctx, conn, *seedDir)
 	default:
-		fail("未知 mode %q（只支持 up / status）", *mode)
+		fail("未知 mode %q（只支持 up / status / seed）", *mode)
 	}
 }
 
@@ -295,6 +298,50 @@ func applyBaseline(ctx context.Context, conn *pgx.Conn, schemaDir string, base [
 		return fmt.Errorf("登记基线: %w", err)
 	}
 	return tx.Commit(ctx)
+}
+
+// applySeeds 把开发种子灌进去。**不进迁移链**：种子属于开发环境，不该被 migrate up
+// 带进任何真实库。因为种子里全部用 ON CONFLICT DO UPDATE，重复跑是幂等的。
+//
+// 它不建 schema_migrations、也不检查迁移跑到第几版——种子只关心「表在不在」，
+// 不在就让 SQL 自己报错（错误信息比这里自己编的清楚）。
+func applySeeds(ctx context.Context, conn *pgx.Conn, seedDir string) {
+	entries, err := os.ReadDir(seedDir)
+	if err != nil {
+		fail("读种子目录失败: %v", err)
+	}
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			names = append(names, e.Name())
+		}
+	}
+	if len(names) == 0 {
+		fail("种子目录 %s 里没有 .sql", seedDir)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		path := filepath.Join(seedDir, name)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			fail("读 %s 失败: %v", name, err)
+		}
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			fail("%s: %v", name, err)
+		}
+		// 无参数的 Exec 走简单协议，可以一次执行多条语句。
+		if _, err := tx.Exec(ctx, string(body)); err != nil {
+			_ = tx.Rollback(context.Background())
+			fail("%s 失败: %v", name, err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			fail("%s 提交失败: %v", name, err)
+		}
+		fmt.Println("种子", name, "ok")
+	}
+	fmt.Println("种子应用完成（开发数据，勿用于生产）")
 }
 
 // ledgerExists 探测 schema_migrations 在不在，不建表。
