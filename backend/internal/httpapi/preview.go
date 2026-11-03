@@ -1,0 +1,336 @@
+package httpapi
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"mime"
+	"net/http"
+	"path"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/storage"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
+)
+
+// 预览托管：把已上传的作品文件按版本号吐出去。
+//
+// # 为什么不在 OpenAPI 契约里
+//
+// 这不是 JSON API：响应体是作品自己的 HTML/CSS/JS，内容类型与状态码由文件决定。
+// 塞进契约会让「所有端点返回 JSON、错误有统一 ErrorBody」这条前提不成立，
+// 而且生成的客户端会把一个二进制流当成对象去解析。
+//
+// # 为什么地址里带版本号
+//
+// `demo_revisions` 一旦创建不可修改（不变量 #1，触发器 trg_demo_revisions_immutable）。
+// 版本化的 URL 因此可以永久缓存：同一个地址永远指向同一份字节。
+// `/preview/{slug}/{path}` 不带版本的是「当前版本」别名，只能短缓存。
+// 地址里的 `v{n}` 的 n 是 `demo_revisions.rev_no`（每个作品内自 1 递增），不是行 id。
+//
+// # 同源渲染的隔离
+//
+// 默认走 `/preview/...` 同源路径。作品 HTML 拿到的是不透明源（opaque origin），
+// 靠两道独立机制保证：
+//  1. 前端 iframe 的 sandbox 属性（不给 allow-same-origin）
+//  2. 这里的 CSP `sandbox` 指令——用户直接在新标签页打开预览地址时也生效
+//
+// 第 2 条不是第 1 条的备份，是唯一在「直接访问」这条路径上生效的那一条。
+// 代价是作品页里 localStorage 会抛异常、不能读同源其它作品的存储——
+// 这正是设计要的（docs/多人联机方案调研.md:146 记录的预览源共享问题）。
+const (
+	// previewReadTimeout 是读一个文件的上限。作品文件可能很大（封面图、字体），
+	// 但都在本地磁盘，5 秒足够；卡住说明盘有问题，不该拖住整个请求。
+	previewReadTimeout = 10 * time.Second
+
+	// previewMaxHTMLBytes 是需要注入 <base> 时读进内存的上限。
+	// 超过这个体积的 HTML 不注入（仍然照常返回）——一个几 MB 的单页应用
+	// 读进内存再复制一份，收益抵不上内存峰值。
+	previewMaxHTMLBytes = 8 << 20
+
+	// previewCSP 见上面「同源渲染的隔离」。
+	// 不给 allow-same-origin 是刻意的：给了它，sandbox 就等于没有。
+	previewCSP = "sandbox allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock"
+)
+
+// Preview 托管作品文件。
+//
+// 它不实现 api.ServerInterface：预览不是契约端点（理由见上方注释），
+// 由 router.go 直接挂到 chi 上。
+type Preview struct {
+	queries  *store.Queries
+	files    storage.Store
+	identity *identity.Service
+}
+
+// NewPreview 组装预览处理器。files 为 nil 表示存储未接线，所有预览返回 404。
+func NewPreview(queries *store.Queries, files storage.Store, identitySvc *identity.Service) *Preview {
+	return &Preview{queries: queries, files: files, identity: identitySvc}
+}
+
+// ServeHTTP 处理 `/preview/{slug}/{rest...}`。
+//
+// rest 的第一段如果是 `r<数字>` 就当版本号，否则当作「当前版本 + 路径」。
+// 只注册一条路由而不是两条：chi 的两条模式会让 `{slug}`/`{rev}` 这类同位置参数
+// 的优先级变得依赖注册顺序，而这里的分支本来就只有一行。
+func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "只支持 GET", http.StatusMethodNotAllowed)
+		return
+	}
+	if p.queries == nil || p.files == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	slug := chi.URLParam(r, "slug")
+	rest := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
+
+	rev, rel, versioned := splitPreviewPath(rest)
+
+	ctx, cancel := context.WithTimeout(r.Context(), previewReadTimeout)
+	defer cancel()
+
+	row, err := p.queries.GetDemoForPreview(ctx, slug)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("preview: 查作品失败", "slug", slug, "err", err)
+		}
+		http.NotFound(w, r)
+		return
+	}
+
+	// 擦除与软删对外一律不存在。归档/移除不在这里拒——它们要能显示墓碑页，
+	// 而墓碑页由前端按 API 返回的 lifecycle_state 渲染，不需要读预览文件。
+	if row.ErasedAt.Valid || row.DeletedAt.Valid {
+		http.NotFound(w, r)
+		return
+	}
+
+	published := row.LifecycleState == "published"
+	if !published && !p.mayPreviewDraft(ctx, r, row.AuthorSub) {
+		http.NotFound(w, r)
+		return
+	}
+
+	if rev == 0 {
+		rev = int(row.CurrentRevNo)
+	}
+	if rev <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if rel == "" {
+		rel = "index.html"
+	}
+
+	key := storage.FilesKey(slug, rev, rel)
+	f, err := p.files.Get(ctx, key)
+	if err != nil {
+		if !errors.Is(err, storage.ErrNotFound) && !errors.Is(err, storage.ErrUnsafeKey) {
+			slog.Error("preview: 读文件失败", "key", key, "err", err)
+		}
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+
+	ct := contentTypeOf(rel)
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", cacheControlOf(published, versioned))
+	if strings.HasPrefix(ct, "text/html") {
+		w.Header().Set("Content-Security-Policy", previewCSP)
+	}
+
+	// 只有需要注入 <base> 的 HTML 才整体读进内存。
+	if strings.HasPrefix(ct, "text/html") {
+		body, err := io.ReadAll(io.LimitReader(f, previewMaxHTMLBytes+1))
+		if err != nil {
+			slog.Error("preview: 读 HTML 失败", "key", key, "err", err)
+			http.Error(w, "读取失败", http.StatusBadGateway)
+			return
+		}
+		if len(body) <= previewMaxHTMLBytes {
+			body = injectBase(body, previewBase(slug, rev))
+		}
+		w.WriteHeader(http.StatusOK)
+		if r.Method != http.MethodHead {
+			_, _ = w.Write(body)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = io.Copy(w, f)
+	}
+}
+
+// mayPreviewDraft 判断这次请求能不能看未发布的内容：作者本人，或持有审核权的角色。
+//
+// 读会话或查权限失败一律当「不能看」——这里放行等于把所有人的草稿公开。
+func (p *Preview) mayPreviewDraft(ctx context.Context, r *http.Request, authorSub string) bool {
+	if p.identity == nil {
+		return false
+	}
+	sid := readSessionCookie(r)
+	if sid == "" {
+		return false
+	}
+	me, err := p.identity.Me(ctx, sid)
+	if err != nil {
+		return false
+	}
+	if authorSub != "" && me.Sub == authorSub {
+		return true
+	}
+	ok, err := p.queries.HasPermission(ctx, store.HasPermissionParams{
+		Sub:           me.Sub,
+		PermissionKey: "demo.review",
+	})
+	if err != nil {
+		slog.Error("preview: 查权限失败", "sub", me.Sub, "err", err)
+		return false
+	}
+	return ok
+}
+
+// splitPreviewPath 拆出「版本号 / 相对路径 / 是否版本化」。
+//
+// `v12/index.html` → (12, "index.html", true)
+// `index.html`    → (0,  "index.html", false)
+// `v12`           → (12, "",           true)
+func splitPreviewPath(rest string) (rev int, rel string, versioned bool) {
+	if rest == "" {
+		return 0, "", false
+	}
+	head, tail, hasTail := strings.Cut(rest, "/")
+	if n, ok := parseRevSegment(head); ok {
+		if hasTail {
+			return n, tail, true
+		}
+		return n, "", true
+	}
+	return 0, rest, false
+}
+
+// parseRevSegment 认 `v12` 这种段（`v` + rev_no，与 docs/Demo域设计.md 的
+// `/preview/{slug}/v{version}/{path}` 一致）。不是版本段就返回 false，交给路径处理。
+func parseRevSegment(seg string) (int, bool) {
+	if len(seg) < 2 || seg[0] != 'v' {
+		return 0, false
+	}
+	n, err := strconv.Atoi(seg[1:])
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// previewBase 是注入进 HTML 的 <base href>。
+//
+// 作品包里的相对路径（`./style.css`、`img/a.png`）原本相对于「解压后的目录」，
+// 现在页面地址是 `/preview/{slug}/r{rev}/index.html`，相对路径恰好落在同一个目录，
+// 本来就能用。注入 <base> 的理由是**子目录里的页面**（`sub/about.html`）：
+// 没有 base 时 `../style.css` 会解析到 `/preview/{slug}/style.css`，越出正确位置。
+func previewBase(slug string, rev int) string {
+	return "/preview/" + slug + "/v" + strconv.Itoa(rev) + "/"
+}
+
+// contentTypeOf 按扩展名给 Content-Type。
+//
+// mime.TypeByExtension 在不同系统读的注册表不同（Windows 上 .js 可能给
+// text/plain），所以常见类型写死，退路才用 mime。
+func contentTypeOf(rel string) string {
+	switch strings.ToLower(path.Ext(rel)) {
+	case ".html", ".htm":
+		return "text/html; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".ico":
+		return "image/x-icon"
+	case ".woff2":
+		return "font/woff2"
+	case ".woff":
+		return "font/woff"
+	case ".ttf":
+		return "font/ttf"
+	case ".wasm":
+		return "application/wasm"
+	case ".txt", ".md":
+		return "text/plain; charset=utf-8"
+	}
+	if ct := mime.TypeByExtension(path.Ext(rel)); ct != "" {
+		return ct
+	}
+	return "application/octet-stream"
+}
+
+// cacheControlOf 决定缓存策略。
+//
+// 版本化 + 已发布 = 内容永不改变 → 一年 immutable。
+// 其余一律不让中间层缓存：草稿会变，当前版本别名也会变。
+func cacheControlOf(published, versioned bool) string {
+	if published && versioned {
+		return "public, max-age=31536000, immutable"
+	}
+	if published {
+		return "public, max-age=60"
+	}
+	return "private, no-store"
+}
+
+// injectBase 在 <head> 之后插入 <base href>。
+//
+// 找不到 <head> 就退回插在 <html ...> 之后；再找不到就放最前面。
+// 不做完整 HTML 解析：那要引 golang.org/x/net/html，为一个字符串插入不值得。
+func injectBase(doc []byte, base string) []byte {
+	tag := []byte(`<base href="` + base + `">`)
+	lower := bytes.ToLower(doc)
+
+	if i := bytes.Index(lower, []byte("<head")); i >= 0 {
+		if j := bytes.IndexByte(doc[i:], '>'); j >= 0 {
+			at := i + j + 1
+			return splice(doc, at, tag)
+		}
+	}
+	if i := bytes.Index(lower, []byte("<html")); i >= 0 {
+		if j := bytes.IndexByte(doc[i:], '>'); j >= 0 {
+			at := i + j + 1
+			return splice(doc, at, tag)
+		}
+	}
+	return splice(doc, 0, tag)
+}
+
+func splice(doc []byte, at int, ins []byte) []byte {
+	out := make([]byte, 0, len(doc)+len(ins))
+	out = append(out, doc[:at]...)
+	out = append(out, ins...)
+	out = append(out, doc[at:]...)
+	return out
+}

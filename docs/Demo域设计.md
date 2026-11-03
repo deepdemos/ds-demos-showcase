@@ -922,30 +922,51 @@ sequenceDiagram
     R-->>Adm: 200
 ```
 
-### 7.5 预览服务（内容寻址的解析）
+### 7.5 预览服务（版本化路径）
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant B as 浏览器
-    participant P as /preview/{slug}/v{ver}/{path}
-    participant Cache as 清单缓存
+    participant P as /preview/{slug}/v{rev_no}/{path}
     participant DB as DB
-    participant S as Blob 存储
+    participant S as 对象存储
 
     B->>P: GET style.css
-    P->>Cache: 取 revision 清单（ver = manifest_hash 前 12 位）
-    alt 缓存未命中
-        Cache->>DB: SELECT revision_id FROM demo_revisions WHERE manifest_hash LIKE :ver%
-        Cache->>DB: SELECT path, blob_hash FROM demo_revision_files
-        Cache-->>P: 清单
-    end
-    P->>S: 读 blob（storage_key）
+    P->>DB: SELECT lifecycle_state, author_sub, current_rev_no FROM demos WHERE slug = :slug
+    P->>P: 判定可见性（见下）
+    P->>S: 读 demos/{slug}/r{rev_no}/{path}
     S-->>P: bytes
-    P-->>B: 200 + Cache-Control: immutable（内容不会变）
+    P-->>B: 200 + Cache-Control: immutable
 ```
 
-**`immutable` 是内容寻址带来的真实收益**：URL 里的 `v{manifest_hash}` 永久对应同一份字节，CDN 可以永不回源。
+**地址里的 `v{n}` 是 `demo_revisions.rev_no`，不是行 id、也不是 manifest 前缀。**
+这样定有两个理由：
+
+1. `rev_no` 在作品内唯一且自 1 递增，天然是「第几版」的人话；
+2. 版本不可变（不变量 #1，`trg_demo_revisions_immutable`），所以
+   `v{rev_no}` 与内容寻址一样永久对应同一份字节——CDN 可以永不回源，
+   但不需要每次请求都去解析 manifest 前缀，也没有前缀碰撞问题。
+
+`/preview/{slug}/{path}` 不带版本的形式是「当前版本」别名（解析
+`demos.current_revision_id` → `rev_no`），它**会变**，所以只能短缓存。
+
+**可见性**：`published` 对所有人可见；其余状态（draft / pending / archived /
+removed）只有**作者本人**或持有 `demo.review` 权限的角色能看。
+`erased_at` 或 `deleted_at` 非空一律 404。判定顺序是先状态后文件——
+不先判定就返回 404 会把「这个 slug 存不存在」泄露出去。
+
+**同源渲染的隔离**：作品 HTML 跑在不透明源里，靠两道独立机制：
+
+| 机制 | 在哪生效 |
+|---|---|
+| iframe 的 `sandbox` 属性（不给 `allow-same-origin`） | 站内嵌预览 |
+| 响应的 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock` | **直接在新标签页打开预览地址** |
+
+第二条不是第一条的备份，是唯一在「直接访问」这条路径上生效的那一条。
+代价是作品页里 `localStorage` 会抛异常、读不到同源其它作品的存储——
+这正是 [`多人联机方案调研.md`](多人联机方案调研.md) 第 146 行记录的预览源共享问题，
+也是把预览最终挪到 `{slug}.preview.deepdemos.top` 的动机。
 
 ### 7.6 删除与 GC
 

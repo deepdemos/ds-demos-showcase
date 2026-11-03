@@ -61,3 +61,20 @@ UPDATE demos SET current_revision_id = $2, updated_at = now() WHERE id = $1;
 -- 不需要先手动删 demo_revisions。demos.current_revision_id 那条边是 SET NULL，
 -- 也不妨碍删除。
 DELETE FROM demos WHERE id = $1;
+
+-- name: GetDemoForPreview :one
+-- 预览托管用：一次取到「这是什么状态、作者是谁、当前是第几版」。
+-- author_sub 用 LEFT JOIN + COALESCE 取空串：作者注销后 author_id 会被 SET NULL
+-- （迁移 0008），此时作者视图应当消失，而不是让整条预览 500。
+-- current_rev_no 同理：还没有版本时是 0，调用方按「没有内容」处理。
+SELECT d.id,
+       d.slug,
+       d.lifecycle_state,
+       d.deleted_at,
+       d.erased_at,
+       COALESCE(r.rev_no, 0)::int AS current_rev_no,
+       COALESCE(u.sub, '')::text AS author_sub
+FROM demos d
+LEFT JOIN users u ON u.id = d.author_id
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.slug = $1;

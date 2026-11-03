@@ -61,7 +61,7 @@ func (s *stub) SubmitDemo(http.ResponseWriter, *http.Request) {
 // 契约改了路径而生成物没重跑、或有人绕过生成物手写路由，这里就会红。
 func TestRouterUsesContractPaths(t *testing.T) {
 	s := &stub{}
-	router := NewRouter(s)
+	router := NewRouter(s, nil)
 
 	cases := []struct {
 		method string
@@ -101,7 +101,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 
 func TestRouterUnknownPathIs404(t *testing.T) {
 	response := httptest.NewRecorder()
-	NewRouter(&stub{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nope", nil))
+	NewRouter(&stub{}, nil).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nope", nil))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", response.Code)
 	}
