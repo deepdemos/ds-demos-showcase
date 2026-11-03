@@ -181,7 +181,8 @@ jobs:
       - name: 接口契约须与生成产物一致（Go）
         run: |
           cd api
-          "$(go env GOPATH)/bin/oapi-codegen" -config oapi-codegen.yaml openapi.yaml
+          "$(go env GOPATH)/bin/oapi-codegen" -config oapi-codegen-types.yaml openapi.yaml
+          "$(go env GOPATH)/bin/oapi-codegen" -config oapi-codegen-server.yaml openapi.yaml
           cd ..
           git diff --exit-code backend/internal/api
       # 兼容门禁放这一步之后：先确认生成物是最新的，再拿它跟基线比。

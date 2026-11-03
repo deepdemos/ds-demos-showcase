@@ -6,7 +6,7 @@
 改 api/openapi.yaml  →  重新生成  →  再改实现
 ```
 
-手改生成目录（`backend/internal/api/api.gen.go`、`web/src/api/gen/`）会被 CI 打回：
+手改生成目录（`backend/internal/api/types.gen.go`、`backend/internal/api/server.gen.go`、`web/src/api/gen/`）会被 CI 打回：
 CI 会重新生成一遍并比对，产物与契约不一致就是红的。
 
 ## 为什么是 OpenAPI 3.0.3，不是 3.1
@@ -53,7 +53,7 @@ npm run gen:api:web    # 只生成前端
 
 | 侧 | 工具 | 产物 | 版本钉在哪 |
 | --- | --- | --- | --- |
-| Go | `oapi-codegen` | `backend/internal/api/api.gen.go` | 根 `package.json` 的 `gen:api:go` 前面的 `go install` 说明 + 生成文件头部 |
+| Go | `oapi-codegen` | `backend/internal/api/types.gen.go` + `backend/internal/api/server.gen.go` | 根 `package.json` 的 `gen:api:go` 前面的 `go install` 说明 + 生成文件头部 |
 | 前端 | `orval` | `web/src/api/gen/index.ts` | 根 `package.json` 的 `gen:api:web`（`npx --yes orval@8.46.0`） |
 
 `orval` 没有放进 `devDependencies`，是因为它带 83 个传递依赖、会让 lockfile 涨 1600 多行，

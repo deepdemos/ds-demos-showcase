@@ -10,7 +10,7 @@ test('层判定：cmd / platform / httpapi / domain 子包 / 生成物', () => {
   assert.equal(layerOf('backend/internal/httpapi/handlers.go'), 'httpapi');
   assert.equal(layerOf('backend/internal/domain/demo/service.go'), 'domain:demo');
   assert.equal(layerOf('backend/internal/kernel/verification/verification.go'), 'kernel:verification');
-  assert.equal(layerOf('backend/internal/api/api.gen.go'), 'api');
+  assert.equal(layerOf('backend/internal/api/server.gen.go'), 'api');
   assert.equal(layerOf('backend/internal/store/db.go'), 'store');
   assert.equal(layerOf('docs/readme.md'), null);
 });

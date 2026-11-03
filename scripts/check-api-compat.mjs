@@ -11,7 +11,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const GENERATED = 'backend/internal/api/api.gen.go';
+// 生成物按「类型」与「服务端」拆成两份（见 api/oapi-codegen-types.yaml）。
+// 兼容门禁读的是 Go 类型表面，所以两份拼起来当一个源读。
+export const GENERATED = [
+  'backend/internal/api/types.gen.go',
+  'backend/internal/api/server.gen.go',
+];
 export const BASELINE = 'api/surface.json';
 
 /** 抽出「调用方能看见的东西」。只认 oapi-codegen 生成出来的那几种形状。 */
@@ -146,8 +151,10 @@ export function diffSurface(base, cur) {
   return findings;
 }
 
-export function readSurface(file = GENERATED, cwd = process.cwd()) {
-  return extractSurface(fs.readFileSync(path.join(cwd, file), 'utf8'));
+export function readSurface(files = GENERATED, cwd = process.cwd()) {
+  const list = Array.isArray(files) ? files : [files];
+  const body = list.map((f) => fs.readFileSync(path.join(cwd, f), 'utf8')).join('@@NL@@');
+  return extractSurface(body.replaceAll('@@NL@@', String.fromCharCode(10)));
 }
 
 function main() {
