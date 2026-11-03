@@ -57,9 +57,7 @@ func mkAuthor(t *testing.T, pool *pgxpool.Pool, tag string) int64 {
 		t.Fatalf("建作者失败: %v", err)
 	}
 	t.Cleanup(func() {
-		// 版本行没有到 demos 的外键（见 queries 里的说明），必须显式删。
-		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM demo_revisions WHERE demo_id IN (SELECT id FROM demos WHERE author_id = $1)`, id)
+		// 版本行由 fk_demo_revisions_demo_id76 的 ON DELETE CASCADE 带走（迁移 0006）。
 		_, _ = pool.Exec(context.Background(), `DELETE FROM demos WHERE author_id = $1`, id)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM accounts WHERE id = $1`, id)
 	})
