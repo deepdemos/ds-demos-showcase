@@ -27,10 +27,14 @@ export default {
       // 增长落在文件数而不是单个文件长度上。
       //
       // 注意：schemas 放在 `gen/model/`，操作放在 `gen/<tag>/`。调用方统一从
-      // `src/api/gen/index.ts` 拿，那个文件是 orval 生成的汇总出口。
+      // `src/api/index.ts`（手写桶）拿，那个文件 re-export 生成物。
+      //
+      // `tags-split` 而不是 `split`：后者把所有操作塞进一个 index.ts，随端点线性增长
+      // （10 端点时 821 行，越过 file-size 的 800 行硬线）。按 tag 拆开后，
+      // 增长落在目录里而不是单个文件长度上。
       target: './src/api/gen/index.ts',
       schemas: './src/api/gen/model',
-      mode: 'split',
+      mode: 'tags-split',
     },
   },
 };
