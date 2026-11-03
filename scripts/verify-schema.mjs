@@ -220,6 +220,62 @@ await rejects('非法 demo_type 被外键拒',
 await accepts('合法 demo_type 通过',
   "INSERT INTO demo_revisions (demo_id, rev_no, demo_type, title) VALUES (" + did + ",2,'zip','x')");
 
+// ---------- 5b. demo 域 16 条外键（迁移 0008）----------
+// 这 16 列在此前全都没有外键：能插进不存在的 id，删父行会留下孤儿。
+// 断言分两半 —— 「约束在不在」查 pg_constraint，「行为对不对」真插真删。
+console.log('--- demo 域外键 ---');
+const EXPECTED_FK = [
+  ['demo_channels', 'fk_demo_channels_demo_id78', 'c'],
+  ['demo_stats', 'fk_demo_stats_demo_id79', 'c'],
+  ['demo_ratings', 'fk_demo_ratings_demo_id80', 'c'],
+  ['demo_timeline', 'fk_demo_timeline_demo_id81', 'c'],
+  ['demo_slug_history', 'fk_demo_slug_history_demo_id82', 'c'],
+  ['demo_grants', 'fk_demo_grants_demo_id83', 'c'],
+  ['demo_revision_files', 'fk_demo_revision_files_revision_id84', 'c'],
+  ['demos', 'fk_demos_author_id85', 'n'],
+  ['demo_revisions', 'fk_demo_revisions_created_by86', 'n'],
+  ['demo_channels', 'fk_demo_channels_curated_by87', 'n'],
+  ['demo_ratings', 'fk_demo_ratings_user_id88', 'n'],
+  ['demo_timeline', 'fk_demo_timeline_actor_id89', 'n'],
+  ['demo_grants', 'fk_demo_grants_granted_by90', 'n'],
+  ['demo_revisions', 'fk_demo_revisions_prompt_id91', 'a'],
+  ['demo_revision_files', 'fk_demo_revision_files_blob_hash92', 'a'],
+  ['demo_grants', 'fk_demo_grants_capability93', 'a'],
+];
+for (const [table, name, deltype] of EXPECTED_FK) {
+  await ok('外键 ' + name,
+    "SELECT confdeltype FROM pg_constraint WHERE conname='" + name + "' AND conrelid='" + table + "'::regclass",
+    deltype);
+}
+
+// 人列必须能指到 users.id；指向不存在的用户要被拒。
+await db.exec("INSERT INTO users (sub) VALUES ('VERIFY-SUB-1')");
+const uid = (await db.query("SELECT id FROM users WHERE sub='VERIFY-SUB-1'")).rows[0].id;
+await accepts('demos.author_id 指向 users.id',
+  "UPDATE demos SET author_id=" + uid + " WHERE id=" + did);
+await rejects('demos.author_id 指向不存在的用户被拒',
+  "UPDATE demos SET author_id=999999 WHERE id=" + did, 'fk_demos_author_id85');
+
+// 共享实体引用：能力下线要先清授权；blob 不存在时引用要拒。
+await rejects('demo_grants.capability 写未登记能力被拒',
+  "INSERT INTO demo_grants (demo_id, capability) VALUES (" + did + ",'not.a.capability')",
+  'fk_demo_grants_capability93');
+await accepts('demo_grants.capability 写已登记能力通过',
+  "INSERT INTO demo_grants (demo_id, capability) VALUES (" + did + ",'storage.read')");
+await rejects('demo_revision_files.blob_hash 指向不存在的 blob 被拒',
+  "INSERT INTO demo_revision_files (revision_id, path, blob_hash, size, mime) VALUES ((SELECT id FROM demo_revisions WHERE demo_id=" + did + " AND rev_no=2),'a.js',repeat('f',64),1,'text/javascript')",
+  'fk_demo_revision_files_blob_hash92');
+
+// 级联：删版本要把清单行一起带走（此前不会，孤儿会留下）。
+await db.exec("INSERT INTO blobs (sha256, size, mime, storage_key, backend) VALUES (repeat('e',64),10,'text/html','verify/index.html','local')");
+await accepts('清单行可写（blob 存在）',
+  "INSERT INTO demo_revision_files (revision_id, path, blob_hash, size, mime) VALUES ((SELECT id FROM demo_revisions WHERE demo_id=" + did + " AND rev_no=2),'index.html',repeat('e',64),10,'text/html')");
+await ok('清单行已写入',
+  "SELECT count(*) FROM demo_revision_files f JOIN demo_revisions r ON r.id=f.revision_id WHERE r.demo_id=" + did, 1);
+await db.exec("DELETE FROM demo_revisions WHERE demo_id=" + did + " AND rev_no=2");
+await ok('删版本级联删清单行',
+  "SELECT count(*) FROM demo_revision_files", 0);
+
 // ---------- 6. 封面内联两条 CHECK 同值（手册 §1 第 4 行的「两处必须同改」）----------
 console.log('--- 结构性上限 ---');
 await ok('cover_inline 上限（demos）',
