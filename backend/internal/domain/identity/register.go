@@ -48,6 +48,12 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Account, stri
 	if err != nil {
 		return Account{}, "", mapRegisterError(err)
 	}
+	// demo 站的投影行：业务外键指向它的 id。与 accounts 同一事务，
+	// 不存在「有账号没有投影行」的中间态。
+	user, err := q.CreateUser(ctx, sub)
+	if err != nil {
+		return Account{}, "", mapRegisterError(err)
+	}
 	if err := q.CreateProfile(ctx, store.CreateProfileParams{
 		AccountID:   row.ID,
 		Username:    in.Username,
@@ -83,6 +89,8 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Account, stri
 	}
 
 	return Account{
+		ID:          row.ID,
+		UserID:      user.ID,
 		Sub:         sub,
 		Username:    in.Username,
 		DisplayName: in.DisplayName,

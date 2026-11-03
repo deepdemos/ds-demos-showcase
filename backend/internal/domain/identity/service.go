@@ -61,6 +61,7 @@ func (s *Service) Me(ctx context.Context, sessionID string) (Account, error) {
 	}
 	return Account{
 		ID:          row.ID,
+		UserID:      row.UserID,
 		Sub:         row.Sub,
 		Username:    row.Username,
 		DisplayName: row.DisplayName,

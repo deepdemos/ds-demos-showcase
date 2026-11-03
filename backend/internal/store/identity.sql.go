@@ -122,7 +122,7 @@ type CreateAccountRow struct {
 	CreatedAt pgtype.Timestamptz
 }
 
-// ===== 注册（一事务五张表）=====
+// ===== 注册（一事务六张表）=====
 func (q *Queries) CreateAccount(ctx context.Context, sub string) (CreateAccountRow, error) {
 	row := q.db.QueryRow(ctx, createAccount, sub)
 	var i CreateAccountRow
@@ -174,6 +174,25 @@ type CreateProfileParams struct {
 func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) error {
 	_, err := q.db.Exec(ctx, createProfile, arg.AccountID, arg.Username, arg.DisplayName)
 	return err
+}
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (sub) VALUES ($1)
+RETURNING id, sub
+`
+
+type CreateUserRow struct {
+	ID  int64
+	Sub string
+}
+
+// demo 站的投影行：只带 sub，业务外键指向它的 id。
+// 与 accounts 同一个事务里建，生命周期一致。
+func (q *Queries) CreateUser(ctx context.Context, sub string) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser, sub)
+	var i CreateUserRow
+	err := row.Scan(&i.ID, &i.Sub)
+	return i, err
 }
 
 const createWebSession = `-- name: CreateWebSession :exec
@@ -293,6 +312,7 @@ func (q *Queries) GetLoginByUsername(ctx context.Context, lower string) (GetLogi
 const getMeBySession = `-- name: GetMeBySession :one
 
 SELECT a.id,
+       u.id AS user_id,
        a.sub,
        p.username,
        p.display_name,
@@ -303,6 +323,7 @@ SELECT a.id,
        a.created_at
 FROM web_sessions s
 JOIN accounts a ON a.sub = s.account_sub
+JOIN users u ON u.sub = a.sub
 JOIN profiles p ON p.account_id = a.id
 JOIN account_emails e ON e.account_id = a.id AND e.is_primary
 WHERE s.id = $1
@@ -313,6 +334,7 @@ WHERE s.id = $1
 
 type GetMeBySessionRow struct {
 	ID          int64
+	UserID      int64
 	Sub         string
 	Username    string
 	DisplayName string
@@ -326,11 +348,14 @@ type GetMeBySessionRow struct {
 // 身份域：会话查询。这一刀只有「我是谁」，建账号与会话在下一刀。
 // 会话有效性一次判完：没过期、没被吊销、账号还在且没注销。其余 status 一律放行——
 // 被封/待验证的账号也要能读出自己；但 deleted 例外，会话必须失效，不能靠注销流程兜底。
+// users 是 demo 站的投影表：业务列（demos.author_id 等）用它的 id，
+// 身份的东西一律留在 accounts。两者靠 sub 对齐。
 func (q *Queries) GetMeBySession(ctx context.Context, id string) (GetMeBySessionRow, error) {
 	row := q.db.QueryRow(ctx, getMeBySession, id)
 	var i GetMeBySessionRow
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
 		&i.Sub,
 		&i.Username,
 		&i.DisplayName,

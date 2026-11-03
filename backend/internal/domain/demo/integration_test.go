@@ -41,27 +41,35 @@ func testService(t *testing.T, pool *pgxpool.Pool) *Service {
 	return New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, nil)
 }
 
-// mkAuthor 建一个只有 accounts 行的作者。
+// mkAuthor 建一个作者：accounts 行 + 对应的 users 投影行，返回 users.id。
 //
 // 不走 Register：投稿只需要一个 author_id，而注册会连带建 profiles / credentials /
 // sessions，跟本域要验的东西无关。这里只满足 accounts 的约束。
 func mkAuthor(t *testing.T, pool *pgxpool.Pool, tag string) int64 {
 	t.Helper()
+	sub := fmt.Sprintf("it-demo-%s", tag)
 	var id int64
 	err := pool.QueryRow(context.Background(),
 		`INSERT INTO accounts (sub, status, role, level)
-		 VALUES ($1, 'active', 'user', 0) RETURNING id`,
-		fmt.Sprintf("it-demo-%s", tag),
+		 VALUES ($1, 'active', 'user', 0) RETURNING id`, sub,
 	).Scan(&id)
 	if err != nil {
 		t.Fatalf("建作者失败: %v", err)
 	}
+	// demos.author_id 指向 users（demo 站投影表），不是 accounts。
+	var userID int64
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO users (sub) VALUES ($1) RETURNING id`, sub,
+	).Scan(&userID); err != nil {
+		t.Fatalf("建用户投影失败: %v", err)
+	}
 	t.Cleanup(func() {
 		// 版本行由 fk_demo_revisions_demo_id76 的 ON DELETE CASCADE 带走（迁移 0006）。
-		_, _ = pool.Exec(context.Background(), `DELETE FROM demos WHERE author_id = $1`, id)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM demos WHERE author_id = $1`, userID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM accounts WHERE id = $1`, id)
 	})
-	return id
+	return userID
 }
 
 // buildZip 造一个最小可用的作品包。

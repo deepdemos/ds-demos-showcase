@@ -132,12 +132,12 @@ func TestIntegrationListAndDetail(t *testing.T) {
 func seedMe(t *testing.T, pool *pgxpool.Pool, sessionID string) {
 	t.Helper()
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
 	}
-	// 用一个 CTE 一次装完四张表。PostgreSQL 的数据修改型 CTE 即使没人读也会执行完，
+	// 用一个 CTE 一次装完五张表（含 users 投影行——/me 的查询要 join 它）。PostgreSQL 的数据修改型 CTE 即使没人读也会执行完，
 	// 所以 p / e 不需要被主语句引用。少填任何一个 NOT NULL 列都会在这里当场报错。
 	const seedSQL = `
 WITH a AS (
@@ -149,6 +149,8 @@ WITH a AS (
 ), e AS (
     INSERT INTO account_emails (account_id, email, is_primary, verified_at)
     SELECT id, 'it-me@example.com', true, now() FROM a
+), u AS (
+    INSERT INTO users (sub) VALUES ('ITSESSION0000000000000000AA')
 )
 INSERT INTO web_sessions (id, account_sub, username, display_name, role, status, verified_at)
 SELECT $1, 'ITSESSION0000000000000000AA', 'it-me', '集成测试', 'admin', 'active', now() FROM a`
@@ -210,7 +212,7 @@ func TestIntegrationGetMe(t *testing.T) {
 func TestIntegrationRegister(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
@@ -289,7 +291,7 @@ func TestIntegrationRegister(t *testing.T) {
 func TestIntegrationLoginLogout(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
@@ -379,7 +381,7 @@ func TestIntegrationLoginRateLimit(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
 	for _, q := range []string{
-		"DELETE FROM login_attempts", "DELETE FROM web_sessions", "DELETE FROM accounts",
+		"DELETE FROM login_attempts", "DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts",
 	} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
@@ -458,7 +460,7 @@ func TestIntegrationLoginRateLimit(t *testing.T) {
 func TestIntegrationBannedAccountHTTP(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
