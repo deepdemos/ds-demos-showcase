@@ -40,7 +40,7 @@ func testService(t *testing.T, pool *pgxpool.Pool) *Service {
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
-	return New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, nil)
+	return New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, 0, nil)
 }
 
 // mkAuthor 建一个作者：accounts 行 + 对应的 users 投影行，返回 users.id。
@@ -228,8 +228,10 @@ func TestIntegrationSubmitUnknownType(t *testing.T) {
 		PackagePath: pkg,
 		PackageSize: fileSize(t, pkg),
 	})
-	if err == nil {
-		t.Fatal("未知作品类型应报错")
+	// 断言的是**哪一类**错误，不只是「有错」：外键违反（23503）如果不翻译，
+	// 会一路漏到传输层的 default 分支变成 503，而它其实是参数写错了（400）。
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("未知作品类型应返回 ErrInvalidInput（→400），实际 %v", err)
 	}
 	var n int
 	if err := pool.QueryRow(context.Background(),

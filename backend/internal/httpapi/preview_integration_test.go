@@ -100,6 +100,10 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 			"index.html": "<!doctype html><html><head><title>" + s.slug + "</title></head><body>hi</body></html>",
 			"style.css":  "body{color:#000}",
 			"sub/a.html": "<html><head></head><body>sub</body></html>",
+			// 顶层文档会执行脚本的类型。没有 CSP sandbox 时它们能读主站同源数据。
+			"evil.svg":   `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`,
+			"evil.xhtml": `<html xmlns="http://www.w3.org/1999/xhtml"><script>alert(1)</script></html>`,
+			"evil.xml":   `<?xml version="1.0"?><root><script>alert(1)</script></root>`,
 		}
 		for name, body := range files {
 			p := filepath.Join(root, filepath.FromSlash(name))
@@ -242,13 +246,24 @@ func TestIntegrationPreviewHeaders(t *testing.T) {
 		t.Errorf("草稿应 no-store，实际 %q", cc)
 	}
 
-	// 非 HTML：不该注入 base，也不该带 CSP sandbox。
+	// **可执行脚本的文档类型必须带 CSP sandbox**，不只是 text/html。
+	// 这条测试曾经写成「非 HTML 一律不加 CSP」，正好把
+	// 「SVG 预览可以执行脚本」锁死在测试里。
+	for _, name := range []string{"evil.svg", "evil.xhtml", "evil.xml"} {
+		w = previewGet(p, "/preview/pv-published/v1/"+name, "")
+		csp := w.Header().Get("Content-Security-Policy")
+		if !strings.Contains(csp, "sandbox") {
+			t.Errorf("%s 是可执行脚本的文档类型，必须带 CSP sandbox，实际 %q", name, csp)
+		}
+	}
+
+	// 纯资源（CSS）：不该注入 base，也不该带 CSP sandbox。
 	w = previewGet(p, "/preview/pv-published/v1/style.css", "")
 	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
 		t.Errorf("CSS 的 Content-Type 错：%q", ct)
 	}
 	if csp := w.Header().Get("Content-Security-Policy"); csp != "" {
-		t.Errorf("非 HTML 不该带 CSP sandbox，实际 %q", csp)
+		t.Errorf("CSS 是纯资源，不该带 CSP sandbox，实际 %q", csp)
 	}
 	if strings.Contains(w.Body.String(), "<base") {
 		t.Errorf("CSS 被注入了 base：%q", w.Body.String())

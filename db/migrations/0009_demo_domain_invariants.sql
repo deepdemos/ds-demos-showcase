@@ -22,8 +22,20 @@ BEGIN
             USING ERRCODE = 'restrict_violation';
     END IF;
 
-    -- 擦除那一次允许改内容列（按 §9 #7 置 NULL 并写 erased_at）
+    -- 擦除那一次允许改内容列（按 §9 #7 置 NULL 并写 erased_at），
+    -- 但**只允许**改内容列：身份列必须原样不动。
+    -- 不放这条闸的话，擦除这个动作本身就成了任意改写的后门——
+    -- ck_rev_erased_content 只兜内容列，管不到 demo_id / rev_no / created_at。
     IF NEW.erased_at IS NOT NULL AND OLD.erased_at IS NULL THEN
+        IF NEW.demo_id    IS DISTINCT FROM OLD.demo_id
+        OR NEW.rev_no     IS DISTINCT FROM OLD.rev_no
+        OR NEW.demo_type  IS DISTINCT FROM OLD.demo_type
+        OR NEW.created_at IS DISTINCT FROM OLD.created_at
+        OR NEW.created_by IS DISTINCT FROM OLD.created_by
+        OR NEW.source     IS DISTINCT FROM OLD.source THEN
+            RAISE EXCEPTION '擦除只允许清空内容列，不允许修改身份列（id=%）', OLD.id
+                USING ERRCODE = 'restrict_violation';
+        END IF;
         RETURN NEW;
     END IF;
 

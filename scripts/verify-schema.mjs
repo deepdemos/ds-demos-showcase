@@ -311,6 +311,15 @@ await rejects('不变量 10 反向：已有上架渠道时退回审核状态被�
   "UPDATE demos SET moderation_state='pending' WHERE id=" + did2,
   '上架中的渠道');
 
+// 擦除那条分支过去是无条件放行任何列，等于给「擦除」留了一扇任意改写的后门。
+// 现在只允许清空内容列，身份列（demo_id / rev_no / created_at / source …）必须不动。
+await rejects('不变量 1：擦除时改 demo_id 被拒',
+  "UPDATE demo_revisions SET erased_at=now(), deleted_at=now(), demo_id=" + did2 + ", title=NULL, description=NULL, cover_url=NULL, cover_inline=NULL, entry_path=NULL, manifest_hash=NULL, file_count=NULL, total_bytes=NULL, prompt=NULL, prompt_id=NULL, video_url=NULL, model_hint=NULL WHERE demo_id=" + did + " AND rev_no=3",
+  '不允许修改身份列');
+await rejects('不变量 1：擦除时改 created_at 被拒',
+  "UPDATE demo_revisions SET erased_at=now(), deleted_at=now(), created_at='2000-01-01', title=NULL, description=NULL, cover_url=NULL, cover_inline=NULL, entry_path=NULL, manifest_hash=NULL, file_count=NULL, total_bytes=NULL, prompt=NULL, prompt_id=NULL, video_url=NULL, model_hint=NULL WHERE demo_id=" + did + " AND rev_no=3",
+  '不允许修改身份列');
+
 // ---------- 5d. 渠道主数据（迁移 0010）----------
 // 渠道是数据不是枚举（标准对象 §EN-1）—— 但「数据」不等于「随便写」。
 console.log('--- 渠道主数据 ---');

@@ -1,5 +1,5 @@
 {
-  "db/schema/10-identity.sql": "8903edb02a84bf8531da3bf9ed9e9fe08c9b17b2d496d5da9ab6b0a041cae621",
+  "db/schema/10-identity.sql": "fe2fc0559b68a2ed7c6cded0010640827b14fdf918afd3390be9eb8f2ad3074e",
   "db/schema/15-settings.sql": "c83ad4d37de63f46474ce60251b1cc400e0fcbe94579f65e78260736d6c4a82a",
   "db/schema/20-governance.sql": "789a3d838a2eaea0583ac034368662a21725433c39d7acf87a38fe82ed4648f0",
   "db/schema/30-demo.sql": "dd7d8bbb36359aaf5a1725b845a771f0a0854d5c4946b27c69f67db0e94ab4ef",
@@ -16,7 +16,7 @@
   "db/migrations/0005_login_attempt_kind.sql": "c34797a485cb1e00a3bd9c7312f1067958072e5949de97ca35bb52ef7f9f60cd",
   "db/migrations/0006_demo_revision_fk.sql": "8b4b5389d910b40bc177c99c32c05bd68609c52cec5f00b217f9b7560156e30c",
   "db/migrations/0007_users_projection.sql": "747a78a1abe1cf3a30b7a7f669f519e750082a8f2f5017d2e9d9e363da8268f9",
-  "db/migrations/0008_demo_domain_fk.sql": "f15bf10557f5d60923f24070ef11e05a575aefb44a02d0b25aff041596feeca1",
-  "db/migrations/0009_demo_domain_invariants.sql": "e35e7d518ace6c1f530e39433cdcd94a5ec4d899746770b185ee752505e09ca9",
-  "db/migrations/0010_channels_master.sql": "dc63249500ed469ccdf318c543e2b0aa8380fb19349fa98e413f6e5054339975"
+  "db/migrations/0008_demo_domain_fk.sql": "90c8403e0169c9bb818cfa2e5dd6385d390a2be0f8ca63a27f24e6f2d6c836d1",
+  "db/migrations/0009_demo_domain_invariants.sql": "d345aae2472313c2caaf5615f3035c61ced4f5abde6ec45b3d615f3e94c5565c",
+  "db/migrations/0010_channels_master.sql": "09e57db7386909cd6ee54bdccc1ab48d79b83a7eb72beb0cd6c12f9aac212084"
 }
