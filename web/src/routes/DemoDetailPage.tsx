@@ -94,8 +94,45 @@ export function DemoDetailPage() {
           <p className="mt-4 whitespace-pre-line text-base leading-7 text-gray-700 dark:text-gray-300">
             {data.demo.description ?? '作者没有填写简介。'}
           </p>
+
+          {data.demo.lifecycleState === 'published' ? <DemoPreview slug={slug} /> : null}
         </article>
       )}
+    </section>
+  );
+}
+
+/**
+ * 作品预览。
+ *
+ * # 两道隔离，缺一不可
+ *
+ * 第一道是服务端给的 `Content-Security-Policy: sandbox …`（见 `preview.go`），
+ * 它对「直接在新标签页打开」也生效——那正是 iframe 属性管不到的场景。
+ *
+ * 第二道就是这里的 `sandbox` 属性。**绝不能加 `allow-same-origin`**：
+ * 预览与主站同源，加上它等于把沙箱拆了——脚本能读主站的 DOM、localStorage
+ * 和 cookie，一句 `fetch` 就能带着用户身份去调审核接口。
+ *
+ * 也不加 `allow-top-navigation`：那让作品能把整个标签页导航走。
+ */
+export function DemoPreview({ slug }: { slug: string }) {
+  const src = `/preview/${encodeURIComponent(slug)}/`;
+  return (
+    <section className="mt-6 space-y-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">预览</h2>
+        <Link to={src} target="_blank" rel="noreferrer" className="text-sm hover:underline">
+          新标签页打开
+        </Link>
+      </div>
+      <iframe
+        src={src}
+        title="作品预览"
+        className="h-[70vh] w-full rounded-xl border border-gray-200 bg-white dark:border-gray-800"
+        sandbox="allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock"
+        referrerPolicy="no-referrer"
+      />
     </section>
   );
 }
