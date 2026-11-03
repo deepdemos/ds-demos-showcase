@@ -21,8 +21,24 @@ import (
 // 实测：真实地址 203.0.113.7 + 伪造 XFF 1.2.3.4 时，clientIP() 返回 1.2.3.4。
 //
 // 上反向代理后要按白名单显式解析 XFF（见 httpapi.clientIP 的注释与运行手册 §3）。
-func NewRouter(si api.ServerInterface) http.Handler {
+// preview 可以为 nil（未接线存储），此时预览路径统一 404。
+func NewRouter(si api.ServerInterface, preview *Preview) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID, middleware.Recoverer)
+
+	// 预览托管不是契约端点（见 httpapi/preview.go 顶部注释），直接挂在 chi 上。
+	// 契约路径都在 /api/v1 与 /healthz 下，与 /preview 不冲突。
+	router.Method("GET", "/preview/{slug}/*", previewOrNotFound(preview))
+	router.Method("HEAD", "/preview/{slug}/*", previewOrNotFound(preview))
+	router.Method("GET", "/preview/{slug}", previewOrNotFound(preview))
+	router.Method("HEAD", "/preview/{slug}", previewOrNotFound(preview))
+
 	return api.HandlerFromMux(si, router)
+}
+
+func previewOrNotFound(p *Preview) http.Handler {
+	if p != nil {
+		return p
+	}
+	return http.NotFoundHandler()
 }
