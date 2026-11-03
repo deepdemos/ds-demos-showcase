@@ -57,7 +57,7 @@
 
 ```bash
 npm i -D @electric-sql/pglite   # 仅本地
-node scripts/verify-schema.mjs  # 基线 + 迁移全灌一遍，跑 47 条断言
+node scripts/verify-schema.mjs  # 基线 + 迁移全灌一遍，跑 113 条断言
 ```
 
 真库（需要 PostgreSQL）用 Go 的迁移器：
@@ -72,7 +72,7 @@ cd backend && DATABASE_URL=postgres://... go run ./cmd/migrate status
 
 **当前基线（2026-11-01，`node scripts/check-schema.mjs` 静态计数）：10 个文件 · 79 表 · 5 视图 · 76 外键。**
 
-> 上一版这里写的是 `tables=75 · views=5 · fks=78 · indexes=199`，与实物不符：实测是 **71 条外键**（设置域落地后 75 条，`demo_types` 落地后 76 条），表数也不是 75（设置域落地后 78，`demo_types` 落地后 79）。本版按门禁实测值改正。**`indexes` 门禁不统计，本轮未复核，故不再列数**。真库计数会**多 3 张 = 82**——`auth_events_default`（身份域）+ `audit_log_default` / `audit_log_p2026_10`（治理域）三个分区是 `PARTITION OF` 写法，门禁的解析器不认，不计入 79。
+> 上一版这里写的是 `tables=75 · views=5 · fks=78 · indexes=199`，与实物不符：实测是 **71 条外键**（设置域落地后 75 条，`demo_types` 落地后 76 条），表数也不是 75（设置域落地后 78，`demo_types` 落地后 79）。本版按门禁实测值改正。**`indexes` 门禁不统计，本轮未复核，故不再列数**。真库计数会**多 3 张 = 85 表 / 102 外键**——`auth_events_default`（身份域）+ `audit_log_default` / `audit_log_p2026_10`（治理域）三个分区是 `PARTITION OF` 写法，门禁的解析器不认，不计入 79。
 
 ## 与设计文档的对应关系
 
