@@ -112,3 +112,12 @@ func TestMapExtractError(t *testing.T) {
 		t.Fatal("未知错误不该翻成 ErrBadPackage")
 	}
 }
+
+func TestSlugifyOnlyPunctuationReturnsEmpty(t *testing.T) {
+	// 纯标点与纯空白一样，都不该产出可用 slug。
+	for _, in := range []string{"！？", "——", "   ", ""} {
+		if got := slugify(in); got != "" {
+			t.Fatalf("slugify(%q) = %q，期望空串", in, got)
+		}
+	}
+}
