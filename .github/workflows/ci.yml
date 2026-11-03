@@ -61,7 +61,10 @@ jobs:
       - name: test（含集成测试）
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable
-        run: go test -race ./...
+        # -p 1：集成测试各包共用同一个测试库，而有的用例会 `DELETE FROM accounts` 清场。
+        # 并行跑包时它们会互相把对方刚建的数据删掉（实测：身份域的验证码用例偶发
+        # 「投递信息不对: To 为空」）。串行是这里最便宜的隔离方式，后端测试量很小。
+        run: go test -race -p 1 ./...
       - name: build
         run: go build ./...
       - name: 失败处理指引
