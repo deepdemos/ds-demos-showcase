@@ -214,6 +214,11 @@ func (s *Service) collect(root string, st *staged) error {
 // 两个并发投稿能同时通过检查。这里把 23505 当成「换一个 slug 再试」的信号。
 func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, error) {
 	base := slugify(in.Title)
+	// 标题里没有可用 ASCII 时 slugify 返回空（纯中文标题就是这种情况）。
+	// 这时不能用光秃秃的 "demo" 当第一版：第二个纯中文标题投稿会撞上它，
+	// 之后全部退化成 "demo-xxxx"，反而把最想要的那个名字占了。
+	// 所以从第一次尝试起就带后缀。
+	needsSuffix := base == ""
 	if base == "" {
 		base = "demo"
 	}
@@ -221,7 +226,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
 		slug := base
-		if attempt > 0 {
+		if attempt > 0 || needsSuffix {
 			suffix, err := randomSuffix(4)
 			if err != nil {
 				return "", fmt.Errorf("demo: 生成 slug 失败: %w", err)
