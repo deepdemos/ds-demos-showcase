@@ -41,6 +41,10 @@ func (s *stub) PostAuthLogout(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "logout")
 }
 
+func (s *stub) PostAuthEmailCode(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "email-code")
+}
+
 // TestRouterUsesContractPaths 守住一条不变式：路由表来自契约，而不是人手写的地址清单。
 // 契约改了路径而生成物没重跑、或有人绕过生成物手写路由，这里就会红。
 func TestRouterUsesContractPaths(t *testing.T) {
@@ -58,6 +62,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/me", "me"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
+		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},
 		{http.MethodPost, "/api/v1/auth/logout", "logout"},
 	}
 

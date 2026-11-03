@@ -11,19 +11,23 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/kernel/verification"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
 type Service struct {
-	pool     *pgxpool.Pool
-	q        *store.Queries
-	ipSecret []byte
+	pool         *pgxpool.Pool
+	q            *store.Queries
+	ipSecret     []byte
+	verification *verification.Service
 }
 
 // New 组装身份域。ipSecret 用于把客户端 IP 变成不可逆的 ip_hash——
 // 明文 IP 不落库（身份域 §11.3 / §6）。
-func New(pool *pgxpool.Pool, ipSecret []byte) *Service {
-	return &Service{pool: pool, q: store.New(pool), ipSecret: ipSecret}
+//
+// verification 是 kernel 里的通用验证码机制，第②层限流要用它。
+func New(pool *pgxpool.Pool, ipSecret []byte, verif *verification.Service) *Service {
+	return &Service{pool: pool, q: store.New(pool), ipSecret: ipSecret, verification: verif}
 }
 
 // hashIP 把客户端 IP 变成不可逆的 ip_hash。

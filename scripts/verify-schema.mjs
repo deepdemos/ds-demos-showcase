@@ -279,6 +279,23 @@ console.log('--- 开发种子 ---');
     'login_attempts 允许无主试（account_id 可空）',
     "INSERT INTO login_attempts (ip_hash, account_id, succeeded) VALUES ('it-null-account', NULL, false)",
   );
+  // ---- 登录尝试的标识符列（迁移 0003）----
+  await ok(
+    'login_attempts 有 identifier_hash（第②层按标识符计数）',
+    "SELECT count(*) FROM information_schema.columns " +
+      "WHERE table_name = 'login_attempts' AND column_name = 'identifier_hash'",
+    '1',
+  );
+  await accepts(
+    'login_attempts 的 identifier_hash 可空（迁移前的历史行不参与第②层）',
+    "INSERT INTO login_attempts (ip_hash, succeeded) VALUES ('it-ip-null', false)",
+  );
+  await ok(
+    'login_attempts 的标识符索引存在',
+    "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_login_attempts_identifier'",
+    '1',
+  );
+
   // ---- 通用验证码表（迁移 0002）----
   await ok(
     'verification_codes 存在（迁移 0002）',
@@ -303,9 +320,9 @@ console.log('--- 开发种子 ---');
   );
 
   await ok(
-    'login_attempts 两个部分索引都在',
+    'login_attempts 三个部分索引都在',
     "SELECT count(*) FROM pg_indexes WHERE tablename = 'login_attempts' AND indexdef LIKE '%WHERE%'",
-    '2',
+    '3',
   );
 
   for (const [slug, why] of [

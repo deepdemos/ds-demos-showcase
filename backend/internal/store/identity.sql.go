@@ -11,6 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countIdentifierFailures = `-- name: CountIdentifierFailures :one
+WITH last_ok AS (
+    SELECT COALESCE(max(created_at), '-infinity'::timestamptz) AS at
+    FROM login_attempts
+    WHERE identifier_hash = $1::text AND succeeded
+)
+SELECT count(*) FILTER (WHERE created_at > last_ok.at)::int AS fails
+FROM login_attempts, last_ok
+WHERE succeeded = false
+  AND identifier_hash = $1::text
+  AND created_at > now() - interval '10 minutes'
+`
+
+// 第②层（身份域 §11.3）：同一标识符 10 分钟内失败次数，成功登录后清零。
+// 不区分账号是否存在——这正是「无效邮箱也要被要求验证码」的实现。
+func (q *Queries) CountIdentifierFailures(ctx context.Context, identifierHash string) (int32, error) {
+	row := q.db.QueryRow(ctx, countIdentifierFailures, identifierHash)
+	var fails int32
+	err := row.Scan(&fails)
+	return fails, err
+}
+
 const countLoginFailures = `-- name: CountLoginFailures :one
 
 WITH last_ok AS (
@@ -307,18 +329,26 @@ func (q *Queries) PurgeLoginAttempts(ctx context.Context) error {
 }
 
 const recordLoginAttempt = `-- name: RecordLoginAttempt :exec
-INSERT INTO login_attempts (ip_hash, account_id, succeeded)
-VALUES ($1, $2, $3)
+INSERT INTO login_attempts (ip_hash, account_id, identifier_hash, succeeded)
+VALUES ($1, $2, $3, $4)
 `
 
 type RecordLoginAttemptParams struct {
-	IpHash    string
-	AccountID pgtype.Int8
-	Succeeded bool
+	IpHash         string
+	AccountID      pgtype.Int8
+	IdentifierHash pgtype.Text
+	Succeeded      bool
 }
 
+// identifier_hash 是「用户输进来的那个标识符」的 HMAC，与账号存不存在无关。
+// 第②层按它计数，所以对着不存在的邮箱撞库同样会被拦住。
 func (q *Queries) RecordLoginAttempt(ctx context.Context, arg RecordLoginAttemptParams) error {
-	_, err := q.db.Exec(ctx, recordLoginAttempt, arg.IpHash, arg.AccountID, arg.Succeeded)
+	_, err := q.db.Exec(ctx, recordLoginAttempt,
+		arg.IpHash,
+		arg.AccountID,
+		arg.IdentifierHash,
+		arg.Succeeded,
+	)
 	return err
 }
 

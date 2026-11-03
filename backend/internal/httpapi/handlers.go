@@ -18,6 +18,7 @@ import (
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/mailer"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -45,11 +46,12 @@ type Handler struct {
 	pinger   Pinger
 	queries  *store.Queries    // nil 表示未配置数据库
 	identity *identity.Service // nil 表示身份域未接线
+	mailer   mailer.Mailer     // nil 表示不投递（验证码请求仍然返回 204）
 }
 
 // New 组装处理器。queries 可以为 nil（未配置数据库），此时业务端点返回 503。
-func New(pinger Pinger, queries *store.Queries, identitySvc *identity.Service) *Handler {
-	return &Handler{pinger: pinger, queries: queries, identity: identitySvc}
+func New(pinger Pinger, queries *store.Queries, identitySvc *identity.Service, m mailer.Mailer) *Handler {
+	return &Handler{pinger: pinger, queries: queries, identity: identitySvc, mailer: m}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

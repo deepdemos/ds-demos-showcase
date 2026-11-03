@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/kernel/verification"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -25,6 +26,9 @@ const dummyHash = "$argon2id$v=19$m=65536,t=3,p=2$YWJjZGVmZ2hpamtsbW5vcA$7n0m3Hk
 type LoginInput struct {
 	Identifier string
 	Password   string
+	// EmailCode 是第②层限流要求的邮箱验证码。只有在同一标识符失败次数
+	// 达到阈值时才有意义；平时传了也会被忽略。
+	EmailCode string
 	// IP 是客户端 IP 原文。它只在本域里被 hash 成 ip_hash，不落库、不进日志。
 	IP string
 }
@@ -66,10 +70,30 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 		return Account{}, "", err
 	}
 
+	// 第②层（身份域 §11.3）：同一标识符 10 分钟内失败 5 次 → 要求邮箱验证码。
+	//
+	// **判定只看标识符，不看账号是否存在**，而且先于密码校验——否则「存在的账号
+	// 返回 verification_required、不存在的返回 401」就成了免费的枚举接口。
+	// 代价是密码输错时也要求验证码，这个取舍是刻意的。
+	identifierHash := s.identifierHash(identifier)
+	if s.requireEmailCode(ctx, identifierHash) {
+		if strings.TrimSpace(in.EmailCode) == "" {
+			// 没带码也算一次失败：服务端已经问了问题，不回答就是没通过。
+			// 不记的话，被要求验证码之后反而可以无限重试而不留痕。
+			limits.record(ctx, s, ipHash, accountID, identifierHash, false)
+			return Account{}, "", ErrVerificationRequired
+		}
+		if err := s.verification.Consume(ctx, verification.PurposeLoginChallenge, identifier, in.EmailCode); err != nil {
+			// 码不对 / 过期 / 试太多次，一律按凭据不对处理，不告诉对方是哪一种。
+			limits.record(ctx, s, ipHash, accountID, identifierHash, false)
+			return Account{}, "", ErrVerificationRequired
+		}
+	}
+
 	if !found {
 		// 走一遍同样的校验代价，再统一报 401。
 		_, _ = VerifyPassword(in.Password, dummyHash)
-		limits.record(ctx, s, ipHash, accountID, false)
+		limits.record(ctx, s, ipHash, accountID, identifierHash, false)
 		return Account{}, "", ErrUnauthorized
 	}
 
@@ -80,13 +104,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 		return Account{}, "", ErrUnauthorized
 	}
 	if !ok {
-		limits.record(ctx, s, ipHash, accountID, false)
+		limits.record(ctx, s, ipHash, accountID, identifierHash, false)
 		return Account{}, "", ErrUnauthorized
 	}
 	// 已注销的账号不能登录。其余状态（pending / suspended / banned）一律放行，
 	// 让用户能读到自己的状态——前端要显示「你被封了」而不是「密码错误」。
 	if row.Status == "deleted" {
-		limits.record(ctx, s, ipHash, accountID, false)
+		limits.record(ctx, s, ipHash, accountID, identifierHash, false)
 		return Account{}, "", ErrUnauthorized
 	}
 
@@ -96,7 +120,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 	}
 	// 成功：记一条 succeeded=true（账号维度的「清零」靠 `created_at > 最后一次成功`
 	// 表达，IP 维度不受影响），顺手清掉一小时前的旧行。
-	limits.record(ctx, s, ipHash, accountID, true)
+	limits.record(ctx, s, ipHash, accountID, identifierHash, true)
 	if err := s.q.PurgeLoginAttempts(ctx); err != nil {
 		slog.Warn("清理登录尝试记录失败", "err", err)
 	}
@@ -173,6 +197,32 @@ func (e *RateLimitError) Unwrap() error { return ErrRateLimited }
 // ErrRateLimited 是「试太快了」。
 var ErrRateLimited = errors.New("identity: 尝试太频繁")
 
+// identifierHash 是第②层计数用的键。取不到（verification 未装配）时返回空串，
+// 那条尝试记录就不参与第②层——降级为「只有第①③层」，不会因为依赖缺失而放行。
+func (s *Service) identifierHash(identifier string) string {
+	if s.verification == nil {
+		return ""
+	}
+	return s.verification.IdentifierHash(verification.PurposeLoginChallenge, identifier)
+}
+
+// requireEmailCode 判断这个标识符是否已经失败够次数、需要验证码。
+//
+// 读失败时**不放行**：第②层是加固，读不到计数时宁可要求验证码（用户能自己解），
+// 也不要静默跳过。但它也不能把登录整个打死——所以只有能确认「计数超阈值」才拦，
+// 读出错时按「不拦」处理并记日志，因为卡在这里等于账号被一条 SQL 锁死。
+func (s *Service) requireEmailCode(ctx context.Context, identifierHash string) bool {
+	if s.verification == nil || identifierHash == "" {
+		return false
+	}
+	row, err := s.q.CountIdentifierFailures(ctx, identifierHash)
+	if err != nil {
+		slog.Warn("读标识符失败计数失败，本次不做第②层判定", "err", err)
+		return false
+	}
+	return row >= accountFailLimit
+}
+
 // loginLimits 是一次登录判定出来的四个计数。
 type loginLimits struct {
 	accountIP int32
@@ -225,11 +275,13 @@ func (s *Service) checkRateLimits(ctx context.Context, ipHash string, accountID 
 }
 
 // record 写一条尝试记录。写失败不影响登录本身——限流是加固，不是正确性前提。
-func (l loginLimits) record(ctx context.Context, s *Service, ipHash string, accountID pgtype.Int8, succeeded bool) {
+func (l loginLimits) record(ctx context.Context, s *Service, ipHash string, accountID pgtype.Int8, identifierHash string, succeeded bool) {
+	ident := pgtype.Text{String: identifierHash, Valid: identifierHash != ""}
 	if err := s.q.RecordLoginAttempt(ctx, store.RecordLoginAttemptParams{
-		IpHash:    ipHash,
-		AccountID: accountID,
-		Succeeded: succeeded,
+		IpHash:         ipHash,
+		AccountID:      accountID,
+		IdentifierHash: ident,
+		Succeeded:      succeeded,
 	}); err != nil {
 		slog.Warn("记录登录尝试失败", "err", err)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -80,7 +81,7 @@ func decode(t *testing.T, body []byte) map[string]any {
 
 func TestHealthzWithoutPinger(t *testing.T) {
 	response := httptest.NewRecorder()
-	New(nil, nil, nil).GetHealthz(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	newTestHandler(nil, nil, nil).GetHealthz(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", response.Code)
@@ -93,7 +94,7 @@ func TestHealthzWithoutPinger(t *testing.T) {
 func TestHealthzDatabaseDownDoesNotLeak(t *testing.T) {
 	const secret = "postgres://user:pass@10.1.2.3:5432/deepdemos"
 	response := httptest.NewRecorder()
-	New(failingPinger{msg: secret}, nil, nil).
+	newTestHandler(failingPinger{msg: secret}, nil, nil).
 		GetHealthz(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
 	if response.Code != http.StatusServiceUnavailable {
@@ -112,7 +113,7 @@ func TestHealthzDatabaseDownDoesNotLeak(t *testing.T) {
 
 func TestListDemosWithoutDatabase(t *testing.T) {
 	response := httptest.NewRecorder()
-	New(nil, nil, nil).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
+	newTestHandler(nil, nil, nil).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
 		api.ListDemosParams{})
 
 	if response.Code != http.StatusServiceUnavailable {
@@ -126,7 +127,7 @@ func TestListDemosRejectsOversizedPageSize(t *testing.T) {
 	queries := store.New(fakeDB{})
 	tooBig := 201
 	response := httptest.NewRecorder()
-	New(nil, queries, nil).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
+	newTestHandler(nil, queries, nil).ListDemos(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
 		api.ListDemosParams{PageSize: &tooBig})
 
 	if response.Code != http.StatusBadRequest {
@@ -158,7 +159,7 @@ func detailRow(state string, title string, deleted, erased bool) store.GetDemoBy
 func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorder {
 	t.Helper()
 	response := httptest.NewRecorder()
-	New(nil, store.New(fakeDB{row: fakeRow{values: []any{
+	newTestHandler(nil, store.New(fakeDB{row: fakeRow{values: []any{
 		row.ID, row.Slug, row.Title, row.Description, row.CoverUrl,
 		row.LifecycleState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
 	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
@@ -223,7 +224,7 @@ func TestGetDemoErasedIs404(t *testing.T) {
 
 func TestGetDemoNotFound(t *testing.T) {
 	response := httptest.NewRecorder()
-	New(nil, store.New(fakeDB{row: fakeRow{err: pgx.ErrNoRows}}), nil).
+	newTestHandler(nil, store.New(fakeDB{row: fakeRow{err: pgx.ErrNoRows}}), nil).
 		GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/x", nil), "x")
 
 	if response.Code != http.StatusNotFound {
@@ -232,4 +233,10 @@ func TestGetDemoNotFound(t *testing.T) {
 	if decode(t, response.Body.Bytes())["code"] != "not_found" {
 		t.Fatalf("expected not_found, got %s", response.Body.String())
 	}
+}
+
+// newTestHandler 是测试里的 Handler 构造器：不投递邮件（mailer 传 nil），
+// 这样断言「204 且不发信」时行为与生产一致。
+func newTestHandler(p Pinger, q *store.Queries, id *identity.Service) *Handler {
+	return New(p, q, id, nil)
 }

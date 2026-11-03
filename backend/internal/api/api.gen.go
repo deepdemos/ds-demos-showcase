@@ -29,13 +29,14 @@ const (
 
 // Defines values for ErrorCode.
 const (
-	Conflict     ErrorCode = "conflict"
-	Forbidden    ErrorCode = "forbidden"
-	InvalidParam ErrorCode = "invalid_param"
-	NotFound     ErrorCode = "not_found"
-	RateLimited  ErrorCode = "rate_limited"
-	Unauthorized ErrorCode = "unauthorized"
-	Unavailable  ErrorCode = "unavailable"
+	Conflict             ErrorCode = "conflict"
+	Forbidden            ErrorCode = "forbidden"
+	InvalidParam         ErrorCode = "invalid_param"
+	NotFound             ErrorCode = "not_found"
+	RateLimited          ErrorCode = "rate_limited"
+	Unauthorized         ErrorCode = "unauthorized"
+	Unavailable          ErrorCode = "unavailable"
+	VerificationRequired ErrorCode = "verification_required"
 )
 
 // Defines values for HealthzStatus.
@@ -105,6 +106,12 @@ type DemoSummary struct {
 	Title *string `json:"title"`
 }
 
+// EmailCodeRequest defines model for EmailCodeRequest.
+type EmailCodeRequest struct {
+	// Identifier 邮箱或用户名，不区分大小写
+	Identifier string `json:"identifier"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	// Code 机器可判别的错误码；`message` 只给人看，不要拿来做判断
@@ -132,6 +139,10 @@ type LifecycleState string
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
+	// EmailCode 邮箱验证码。只有在该标识符失败次数超阈值时才需要；
+	// 平时传了也会被忽略。
+	EmailCode *string `json:"emailCode,omitempty"`
+
 	// Identifier 邮箱或用户名，不区分大小写
 	Identifier string `json:"identifier"`
 	Password   string `json:"password"`
@@ -191,6 +202,9 @@ type ListDemosParams struct {
 // ListDemosParamsSort defines parameters for ListDemos.
 type ListDemosParamsSort string
 
+// PostAuthEmailCodeJSONRequestBody defines body for PostAuthEmailCode for application/json ContentType.
+type PostAuthEmailCodeJSONRequestBody = EmailCodeRequest
+
 // PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
 type PostAuthLoginJSONRequestBody = LoginRequest
 
@@ -199,6 +213,9 @@ type PostAuthRegisterJSONRequestBody = RegisterRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// 申请登录验证码
+	// (POST /api/v1/auth/email-code)
+	PostAuthEmailCode(w http.ResponseWriter, r *http.Request)
 	// 登录
 	// (POST /api/v1/auth/login)
 	PostAuthLogin(w http.ResponseWriter, r *http.Request)
@@ -225,6 +242,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// 申请登录验证码
+// (POST /api/v1/auth/email-code)
+func (_ Unimplemented) PostAuthEmailCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // 登录
 // (POST /api/v1/auth/login)
@@ -276,6 +299,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// PostAuthEmailCode operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthEmailCode(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthEmailCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // PostAuthLogin operation middleware
 func (siw *ServerInterfaceWrapper) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -542,6 +579,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/email-code", wrapper.PostAuthEmailCode)
+	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/login", wrapper.PostAuthLogin)
 	})

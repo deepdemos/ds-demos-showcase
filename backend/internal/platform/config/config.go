@@ -19,6 +19,13 @@ type Config struct {
 	// 历史 ip_hash 就对不上了，多实例之间也互相看不见。
 	IPHashSecret string
 
+	// VerificationSecret 是给验证码做 HMAC 的密钥。6 位码只有 10^6 种取值，
+	// 裸哈希可以枚举反推，必须带密钥。
+	//
+	// **不要与 IPHashSecret 混用**：两处用途不同，一把泄露不该连累另一处。
+	// 未配置时同样进程内随机生成 + WARN，重启后已发的码全部作废。
+	VerificationSecret string
+
 	// 发信配置。它们是**部署拓扑**（用哪家邮件服务商、什么凭据），不是运营参数，
 	// 所以不进设置域。全为空时程序仍能启动：邮件会由 logMailer 记一条告警而不发出。
 	SMTPHost string
@@ -38,6 +45,8 @@ func Load() Config {
 		Port:         getenv("PORT", "8080"),
 		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		IPHashSecret: os.Getenv("IP_HASH_SECRET"),
+
+		VerificationSecret: os.Getenv("VERIFICATION_SECRET"),
 
 		SMTPHost:     os.Getenv("SMTP_HOST"),
 		SMTPPort:     os.Getenv("SMTP_PORT"),

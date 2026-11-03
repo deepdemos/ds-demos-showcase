@@ -232,7 +232,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: 账号或密码不对（不区分「没这个账号」与「密码错」）
+          description: |
+            账号或密码不对（不区分「没这个账号」与「密码错」）。
+
+            当这个标识符在 10 分钟内失败达到 5 次时，服务端会要求邮箱验证码：
+            此时即使密码正确也返回 401，`code` 为 `verification_required`。
+            该判定**只看标识符的失败次数，不看账号是否存在**——所以它不能用来
+            判断某个邮箱有没有注册过。
           content:
             application/json:
               schema:
@@ -249,6 +255,52 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/email-code:
+    post:
+      operationId: postAuthEmailCode
+      tags: [身份]
+      summary: 申请登录验证码
+      description: |
+        `identifier` 与登录时填的一致（邮箱或用户名，不区分大小写）。
+
+        **无论该标识符有没有对应账号，都返回 204**——账号不存在时不发信，但响应形状
+        完全相同，否则这里就成了免费的账号枚举接口。
+
+        发送频率限制在 1 次/分钟、5 次/小时；超限返回 429，这个也只看标识符，
+        与账号是否存在无关。
+
+        验证码投递到该账号的**主邮箱**，6 位数字，5 分钟内有效，一次性。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailCodeRequest'
+      responses:
+        '204':
+          description: 已受理（不表示账号存在，也不表示信件一定送达）
+        '400':
+          description: 标识符为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 发送太频繁
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库或邮件通道不可用
           content:
             application/json:
               schema:
@@ -307,7 +359,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable]
+          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required]
           description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
         message:
           type: string
@@ -389,11 +441,29 @@ components:
         `archived` / `removed` 可见但为墓碑态。
       enum: [draft, pending, published, rejected, archived, removed]
 
+    EmailCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [identifier]
+      properties:
+        identifier:
+          type: string
+          minLength: 1
+          maxLength: 320
+          description: 邮箱或用户名，不区分大小写
+
     LoginRequest:
       type: object
       additionalProperties: false
       required: [identifier, password]
       properties:
+        emailCode:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: |
+            邮箱验证码。只有在该标识符失败次数超阈值时才需要；
+            平时传了也会被忽略。
+
         identifier:
           type: string
           description: 邮箱或用户名，不区分大小写
