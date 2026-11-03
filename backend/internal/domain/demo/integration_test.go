@@ -4,9 +4,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -272,4 +274,194 @@ func fileSize(t *testing.T, path string) int64 {
 		t.Fatalf("stat 失败: %v", err)
 	}
 	return info.Size()
+}
+
+// mkReviewer 建一个审核员：accounts（role=moderator）+ 对应的 users 投影行。
+// 返回 ReviewActor 需要的两个 id——audit_log 记 accounts.id，demo_timeline 记 users.id。
+func mkReviewer(t *testing.T, pool *pgxpool.Pool, tag string) (int64, int64) {
+	t.Helper()
+	sub := fmt.Sprintf("it-mod-%s", tag)
+	var accountID int64
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO accounts (sub, status, role, level)
+		 VALUES ($1, 'active', 'moderator', 0) RETURNING id`, sub,
+	).Scan(&accountID); err != nil {
+		t.Fatalf("建审核员失败: %v", err)
+	}
+	var userID int64
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO users (sub) VALUES ($1) RETURNING id`, sub,
+	).Scan(&userID); err != nil {
+		t.Fatalf("建审核员投影失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM accounts WHERE id = $1`, accountID)
+	})
+	return accountID, userID
+}
+
+// submitOne 造一条待审作品，返回 slug。
+func submitOne(t *testing.T, s *Service, author int64, tag string) string {
+	t.Helper()
+	pkg := buildZip(t, map[string]string{"index.html": "<html>" + tag + "</html>"})
+	res, err := s.Submit(context.Background(), SubmitInput{
+		AuthorID:    author,
+		Title:       "待审作品-" + tag,
+		Description: "描述",
+		DemoType:    "web",
+		PackagePath: pkg,
+		PackageSize: fileSize(t, pkg),
+	})
+	if err != nil {
+		t.Fatalf("投稿失败: %v", err)
+	}
+	return res.Slug
+}
+
+func TestIntegrationReviewApproveWritesBothTraces(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	author := mkAuthor(t, pool, "rev-a")
+	accountID, userID := mkReviewer(t, pool, "a")
+	slug := submitOne(t, s, author, "a")
+
+	got, err := s.Review(context.Background(), ReviewActor{
+		AccountID: accountID, UserID: userID, Role: "moderator",
+	}, ReviewInput{Slug: slug, Approve: true, Reason: "内容正常"})
+	if err != nil {
+		t.Fatalf("裁决失败: %v", err)
+	}
+	if got.ModerationState != "approved" {
+		t.Fatalf("moderation_state = %q, want approved", got.ModerationState)
+	}
+
+	// 两处留痕都必须写：状态改了但没人知道是谁改的，比没改更难查。
+	var kind, message string
+	var actorID int64
+	if err := pool.QueryRow(context.Background(),
+		`SELECT t.kind, COALESCE(t.message,''), t.actor_id
+		   FROM demo_timeline t JOIN demos d ON d.id = t.demo_id
+		  WHERE d.slug = $1`, slug,
+	).Scan(&kind, &message, &actorID); err != nil {
+		t.Fatalf("时间线没写: %v", err)
+	}
+	if kind != "approve" || message != "内容正常" || actorID != userID {
+		t.Fatalf("时间线不对: kind=%q message=%q actor=%d", kind, message, actorID)
+	}
+
+	var action, actorRole, reason string
+	var after []byte
+	if err := pool.QueryRow(context.Background(),
+		`SELECT l.action, l.actor_role, COALESCE(l.reason,''), l.after
+		   FROM audit_log l JOIN demos d ON d.id = l.entity_id
+		  WHERE l.entity_type = 'demo' AND d.slug = $1`, slug,
+	).Scan(&action, &actorRole, &reason, &after); err != nil {
+		t.Fatalf("审计没写: %v", err)
+	}
+	if action != "review" || actorRole != "moderator" || reason != "内容正常" {
+		t.Fatalf("审计不对: action=%q role=%q reason=%q", action, actorRole, reason)
+	}
+	if !strings.Contains(string(after), `"approved"`) {
+		t.Fatalf("审计 after 快照应含 approved，实际 %s", after)
+	}
+}
+
+func TestIntegrationReviewReject(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	author := mkAuthor(t, pool, "rev-r")
+	accountID, userID := mkReviewer(t, pool, "r")
+	slug := submitOne(t, s, author, "r")
+
+	got, err := s.Review(context.Background(), ReviewActor{
+		AccountID: accountID, UserID: userID, Role: "moderator",
+	}, ReviewInput{Slug: slug, Approve: false, Reason: "缺少说明"})
+	if err != nil {
+		t.Fatalf("裁决失败: %v", err)
+	}
+	if got.ModerationState != "rejected" {
+		t.Fatalf("moderation_state = %q, want rejected", got.ModerationState)
+	}
+}
+
+func TestIntegrationReviewNotPending(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	author := mkAuthor(t, pool, "rev-n")
+	accountID, userID := mkReviewer(t, pool, "n")
+	slug := submitOne(t, s, author, "n")
+
+	actor := ReviewActor{AccountID: accountID, UserID: userID, Role: "moderator"}
+	if _, err := s.Review(context.Background(), actor, ReviewInput{Slug: slug, Approve: true}); err != nil {
+		t.Fatalf("首次裁决应成功: %v", err)
+	}
+	// 第二次必须 409 那一档：已经裁决过的作品不能再裁。
+	if _, err := s.Review(context.Background(), actor, ReviewInput{Slug: slug, Approve: false}); !errors.Is(err, ErrNotPending) {
+		t.Fatalf("expected ErrNotPending, got %v", err)
+	}
+}
+
+func TestIntegrationReviewNotFound(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	accountID, userID := mkReviewer(t, pool, "x")
+
+	_, err := s.Review(context.Background(), ReviewActor{
+		AccountID: accountID, UserID: userID, Role: "moderator",
+	}, ReviewInput{Slug: "does-not-exist", Approve: true})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegrationReviewReasonTooLong(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	author := mkAuthor(t, pool, "rev-l")
+	accountID, userID := mkReviewer(t, pool, "l")
+	slug := submitOne(t, s, author, "l")
+
+	_, err := s.Review(context.Background(), ReviewActor{
+		AccountID: accountID, UserID: userID, Role: "moderator",
+	}, ReviewInput{Slug: slug, Approve: false, Reason: strings.Repeat("字", reviewReasonMax+1)})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+	// 校验发生在开事务之前，所以作品应当还停在 pending。
+	var state string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT moderation_state FROM demos WHERE slug = $1`, slug).Scan(&state); err != nil {
+		t.Fatalf("查状态失败: %v", err)
+	}
+	if state != "pending" {
+		t.Fatalf("超长说明不该改动状态，实际 %q", state)
+	}
+}
+
+func TestIntegrationListPendingReviews(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	author := mkAuthor(t, pool, "rev-q")
+	slug := submitOne(t, s, author, "q")
+
+	rows, err := s.ListPendingReviews(context.Background(), 50)
+	if err != nil {
+		t.Fatalf("查队列失败: %v", err)
+	}
+	found := false
+	for _, r := range rows {
+		if r.Slug == slug {
+			found = true
+			if r.CurrentRevNo != 1 {
+				t.Fatalf("current_rev_no = %d, want 1", r.CurrentRevNo)
+			}
+			if r.Title == "" {
+				t.Fatal("标题不该为空")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("队列里没找到刚投稿的 %s", slug)
+	}
 }

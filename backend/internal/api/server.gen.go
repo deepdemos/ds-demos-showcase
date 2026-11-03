@@ -14,6 +14,12 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// 待审作品队列
+	// (GET /api/v1/admin/reviews/demo)
+	ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams)
+	// 审核裁决
+	// (POST /api/v1/admin/reviews/demo/{slug})
+	ReviewDemo(w http.ResponseWriter, r *http.Request, slug string)
 	// 申请登录验证码
 	// (POST /api/v1/auth/email-code)
 	PostAuthEmailCode(w http.ResponseWriter, r *http.Request)
@@ -52,6 +58,18 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// 待审作品队列
+// (GET /api/v1/admin/reviews/demo)
+func (_ Unimplemented) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 审核裁决
+// (POST /api/v1/admin/reviews/demo/{slug})
+func (_ Unimplemented) ReviewDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // 申请登录验证码
 // (POST /api/v1/auth/email-code)
@@ -127,6 +145,70 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListDemoReviewQueue operation middleware
+func (siw *ServerInterfaceWrapper) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDemoReviewQueueParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDemoReviewQueue(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReviewDemo operation middleware
+func (siw *ServerInterfaceWrapper) ReviewDemo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReviewDemo(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // PostAuthEmailCode operation middleware
 func (siw *ServerInterfaceWrapper) PostAuthEmailCode(w http.ResponseWriter, r *http.Request) {
@@ -455,6 +537,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/reviews/demo", wrapper.ListDemoReviewQueue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/reviews/demo/{slug}", wrapper.ReviewDemo)
+	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/email-code", wrapper.PostAuthEmailCode)
 	})

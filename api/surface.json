@@ -178,6 +178,62 @@
         "optional": false
       }
     },
+    "ReviewDecision": {
+      "decision": {
+        "type": "ReviewDecisionDecision",
+        "optional": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "ReviewQueue": {
+      "items": {
+        "type": "[]ReviewQueueItem",
+        "optional": false
+      }
+    },
+    "ReviewQueueItem": {
+      "authorName": {
+        "type": "string",
+        "optional": true
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "moderationState": {
+        "type": "ReviewQueueItemModerationState",
+        "optional": false
+      },
+      "previewPath": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "submittedAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "ReviewResult": {
+      "moderationState": {
+        "type": "ReviewResultModerationState",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "SubmissionResult": {
       "lifecycleState": {
         "type": "LifecycleState",
@@ -245,6 +301,17 @@
       "rejected",
       "removed"
     ],
+    "ReviewDecisionDecision": [
+      "approve",
+      "reject"
+    ],
+    "ReviewQueueItemModerationState": [
+      "pending"
+    ],
+    "ReviewResultModerationState": [
+      "approved",
+      "rejected"
+    ],
     "SubmissionResultModerationState": [
       "approved",
       "pending",
@@ -255,6 +322,16 @@
     ]
   },
   "endpoints": {
+    "GET /api/v1/admin/reviews/demo": {
+      "method": "ListDemoReviewQueue",
+      "pathParams": 0,
+      "params": "ListDemoReviewQueueParams"
+    },
+    "POST /api/v1/admin/reviews/demo/{slug}": {
+      "method": "ReviewDemo",
+      "pathParams": 1,
+      "params": null
+    },
     "POST /api/v1/auth/email-code": {
       "method": "PostAuthEmailCode",
       "pathParams": 0,

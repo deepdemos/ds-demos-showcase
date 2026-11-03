@@ -153,8 +153,8 @@ export function diffSurface(base, cur) {
 
 export function readSurface(files = GENERATED, cwd = process.cwd()) {
   const list = Array.isArray(files) ? files : [files];
-  const body = list.map((f) => fs.readFileSync(path.join(cwd, f), 'utf8')).join('@@NL@@');
-  return extractSurface(body.replaceAll('@@NL@@', String.fromCharCode(10)));
+  const body = list.map((f) => fs.readFileSync(path.join(cwd, f), 'utf8')).join('\n');
+  return extractSurface(body);
 }
 
 function main() {

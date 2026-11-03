@@ -526,6 +526,123 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/reviews/demo:
+    get:
+      operationId: listDemoReviewQueue
+      tags: [治理]
+      summary: 待审作品队列
+      description: |
+        只列 `moderation_state = 'pending'` 的作品，按提交时间正序（先来先审）。
+
+        需要 `demo.review` 权限。权限来自 `accounts.role` 经 `role_permissions` 展开，
+        **不是**「登录了就能看」——审核队列里有未公开内容，见预览端口径。
+
+        队列项带 `previewPath`：审核员用它打开作品内容（该路径对持 `demo.review`
+        的角色开放未发布作品，见 `GET /preview/{slug}/v{rev}/{path}`）。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: 队列
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewQueue'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 demo.review 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/reviews/demo/{slug}:
+    post:
+      operationId: reviewDemo
+      tags: [治理]
+      summary: 审核裁决
+      description: |
+        把作品从 `pending` 推到 `approved` 或 `rejected`。
+
+        **只有 `pending` 能裁决**：已经裁决过的一律 409。这不是为了省事——
+        `approved → 其它` 会被 `trg_demos_guard` 拦住（有 `listed` 渠道时不允许撤下），
+        与其让调用方撞数据库异常，不如在这里明确拒绝，并指向「下架」那个端点。
+
+        裁决与两处留痕在**同一个事务**里：`demo_timeline`（写给人看的经过）与
+        `audit_log`（谁、什么时候、改前改后）。任何一处失败整体回滚——
+        「状态改了但没人知道是谁改的」比「没改」更难查。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecision'
+      responses:
+        '200':
+          description: 已裁决
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResult'
+        '400':
+          description: 请求体不合法（决定值不在枚举内 / reason 过长）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 demo.review 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 该作品不处于待审状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   schemas:
     Error:
@@ -751,6 +868,68 @@ components:
       type: string
       enum: [pending, active, suspended, banned, deleted]
       description: 账号状态取值域，见标准对象 §ST-1
+
+    ReviewQueue:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewQueueItem'
+
+    ReviewQueueItem:
+      type: object
+      additionalProperties: false
+      required: [slug, title, description, authorName, moderationState, submittedAt, previewPath]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        authorName:
+          type: string
+          nullable: true
+          description: 作者显示名；作者已注销时（author_id 被 SET NULL）为 null
+        moderationState:
+          type: string
+          enum: [pending]
+        submittedAt:
+          type: string
+          format: date-time
+        previewPath:
+          type: string
+          description: 作品入口的相对地址，审核员直接拼到本站域名后使用
+
+    ReviewDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: string
+          maxLength: 500
+          description: 给作者看的说明；驳回时应当写清哪里不合格
+
+    ReviewResult:
+      type: object
+      additionalProperties: false
+      required: [slug, moderationState]
+      properties:
+        slug:
+          type: string
+        moderationState:
+          type: string
+          enum: [approved, rejected]
 
   securitySchemes:
     sessionCookie:
