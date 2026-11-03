@@ -272,3 +272,68 @@ type mailerDelivery struct {
 
 // loginCodeTimeout 比 queryTimeout 宽：SMTP 握手（TLS + AUTH）在慢网络下要几秒。
 const loginCodeTimeout = 20 * time.Second
+
+// PostAuthPasswordResetCode 实现 POST /api/v1/auth/password-reset/code。
+//
+// 与登录验证码同样「一律 204」：不存在的邮箱也走一遍生成与频率限制，只是不投递。
+func (h *Handler) PostAuthPasswordResetCode(w http.ResponseWriter, r *http.Request) {
+	if h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+	var body api.PasswordResetCodeRequest
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体格式不对")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+
+	delivery, err := h.identity.RequestPasswordResetCode(ctx, string(body.Email))
+	if err != nil {
+		h.writeIdentityError(w, err)
+		return
+	}
+	if delivery.To != "" && h.mailer != nil {
+		go h.sendPasswordResetCode(mailerDelivery{Code: delivery.Code, To: delivery.To})
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PostAuthPasswordReset 实现 POST /api/v1/auth/password-reset。
+func (h *Handler) PostAuthPasswordReset(w http.ResponseWriter, r *http.Request) {
+	if h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+	var body api.PasswordResetRequest
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体格式不对")
+		return
+	}
+
+	// 改密码要跑一次 argon2id，与注册同样给宽一点的超时。
+	ctx, cancel := context.WithTimeout(r.Context(), registerTimeout)
+	defer cancel()
+
+	if err := h.identity.ResetPassword(ctx, string(body.Email), body.Code, body.NewPassword); err != nil {
+		h.writeIdentityError(w, err)
+		return
+	}
+	// 旧会话已经全部失效，本地这个 cookie 也就不再有意义——顺手清掉，
+	// 免得用户看到「已重置」却还挂着一个半死的会话。
+	clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// sendPasswordResetCode 异步发一封重置验证码。
+func (h *Handler) sendPasswordResetCode(d mailerDelivery) {
+	ctx, cancel := context.WithTimeout(context.Background(), loginCodeTimeout)
+	defer cancel()
+	body := fmt.Sprintf("你正在重设密码，验证码是 %s，%d 分钟内有效，只能使用一次。\n\n重设成功后，其他设备上的登录会全部失效。\n\n如果这不是你本人操作，忽略这封邮件即可。\n",
+		d.Code, int(verification.CodeTTL.Minutes()))
+	if err := h.mailer.Send(ctx, d.To, "重设密码验证码", body); err != nil {
+		slog.Warn("发送重置密码验证码失败", "err", err)
+	}
+}

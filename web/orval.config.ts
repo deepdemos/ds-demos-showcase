@@ -18,12 +18,19 @@ export default {
       target: '../api/openapi.yaml',
     },
     output: {
-      target: './src/api/gen/index.ts',
       client: 'fetch',
-      mode: 'single',
       mock: false,
       // 生成物里不加 orval 的横幅注释，避免每次升级都产生无关 diff
       headers: false,
+      // 按类型拆成多个文件。单文件会随端点数线性增长：3 端点 303 行 → 7 端点 925 行，
+      // 已越过 file-size 的 800 行硬线。拆开后每个文件只含自己的模型与操作，
+      // 增长落在文件数而不是单个文件长度上。
+      //
+      // 注意：schemas 放在 `gen/model/`，操作放在 `gen/<tag>/`。调用方统一从
+      // `src/api/gen/index.ts` 拿，那个文件是 orval 生成的汇总出口。
+      target: './src/api/gen/index.ts',
+      schemas: './src/api/gen/model',
+      mode: 'split',
     },
   },
 };

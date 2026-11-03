@@ -296,6 +296,18 @@ console.log('--- 开发种子 ---');
     '1',
   );
 
+  // ---- 密码重置（迁移 0004）----
+  await ok(
+    'credentials 有 rotated_at（换密码后作废更早的会话）',
+    "SELECT count(*) FROM information_schema.columns " +
+      "WHERE table_name = 'credentials' AND column_name = 'rotated_at'",
+    '1',
+  );
+  await accepts(
+    'rotated_at 可空（既有凭证视作从未轮换）',
+    "UPDATE credentials SET rotated_at = NULL WHERE kind = 'password'",
+  );
+
   // ---- 通用验证码表（迁移 0002）----
   await ok(
     'verification_codes 存在（迁移 0002）',
