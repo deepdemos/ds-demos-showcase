@@ -24,6 +24,14 @@ export function AppLayout() {
               会让已经登录的人在每次刷新时看到一次闪烁的错误状态。 */}
           {isLoading ? null : me ? (
             <>
+              {/* 这只是「入口可见性」的提示，不是权限判定——真正的判定在服务端
+                  （`demo.review`）。所以这里用 or 而不是等号：给某个新角色加权限时，
+                  最多是入口不显示，不会出现「有权限但被前端挡住」。 */}
+              {me.role === 'admin' || me.role === 'moderator' ? (
+                <Link to="/admin/reviews" className="text-sm underline">
+                  待审
+                </Link>
+              ) : null}
               <span className="text-gray-500 dark:text-gray-400">
                 {me.displayName || me.username}
               </span>
