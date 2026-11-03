@@ -123,6 +123,7 @@ func (s *Service) Review(ctx context.Context, actor ReviewActor, in ReviewInput)
 		if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
 			ActorID:   int8(actor.AccountID),
 			ActorRole: actor.Role,
+			Action:    "review",
 			EntityID:  row.ID,
 			Before:    before,
 			After:     after,

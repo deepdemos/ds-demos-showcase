@@ -50,6 +50,31 @@ const (
 	LifecycleStateRemoved   LifecycleState = "removed"
 )
 
+// Defines values for PublishRequestLang.
+const (
+	En PublishRequestLang = "en"
+	Zh PublishRequestLang = "zh"
+)
+
+// Defines values for PublishRequestVisibility.
+const (
+	PublishRequestVisibilityHidden   PublishRequestVisibility = "hidden"
+	PublishRequestVisibilityListed   PublishRequestVisibility = "listed"
+	PublishRequestVisibilityUnlisted PublishRequestVisibility = "unlisted"
+)
+
+// Defines values for PublishResultLifecycleState.
+const (
+	Published PublishResultLifecycleState = "published"
+)
+
+// Defines values for PublishResultVisibility.
+const (
+	PublishResultVisibilityHidden   PublishResultVisibility = "hidden"
+	PublishResultVisibilityListed   PublishResultVisibility = "listed"
+	PublishResultVisibilityUnlisted PublishResultVisibility = "unlisted"
+)
+
 // Defines values for ReviewDecisionDecision.
 const (
 	Approve ReviewDecisionDecision = "approve"
@@ -202,6 +227,34 @@ type PasswordResetRequest struct {
 	NewPassword string              `json:"newPassword"`
 }
 
+// PublishRequest defines model for PublishRequest.
+type PublishRequest struct {
+	// Channel 必须是 channels 表里已登记且 status='active' 的码值
+	Channel    string                   `json:"channel"`
+	Lang       *PublishRequestLang      `json:"lang,omitempty"`
+	Visibility PublishRequestVisibility `json:"visibility"`
+}
+
+// PublishRequestLang defines model for PublishRequest.Lang.
+type PublishRequestLang string
+
+// PublishRequestVisibility defines model for PublishRequest.Visibility.
+type PublishRequestVisibility string
+
+// PublishResult defines model for PublishResult.
+type PublishResult struct {
+	Channel        string                      `json:"channel"`
+	LifecycleState PublishResultLifecycleState `json:"lifecycleState"`
+	Slug           string                      `json:"slug"`
+	Visibility     PublishResultVisibility     `json:"visibility"`
+}
+
+// PublishResultLifecycleState defines model for PublishResult.LifecycleState.
+type PublishResultLifecycleState string
+
+// PublishResultVisibility defines model for PublishResult.Visibility.
+type PublishResultVisibility string
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	// DisplayName 可为空串，展示时回退到 username
@@ -308,6 +361,9 @@ type SubmitDemoMultipartBody struct {
 	Package openapi_types.File `json:"package"`
 	Title   string             `json:"title"`
 }
+
+// PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
+type PublishDemoJSONRequestBody = PublishRequest
 
 // ReviewDemoJSONRequestBody defines body for ReviewDemo for application/json ContentType.
 type ReviewDemoJSONRequestBody = ReviewDecision

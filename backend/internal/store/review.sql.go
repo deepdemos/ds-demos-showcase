@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getDemoForPublish = `-- name: GetDemoForPublish :one
+
+SELECT d.id, d.slug, d.lifecycle_state, d.moderation_state, d.deleted_at, d.erased_at
+FROM demos d
+WHERE d.slug = $1
+`
+
+type GetDemoForPublishRow struct {
+	ID              int64
+	Slug            string
+	LifecycleState  string
+	ModerationState string
+	DeletedAt       pgtype.Timestamptz
+	ErasedAt        pgtype.Timestamptz
+}
+
+// ---------- 发布（治理域 §4.3 的 demo.publish）----------
+// 发布前的状态检查。与 GetDemoForReview 分开：这里要 lifecycle_state 与
+// moderation_state 两个一起判，而审核只看后者。
+func (q *Queries) GetDemoForPublish(ctx context.Context, slug string) (GetDemoForPublishRow, error) {
+	row := q.db.QueryRow(ctx, getDemoForPublish, slug)
+	var i GetDemoForPublishRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.LifecycleState,
+		&i.ModerationState,
+		&i.DeletedAt,
+		&i.ErasedAt,
+	)
+	return i, err
+}
+
 const getDemoForReview = `-- name: GetDemoForReview :one
 SELECT id, slug, moderation_state, deleted_at, erased_at
 FROM demos
@@ -43,13 +76,14 @@ func (q *Queries) GetDemoForReview(ctx context.Context, slug string) (GetDemoFor
 const insertAuditLog = `-- name: InsertAuditLog :exec
 INSERT INTO audit_log (actor_type, actor_id, actor_role, action,
                        entity_type, entity_id, before, after, reason)
-VALUES ('user', $1, $2, 'review',
-        'demo', $3, $4, $5, $6)
+VALUES ('user', $1, $2, $3,
+        'demo', $4, $5, $6, $7)
 `
 
 type InsertAuditLogParams struct {
 	ActorID   pgtype.Int8
 	ActorRole string
+	Action    string
 	EntityID  int64
 	Before    []byte
 	After     []byte
@@ -62,6 +96,7 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 	_, err := q.db.Exec(ctx, insertAuditLog,
 		arg.ActorID,
 		arg.ActorRole,
+		arg.Action,
 		arg.EntityID,
 		arg.Before,
 		arg.After,
@@ -162,6 +197,28 @@ func (q *Queries) ListPendingDemoReviews(ctx context.Context, limit int32) ([]Li
 	return items, nil
 }
 
+const publishDemo = `-- name: PublishDemo :execrows
+UPDATE demos
+SET lifecycle_state = 'published',
+    updated_at = now()
+WHERE slug = $1
+  AND lifecycle_state IN ('draft', 'archived')
+  AND moderation_state = 'approved'
+  AND deleted_at IS NULL
+  AND erased_at IS NULL
+`
+
+// 同一条语句里判状态并跃迁：并发两次发布只有一次能改走。
+// 允许的来源状态写在 WHERE 里，`published` 不在其中 —— 重复发布返回 0 行，
+// 调用方据此回 409，而不是让「已经是发布态」和「刚发布成功」都返回 200。
+func (q *Queries) PublishDemo(ctx context.Context, slug string) (int64, error) {
+	result, err := q.db.Exec(ctx, publishDemo, slug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const reviewDemo = `-- name: ReviewDemo :one
 UPDATE demos
 SET moderation_state = $2,
@@ -191,4 +248,35 @@ func (q *Queries) ReviewDemo(ctx context.Context, arg ReviewDemoParams) (ReviewD
 	var i ReviewDemoRow
 	err := row.Scan(&i.ID, &i.Slug, &i.ModerationState)
 	return i, err
+}
+
+const upsertDemoChannel = `-- name: UpsertDemoChannel :exec
+INSERT INTO demo_channels (demo_id, channel, visibility, lang, published_at, curated_by)
+VALUES ($1, $2, $3, $4, now(), $5)
+ON CONFLICT (demo_id, channel) DO UPDATE
+SET visibility = EXCLUDED.visibility,
+    lang = EXCLUDED.lang,
+    published_at = COALESCE(demo_channels.published_at, EXCLUDED.published_at),
+    curated_by = EXCLUDED.curated_by,
+    updated_at = now()
+`
+
+type UpsertDemoChannelParams struct {
+	DemoID     int64
+	Channel    string
+	Visibility string
+	Lang       string
+	CuratedBy  pgtype.Int8
+}
+
+// 同一作品同一渠道重复发布时覆盖可见性，不新增行（uq_channel 保证唯一）。
+func (q *Queries) UpsertDemoChannel(ctx context.Context, arg UpsertDemoChannelParams) error {
+	_, err := q.db.Exec(ctx, upsertDemoChannel,
+		arg.DemoID,
+		arg.Channel,
+		arg.Visibility,
+		arg.Lang,
+		arg.CuratedBy,
+	)
+	return err
 }

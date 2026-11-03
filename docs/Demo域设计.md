@@ -1,4 +1,6 @@
-# Demo 域细化建模 v1.7
+# Demo 域细化建模 v1.8
+
+**本版变更（v1.8，2026-11-04）：发布端点落地，时间线补 `publish` 一种事件。** 迁移 [`0012_timeline_publish_kind.sql`](../db/migrations/0012_timeline_publish_kind.sql) 把 `demo_timeline.ck_timeline_kind` 的取值加一个 `publish`。理由：§6.1 明写「审核通过 ≠ 已发布」，而这个区别在时间线上原本**没有落点**——把发布记成 `approve` 会让「审过了」与「发出去了」再也分不开，而那正是两个动作被拆成两个端点（`demo.review` / `demo.publish`）的理由。**§3.11 的 `kind` 那一行同步**；正文其余部分未动。
 
 **本版变更（v1.7，2026-11-03）：把 §9 里三条「出错时静默」的不变量落成触发器，并把渠道提成主数据。** 三件事：① 迁移 [`0009_demo_domain_invariants.sql`](../db/migrations/0009_demo_domain_invariants.sql) 给 §9 的 **#1**（revision 不可变）、**#2**（`current_revision_id` 必须属于本 demo）、**#10**（`listed` 要求 `approved`，含反向）加触发器，**§9 那三条同步标注「已由触发器兜住」**；② 迁移 [`0010_channels_master.sql`](../db/migrations/0010_channels_master.sql) 新建 `channels` 主数据表，`demo_channels.channel` 从自由文本改成外键（**§3.5 那一行同步**）；③ 补 **§3.11 `DemoTimeline`**（此前建了表、§7 有写入点，但没有实体描述），并写清 **§3.7 `rater_key` 的生成口径**（此前只写了匿名口径，登录用户怎么算没定义）。**#3 不做数据库约束**（投稿事务天然两阶段），已记进 `docs/已知松点.md`。
 
@@ -374,7 +376,7 @@ demo_skills           = demos ⋈ demo_revisions(current) ⋈ demo_revision_skil
 |---|---|---|
 | `id` | bigint PK | |
 | `demo_id` | bigint FK | CASCADE |
-| `kind` | text | `create` / `approve` / `reject` / `archive` / `restore` / `slug_change` / `merge`（≤16 字符） |
+| `kind` | text | `create` / `approve` / `reject` / `publish` / `archive` / `restore` / `slug_change` / `merge`（≤16 字符） |
 | `message` | text | （≤500 字符） |
 | `actor_id` | bigint FK→users | 可空 = 系统 |
 | `created_at` | timestamptz | |

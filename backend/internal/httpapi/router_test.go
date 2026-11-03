@@ -57,6 +57,10 @@ func (s *stub) ReviewDemo(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "review:"+slug)
 }
 
+func (s *stub) PublishDemo(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "publish:"+slug)
+}
+
 func (s *stub) PostAuthPasswordReset(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "reset")
 }
@@ -89,6 +93,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/demos", "submit"},
 		{http.MethodGet, "/api/v1/admin/reviews/demo", "review-queue"},
 		{http.MethodPost, "/api/v1/admin/reviews/demo/some-slug", "review:some-slug"},
+		{http.MethodPost, "/api/v1/admin/demos/some-slug/publish", "publish:some-slug"},
 	}
 
 	for _, tc := range cases {

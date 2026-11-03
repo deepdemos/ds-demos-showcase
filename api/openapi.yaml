@@ -643,6 +643,83 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/demos/{slug}/publish:
+    post:
+      operationId: publishDemo
+      tags: [治理]
+      summary: 发布作品
+      description: |
+        把作品从 `draft`（或 `archived`，即作者下架后恢复）推到 `published`，
+        并在同一个事务里落一行 `demo_channels`。
+
+        **审核通过 ≠ 已发布**（Demo 域 §6.1）：`moderation_state='approved'` 只说明
+        内容合规，`lifecycle_state` 与渠道行才决定它对外能不能看到。这个端点只做后者。
+
+        拒绝的三种情况，分开返回：
+        - 作品不存在（含软删、擦除）→ 404
+        - 内容还没通过审核 → 409，`message` 指明「先审」
+        - 已经是 `published` → 409（同渠道重复发布不叠加，换渠道请走上架端点）
+        - `removed`（违规下架）→ 409，只能走申诉，不能直接发
+
+        `visibility='listed'` 还要求父作品 `approved`——已在上面的 409 里挡过；
+        数据库的 `trg_demo_channels_listed_requires_approved` 是兜底，不是第一道。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+      responses:
+        '200':
+          description: 已发布
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResult'
+        '400':
+          description: 请求体不合法（渠道为空 / 可见性不在枚举内 / lang 不在枚举内）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 demo.publish 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态不允许发布（未审核 / 已发布 / 已违规下架）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   schemas:
     Error:
@@ -930,6 +1007,40 @@ components:
         moderationState:
           type: string
           enum: [approved, rejected]
+
+    PublishRequest:
+      type: object
+      additionalProperties: false
+      required: [channel, visibility]
+      properties:
+        channel:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: 必须是 channels 表里已登记且 status='active' 的码值
+        visibility:
+          type: string
+          enum: [listed, unlisted, hidden]
+        lang:
+          type: string
+          enum: [zh, en]
+          default: zh
+
+    PublishResult:
+      type: object
+      additionalProperties: false
+      required: [slug, lifecycleState, channel, visibility]
+      properties:
+        slug:
+          type: string
+        lifecycleState:
+          type: string
+          enum: [published]
+        channel:
+          type: string
+        visibility:
+          type: string
+          enum: [listed, unlisted, hidden]
 
   securitySchemes:
     sessionCookie:

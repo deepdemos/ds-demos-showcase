@@ -23,6 +23,8 @@
 import type {
   Error,
   ListDemoReviewQueueParams,
+  PublishRequest,
+  PublishResult,
   ReviewDecision,
   ReviewQueue,
   ReviewResult
@@ -197,6 +199,109 @@ const res = await fetch(getReviewDemoUrl(slug),
 
   const data: reviewDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as reviewDemoResponse
+}
+
+
+export type publishDemoResponse200 = {
+  data: PublishResult
+  status: 200
+}
+
+export type publishDemoResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type publishDemoResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type publishDemoResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type publishDemoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type publishDemoResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type publishDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type publishDemoResponseSuccess = (publishDemoResponse200) & {
+  headers: Headers;
+};
+export type publishDemoResponseError = (publishDemoResponse400 | publishDemoResponse401 | publishDemoResponse403 | publishDemoResponse404 | publishDemoResponse409 | publishDemoResponse503) & {
+  headers: Headers;
+};
+
+export type publishDemoResponse = (publishDemoResponseSuccess | publishDemoResponseError)
+
+export const getPublishDemoUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/admin/demos/${slug}/publish`
+}
+
+/**
+ * 把作品从 `draft`（或 `archived`，即作者下架后恢复）推到 `published`，
+ * 并在同一个事务里落一行 `demo_channels`。
+ *
+ * **审核通过 ≠ 已发布**（Demo 域 §6.1）：`moderation_state='approved'` 只说明
+ * 内容合规，`lifecycle_state` 与渠道行才决定它对外能不能看到。这个端点只做后者。
+ *
+ * 拒绝的三种情况，分开返回：
+ * - 作品不存在（含软删、擦除）→ 404
+ * - 内容还没通过审核 → 409，`message` 指明「先审」
+ * - 已经是 `published` → 409（同渠道重复发布不叠加，换渠道请走上架端点）
+ * - `removed`（违规下架）→ 409，只能走申诉，不能直接发
+ *
+ * `visibility='listed'` 还要求父作品 `approved`——已在上面的 409 里挡过；
+ * 数据库的 `trg_demo_channels_listed_requires_approved` 是兜底，不是第一道。
+ * @summary 发布作品
+ */
+export const publishDemo = async (slug: string,
+    publishRequest: PublishRequest, options?: RequestInit): Promise<publishDemoResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPublishDemoUrl(slug),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(publishRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: publishDemoResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as publishDemoResponse
 }
 
 
