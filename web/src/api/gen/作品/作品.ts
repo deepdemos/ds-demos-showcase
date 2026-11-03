@@ -24,7 +24,9 @@ import type {
   DemoDetail,
   DemoList,
   Error,
-  ListDemosParams
+  ListDemosParams,
+  SubmissionResult,
+  SubmitDemoBody
 } from '../model';
 
 
@@ -88,6 +90,99 @@ export const listDemos = async (params?: ListDemosParams, options?: RequestInit)
 
   const data: listDemosResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listDemosResponse
+}
+
+
+export type submitDemoResponse201 = {
+  data: SubmissionResult
+  status: 201
+}
+
+export type submitDemoResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type submitDemoResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type submitDemoResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type submitDemoResponse415 = {
+  data: Error
+  status: 415
+}
+
+export type submitDemoResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type submitDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type submitDemoResponseSuccess = (submitDemoResponse201) & {
+  headers: Headers;
+};
+export type submitDemoResponseError = (submitDemoResponse400 | submitDemoResponse401 | submitDemoResponse413 | submitDemoResponse415 | submitDemoResponse422 | submitDemoResponse503) & {
+  headers: Headers;
+};
+
+export type submitDemoResponse = (submitDemoResponseSuccess | submitDemoResponseError)
+
+export const getSubmitDemoUrl = () => {
+
+
+
+
+  return `/api/v1/demos`
+}
+
+/**
+ * 需要登录。一次请求同时提交元数据与作品文件，由服务端校验、解压、落库、上传。
+ *
+ * **为什么是后端中转而不是预签名直传**：直传有三个失败点（签名过期、传一半断、
+ * 确认丢失），每个都要额外清理孤儿对象；本期没有带宽压力，中转把失败点收敛成一个。
+ * 等带宽成为瓶颈时再换，契约形状不用改——客户端仍然是「一次提交」。
+ *
+ * `package` 支持两种形态：
+ * - 一个 zip 包，**包根必须有 `index.html`**
+ * - 单个 `.html` / `.svg` 文件
+ *
+ * 服务端闸门（数值见 `docs/运行手册-可变常量.md` §3）：包体积、解压后体积、
+ * 成员数、压缩比四道，任一不过即 422。
+ * @summary 投稿（multipart，连文件一起上传）
+ */
+export const submitDemo = async (submitDemoBody: SubmitDemoBody, options?: RequestInit): Promise<submitDemoResponse> => {
+    const formData = new FormData();
+formData.append(`title`, submitDemoBody.title);
+if(submitDemoBody.description !== undefined) {
+ formData.append(`description`, submitDemoBody.description);
+ }
+formData.append(`demoType`, submitDemoBody.demoType);
+formData.append(`package`, submitDemoBody.package);
+
+  const res = await fetch(getSubmitDemoUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: submitDemoResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as submitDemoResponse
 }
 
 

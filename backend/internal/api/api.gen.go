@@ -33,6 +33,7 @@ const (
 	Forbidden            ErrorCode = "forbidden"
 	InvalidParam         ErrorCode = "invalid_param"
 	NotFound             ErrorCode = "not_found"
+	PayloadTooLarge      ErrorCode = "payload_too_large"
 	RateLimited          ErrorCode = "rate_limited"
 	Unauthorized         ErrorCode = "unauthorized"
 	Unavailable          ErrorCode = "unavailable"
@@ -52,6 +53,13 @@ const (
 	LifecycleStatePublished LifecycleState = "published"
 	LifecycleStateRejected  LifecycleState = "rejected"
 	LifecycleStateRemoved   LifecycleState = "removed"
+)
+
+// Defines values for SubmissionResultModerationState.
+const (
+	Approved SubmissionResultModerationState = "approved"
+	Pending  SubmissionResultModerationState = "pending"
+	Rejected SubmissionResultModerationState = "rejected"
 )
 
 // Defines values for ListDemosParamsSort.
@@ -195,6 +203,22 @@ type RegisterRequest struct {
 	Username string `json:"username"`
 }
 
+// SubmissionResult defines model for SubmissionResult.
+type SubmissionResult struct {
+	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
+	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
+	// `archived` / `removed` 可见但为墓碑态。
+	LifecycleState  LifecycleState                  `json:"lifecycleState"`
+	ModerationState SubmissionResultModerationState `json:"moderationState"`
+	RevisionNo      int                             `json:"revisionNo"`
+
+	// Slug 生成的唯一标识，客户端用它跳详情页
+	Slug string `json:"slug"`
+}
+
+// SubmissionResultModerationState defines model for SubmissionResult.ModerationState.
+type SubmissionResultModerationState string
+
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
 	// Q 关键词，匹配标题与描述
@@ -214,6 +238,18 @@ type ListDemosParams struct {
 // ListDemosParamsSort defines parameters for ListDemos.
 type ListDemosParamsSort string
 
+// SubmitDemoMultipartBody defines parameters for SubmitDemo.
+type SubmitDemoMultipartBody struct {
+	// DemoType 作品类型。取值见 `demo_types` 表——它是主数据，**加一种类型是加一行
+	// 数据，不是改契约**，所以这里不定 enum。
+	DemoType    string  `json:"demoType"`
+	Description *string `json:"description,omitempty"`
+
+	// Package 作品文件（zip 或单个 html/svg）
+	Package openapi_types.File `json:"package"`
+	Title   string             `json:"title"`
+}
+
 // PostAuthEmailCodeJSONRequestBody defines body for PostAuthEmailCode for application/json ContentType.
 type PostAuthEmailCodeJSONRequestBody = EmailCodeRequest
 
@@ -228,6 +264,9 @@ type PostAuthPasswordResetCodeJSONRequestBody = PasswordResetCodeRequest
 
 // PostAuthRegisterJSONRequestBody defines body for PostAuthRegister for application/json ContentType.
 type PostAuthRegisterJSONRequestBody = RegisterRequest
+
+// SubmitDemoMultipartRequestBody defines body for SubmitDemo for multipart/form-data ContentType.
+type SubmitDemoMultipartRequestBody SubmitDemoMultipartBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -252,6 +291,9 @@ type ServerInterface interface {
 	// 作品列表
 	// (GET /api/v1/demos)
 	ListDemos(w http.ResponseWriter, r *http.Request, params ListDemosParams)
+	// 投稿（multipart，连文件一起上传）
+	// (POST /api/v1/demos)
+	SubmitDemo(w http.ResponseWriter, r *http.Request)
 	// 作品详情
 	// (GET /api/v1/demos/{slug})
 	GetDemo(w http.ResponseWriter, r *http.Request, slug string)
@@ -306,6 +348,12 @@ func (_ Unimplemented) PostAuthRegister(w http.ResponseWriter, r *http.Request) 
 // 作品列表
 // (GET /api/v1/demos)
 func (_ Unimplemented) ListDemos(w http.ResponseWriter, r *http.Request, params ListDemosParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 投稿（multipart，连文件一起上传）
+// (POST /api/v1/demos)
+func (_ Unimplemented) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -462,6 +510,26 @@ func (siw *ServerInterfaceWrapper) ListDemos(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListDemos(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SubmitDemo operation middleware
+func (siw *ServerInterfaceWrapper) SubmitDemo(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SubmitDemo(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -663,6 +731,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demos", wrapper.ListDemos)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/demos", wrapper.SubmitDemo)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demos/{slug}", wrapper.GetDemo)

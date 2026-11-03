@@ -3,7 +3,8 @@
 -- name: GetMeBySession :one
 -- 会话有效性一次判完：没过期、没被吊销、账号还在且没注销。其余 status 一律放行——
 -- 被封/待验证的账号也要能读出自己；但 deleted 例外，会话必须失效，不能靠注销流程兜底。
-SELECT a.sub,
+SELECT a.id,
+       a.sub,
        p.username,
        p.display_name,
        e.email,
