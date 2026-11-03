@@ -48,7 +48,7 @@ import (
 // 这正是设计要的（docs/多人联机方案调研.md:146 记录的预览源共享问题）。
 const (
 	// previewReadTimeout 是读一个文件的上限。作品文件可能很大（封面图、字体），
-	// 但都在本地磁盘，5 秒足够；卡住说明盘有问题，不该拖住整个请求。
+	// 但都在本地磁盘，10 秒足够；卡住说明盘有问题，不该拖住整个请求。
 	previewReadTimeout = 10 * time.Second
 
 	// previewMaxHTMLBytes 是需要注入 <base> 时读进内存的上限。
@@ -78,7 +78,7 @@ func NewPreview(queries *store.Queries, files storage.Store, identitySvc *identi
 
 // ServeHTTP 处理 `/preview/{slug}/{rest...}`。
 //
-// rest 的第一段如果是 `r<数字>` 就当版本号，否则当作「当前版本 + 路径」。
+// rest 的第一段如果是 `v<数字>` 就当版本号，否则当作「当前版本 + 路径」。
 // 只注册一条路由而不是两条：chi 的两条模式会让 `{slug}`/`{rev}` 这类同位置参数
 // 的优先级变得依赖注册顺序，而这里的分支本来就只有一行。
 func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -111,9 +111,21 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 擦除与软删对外一律不存在。归档/移除不在这里拒——它们要能显示墓碑页，
 	// 而墓碑页由前端按 API 返回的 lifecycle_state 渲染，不需要读预览文件。
+	//
+	// **单个版本的擦除也要拦**：demo_revisions 的 erased_at 是给「只处理这一版」留的
+	// （数据生命周期 §6 的文件轴）。只判 demos 的话，擦掉一版之后磁盘上的
+	// `demos/{slug}/r{n}/` 还在（没有 purge 代码），预览照常 200。
 	if row.ErasedAt.Valid || row.DeletedAt.Valid {
 		http.NotFound(w, r)
 		return
+	}
+	if rev > 0 && int32(rev) == row.CurrentRevNo {
+		// 只有当前版本能从作品行上看出来；历史版本的行状态这里查不到，
+		// 所以只拦「当前版本已被单独擦除」这一种。
+		if row.RevisionErasedAt.Valid || row.RevisionDeletedAt.Valid {
+			http.NotFound(w, r)
+			return
+		}
 	}
 
 	published := row.LifecycleState == "published"
@@ -148,7 +160,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", cacheControlOf(published, versioned))
-	if strings.HasPrefix(ct, "text/html") {
+	if needsSandbox(ct) {
 		w.Header().Set("Content-Security-Policy", previewCSP)
 	}
 
@@ -160,12 +172,21 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "读取失败", http.StatusBadGateway)
 			return
 		}
-		if len(body) <= previewMaxHTMLBytes {
+		// 超过上限：不注入 <base>，但**必须把剩下的字节原样送出去**。
+		// 只写 head 那 8 MiB 会让响应看起来完整（Content-Length 也是截断后的长度），
+		// 客户端没有任何办法发现少了东西。
+		var rest io.Reader
+		if len(body) > previewMaxHTMLBytes {
+			rest = f
+		} else {
 			body = injectBase(body, previewBase(slug, rev))
 		}
 		w.WriteHeader(http.StatusOK)
 		if r.Method != http.MethodHead {
 			_, _ = w.Write(body)
+			if rest != nil {
+				_, _ = io.Copy(w, rest)
+			}
 		}
 		return
 	}
@@ -240,7 +261,7 @@ func parseRevSegment(seg string) (int, bool) {
 // previewBase 是注入进 HTML 的 <base href>。
 //
 // 作品包里的相对路径（`./style.css`、`img/a.png`）原本相对于「解压后的目录」，
-// 现在页面地址是 `/preview/{slug}/r{rev}/index.html`，相对路径恰好落在同一个目录，
+// 现在页面地址是 `/preview/{slug}/v{rev}/index.html`，相对路径恰好落在同一个目录，
 // 本来就能用。注入 <base> 的理由是**子目录里的页面**（`sub/about.html`）：
 // 没有 base 时 `../style.css` 会解析到 `/preview/{slug}/style.css`，越出正确位置。
 func previewBase(slug string, rev int) string {
@@ -251,6 +272,28 @@ func previewBase(slug string, rev int) string {
 //
 // mime.TypeByExtension 在不同系统读的注册表不同（Windows 上 .js 可能给
 // text/plain），所以常见类型写死，退路才用 mime。
+// needsSandbox 判断这个 Content-Type 是否需要 CSP sandbox。
+//
+// 不是「是不是 HTML」——**SVG 与 XHTML 作为顶层文档打开时会执行脚本**，
+// 而它们运行在主站源上。只给 text/html 加 sandbox 的话，
+// 作者提交一个带 <script> 的 .svg，审核员在队列里点预览，
+// 脚本就在审核员的会话里跑起来（HttpOnly 挡不住，因为脚本不需要读 cookie，
+// 它就在同一个源里直接发请求）。
+//
+// 白名单之外一律不加：图片、字体、wasm、纯文本不会执行脚本，
+// 给它们加 sandbox 反而可能影响正常的资源加载。
+func needsSandbox(ct string) bool {
+	base := strings.ToLower(strings.TrimSpace(strings.SplitN(ct, ";", 2)[0]))
+	switch base {
+	case "text/html", "image/svg+xml", "application/xhtml+xml",
+		"text/xml", "application/xml", "application/rss+xml",
+		"application/atom+xml", "text/xsl", "application/xslt+xml":
+		return true
+	}
+	// 兜底：任何 +xml 后缀的文档类型都可能带脚本（XSLT / XML 数据岛）。
+	return strings.HasSuffix(base, "+xml") || strings.HasSuffix(base, "/xml")
+}
+
 func contentTypeOf(rel string) string {
 	switch strings.ToLower(path.Ext(rel)) {
 	case ".html", ".htm":
@@ -322,6 +365,14 @@ func injectBase(doc []byte, base string) []byte {
 		if j := bytes.IndexByte(doc[i:], '>'); j >= 0 {
 			at := i + j + 1
 			return splice(doc, at, tag)
+		}
+	}
+	// 找不到 <head> / <html>：按 HTML 规范 doctype 必须是第一个 token，
+	// 插在它前面会让浏览器进 quirks mode（盒模型、行高等全变）。
+	// 有 doctype 就插在它之后。
+	if i := bytes.Index(lower, []byte("<!doctype")); i == 0 {
+		if j := bytes.IndexByte(doc, '>'); j >= 0 {
+			return splice(doc, j+1, tag)
 		}
 	}
 	return splice(doc, 0, tag)

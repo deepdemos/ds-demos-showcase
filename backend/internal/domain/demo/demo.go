@@ -20,6 +20,8 @@ var (
 	ErrUnsupportedPackage = errors.New("demo: 不支持的作品包类型")
 	// ErrBadPackage 包内容不合格（缺 index.html、压缩炸弹、成员过多等）。
 	ErrBadPackage = errors.New("demo: 作品包内容不合格")
+	// ErrTooManyPending 待审作品太多，暂时不能再投。
+	ErrTooManyPending = errors.New("demo: 待审作品太多")
 )
 
 const (
@@ -68,8 +70,10 @@ func (in SubmitInput) validate() error {
 	if len([]rune(in.Description)) > maxDescriptionLen {
 		return fmt.Errorf("%w: 描述最多 %d 个字符", ErrInvalidInput, maxDescriptionLen)
 	}
-	// demoType 的合法性由 demo_types 外键兜底（fk_demo_revisions_demo_type75）；
-	// 这里只挡明显不合格式的，避免把一串乱码送到数据库再翻译成 500。
+	// demoType 的**取值**合法性由 demo_types 外键兜底（fk_demo_revisions_demo_type75），
+	// 这里只挡格式。外键违反是 23503，submit.go 会把它翻成 ErrInvalidInput ——
+	// 不翻的话它会落到 writeDemoError 的 default 分支变成 503，
+	// 而契约写的是 400「类型未知」。
 	if in.DemoType == "" {
 		return fmt.Errorf("%w: 缺少作品类型", ErrInvalidInput)
 	}

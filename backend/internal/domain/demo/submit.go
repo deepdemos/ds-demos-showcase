@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -28,7 +27,11 @@ import (
 //
 // 比普通查询宽得多：一个 200 MiB 的包要解压、要算哈希、要逐个写到存储。
 // 它不是「慢查询」保护，而是「客户端连不上时不要永远占着 goroutine」的兜底。
-const submitTimeout = 5 * time.Minute
+const submitTimeout = SubmitTimeout
+
+// SubmitTimeout 是一次投稿的总时长上限。传出去是为了让传输层与领域层
+// 用同一个值——两处各写一个 5 分钟，改一处另一处不会跟着变。
+const SubmitTimeout = 5 * time.Minute
 
 // Service 是作品域的服务。
 type Service struct {
@@ -39,15 +42,17 @@ type Service struct {
 	limits storage.Limits
 	// maxPackageBytes 是上传包本身的体积上限。
 	maxPackageBytes int64
-	log             *slog.Logger
+	// maxPending 是一个作者同时能压多少条待审。0 表示不限。
+	maxPending int
+	log        *slog.Logger
 }
 
 // New 组装服务。files 与 q 都必须非 nil——投稿没有「降级运行」这一说。
-func New(pool *pgxpool.Pool, q *store.Queries, files storage.Store, limits storage.Limits, maxPackageBytes int64, log *slog.Logger) *Service {
+func New(pool *pgxpool.Pool, q *store.Queries, files storage.Store, limits storage.Limits, maxPackageBytes int64, maxPending int, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Service{pool: pool, q: q, files: files, limits: limits, maxPackageBytes: maxPackageBytes, log: log}
+	return &Service{pool: pool, q: q, files: files, limits: limits, maxPackageBytes: maxPackageBytes, maxPending: maxPending, log: log}
 }
 
 // MaxPackageBytes 返回上传包的体积上限（字节）。
@@ -90,6 +95,17 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	if s.maxPackageBytes > 0 && in.PackageSize > s.maxPackageBytes {
 		return out, fmt.Errorf("%w（%d > %d 字节）", ErrPackageTooLarge, in.PackageSize, s.maxPackageBytes)
 	}
+	// 配额判在解压之前：解压是全站最贵的一步（最多 500 MiB），
+	// 等解完再拒等于先付出成本再告诉对方不行。
+	if s.maxPending > 0 {
+		n, err := s.q.CountPendingDemosByAuthor(ctx, int8(in.AuthorID))
+		if err != nil {
+			return out, fmt.Errorf("demo: 查待审数量失败: %w", err)
+		}
+		if int(n) >= s.maxPending {
+			return out, fmt.Errorf("%w：最多同时有 %d 条待审作品，请等已提交的审核完再投", ErrTooManyPending, s.maxPending)
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, submitTimeout)
 	defer cancel()
@@ -126,11 +142,6 @@ func (s *Service) stage(ctx context.Context, in SubmitInput) (st staged, cleanup
 	cleanup = func() { _ = os.RemoveAll(dir) }
 	st.dir = dir
 
-	st.manifest, err = hashFile(in.PackagePath)
-	if err != nil {
-		return st, cleanup, fmt.Errorf("demo: 计算摘要失败: %w", err)
-	}
-
 	zr, zipErr := zip.OpenReader(in.PackagePath)
 	if zipErr == nil {
 		defer func() { _ = zr.Close() }()
@@ -146,6 +157,12 @@ func (s *Service) stage(ctx context.Context, in SubmitInput) (st staged, cleanup
 		}
 		if st.entryPath == "" {
 			return st, cleanup, fmt.Errorf("%w: 压缩包根目录必须有 index.html", ErrBadPackage)
+		}
+		// manifest 按「内容清单」算，不按 zip 字节算：同样的内容换个打包工具
+		// 或换台机器的 mtime，zip 哈希就变了，而设计要求它与打包方式无关。
+		st.manifest, err = canonicalManifest(contentDir, st.files)
+		if err != nil {
+			return st, cleanup, fmt.Errorf("demo: 计算清单哈希失败: %w", err)
 		}
 		// 原始包也存一份：解压逻辑以后修好了能就地重修，用户也能下载原件。
 		srcCopy := filepath.Join(dir, "source.zip")
@@ -183,6 +200,10 @@ func (s *Service) stage(ctx context.Context, in SubmitInput) (st staged, cleanup
 	st.files = []string{name}
 	st.entryPath = name
 	st.totalBytes = info.Size()
+	st.manifest, err = canonicalManifest(dir, st.files)
+	if err != nil {
+		return st, cleanup, fmt.Errorf("demo: 计算清单哈希失败: %w", err)
+	}
 	return st, cleanup, nil
 }
 
@@ -275,6 +296,11 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			}
 			return slug, nil
 		}
+		if isForeignKeyViolation(err) {
+			// 走到这里只可能是 demo_type 不存在（其余外键都由服务端自己填）。
+			// 这是输入问题不是服务端故障，必须回 400 而不是 503。
+			return "", fmt.Errorf("%w: 作品类型不存在", ErrInvalidInput)
+		}
 		if !isUniqueViolation(err) {
 			return "", fmt.Errorf("demo: 落库失败: %w", err)
 		}
@@ -325,6 +351,30 @@ func (s *Service) compensate(ctx context.Context, slug string, st staged) {
 	cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// 先删库：库行是「作品存在」的唯一凭据。库删失败时文件还在，重跑补偿仍能清干净；
+	// 反过来（先删文件再删库）一旦删库失败，就留下一条指向空目录的作品——
+	// 它对外可见、点进去什么都没有，比孤儿对象难处理得多。
+	//
+	// 删 demos 一行即可：版本行由 fk_demo_revisions_demo_id76 的 ON DELETE CASCADE
+	// 带走（迁移 0006），current_revision_id 是 SET NULL。
+	if err := s.inTx(cctx, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		d, err := q.GetDemoBySlug(cctx, slug)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// 库行已经不在了（补偿重跑），继续清文件。
+				return nil
+			}
+			return err
+		}
+		return q.DeleteDemoForCleanup(cctx, d.ID)
+	}); err != nil {
+		// 库删失败：不删文件。留着文件，下一次补偿或 GC 还能按 slug 清掉，
+		// 而此刻删文件只会把「库里有行、磁盘没文件」做实。
+		s.log.Error("补偿删除作品失败，暂不删文件（可重跑补偿）", "slug", slug, "err", err)
+		return
+	}
+
 	keys := make([]string, 0, len(st.files)+1)
 	if st.sourceKey != "" {
 		keys = append(keys, st.sourceKey)
@@ -336,18 +386,6 @@ func (s *Service) compensate(ctx context.Context, slug string, st staged) {
 		if err := s.files.Delete(cctx, key); err != nil {
 			s.log.Error("清理孤儿对象失败", "key", key, "err", err)
 		}
-	}
-	// 删 demos 一行即可：版本行由 fk_demo_revisions_demo_id76 的 ON DELETE CASCADE
-	// 带走（迁移 0006），current_revision_id 是 SET NULL。
-	if err := s.inTx(cctx, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		d, err := q.GetDemoBySlug(cctx, slug)
-		if err != nil {
-			return err
-		}
-		return q.DeleteDemoForCleanup(cctx, d.ID)
-	}); err != nil {
-		s.log.Error("补偿删除作品失败，留下一条不可见的草稿", "slug", slug, "err", err)
 	}
 }
 
@@ -379,19 +417,6 @@ func mapExtractError(err error) error {
 	}
 }
 
-func hashFile(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -420,6 +445,16 @@ func randomSuffix(n int) (string, error) {
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// isForeignKeyViolation 判断是不是外键违反（23503）。
+//
+// 目前唯一来源是 demo_revisions.demo_type → demo_types：调用方传了格式合法但不存在的类型。
+// 这是**输入问题**（400），不是服务端故障（503）——不翻的话它会落到
+// writeDemoError 的 default 分支，而契约写的是 400「类型未知」。
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
 // text 把字符串包成可空列。空串按 NULL 处理：标题/描述是"内容列"，

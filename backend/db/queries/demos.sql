@@ -10,7 +10,8 @@
 -- name: ListPublishedDemos :many
 SELECT id, slug, title, cover_url, created_at
 FROM demos
-WHERE lifecycle_state = 'published'
+WHERE moderation_state = 'approved'
+  AND lifecycle_state = 'published'
   AND deleted_at IS NULL
   AND erased_at IS NULL
 ORDER BY created_at DESC, id DESC
@@ -19,7 +20,8 @@ LIMIT $1 OFFSET $2;
 -- name: CountPublishedDemos :one
 SELECT count(*)
 FROM demos
-WHERE lifecycle_state = 'published'
+WHERE moderation_state = 'approved'
+  AND lifecycle_state = 'published'
   AND deleted_at IS NULL
   AND erased_at IS NULL;
 
@@ -73,8 +75,23 @@ SELECT d.id,
        d.deleted_at,
        d.erased_at,
        COALESCE(r.rev_no, 0)::int AS current_rev_no,
+       r.deleted_at AS revision_deleted_at,
+       r.erased_at  AS revision_erased_at,
        COALESCE(u.sub, '')::text AS author_sub
 FROM demos d
 LEFT JOIN users u ON u.id = d.author_id
 LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
 WHERE d.slug = $1;
+
+-- name: CountPendingDemosByAuthor :one
+-- 投稿配额：一个作者最多同时压多少条待审。
+--
+-- 没有配额时，登录用户循环 POST 就能把磁盘写满（每次 200 MiB 包 + 最多 500 MiB 解压），
+-- 而投稿是全站最贵的写路径。用「待审条数」而不是令牌桶：
+-- 它同时防住了「循环投稿」和「攒一堆待审把审核员淹掉」两件事。
+SELECT count(*)::int
+FROM demos
+WHERE author_id = $1
+  AND moderation_state = 'pending'
+  AND deleted_at IS NULL
+  AND erased_at IS NULL;
