@@ -50,11 +50,28 @@ const (
 	LifecycleStateRemoved   LifecycleState = "removed"
 )
 
+// Defines values for ReviewDecisionDecision.
+const (
+	Approve ReviewDecisionDecision = "approve"
+	Reject  ReviewDecisionDecision = "reject"
+)
+
+// Defines values for ReviewQueueItemModerationState.
+const (
+	ReviewQueueItemModerationStatePending ReviewQueueItemModerationState = "pending"
+)
+
+// Defines values for ReviewResultModerationState.
+const (
+	Approved ReviewResultModerationState = "approved"
+	Rejected ReviewResultModerationState = "rejected"
+)
+
 // Defines values for SubmissionResultModerationState.
 const (
-	Approved SubmissionResultModerationState = "approved"
-	Pending  SubmissionResultModerationState = "pending"
-	Rejected SubmissionResultModerationState = "rejected"
+	SubmissionResultModerationStateApproved SubmissionResultModerationState = "approved"
+	SubmissionResultModerationStatePending  SubmissionResultModerationState = "pending"
+	SubmissionResultModerationStateRejected SubmissionResultModerationState = "rejected"
 )
 
 // Defines values for ListDemosParamsSort.
@@ -198,6 +215,48 @@ type RegisterRequest struct {
 	Username string `json:"username"`
 }
 
+// ReviewDecision defines model for ReviewDecision.
+type ReviewDecision struct {
+	Decision ReviewDecisionDecision `json:"decision"`
+
+	// Reason 给作者看的说明；驳回时应当写清哪里不合格
+	Reason *string `json:"reason,omitempty"`
+}
+
+// ReviewDecisionDecision defines model for ReviewDecision.Decision.
+type ReviewDecisionDecision string
+
+// ReviewQueue defines model for ReviewQueue.
+type ReviewQueue struct {
+	Items []ReviewQueueItem `json:"items"`
+}
+
+// ReviewQueueItem defines model for ReviewQueueItem.
+type ReviewQueueItem struct {
+	// AuthorName 作者显示名；作者已注销时（author_id 被 SET NULL）为 null
+	AuthorName      *string                        `json:"authorName"`
+	Description     *string                        `json:"description"`
+	ModerationState ReviewQueueItemModerationState `json:"moderationState"`
+
+	// PreviewPath 作品入口的相对地址，审核员直接拼到本站域名后使用
+	PreviewPath string    `json:"previewPath"`
+	Slug        string    `json:"slug"`
+	SubmittedAt time.Time `json:"submittedAt"`
+	Title       *string   `json:"title"`
+}
+
+// ReviewQueueItemModerationState defines model for ReviewQueueItem.ModerationState.
+type ReviewQueueItemModerationState string
+
+// ReviewResult defines model for ReviewResult.
+type ReviewResult struct {
+	ModerationState ReviewResultModerationState `json:"moderationState"`
+	Slug            string                      `json:"slug"`
+}
+
+// ReviewResultModerationState defines model for ReviewResult.ModerationState.
+type ReviewResultModerationState string
+
 // SubmissionResult defines model for SubmissionResult.
 type SubmissionResult struct {
 	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
@@ -213,6 +272,11 @@ type SubmissionResult struct {
 
 // SubmissionResultModerationState defines model for SubmissionResult.ModerationState.
 type SubmissionResultModerationState string
+
+// ListDemoReviewQueueParams defines parameters for ListDemoReviewQueue.
+type ListDemoReviewQueueParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
@@ -244,6 +308,9 @@ type SubmitDemoMultipartBody struct {
 	Package openapi_types.File `json:"package"`
 	Title   string             `json:"title"`
 }
+
+// ReviewDemoJSONRequestBody defines body for ReviewDemo for application/json ContentType.
+type ReviewDemoJSONRequestBody = ReviewDecision
 
 // PostAuthEmailCodeJSONRequestBody defines body for PostAuthEmailCode for application/json ContentType.
 type PostAuthEmailCodeJSONRequestBody = EmailCodeRequest

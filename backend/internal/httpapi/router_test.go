@@ -49,6 +49,14 @@ func (s *stub) PostAuthPasswordResetCode(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "reset-code")
 }
 
+func (s *stub) ListDemoReviewQueue(_ http.ResponseWriter, _ *http.Request, _ api.ListDemoReviewQueueParams) {
+	s.hits = append(s.hits, "review-queue")
+}
+
+func (s *stub) ReviewDemo(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "review:"+slug)
+}
+
 func (s *stub) PostAuthPasswordReset(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "reset")
 }
@@ -79,6 +87,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/auth/password-reset", "reset"},
 		{http.MethodPost, "/api/v1/auth/logout", "logout"},
 		{http.MethodPost, "/api/v1/demos", "submit"},
+		{http.MethodGet, "/api/v1/admin/reviews/demo", "review-queue"},
+		{http.MethodPost, "/api/v1/admin/reviews/demo/some-slug", "review:some-slug"},
 	}
 
 	for _, tc := range cases {
