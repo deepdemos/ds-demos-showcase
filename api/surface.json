@@ -70,6 +70,12 @@
         "optional": true
       }
     },
+    "EmailCodeRequest": {
+      "identifier": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "Error": {
       "code": {
         "type": "ErrorCode",
@@ -85,15 +91,111 @@
         "type": "HealthzStatus",
         "optional": false
       }
+    },
+    "LoginRequest": {
+      "emailCode": {
+        "type": "string",
+        "optional": true
+      },
+      "identifier": {
+        "type": "string",
+        "optional": false
+      },
+      "password": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "Me": {
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "displayName": {
+        "type": "string",
+        "optional": false
+      },
+      "email": {
+        "type": "openapi_types.Email",
+        "optional": false
+      },
+      "level": {
+        "type": "int",
+        "optional": false
+      },
+      "role": {
+        "type": "string",
+        "optional": false
+      },
+      "status": {
+        "type": "AccountStatus",
+        "optional": false
+      },
+      "sub": {
+        "type": "string",
+        "optional": false
+      },
+      "username": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "PasswordResetCodeRequest": {
+      "email": {
+        "type": "openapi_types.Email",
+        "optional": false
+      }
+    },
+    "PasswordResetRequest": {
+      "code": {
+        "type": "string",
+        "optional": false
+      },
+      "email": {
+        "type": "openapi_types.Email",
+        "optional": false
+      },
+      "newPassword": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "RegisterRequest": {
+      "displayName": {
+        "type": "string",
+        "optional": false
+      },
+      "email": {
+        "type": "openapi_types.Email",
+        "optional": false
+      },
+      "password": {
+        "type": "string",
+        "optional": false
+      },
+      "username": {
+        "type": "string",
+        "optional": false
+      }
     }
   },
   "enums": {
+    "AccountStatus": [
+      "active",
+      "banned",
+      "deleted",
+      "pending",
+      "suspended"
+    ],
     "ErrorCode": [
+      "conflict",
       "forbidden",
       "invalid_param",
       "not_found",
       "rate_limited",
-      "unavailable"
+      "unauthorized",
+      "unavailable",
+      "verification_required"
     ],
     "HealthzStatus": [
       "ok"
@@ -111,6 +213,36 @@
     ]
   },
   "endpoints": {
+    "POST /api/v1/auth/email-code": {
+      "method": "PostAuthEmailCode",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/auth/login": {
+      "method": "PostAuthLogin",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/auth/logout": {
+      "method": "PostAuthLogout",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/auth/password-reset": {
+      "method": "PostAuthPasswordReset",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/auth/password-reset/code": {
+      "method": "PostAuthPasswordResetCode",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/auth/register": {
+      "method": "PostAuthRegister",
+      "pathParams": 0,
+      "params": null
+    },
     "GET /api/v1/demos": {
       "method": "ListDemos",
       "pathParams": 0,
@@ -119,6 +251,11 @@
     "GET /api/v1/demos/{slug}": {
       "method": "GetDemo",
       "pathParams": 1,
+      "params": null
+    },
+    "GET /api/v1/me": {
+      "method": "GetMe",
+      "pathParams": 0,
       "params": null
     },
     "GET /healthz": {
