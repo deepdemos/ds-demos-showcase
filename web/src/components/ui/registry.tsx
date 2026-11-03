@@ -8,7 +8,12 @@ import {
 import { CheckboxDefaultDemo, CheckboxDisabledDemo } from './checkbox.demo';
 import { EmptyStateDefaultDemo, EmptyStateWithActionDemo } from './empty-state.demo';
 import { ErrorStateDefaultDemo, ErrorStateWithRetryDemo } from './error-state.demo';
-import { InputDefaultDemo, InputDisabledDemo, InputErrorDemo } from './input.demo';
+import {
+  InputDefaultDemo,
+  InputDisabledDemo,
+  InputErrorDemo,
+  InputPasswordDemo,
+} from './input.demo';
 import { PaginationDefaultDemo, PaginationDisabledDemo } from './pagination.demo';
 import { SkeletonDefaultDemo, SkeletonCardDemo } from './skeleton.demo';
 import { ThemeToggleDemo } from './theme-toggle.demo';
@@ -99,6 +104,15 @@ export const controls: ControlSpec[] = [
     category: 'input',
     description: '不可编辑状态。',
     Demo: InputDisabledDemo,
+  },
+
+  {
+    id: 'input/password',
+    component: 'Input',
+    name: '密码输入框',
+    category: 'input',
+    description: '输入内容不回显，用于密码与验证码以外的口令。',
+    Demo: InputPasswordDemo,
   },
   {
     id: 'checkbox/default',
