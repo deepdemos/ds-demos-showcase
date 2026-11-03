@@ -300,15 +300,29 @@ await rejects('不变量 2：指针指向别的作品的版本被拒',
 await accepts('不变量 2：指针指向自己的版本允许',
   "UPDATE demos SET current_revision_id=(SELECT id FROM demo_revisions WHERE demo_id=" + did + " AND rev_no=3) WHERE id=" + did);
 await rejects('不变量 10：未审核作品上架渠道被拒',
-  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'inv-ch','listed')",
+  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'deep','listed')",
   '不能上架渠道');
 await accepts('不变量 10：非 listed 渠道不受限',
-  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'inv-ch2','unlisted')");
+  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'deep','unlisted')");
+await db.exec("DELETE FROM demo_channels WHERE demo_id=" + did2 + " AND channel='deep'");
 await accepts('不变量 10：审核通过后可以上架',
-  "UPDATE demos SET moderation_state='approved' WHERE id=" + did2 + "; INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'inv-ch3','listed');");
+  "UPDATE demos SET moderation_state='approved' WHERE id=" + did2 + "; INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'deep','listed');");
 await rejects('不变量 10 反向：已有上架渠道时退回审核状态被拒',
   "UPDATE demos SET moderation_state='pending' WHERE id=" + did2,
   '上架中的渠道');
+
+// ---------- 5d. 渠道主数据（迁移 0010）----------
+// 渠道是数据不是枚举（标准对象 §EN-1）—— 但「数据」不等于「随便写」。
+console.log('--- 渠道主数据 ---');
+await ok('channels 码值',
+  "SELECT string_agg(code, ',' ORDER BY sort) FROM channels WHERE status='active'", 'deep,astra');
+await rejects('未登记的渠道被拒',
+  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did + ",'astr','hidden')",
+  'fk_demo_channels_channel94');
+await accepts('登记过的渠道通过',
+  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'astra','hidden')");
+await ok('渠道码格式受约束',
+  "SELECT count(*) FROM pg_constraint WHERE conname='ck_channels_code'", 1);
 
 // ---------- 6. 封面内联两条 CHECK 同值（手册 §1 第 4 行的「两处必须同改」）----------
 console.log('--- 结构性上限 ---');
