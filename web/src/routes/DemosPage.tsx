@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, Pagination, Skeleton } from '@/components/ui';
-import { listDemos, type DemoList } from '@/api/gen';
+import { listDemos, type DemoList } from '@/api';
 
 const PAGE_SIZE = 12;
 

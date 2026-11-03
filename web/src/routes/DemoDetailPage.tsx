@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
-import { getDemo, type DemoDetail } from '@/api/gen';
+import { getDemo, type DemoDetail } from '@/api';
 
 type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
 
