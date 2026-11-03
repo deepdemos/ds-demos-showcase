@@ -65,7 +65,10 @@ const (
 
 // Account 是 domain 眼中的「一个人」。它不认识 api.Me——那一层的形状属于传输层。
 type Account struct {
-	ID          int64
+	ID int64
+	// UserID 是 demo 站投影表 users 的主键。业务侧（作品作者、创建人等）
+	// 引用的是它，不是 ID——两者靠 sub 对齐，ID 只在本域内用。
+	UserID      int64
 	Sub         string
 	Username    string
 	DisplayName string

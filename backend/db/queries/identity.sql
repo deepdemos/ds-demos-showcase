@@ -4,6 +4,7 @@
 -- 会话有效性一次判完：没过期、没被吊销、账号还在且没注销。其余 status 一律放行——
 -- 被封/待验证的账号也要能读出自己；但 deleted 例外，会话必须失效，不能靠注销流程兜底。
 SELECT a.id,
+       u.id AS user_id,
        a.sub,
        p.username,
        p.display_name,
@@ -14,6 +15,9 @@ SELECT a.id,
        a.created_at
 FROM web_sessions s
 JOIN accounts a ON a.sub = s.account_sub
+-- users 是 demo 站的投影表：业务列（demos.author_id 等）用它的 id，
+-- 身份的东西一律留在 accounts。两者靠 sub 对齐。
+JOIN users u ON u.sub = a.sub
 JOIN profiles p ON p.account_id = a.id
 JOIN account_emails e ON e.account_id = a.id AND e.is_primary
 WHERE s.id = $1
@@ -21,7 +25,7 @@ WHERE s.id = $1
   AND s.expires_at > now()
   AND a.status <> 'deleted';
 
--- ===== 注册（一事务五张表）=====
+-- ===== 注册（一事务六张表）=====
 
 -- name: CreateAccount :one
 INSERT INTO accounts (sub, status, role)
@@ -180,3 +184,9 @@ SET revoked_at = now()
 WHERE account_sub = $1
   AND revoked_at IS NULL
   AND created_at < $2;
+
+-- name: CreateUser :one
+-- demo 站的投影行：只带 sub，业务外键指向它的 id。
+-- 与 accounts 同一个事务里建，生命周期一致。
+INSERT INTO users (sub) VALUES ($1)
+RETURNING id, sub;

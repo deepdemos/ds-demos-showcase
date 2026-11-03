@@ -14,5 +14,6 @@
   "db/migrations/0003_login_attempt_identifier.sql": "69f6b501837da61237aceec71d2dbaf270b63b4449d393a6eb4a18e0e2d3df68",
   "db/migrations/0004_password_reset.sql": "3d22d629b9af3eb30be2e70b6eae40755169d465f514440a26c37c4133cc7b74",
   "db/migrations/0005_login_attempt_kind.sql": "c34797a485cb1e00a3bd9c7312f1067958072e5949de97ca35bb52ef7f9f60cd",
-  "db/migrations/0006_demo_revision_fk.sql": "8b4b5389d910b40bc177c99c32c05bd68609c52cec5f00b217f9b7560156e30c"
+  "db/migrations/0006_demo_revision_fk.sql": "8b4b5389d910b40bc177c99c32c05bd68609c52cec5f00b217f9b7560156e30c",
+  "db/migrations/0007_users_projection.sql": "747a78a1abe1cf3a30b7a7f669f519e750082a8f2f5017d2e9d9e363da8268f9"
 }

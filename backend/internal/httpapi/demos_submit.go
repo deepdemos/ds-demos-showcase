@@ -95,7 +95,7 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	res, err := h.demos.Submit(ctx, demo.SubmitInput{
-		AuthorID:    account.ID,
+		AuthorID:    account.UserID,
 		Title:       title,
 		Description: description,
 		DemoType:    demoType,

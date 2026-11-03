@@ -187,12 +187,22 @@ await accepts('level=42 允许（级数不封顶）', "UPDATE accounts SET level
 await rejects('level=-1 被拒', "UPDATE accounts SET level=-1 WHERE sub='VERIFY-SUB-1'", 'ck_accounts_level_nonneg');
 const aid = (await db.query("SELECT id FROM accounts WHERE sub='VERIFY-SUB-1'")).rows[0].id;
 
+// ---------- 3b. users 投影表（迁移 0007：注册建行、业务列指向它）----------
+console.log('--- users 投影 ---');
+await accepts('建 users 投影行', "INSERT INTO users (sub) VALUES ('VERIFY-SUB-1')");
+await ok('投影行可由 sub 对齐 accounts',
+  "SELECT count(*) FROM users u JOIN accounts a ON a.sub = u.sub WHERE u.sub='VERIFY-SUB-1'", 1);
+await rejects('sub 重复被拒', "INSERT INTO users (sub) VALUES ('VERIFY-SUB-1')", 'users_sub_key');
+await ok('users 只剩四列（history_enabled 已删除，偏好归设置域）',
+  "SELECT count(*) FROM pg_attribute WHERE attrelid='users'::regclass AND attnum>0 AND NOT attisdropped", 4);
+
 // ---------- 4. 用户偏好：本人读写 + 级联 ----------
 console.log('--- 用户偏好 ---');
 await accepts('写用户偏好',
   "INSERT INTO user_preferences (account_id, key, value_type, value) VALUES (" + aid + ",'history.record','boolean','false'::jsonb)");
 await ok('读回用户偏好',
   "SELECT value::text FROM user_preferences WHERE key='history.record'", 'false');
+await db.exec("DELETE FROM users WHERE sub = 'VERIFY-SUB-1'");
 await db.exec('DELETE FROM accounts WHERE id = ' + aid);
 await ok('删账号级联删偏好',
   "SELECT count(*) FROM user_preferences WHERE key='history.record'", 0);
