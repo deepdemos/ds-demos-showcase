@@ -39,9 +39,12 @@ test('支持分类筛选、分页与主题切换', () => {
   expect(screen.getByText(`第 ${totalPages} / ${totalPages} 页`)).toBeInTheDocument();
   expect(document.querySelectorAll('[data-control-id]')).toHaveLength(countOnPage(totalPages));
 
+  // 输入类控件的注册项数从 registry 推导，不写死数字：
+  // 每加一种输入样式这里都要跟着改，写死等于给未来的自己埋一次假红。
   fireEvent.click(screen.getByRole('button', { name: '输入' }));
-  expect(screen.getByText('共 3 个控件')).toBeInTheDocument();
-  expect(document.querySelectorAll('[data-control-id]')).toHaveLength(3);
+  const inputCount = controls.filter((item) => item.category === 'input').length;
+  expect(screen.getByText(`共 ${inputCount} 个控件`)).toBeInTheDocument();
+  expect(document.querySelectorAll('[data-control-id]')).toHaveLength(inputCount);
 
   fireEvent.click(screen.getByRole('button', { name: '切换到深色模式' }));
   expect(document.documentElement).toHaveClass('ring-ui-theme-dark');

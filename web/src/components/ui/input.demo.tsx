@@ -11,3 +11,7 @@ export function InputErrorDemo() {
 export function InputDisabledDemo() {
   return <Input defaultValue="禁用状态" disabled />;
 }
+
+export function InputPasswordDemo() {
+  return <Input type="password" defaultValue="hunter2hunter2" autoComplete="new-password" />;
+}
