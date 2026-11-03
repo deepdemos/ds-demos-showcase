@@ -306,6 +306,90 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/auth/password-reset/code:
+    post:
+      operationId: postAuthPasswordResetCode
+      tags: [身份]
+      summary: 申请找回密码验证码
+      description: |
+        只认**邮箱**，不认用户名——用户名是公开的，用它发起重置等于给攻击者
+        一个「知道昵称就能骚扰到人」的入口。
+
+        **无论该邮箱有没有注册，都返回 204**：不存在的邮箱同样会走一遍生成与
+        频率限制，只是不投递。响应形状与账号是否存在无关。
+
+        验证码发到主邮箱，6 位数字，5 分钟有效，一次性。与登录验证码**不能混用**。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetCodeRequest'
+      responses:
+        '204':
+          description: 已受理（不表示邮箱注册过，也不表示信件一定送达）
+        '400':
+          description: 邮箱格式不对
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 发送太频繁
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库或邮件通道不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/password-reset:
+    post:
+      operationId: postAuthPasswordReset
+      tags: [身份]
+      summary: 用验证码重设密码
+      description: |
+        验证码、改密码、吊销旧会话在**同一个事务**里完成。
+
+        成功后该账号在本次重置之前签发的**所有会话立即失效**——这是「密码可能
+        已经泄露」场景下的关键一步，只改哈希不踢会话等于没改。
+
+        验证码错误、过期、超次数、邮箱不存在，一律 401，不区分原因。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '204':
+          description: 已重置，旧会话全部失效
+        '400':
+          description: 邮箱格式不对、新密码长度不合格或验证码为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 验证码不对或已失效（不区分具体原因）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/auth/logout:
     post:
       operationId: postAuthLogout
@@ -451,6 +535,33 @@ components:
           minLength: 1
           maxLength: 320
           description: 邮箱或用户名，不区分大小写
+
+    PasswordResetCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [email, code, newPassword]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+        newPassword:
+          type: string
+          minLength: 10
+          maxLength: 128
 
     LoginRequest:
       type: object

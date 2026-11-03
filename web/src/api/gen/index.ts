@@ -17,209 +17,20 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-/**
- * 机器可判别的错误码；`message` 只给人看，不要拿来做判断
- */
-export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
+import type {
+  DemoDetail,
+  DemoList,
+  EmailCodeRequest,
+  Error,
+  Healthz,
+  ListDemosParams,
+  LoginRequest,
+  Me,
+  PasswordResetCodeRequest,
+  PasswordResetRequest,
+  RegisterRequest
+} from './model';
 
-
-export const ErrorCode = {
-  not_found: 'not_found',
-  invalid_param: 'invalid_param',
-  forbidden: 'forbidden',
-  unauthorized: 'unauthorized',
-  conflict: 'conflict',
-  rate_limited: 'rate_limited',
-  unavailable: 'unavailable',
-  verification_required: 'verification_required',
-} as const;
-
-export interface Error {
-  /** 机器可判别的错误码；`message` 只给人看，不要拿来做判断 */
-  code: ErrorCode;
-  /** 中文说明，可直接展示 */
-  message: string;
-}
-
-export type HealthzStatus = typeof HealthzStatus[keyof typeof HealthzStatus];
-
-
-export const HealthzStatus = {
-  ok: 'ok',
-} as const;
-
-export interface Healthz {
-  status: HealthzStatus;
-}
-
-/**
- * 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
- * `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
- * `archived` / `removed` 可见但为墓碑态。
- */
-export type LifecycleState = typeof LifecycleState[keyof typeof LifecycleState];
-
-
-export const LifecycleState = {
-  draft: 'draft',
-  pending: 'pending',
-  published: 'published',
-  rejected: 'rejected',
-  archived: 'archived',
-  removed: 'removed',
-} as const;
-
-export interface DemoSummary {
-  /** @maxLength 128 */
-  slug: string;
-  /**
-     * 墓碑态为 null
-     * @maxLength 200
-     * @nullable
-     */
-  title: string | null;
-  /**
-     * @maxLength 500
-     * @nullable
-     */
-  coverUrl: string | null;
-  createdAt: string;
-  lifecycleState: LifecycleState;
-}
-
-export type DemoDetail = DemoSummary & ({
-  /**
-     * 墓碑态为 null
-     * @nullable
-     */
-  description: string | null;
-  updatedAt: string;
-});
-
-export interface DemoList {
-  items: DemoSummary[];
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minimum 1
-     * @maximum 200
-     */
-  pageSize: number;
-  /**
-     * 满足条件的总条数（不是当前页条数）
-     * @minimum 0
-     */
-  total: number;
-}
-
-export interface EmailCodeRequest {
-  /**
-     * 邮箱或用户名，不区分大小写
-     * @minLength 1
-     * @maxLength 320
-     */
-  identifier: string;
-}
-
-export interface LoginRequest {
-  /**
-     * 邮箱验证码。只有在该标识符失败次数超阈值时才需要；
-     * 平时传了也会被忽略。
-     * @pattern ^[0-9]{6}$
-     */
-  emailCode?: string;
-  /** 邮箱或用户名，不区分大小写 */
-  identifier: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  /** @maxLength 254 */
-  email: string;
-  /**
-     * 只以 argon2id 哈希入库，接口从不回显
-     * @minLength 10
-     * @maxLength 128
-     */
-  password: string;
-  /**
-     * 不区分大小写唯一（标准对象 §ID-2）
-     * @minLength 3
-     * @maxLength 20
-     * @pattern ^[A-Za-z0-9_-]+$
-     */
-  username: string;
-  /**
-     * 可为空串，展示时回退到 username
-     * @maxLength 50
-     */
-  displayName: string;
-}
-
-/**
- * 账号状态取值域，见标准对象 §ST-1
- */
-export type AccountStatus = typeof AccountStatus[keyof typeof AccountStatus];
-
-
-export const AccountStatus = {
-  pending: 'pending',
-  active: 'active',
-  suspended: 'suspended',
-  banned: 'banned',
-  deleted: 'deleted',
-} as const;
-
-export interface Me {
-  /** 对外不可变 ID（base32(128 bit)，26 字符），不暴露自增主键 */
-  sub: string;
-  /** @maxLength 20 */
-  username: string;
-  /** @maxLength 50 */
-  displayName: string;
-  /** 只有本人看得到自己的邮箱 */
-  email: string;
-  /** 角色快照，权限判定不只看它 */
-  role: string;
-  status: AccountStatus;
-  /**
-     * 等级投影镜像，级数不封顶（EXP-001）
-     * @minimum 0
-     */
-  level: number;
-  createdAt: string;
-}
-
-export type ListDemosParams = {
-  /**
-   * 关键词，匹配标题与描述
-   * @maxLength 100
-   */
-  q?: string;
-  /**
-   * 页码，从 1 开始
-   * @minimum 1
-   */
-  page?: number;
-  /**
-   * 每页条数
-   * @minimum 1
-   * @maximum 200
-   */
-  pageSize?: number;
-  /**
-   * 排序口径。目前只有「最新」一种——`hot` 需要热度数据（浏览/收藏/评分），
-   * 那批指标还没落地，所以先不放进枚举：契约里有的值必须真能算出来。
-   */
-  sort?: ListDemosSort;
-};
-
-export type ListDemosSort = typeof ListDemosSort[keyof typeof ListDemosSort];
-
-
-export const ListDemosSort = {
-  latest: 'latest',
-} as const;
 
 export type getHealthzResponse200 = {
   data: Healthz
@@ -644,6 +455,167 @@ const res = await fetch(getPostAuthEmailCodeUrl(),
 
 
 
+export type postAuthPasswordResetCodeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postAuthPasswordResetCodeResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type postAuthPasswordResetCodeResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type postAuthPasswordResetCodeResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type postAuthPasswordResetCodeResponseSuccess = (postAuthPasswordResetCodeResponse204) & {
+  headers: Headers;
+};
+export type postAuthPasswordResetCodeResponseError = (postAuthPasswordResetCodeResponse400 | postAuthPasswordResetCodeResponse429 | postAuthPasswordResetCodeResponse503) & {
+  headers: Headers;
+};
+
+export type postAuthPasswordResetCodeResponse = (postAuthPasswordResetCodeResponseSuccess | postAuthPasswordResetCodeResponseError)
+
+export const getPostAuthPasswordResetCodeUrl = () => {
+
+
+
+
+  return `/api/v1/auth/password-reset/code`
+}
+
+/**
+ * 只认**邮箱**，不认用户名——用户名是公开的，用它发起重置等于给攻击者
+ * 一个「知道昵称就能骚扰到人」的入口。
+ *
+ * **无论该邮箱有没有注册，都返回 204**：不存在的邮箱同样会走一遍生成与
+ * 频率限制，只是不投递。响应形状与账号是否存在无关。
+ *
+ * 验证码发到主邮箱，6 位数字，5 分钟有效，一次性。与登录验证码**不能混用**。
+ * @summary 申请找回密码验证码
+ */
+export const postAuthPasswordResetCode = async (passwordResetCodeRequest: PasswordResetCodeRequest, options?: RequestInit): Promise<postAuthPasswordResetCodeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPostAuthPasswordResetCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passwordResetCodeRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthPasswordResetCodeResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as postAuthPasswordResetCodeResponse
+}
+
+
+
+export type postAuthPasswordResetResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postAuthPasswordResetResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type postAuthPasswordResetResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type postAuthPasswordResetResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type postAuthPasswordResetResponseSuccess = (postAuthPasswordResetResponse204) & {
+  headers: Headers;
+};
+export type postAuthPasswordResetResponseError = (postAuthPasswordResetResponse400 | postAuthPasswordResetResponse401 | postAuthPasswordResetResponse503) & {
+  headers: Headers;
+};
+
+export type postAuthPasswordResetResponse = (postAuthPasswordResetResponseSuccess | postAuthPasswordResetResponseError)
+
+export const getPostAuthPasswordResetUrl = () => {
+
+
+
+
+  return `/api/v1/auth/password-reset`
+}
+
+/**
+ * 验证码、改密码、吊销旧会话在**同一个事务**里完成。
+ *
+ * 成功后该账号在本次重置之前签发的**所有会话立即失效**——这是「密码可能
+ * 已经泄露」场景下的关键一步，只改哈希不踢会话等于没改。
+ *
+ * 验证码错误、过期、超次数、邮箱不存在，一律 401，不区分原因。
+ * @summary 用验证码重设密码
+ */
+export const postAuthPasswordReset = async (passwordResetRequest: PasswordResetRequest, options?: RequestInit): Promise<postAuthPasswordResetResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPostAuthPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(passwordResetRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthPasswordResetResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as postAuthPasswordResetResponse
+}
+
+
+
 export type postAuthLogoutResponse204 = {
   data: void
   status: 204
@@ -745,3 +717,6 @@ export const getMe = async ( options?: RequestInit): Promise<getMeResponse> => {
   const data: getMeResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getMeResponse
 }
+
+
+

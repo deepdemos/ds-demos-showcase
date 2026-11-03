@@ -31,6 +31,11 @@ type Purpose string
 const (
 	// PurposeLoginChallenge：登录时「账号维度失败太多次」之后要求证明邮箱所有权。
 	PurposeLoginChallenge Purpose = "login_challenge"
+	// PurposeResetPassword：找回密码时证明「这个邮箱是我的」。
+	//
+	// 与登录挑战**共用同一套机制、不同的 purpose**：purpose 同时参与键与码的哈希，
+	// 所以登录时发的码拿去重置密码验不过，反之亦然（见 verification_test.go）。
+	PurposeResetPassword Purpose = "reset_password"
 )
 
 // 阈值。它们是安全下限，登记在 docs/运行手册-可变常量.md §3。

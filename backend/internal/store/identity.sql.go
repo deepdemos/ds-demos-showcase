@@ -319,6 +319,42 @@ func (q *Queries) GetMeBySession(ctx context.Context, id string) (GetMeBySession
 	return i, err
 }
 
+const getPasswordResetTarget = `-- name: GetPasswordResetTarget :one
+
+SELECT a.id, a.sub, a.status, p.username, p.display_name, e.email
+FROM accounts a
+JOIN profiles p ON p.account_id = a.id
+JOIN account_emails e ON e.account_id = a.id AND e.is_primary
+JOIN credentials c ON c.account_id = a.id AND c.kind = 'password'
+WHERE lower(e.email) = lower($1)
+`
+
+type GetPasswordResetTargetRow struct {
+	ID          int64
+	Sub         string
+	Status      string
+	Username    string
+	DisplayName string
+	Email       string
+}
+
+// ===== 密码重置 =====
+// 找回密码只认**邮箱**，不认用户名：用户名是公开的，拿它发起重置等于给攻击者
+// 一个「只要知道昵称就能骚扰到人」的入口。
+func (q *Queries) GetPasswordResetTarget(ctx context.Context, lower string) (GetPasswordResetTargetRow, error) {
+	row := q.db.QueryRow(ctx, getPasswordResetTarget, lower)
+	var i GetPasswordResetTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sub,
+		&i.Status,
+		&i.Username,
+		&i.DisplayName,
+		&i.Email,
+	)
+	return i, err
+}
+
 const purgeLoginAttempts = `-- name: PurgeLoginAttempts :exec
 DELETE FROM login_attempts WHERE created_at < now() - interval '1 hour'
 `
@@ -352,11 +388,54 @@ func (q *Queries) RecordLoginAttempt(ctx context.Context, arg RecordLoginAttempt
 	return err
 }
 
+const revokeSessionsBefore = `-- name: RevokeSessionsBefore :execrows
+UPDATE web_sessions
+SET revoked_at = now()
+WHERE account_sub = $1
+  AND revoked_at IS NULL
+  AND created_at < $2
+`
+
+type RevokeSessionsBeforeParams struct {
+	AccountSub string
+	CreatedAt  pgtype.Timestamptz
+}
+
+// 撤销这个账号在 $2 之前签发的全部会话。$2 是刚写下的 rotated_at，
+// 所以本次重置自己新发的会话（created_at 更晚）不受影响。
+func (q *Queries) RevokeSessionsBefore(ctx context.Context, arg RevokeSessionsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeSessionsBefore, arg.AccountSub, arg.CreatedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeWebSession = `-- name: RevokeWebSession :exec
 UPDATE web_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) RevokeWebSession(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, revokeWebSession, id)
+	return err
+}
+
+const updatePasswordHash = `-- name: UpdatePasswordHash :exec
+UPDATE credentials
+SET secret_hash = $2,
+    rotated_at  = now(),
+    last_used_at = now()
+WHERE account_id = $1 AND kind = 'password'
+`
+
+type UpdatePasswordHashParams struct {
+	AccountID  int64
+	SecretHash string
+}
+
+// 同时写 rotated_at：这两件事必须同一个事务，否则会出现「密码换了但旧会话还有效」
+// 或者「会话被踢了但密码没换成」的中间态。
+func (q *Queries) UpdatePasswordHash(ctx context.Context, arg UpdatePasswordHashParams) error {
+	_, err := q.db.Exec(ctx, updatePasswordHash, arg.AccountID, arg.SecretHash)
 	return err
 }

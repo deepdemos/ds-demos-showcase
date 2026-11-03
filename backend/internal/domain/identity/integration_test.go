@@ -143,3 +143,68 @@ func TestIntegration不存在的账号也发码但不下发(t *testing.T) {
 		t.Fatalf("不存在的账号不该有收件地址，实际 %q", delivery.To)
 	}
 }
+
+// 重置密码：验证码换密码，并把重置之前签发的会话全部作废。
+func TestIntegrationPasswordReset(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	email, _ := mkUser(t, s, "reset")
+	const ip = "10.9.9.3"
+
+	// 先登录一次，拿到一个「旧会话」。
+	_, oldSession, err := s.Login(context.Background(), LoginInput{
+		Identifier: email, Password: "correct-horse-battery", IP: ip,
+	})
+	if err != nil {
+		t.Fatalf("登录失败: %v", err)
+	}
+	if _, err := s.Me(context.Background(), oldSession); err != nil {
+		t.Fatalf("旧会话应有效: %v", err)
+	}
+
+	delivery, err := s.RequestPasswordResetCode(context.Background(), email)
+	if err != nil {
+		t.Fatalf("RequestPasswordResetCode: %v", err)
+	}
+	if delivery.Code == "" || delivery.To != email {
+		t.Fatalf("投递信息不对: %+v", delivery)
+	}
+
+	const newPassword = "another-correct-horse"
+	if err := s.ResetPassword(context.Background(), email, delivery.Code, newPassword); err != nil {
+		t.Fatalf("重置失败: %v", err)
+	}
+
+	// 旧会话必须已经失效——只改哈希不踢会话等于没改。
+	if _, err := s.Me(context.Background(), oldSession); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("重置后旧会话应失效，实际 %v", err)
+	}
+
+	// 旧密码登不上，新密码能登上。
+	if _, _, err := s.Login(context.Background(), LoginInput{Identifier: email, Password: "correct-horse-battery", IP: ip}); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("旧密码应失效，实际 %v", err)
+	}
+	if _, _, err := s.Login(context.Background(), LoginInput{Identifier: email, Password: newPassword, IP: ip}); err != nil {
+		t.Fatalf("新密码应能登录: %v", err)
+	}
+
+	// 同一个码不能用第二次。
+	if err := s.ResetPassword(context.Background(), email, delivery.Code, newPassword); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("验证码应一次性，实际 %v", err)
+	}
+}
+
+// 登录验证码不能拿来重置密码（purpose 不同，码不同）。
+func TestIntegrationCrossPurposeCodeRejected(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	email, _ := mkUser(t, s, "xpurpose")
+
+	loginCode, err := s.RequestEmailCode(context.Background(), email)
+	if err != nil {
+		t.Fatalf("RequestEmailCode: %v", err)
+	}
+	if err := s.ResetPassword(context.Background(), email, loginCode.Code, "another-correct-horse"); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("登录验证码不该能重置密码，实际 %v", err)
+	}
+}

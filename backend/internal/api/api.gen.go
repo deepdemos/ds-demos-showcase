@@ -170,6 +170,18 @@ type Me struct {
 	Username string `json:"username"`
 }
 
+// PasswordResetCodeRequest defines model for PasswordResetCodeRequest.
+type PasswordResetCodeRequest struct {
+	Email openapi_types.Email `json:"email"`
+}
+
+// PasswordResetRequest defines model for PasswordResetRequest.
+type PasswordResetRequest struct {
+	Code        string              `json:"code"`
+	Email       openapi_types.Email `json:"email"`
+	NewPassword string              `json:"newPassword"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	// DisplayName 可为空串，展示时回退到 username
@@ -208,6 +220,12 @@ type PostAuthEmailCodeJSONRequestBody = EmailCodeRequest
 // PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
 type PostAuthLoginJSONRequestBody = LoginRequest
 
+// PostAuthPasswordResetJSONRequestBody defines body for PostAuthPasswordReset for application/json ContentType.
+type PostAuthPasswordResetJSONRequestBody = PasswordResetRequest
+
+// PostAuthPasswordResetCodeJSONRequestBody defines body for PostAuthPasswordResetCode for application/json ContentType.
+type PostAuthPasswordResetCodeJSONRequestBody = PasswordResetCodeRequest
+
 // PostAuthRegisterJSONRequestBody defines body for PostAuthRegister for application/json ContentType.
 type PostAuthRegisterJSONRequestBody = RegisterRequest
 
@@ -222,6 +240,12 @@ type ServerInterface interface {
 	// 登出
 	// (POST /api/v1/auth/logout)
 	PostAuthLogout(w http.ResponseWriter, r *http.Request)
+	// 用验证码重设密码
+	// (POST /api/v1/auth/password-reset)
+	PostAuthPasswordReset(w http.ResponseWriter, r *http.Request)
+	// 申请找回密码验证码
+	// (POST /api/v1/auth/password-reset/code)
+	PostAuthPasswordResetCode(w http.ResponseWriter, r *http.Request)
 	// 注册
 	// (POST /api/v1/auth/register)
 	PostAuthRegister(w http.ResponseWriter, r *http.Request)
@@ -258,6 +282,18 @@ func (_ Unimplemented) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
 // 登出
 // (POST /api/v1/auth/logout)
 func (_ Unimplemented) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 用验证码重设密码
+// (POST /api/v1/auth/password-reset)
+func (_ Unimplemented) PostAuthPasswordReset(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 申请找回密码验证码
+// (POST /api/v1/auth/password-reset/code)
+func (_ Unimplemented) PostAuthPasswordResetCode(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -333,6 +369,34 @@ func (siw *ServerInterfaceWrapper) PostAuthLogout(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAuthLogout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthPasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthPasswordResetCode operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthPasswordResetCode(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthPasswordResetCode(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -587,6 +651,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/logout", wrapper.PostAuthLogout)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/password-reset", wrapper.PostAuthPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/password-reset/code", wrapper.PostAuthPasswordResetCode)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/register", wrapper.PostAuthRegister)
