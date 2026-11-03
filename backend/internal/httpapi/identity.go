@@ -3,16 +3,19 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/kernel/verification"
 )
 
 // sessionCookie 是会话 cookie 的名字。`__Host-` 前缀由浏览器强制 `Secure` +
@@ -66,6 +69,8 @@ func (h *Handler) writeIdentityError(w http.ResponseWriter, err error) {
 	case errors.Is(err, identity.ErrEmailTaken), errors.Is(err, identity.ErrUsernameTaken):
 		// 409 而不是 400：格式没问题，是**这个值已经被占了**。前端据此把错误标在对应输入框。
 		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
+	case errors.Is(err, identity.ErrVerificationRequired):
+		writeError(w, http.StatusUnauthorized, api.VerificationRequired, "需要邮箱验证码")
 	case errors.Is(err, identity.ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, api.Unauthorized, "邮箱或密码不对")
 	case errors.Is(err, identity.ErrRateLimited):
@@ -151,11 +156,15 @@ func (h *Handler) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), registerTimeout)
 	defer cancel()
 
-	account, sessionID, err := h.identity.Login(ctx, identity.LoginInput{
+	in := identity.LoginInput{
 		Identifier: body.Identifier,
 		Password:   body.Password,
 		IP:         clientIP(r),
-	})
+	}
+	if body.EmailCode != nil {
+		in.EmailCode = *body.EmailCode
+	}
+	account, sessionID, err := h.identity.Login(ctx, in)
 	if err != nil {
 		h.writeIdentityError(w, err)
 		return
@@ -207,3 +216,59 @@ func clientIP(r *http.Request) string {
 	}
 	return host
 }
+
+// PostAuthEmailCode 实现 POST /api/v1/auth/email-code。
+//
+// **无论标识符有没有对应账号都返回 204**：账号不存在时验证码照样生成（以保持
+// 发送频率的判定与账号是否存在无关），但不投递。响应形状完全相同，所以这个端点
+// 不能用来判断某个邮箱注册过没有。
+func (h *Handler) PostAuthEmailCode(w http.ResponseWriter, r *http.Request) {
+	if h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+	var body api.EmailCodeRequest
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体格式不对")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+
+	delivery, err := h.identity.RequestEmailCode(ctx, body.Identifier)
+	if err != nil {
+		h.writeIdentityError(w, err)
+		return
+	}
+
+	if delivery.To != "" && h.mailer != nil {
+		// 异步投递，且**不能**用请求的 context：响应一返回它就被取消，信永远发不出去。
+		go h.sendLoginCode(mailerDelivery{Code: delivery.Code, To: delivery.To})
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// sendLoginCode 异步发一封登录验证码。
+//
+// 独立 goroutine + 自己的超时：同步等 SMTP 会在**响应时间**上泄露「这个账号存在」，
+// 而 204 是立刻返回的。
+func (h *Handler) sendLoginCode(d mailerDelivery) {
+	ctx, cancel := context.WithTimeout(context.Background(), loginCodeTimeout)
+	defer cancel()
+	subject := "登录验证码"
+	body := fmt.Sprintf("你的登录验证码是 %s，%d 分钟内有效，只能使用一次。\n\n如果这不是你本人操作，忽略这封邮件即可。\n",
+		d.Code, int(verification.CodeTTL.Minutes()))
+	if err := h.mailer.Send(ctx, d.To, subject, body); err != nil {
+		slog.Warn("发送登录验证码失败", "err", err)
+	}
+}
+
+// mailerDelivery 是发信需要的最小信息，避免把领域类型泄进传输层的签名里。
+type mailerDelivery struct {
+	Code string
+	To   string
+}
+
+// loginCodeTimeout 比 queryTimeout 宽：SMTP 握手（TLS + AUTH）在慢网络下要几秒。
+const loginCodeTimeout = 20 * time.Second

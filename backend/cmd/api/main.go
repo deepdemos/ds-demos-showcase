@@ -13,8 +13,10 @@ import (
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/httpapi"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/kernel/verification"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/config"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/database"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/mailer"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -25,6 +27,23 @@ func main() {
 	// 两个变量都保持 nil，表示「未配置数据库」。注意不能把 *pgxpool.Pool 的 nil 值
 	// 直接赋给接口——那会得到「非 nil 接口装着 nil 指针」，后面的 nil 判断全部失效。
 	ipSecret := loadIPSecret(cfg)
+	verificationSecret := loadVerificationSecret(cfg)
+
+	// 邮件通道。没配 SMTP 时拿到的是 logMailer：它不假装发出去，只告警。
+	mail, err := mailer.New(mailer.Config{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		User:     cfg.SMTPUser,
+		Pass:     cfg.SMTPPass,
+		From:     cfg.SMTPFrom,
+		LogCodes: cfg.MailLogCodes,
+		Logger:   logger,
+	})
+	if err != nil {
+		// 配置了一半（有 host 没 from）属于启动期错误，立刻失败。
+		logger.Error("mailer config invalid", "err", err)
+		os.Exit(1)
+	}
 
 	var pinger httpapi.Pinger
 	var queries *store.Queries
@@ -40,14 +59,14 @@ func main() {
 		defer pool.Close()
 		pinger = pool
 		queries = store.New(pool)
-		identitySvc = identity.New(pool, ipSecret)
+		identitySvc = identity.New(pool, ipSecret, verification.New(queries, verificationSecret))
 	} else {
 		logger.Warn("DATABASE_URL 未配置：/healthz 仍可用，业务端点返回 503")
 	}
 
 	server := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries, identitySvc)),
+		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries, identitySvc, mail)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -84,5 +103,19 @@ func loadIPSecret(cfg config.Config) []byte {
 		panic("生成 IP 哈希密钥失败: " + err.Error())
 	}
 	slog.Warn("IP_HASH_SECRET 未配置：本进程临时生成一把。重启后历史 ip_hash 不再可比，多实例之间也互不可见")
+	return secret
+}
+
+// loadVerificationSecret 与 loadIPSecret 同样的降级策略，但**必须与它分开**：
+// 两个用途共用一把密钥，一处泄露会连累另一处。
+func loadVerificationSecret(cfg config.Config) []byte {
+	if cfg.VerificationSecret != "" {
+		return []byte(cfg.VerificationSecret)
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		panic("生成验证码密钥失败: " + err.Error())
+	}
+	slog.Warn("VERIFICATION_SECRET 未配置：本进程临时生成一把。重启后已发出的验证码全部作废，多实例之间也互不认账")
 	return secret
 }

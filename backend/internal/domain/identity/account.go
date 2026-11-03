@@ -19,6 +19,9 @@ var (
 	// ErrEmailTaken / ErrUsernameTaken 分开，是因为前端要把错误标在不同输入框上。
 	ErrEmailTaken    = errors.New("identity: 邮箱已被使用")
 	ErrUsernameTaken = errors.New("identity: 用户名已被使用")
+	// ErrVerificationRequired 是「这次登录需要邮箱验证码」。
+	// 它只由第②层限流触发，与账号是否存在无关。
+	ErrVerificationRequired = errors.New("identity: 需要邮箱验证码")
 	// ErrUnauthorized 是「没登录 / 会话失效」。**不区分原因**——区分了就是给攻击者送信息。
 	ErrUnauthorized = errors.New("identity: 未登录")
 )

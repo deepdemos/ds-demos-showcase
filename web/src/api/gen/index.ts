@@ -31,6 +31,7 @@ export const ErrorCode = {
   conflict: 'conflict',
   rate_limited: 'rate_limited',
   unavailable: 'unavailable',
+  verification_required: 'verification_required',
 } as const;
 
 export interface Error {
@@ -111,7 +112,22 @@ export interface DemoList {
   total: number;
 }
 
+export interface EmailCodeRequest {
+  /**
+     * 邮箱或用户名，不区分大小写
+     * @minLength 1
+     * @maxLength 320
+     */
+  identifier: string;
+}
+
 export interface LoginRequest {
+  /**
+     * 邮箱验证码。只有在该标识符失败次数超阈值时才需要；
+     * 平时传了也会被忽略。
+     * @pattern ^[0-9]{6}$
+     */
+  emailCode?: string;
   /** 邮箱或用户名，不区分大小写 */
   identifier: string;
   password: string;
@@ -541,6 +557,89 @@ const res = await fetch(getPostAuthLoginUrl(),
 
   const data: postAuthLoginResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as postAuthLoginResponse
+}
+
+
+
+export type postAuthEmailCodeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postAuthEmailCodeResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type postAuthEmailCodeResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type postAuthEmailCodeResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type postAuthEmailCodeResponseSuccess = (postAuthEmailCodeResponse204) & {
+  headers: Headers;
+};
+export type postAuthEmailCodeResponseError = (postAuthEmailCodeResponse400 | postAuthEmailCodeResponse429 | postAuthEmailCodeResponse503) & {
+  headers: Headers;
+};
+
+export type postAuthEmailCodeResponse = (postAuthEmailCodeResponseSuccess | postAuthEmailCodeResponseError)
+
+export const getPostAuthEmailCodeUrl = () => {
+
+
+
+
+  return `/api/v1/auth/email-code`
+}
+
+/**
+ * `identifier` 与登录时填的一致（邮箱或用户名，不区分大小写）。
+ *
+ * **无论该标识符有没有对应账号，都返回 204**——账号不存在时不发信，但响应形状
+ * 完全相同，否则这里就成了免费的账号枚举接口。
+ *
+ * 发送频率限制在 1 次/分钟、5 次/小时；超限返回 429，这个也只看标识符，
+ * 与账号是否存在无关。
+ *
+ * 验证码投递到该账号的**主邮箱**，6 位数字，5 分钟内有效，一次性。
+ * @summary 申请登录验证码
+ */
+export const postAuthEmailCode = async (emailCodeRequest: EmailCodeRequest, options?: RequestInit): Promise<postAuthEmailCodeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPostAuthEmailCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(emailCodeRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthEmailCodeResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as postAuthEmailCodeResponse
 }
 
 

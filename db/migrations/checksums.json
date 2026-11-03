@@ -10,5 +10,6 @@
   "db/schema/80-late-fk.sql": "556590875ad6c255b7d2de669038a1f7ca24714803ab55831b7486d1a6b803fa",
   "db/schema/90-extensions.sql": "5a41cd134542c40c60603f8b59a3c9bdf86bb4357e0e09e03ca990d085db16f9",
   "db/migrations/0001_login_attempts.sql": "ceb244a2bbd4ccf90fb3a0215bce7045937aa68e7b3ecd6a2494bbf329434f84",
-  "db/migrations/0002_verification_codes.sql": "7730c98487db2b9a1fd1808031830cc773912aa387cd77f0dc8213ddb6b9ef9d"
+  "db/migrations/0002_verification_codes.sql": "7730c98487db2b9a1fd1808031830cc773912aa387cd77f0dc8213ddb6b9ef9d",
+  "db/migrations/0003_login_attempt_identifier.sql": "69f6b501837da61237aceec71d2dbaf270b63b4449d393a6eb4a18e0e2d3df68"
 }

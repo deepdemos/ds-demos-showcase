@@ -102,8 +102,24 @@ WHERE succeeded = false
   AND created_at > now() - interval '10 minutes';
 
 -- name: RecordLoginAttempt :exec
-INSERT INTO login_attempts (ip_hash, account_id, succeeded)
-VALUES (sqlc.arg(ip_hash), sqlc.narg(account_id), sqlc.arg(succeeded));
+-- identifier_hash 是「用户输进来的那个标识符」的 HMAC，与账号存不存在无关。
+-- 第②层按它计数，所以对着不存在的邮箱撞库同样会被拦住。
+INSERT INTO login_attempts (ip_hash, account_id, identifier_hash, succeeded)
+VALUES (sqlc.arg(ip_hash), sqlc.narg(account_id), sqlc.narg(identifier_hash), sqlc.arg(succeeded));
+
+-- name: CountIdentifierFailures :one
+-- 第②层（身份域 §11.3）：同一标识符 10 分钟内失败次数，成功登录后清零。
+-- 不区分账号是否存在——这正是「无效邮箱也要被要求验证码」的实现。
+WITH last_ok AS (
+    SELECT COALESCE(max(created_at), '-infinity'::timestamptz) AS at
+    FROM login_attempts
+    WHERE identifier_hash = sqlc.arg(identifier_hash)::text AND succeeded
+)
+SELECT count(*) FILTER (WHERE created_at > last_ok.at)::int AS fails
+FROM login_attempts, last_ok
+WHERE succeeded = false
+  AND identifier_hash = sqlc.arg(identifier_hash)::text
+  AND created_at > now() - interval '10 minutes';
 
 -- name: PurgeLoginAttempts :exec
 DELETE FROM login_attempts WHERE created_at < now() - interval '1 hour';

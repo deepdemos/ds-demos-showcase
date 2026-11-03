@@ -154,6 +154,14 @@ func (s *Service) Purge(ctx context.Context) error {
 	return nil
 }
 
+// IdentifierHash 把「用途 + 标识符」变成一个不可逆的键，供调用方记自己的计数。
+//
+// 调用方需要**同一个**键：登录尝试表按它计数，验证码按它存储，两边必须对得上，
+// 否则「失败 5 次就要求验证码」永远触发不了。把推导放在这里，避免两处各写一遍。
+func (s *Service) IdentifierHash(purpose Purpose, identifier string) string {
+	return s.identifierKey(purpose, identifier)
+}
+
 // identifierKey 把「用途 + 归一化标识符」变成一个不可逆的键。
 //
 // 带上 purpose：同一个邮箱在「登录挑战」与「改邮箱确认」下是两条独立的记录，
