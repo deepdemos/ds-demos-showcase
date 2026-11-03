@@ -268,6 +268,9 @@ CREATE INDEX ix_outbox_pending ON outbox_events (created_at) WHERE processed_at 
 CREATE TABLE users (
     id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     sub         text        NOT NULL UNIQUE,          -- IdP 的 sub
+    -- history_enabled 已被 db/migrations/0007_users_projection.sql 删除
+    -- （它是设置域用户级键 history.record 的第二处存法）。基线冻结不改，
+    -- 所以下面这行仍在，但**实际库里已经没有了**；读这张表以「基线 + 全部迁移」为准。
     history_enabled boolean NOT NULL DEFAULT true,
     created_at  timestamptz NOT NULL DEFAULT now(),
     deleted_at  timestamptz

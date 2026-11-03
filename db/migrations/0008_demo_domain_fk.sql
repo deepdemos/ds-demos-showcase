@@ -24,6 +24,32 @@
 -- 顺序不影响结果，按 issue 里的编号排是为了对照方便。
 
 -- ① 作品子行
+-- 跑之前先查孤儿：加外键时若存量里已有指向不存在行的值，这条迁移会以
+-- `violates foreign key constraint` 失败，而那条报错不告诉你有几行、是哪些值。
+-- 下面这段先算一遍，带计数中止——换机器、换数据重放时行为可预期。
+DO $$
+DECLARE n bigint;
+BEGIN
+    SELECT count(*) INTO n FROM demo_grants g
+        WHERE NOT EXISTS (SELECT 1 FROM demo_capabilities c WHERE c.key = g.capability);
+    IF n > 0 THEN
+        RAISE EXCEPTION 'demo_grants.capability 有 % 行指向不存在的 demo_capabilities.key，先清理再跑', n;
+    END IF;
+
+    SELECT count(*) INTO n FROM demo_revision_files f
+        WHERE NOT EXISTS (SELECT 1 FROM blobs b WHERE b.sha256 = f.blob_hash);
+    IF n > 0 THEN
+        RAISE EXCEPTION 'demo_revision_files.blob_hash 有 % 行指向不存在的 blobs.sha256，先清理再跑', n;
+    END IF;
+
+    SELECT count(*) INTO n FROM demo_revisions r
+        WHERE r.prompt_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM prompts p WHERE p.id = r.prompt_id);
+    IF n > 0 THEN
+        RAISE EXCEPTION 'demo_revisions.prompt_id 有 % 行指向不存在的 prompts.id，先清理再跑', n;
+    END IF;
+END $$;
+
 ALTER TABLE demo_channels ADD CONSTRAINT fk_demo_channels_demo_id78
     FOREIGN KEY (demo_id) REFERENCES demos (id) ON DELETE CASCADE;
 

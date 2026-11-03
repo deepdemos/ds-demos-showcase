@@ -22,6 +22,20 @@ INSERT INTO channels (code, name, sort) VALUES
     ('deep',  '主站',       10),
     ('astra', 'Astra 橱窗', 20);
 
+-- 加外键前先查孤儿。存量里如果已有拼错的渠道名（比如 'astr'），
+-- ADD CONSTRAINT 会以 `violates foreign key constraint` 失败，
+-- 报错不告诉你有几行、是哪些值。先算一遍，带清单中止。
+DO $$
+DECLARE bad text;
+BEGIN
+    SELECT string_agg(DISTINCT channel, ', ') INTO bad
+        FROM demo_channels c
+        WHERE NOT EXISTS (SELECT 1 FROM channels x WHERE x.code = c.channel);
+    IF bad IS NOT NULL THEN
+        RAISE EXCEPTION 'demo_channels.channel 有未登记的取值（%），先清理或先补 channels 行', bad;
+    END IF;
+END $$;
+
 ALTER TABLE demo_channels ADD CONSTRAINT fk_demo_channels_channel94
     FOREIGN KEY (channel) REFERENCES channels (code);
 
