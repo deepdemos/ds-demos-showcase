@@ -1,0 +1,174 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { Navigate, Link } from 'react-router';
+import { listDemoReviewQueue, reviewDemo } from '@/api';
+import type { ReviewQueueItem } from '@/api';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/features/auth/AuthContext';
+
+/** 裁决说明的长度上限，与后端 `reviewReasonMax = 500` 同口径。 */
+const REASON_MAX = 500;
+
+/**
+ * 审核队列。
+ *
+ * # 为什么权限不在前端判
+ *
+ * 谁能审由服务端说了算（`demo.review` 权限）。前端**不**读 `me.role` 去猜——
+ * 一猜就会和权限表脱钩：以后给某个新角色加权限，前端还得跟着改一次。
+ * 这里只做一件事：收到 403 就展示「没有审核权限」，其余交给后端。
+ *
+ * # 为什么预览用新标签页打开
+ *
+ * 预览是第三方代码（作者上传的 HTML），放进本页的 iframe 等于把审核员
+ * 留在一个可能弹窗、可能占满、可能劫持键盘的页面里做裁决。
+ * 新标签页里它是个独立文档，CSP sandbox 也是那边在服务端注的。
+ */
+export function AdminReviewPage() {
+  const { me, isLoading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+
+  const queue = useQuery({
+    queryKey: ['admin', 'reviews', 'demo'],
+    queryFn: () => listDemoReviewQueue({ limit: 50 }),
+    enabled: me !== null,
+  });
+
+  const decide = useMutation({
+    mutationFn: async (input: { slug: string; decision: 'approve' | 'reject' }) =>
+      reviewDemo(input.slug, {
+        decision: input.decision,
+        reason: reasons[input.slug] || undefined,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'reviews', 'demo'] });
+    },
+  });
+
+  if (authLoading) return <Skeleton lines={3} />;
+  if (me === null) return <Navigate to="/login?return_to=/admin/reviews" replace />;
+
+  const forbidden = queue.data?.status === 403;
+
+  return (
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold">待审作品</h1>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          按提交时间正序。预览会在新标签页打开——那是作者上传的代码，不在本页里跑。
+        </p>
+      </header>
+
+      {queue.isPending ? <Skeleton lines={3} /> : null}
+
+      {queue.isError || queue.data?.status === 503 ? (
+        <ErrorState
+          title="队列加载失败"
+          description="请稍后重试"
+          onRetry={() => void queue.refetch()}
+        />
+      ) : null}
+
+      {forbidden ? (
+        // 给了重试：权限可能是刚在另一个标签页给的，重试比刷新整页轻。
+        <ErrorState
+          title="没有审核权限"
+          description="需要 demo.review 权限才能查看待审队列。"
+          onRetry={() => void queue.refetch()}
+        />
+      ) : null}
+
+      {decide.isError ? (
+        // 裁决失败不用 ErrorState：那不是「整块内容加载失败」，
+        // 而是一次操作的反馈；给整页错误态会让已加载的队列看起来也没了。
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {decide.error instanceof Error ? decide.error.message : '裁决失败，请重试'}
+        </p>
+      ) : null}
+
+      {queue.data?.status === 200 && queue.data.data.items.length === 0 ? (
+        <EmptyState title="没有待审作品" description="有新投稿时会出现在这里。" />
+      ) : null}
+
+      {queue.data?.status === 200 && queue.data.data.items.length > 0 ? (
+        <ul className="list-none space-y-4 p-0">
+          {queue.data.data.items.map((item) => (
+            <ReviewCard
+              key={item.slug}
+              item={item}
+              reason={reasons[item.slug] ?? ''}
+              onReasonChange={(value) => setReasons((prev) => ({ ...prev, [item.slug]: value }))}
+              onDecide={(decision) => decide.mutate({ slug: item.slug, decision })}
+              busy={decide.isPending && decide.variables?.slug === item.slug}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewCard({
+  item,
+  reason,
+  onReasonChange,
+  onDecide,
+  busy,
+}: {
+  item: ReviewQueueItem;
+  reason: string;
+  onReasonChange: (value: string) => void;
+  onDecide: (decision: 'approve' | 'reject') => void;
+  busy: boolean;
+}) {
+  return (
+    <li className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h2 className="truncate font-medium">{item.title ?? '（无标题）'}</h2>
+          <p className="truncate text-sm text-neutral-500 dark:text-neutral-400">
+            {item.authorName ?? '（未知作者）'} ·{' '}
+            {new Date(item.submittedAt).toLocaleString('zh-CN')}
+          </p>
+          {item.description ? (
+            <p className="line-clamp-2 text-sm text-neutral-600 dark:text-neutral-300">
+              {item.description}
+            </p>
+          ) : null}
+        </div>
+        <Link
+          to={item.previewPath}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 text-sm underline"
+        >
+          预览
+        </Link>
+      </div>
+
+      <label className="mt-3 block text-sm">
+        <span className="text-neutral-500 dark:text-neutral-400">说明（可选，驳回时建议写）</span>
+        <textarea
+          className="mt-1 w-full rounded border border-neutral-300 bg-transparent p-2 text-sm dark:border-neutral-700"
+          rows={2}
+          maxLength={REASON_MAX}
+          value={reason}
+          onChange={(event) => onReasonChange(event.target.value)}
+        />
+      </label>
+
+      <div className="mt-3 flex gap-2">
+        <Button primary disabled={busy} onClick={() => onDecide('approve')}>
+          通过
+        </Button>
+        <Button disabled={busy} onClick={() => onDecide('reject')}>
+          驳回
+        </Button>
+      </div>
+    </li>
+  );
+}

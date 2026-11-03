@@ -6,6 +6,7 @@ import { HomePage } from '@/routes/HomePage';
 import { LoginPage } from '@/routes/LoginPage';
 import { RegisterPage } from '@/routes/RegisterPage';
 import { SubmitPage } from '@/routes/SubmitPage';
+import { AdminReviewPage } from '@/routes/AdminReviewPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
 
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       { path: 'submit', element: <SubmitPage /> },
+      { path: 'admin/reviews', element: <AdminReviewPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
