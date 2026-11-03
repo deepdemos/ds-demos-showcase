@@ -33,9 +33,11 @@ test('支持分类筛选、分页与主题切换', () => {
   expect(screen.getByText(`第 2 / ${totalPages} 页`)).toBeInTheDocument();
   expect(document.querySelectorAll('[data-control-id]')).toHaveLength(countOnPage(2));
 
-  // 跳到末页，确认最后一页只渲染剩下的那些
-  fireEvent.click(pagination().getByRole('button', { name: '下一页' }));
-  fireEvent.click(pagination().getByRole('button', { name: '下一页' }));
+  // 跳到末页，确认最后一页只渲染剩下的那些。
+  // 用循环而不是写死点几次：页数随控件数量变化，写死点 2 次在控件变多时会停在中间页。
+  for (let page = 2; page < totalPages; page += 1) {
+    fireEvent.click(pagination().getByRole('button', { name: '下一页' }));
+  }
   expect(screen.getByText(`第 ${totalPages} / ${totalPages} 页`)).toBeInTheDocument();
   expect(document.querySelectorAll('[data-control-id]')).toHaveLength(countOnPage(totalPages));
 
@@ -44,7 +46,10 @@ test('支持分类筛选、分页与主题切换', () => {
   fireEvent.click(screen.getByRole('button', { name: '输入' }));
   const inputCount = controls.filter((item) => item.category === 'input').length;
   expect(screen.getByText(`共 ${inputCount} 个控件`)).toBeInTheDocument();
-  expect(document.querySelectorAll('[data-control-id]')).toHaveLength(inputCount);
+  // 筛选后回到第 1 页，所以渲染的是「第 1 页那几条」，不是全部。
+  expect(document.querySelectorAll('[data-control-id]')).toHaveLength(
+    Math.min(PAGE_SIZE, inputCount),
+  );
 
   fireEvent.click(screen.getByRole('button', { name: '切换到深色模式' }));
   expect(document.documentElement).toHaveClass('ring-ui-theme-dark');

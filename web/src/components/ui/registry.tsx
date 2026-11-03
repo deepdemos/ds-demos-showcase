@@ -9,12 +9,24 @@ import { CheckboxDefaultDemo, CheckboxDisabledDemo } from './checkbox.demo';
 import { EmptyStateDefaultDemo, EmptyStateWithActionDemo } from './empty-state.demo';
 import { ErrorStateDefaultDemo, ErrorStateWithRetryDemo } from './error-state.demo';
 import {
+  FileInputAcceptDemo,
+  FileInputDefaultDemo,
+  FileInputDisabledDemo,
+  FileInputErrorDemo,
+} from './file-input.demo';
+import {
   InputDefaultDemo,
   InputDisabledDemo,
   InputErrorDemo,
   InputPasswordDemo,
 } from './input.demo';
 import { PaginationDefaultDemo, PaginationDisabledDemo } from './pagination.demo';
+import {
+  SelectDefaultDemo,
+  SelectDisabledDemo,
+  SelectErrorDemo,
+  SelectPlaceholderDemo,
+} from './select.demo';
 import { SkeletonDefaultDemo, SkeletonCardDemo } from './skeleton.demo';
 import { ThemeToggleDemo } from './theme-toggle.demo';
 
@@ -113,6 +125,78 @@ export const controls: ControlSpec[] = [
     category: 'input',
     description: '输入内容不回显，用于密码与验证码以外的口令。',
     Demo: InputPasswordDemo,
+  },
+
+  {
+    id: 'file-input/default',
+    component: 'FileInput',
+    name: '文件选择',
+    category: 'input',
+    description: '选择一个本地文件，选中后显示文件名与大小。',
+    Demo: FileInputDefaultDemo,
+  },
+
+  {
+    id: 'file-input/accept',
+    component: 'FileInput',
+    name: '限定类型的文件选择',
+    category: 'input',
+    description: '只允许选指定后缀的文件。',
+    Demo: FileInputAcceptDemo,
+  },
+
+  {
+    id: 'file-input/error',
+    component: 'FileInput',
+    name: '错误态文件选择',
+    category: 'input',
+    description: '校验失败时的错误提示。',
+    Demo: FileInputErrorDemo,
+  },
+
+  {
+    id: 'file-input/disabled',
+    component: 'FileInput',
+    name: '禁用文件选择',
+    category: 'input',
+    description: '不可选择状态。',
+    Demo: FileInputDisabledDemo,
+  },
+
+  {
+    id: 'select/default',
+    component: 'Select',
+    name: '下拉选择',
+    category: 'selection',
+    description: '从固定选项里选一个。',
+    Demo: SelectDefaultDemo,
+  },
+
+  {
+    id: 'select/placeholder',
+    component: 'Select',
+    name: '带占位的下拉选择',
+    category: 'selection',
+    description: '尚未选择时显示提示项。',
+    Demo: SelectPlaceholderDemo,
+  },
+
+  {
+    id: 'select/error',
+    component: 'Select',
+    name: '错误态下拉选择',
+    category: 'selection',
+    description: '未选择时的错误提示。',
+    Demo: SelectErrorDemo,
+  },
+
+  {
+    id: 'select/disabled',
+    component: 'Select',
+    name: '禁用下拉选择',
+    category: 'selection',
+    description: '不可选择状态。',
+    Demo: SelectDisabledDemo,
   },
   {
     id: 'checkbox/default',
