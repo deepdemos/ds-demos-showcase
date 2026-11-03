@@ -1,4 +1,6 @@
-# Demo 域细化建模 v1.5
+# Demo 域细化建模 v1.6
+
+**本版变更（v1.6，2026-11-03）：补上两条缺失的外键。** `demos.current_revision_id → demo_revisions` 与 `demo_revisions.demo_id → demos` 一直只有字段表里的「FK」标注、没有实际约束（`db/schema/80-late-fk.sql` 的头部还拿这一对当「跨域存在环、只能集中添加」的例子，但集中添加那一轮漏了）。迁移 [`0006_demo_revision_fk.sql`](../db/migrations/0006_demo_revision_fk.sql) 补上：`demo_id` 是 `ON DELETE CASCADE`（版本属于作品），`current_revision_id` 是 `ON DELETE SET NULL`（指针不是拥有者）。**§3.1 字段表那一行同步**；正文其余部分未动。
 
 **本版变更（v1.5，2026-10-30）：§13 待定第 1 条结案。** 「软删除保留期」不再是待定项——生命周期 **L1 = A**、治理域 §9.2 已写死 **30 天**，本域 §13 的「默认建议 30 天」随之改成定案口径。**本版只改这一处**，正文（表结构 / 状态机 / 不变量）一律未动。
 
@@ -145,7 +147,7 @@ flowchart TB
 | `cover_inline` | bytea | **是** | NULL | ≤32 KiB 的内联封面（生命周期 §8.3）；超过就走 OSS。**内容列**，擦除置 NULL |
 | `author_id` | bigint FK→users | 是 | NULL | NULL = 匿名 |
 | `guest_name` | text | 是 | NULL | 匿名展示名（≤64 字符） |
-| `current_revision_id` | bigint FK→demo_revisions | 是 | NULL | 建库时可能还没有版本 |
+| `current_revision_id` | bigint FK→demo_revisions（`ON DELETE SET NULL`） | 是 | NULL | 建库时可能还没有版本；版本被删时指针自动置空（见 `db/migrations/0006_demo_revision_fk.sql`） |
 | `moderation_state` | text | 否 | `pending` | `pending` / `approved` / `rejected`（≤16 字符） |
 | `lifecycle_state` | text | 否 | `draft` | `draft` / `published` / `archived` / `removed`（≤16 字符） |
 | `idempotency_key` | text | 是 | NULL | 唯一，agent 重试去重（≤128 字符） |

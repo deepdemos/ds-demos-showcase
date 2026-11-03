@@ -114,22 +114,12 @@ DELETE FROM demos WHERE id = $1
 
 // 仅用于「投稿中途失败」的补偿：这一行是刚刚在同一请求里建的、从未对外可见。
 // **正常删除不走这里**——正常删除是生命周期域的软删 + 墓碑。
+//
+// 版本行由 fk_demo_revisions_demo_id76 的 ON DELETE CASCADE 带走（迁移 0006），
+// 不需要先手动删 demo_revisions。demos.current_revision_id 那条边是 SET NULL，
+// 也不妨碍删除。
 func (q *Queries) DeleteDemoForCleanup(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteDemoForCleanup, id)
-	return err
-}
-
-const deleteRevisionsForCleanup = `-- name: DeleteRevisionsForCleanup :exec
-DELETE FROM demo_revisions WHERE demo_id = $1
-`
-
-// 仅用于「投稿中途失败」的补偿：这些版本从未对外可见。
-//
-// 为什么要显式删：`demo_revisions.demo_id` 目前**没有外键**（`db/schema/80-late-fk.sql`
-// 的注释解释了 demos 与 demo_revisions 互为先后、只能集中添加，但这两条边至今没加），
-// 所以删 demos 那一行不会带走版本行。这里按 demo_id 整批删，不依赖级联。
-func (q *Queries) DeleteRevisionsForCleanup(ctx context.Context, demoID int64) error {
-	_, err := q.db.Exec(ctx, deleteRevisionsForCleanup, demoID)
 	return err
 }
 

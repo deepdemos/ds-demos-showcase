@@ -337,13 +337,12 @@ func (s *Service) compensate(ctx context.Context, slug string, st staged) {
 			s.log.Error("清理孤儿对象失败", "key", key, "err", err)
 		}
 	}
+	// 删 demos 一行即可：版本行由 fk_demo_revisions_demo_id76 的 ON DELETE CASCADE
+	// 带走（迁移 0006），current_revision_id 是 SET NULL。
 	if err := s.inTx(cctx, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		d, err := q.GetDemoBySlug(cctx, slug)
 		if err != nil {
-			return err
-		}
-		if err := q.DeleteRevisionsForCleanup(cctx, d.ID); err != nil {
 			return err
 		}
 		return q.DeleteDemoForCleanup(cctx, d.ID)
