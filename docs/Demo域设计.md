@@ -1,4 +1,6 @@
-# Demo 域细化建模 v1.6
+# Demo 域细化建模 v1.7
+
+**本版变更（v1.7，2026-11-03）：把 §9 里三条「出错时静默」的不变量落成触发器，并把渠道提成主数据。** 三件事：① 迁移 [`0009_demo_domain_invariants.sql`](../db/migrations/0009_demo_domain_invariants.sql) 给 §9 的 **#1**（revision 不可变）、**#2**（`current_revision_id` 必须属于本 demo）、**#10**（`listed` 要求 `approved`，含反向）加触发器，**§9 那三条同步标注「已由触发器兜住」**；② 迁移 [`0010_channels_master.sql`](../db/migrations/0010_channels_master.sql) 新建 `channels` 主数据表，`demo_channels.channel` 从自由文本改成外键（**§3.5 那一行同步**）；③ 补 **§3.11 `DemoTimeline`**（此前建了表、§7 有写入点，但没有实体描述），并写清 **§3.7 `rater_key` 的生成口径**（此前只写了匿名口径，登录用户怎么算没定义）。**#3 不做数据库约束**（投稿事务天然两阶段），已记进 `docs/已知松点.md`。
 
 **本版变更（v1.6，2026-11-03）：补上两条缺失的外键。** `demos.current_revision_id → demo_revisions` 与 `demo_revisions.demo_id → demos` 一直只有字段表里的「FK」标注、没有实际约束（`db/schema/80-late-fk.sql` 的头部还拿这一对当「跨域存在环、只能集中添加」的例子，但集中添加那一轮漏了）。迁移 [`0006_demo_revision_fk.sql`](../db/migrations/0006_demo_revision_fk.sql) 补上：`demo_id` 是 `ON DELETE CASCADE`（版本属于作品），`current_revision_id` 是 `ON DELETE SET NULL`（指针不是拥有者）。**§3.1 字段表那一行同步**；正文其余部分未动。
 
@@ -281,7 +283,7 @@ INDEX  (blob_hash)   -- GC 反查
 |---|---|---|---|---|
 | `id` | bigint PK | 否 | 自增 | |
 | `demo_id` | bigint FK→demos | 否 | — | CASCADE |
-| `channel` | text | 否 | — | `deep` / `astra` / 未来渠道（≤32 字符） |
+| `channel` | text FK→channels | 否 | — | `deep` / `astra` / 未来渠道。**取值来自 `channels` 主数据表**（迁移 0010），不是自由文本 —— 加一种渠道是加一行，打错字会被外键拒 |
 | `visibility` | text | 否 | `listed` | `listed` / `unlisted` / `hidden`（≤16 字符） |
 | `lang` | text | 否 | `zh` | 该渠道的语言标记（≤8 字符） |
 | `featured` | boolean | 否 | `false` | 精选位 |
@@ -326,7 +328,7 @@ INDEX  (channel, visibility, featured_order)
 | `id` | bigint PK | 否 | |
 | `demo_id` | bigint FK→demos | 否 | CASCADE |
 | `user_id` | bigint FK→users | 是 | 登录用户 |
-| `rater_key` | text | 否 | 匿名指纹 `sha256(device|ip|salt)`（≤128 字符） |
+| `rater_key` | text | 否 | 去重键（≤128 字符）。**登录用户 = `user:<users.id>`；匿名 = `anon:` + `HMAC(ip | ua)`**（密钥 `RATER_SECRET`）。两种状态用不同前缀，所以同一个人登录后投的是另一票 —— 这是有意的：匿名票不该因为后来登录就变成「同一个人投过」。清理与合并留给运营脚本，不在本期。 |
 | `score` | int | 否 | 1–5 |
 | `created_at` / `updated_at` | timestamptz | 否 | |
 
@@ -404,6 +406,25 @@ UNIQUE (provider, host, topic_id)
 | `created_at` | timestamptz | |
 
 访问旧 slug → 301 到当前 slug。这样 `slug` 可以唯一且永久，同时支持改名。
+
+### 3.11 `DemoTimeline`（作品时间线）
+
+`db/schema/30-demo.sql` 里建了这张表，§7 的流程里也有写入点，但此前没有单列实体 —— 补在这里。
+
+| 字段 | 类型 | 空 | 说明 |
+|---|---|---|---|
+| `id` | bigint PK | 否 | |
+| `demo_id` | bigint FK→demos | 否 | CASCADE |
+| `kind` | text | 否 | `create` / `approve` / `reject` / `archive` / `restore` / `slug_change` / `merge` |
+| `message` | text | 是 | 一句话说明（≤500 字符） |
+| `actor_id` | bigint FK→users | 是 | 触发者；系统行为为 NULL |
+| `created_at` | timestamptz | 否 | |
+
+**它写给人看，不承担审计**：审计在治理域的 `audit_log`（谁、改了什么、改前改后）。时间线只保留「这个作品发生过什么」这条叙事，所以：
+
+- **不是事实源**：删掉它不影响任何判定。
+- **只记录对外可见的动作**：审核通过与驳回、归档与恢复、改名、合并。内部字段级改动不进时间线。
+- **`actor_id` 可空**：系统自动行为（如到期归档）没有操作人。
 
 ## 4. 全景类图
 
@@ -971,19 +992,19 @@ sequenceDiagram
 
 ## 9. 不变量
 
-1. `DemoRevision` 一旦创建，任何字段不得 UPDATE（除后续追加的可空审计列）。
-2. `Demo.current_revision_id` 必须指向属于该 demo 的 revision。
-3. 每个 `Demo` 至少一条 revision（除建库瞬间）。
+1. `DemoRevision` 一旦创建，任何字段不得 UPDATE（除后续追加的可空审计列）。✅ **触发器 `trg_demo_revisions_immutable` 兜住**（迁移 0009）：除 `deleted_at` 与那次擦除写入，整行的 `to_jsonb` 相减必须为空。
+2. `Demo.current_revision_id` 必须指向属于该 demo 的 revision。✅ **触发器 `trg_demos_guard` 兜住**（迁移 0009）。
+3. 每个 `Demo` 至少一条 revision（除建库瞬间）。⚠️ **不做数据库约束**：投稿事务天然两阶段（先 `INSERT demos` 再 `INSERT demo_revisions`），非延迟约束会让第一步就失败；做成 `DEFERRABLE INITIALLY DEFERRED` 又把「必须一个事务」变成硬约束，挡死「先存草稿、稍后补内容」。见 [`已知松点.md`](./已知松点.md)。
 4. `rev_no` 在同一 demo 内从 1 连续递增，不跳号不复用。
-5. `manifest_hash` 只由清单内容决定，与打包方式无关。
+5. `manifest_hash` 只由清单内容决定，与打包方式无关。⬜ **语义，库里管不了**（哈希怎么算出来的，数据库看不见）。
 6. `DemoRevisionFile.blob_hash` 必须存在于 `Blob`。
 7. **`erased_at` 非空 ⟹ `deleted_at` 非空，且全部内容列为 `NULL`**：`demos` 侧 `title` / `description` / `cover_url` / `cover_thumb_url` / `guest_name`；revision 侧 `title` / `description` / `cover_url` / `entry_path` / `manifest_hash` / `file_count` / `total_bytes` / `prompt` / `model_hint` / `single_file` / `external_url` / `video_url` / `prompt_id`。**逐列清单以 [`数据生命周期设计.md`](./数据生命周期设计.md) §6.2 为准**（本行只是投影），验收 SQL 见其附录 A.2。
 8. **内容行永不物理删除**（Q11）：`demos` / `demo_revisions` 不做 `DELETE`，只有 GC 删派生物。**唯一例外是 `demo_revision_files`**：它是清单子行（没有任何 id 指向它），擦除时按《数据生命周期设计》§6.3 的顺序「先入队 → 再清字段 → 最后删子行」整行删除；留着的副作用是永久记着「他传过 12 个 3 MB 的 png」。
 9. `Blob` 不可变：同 sha256 永远同内容；写盘前必须校验。
-10. `DemoChannel.(demo_id, channel)` 唯一；`visibility='listed'` 要求 `moderation_state='approved'`。
-11. `DemoStat` 可随时从 `DemoRating` 重建；不得作为唯一数据源。
+10. `DemoChannel.(demo_id, channel)` 唯一；`visibility='listed'` 要求 `moderation_state='approved'`。✅ **唯一性靠 `uq_channel`，跨表那条靠两个触发器**（迁移 0009）：写渠道时校验父作品已审核，作品退回审核状态时校验没有上架中的渠道。
+11. `DemoStat` 可随时从 `DemoRating` 重建；不得作为唯一数据源。⬜ **语义，库里管不了**。
 12. `Demo.slug` 永久唯一；改名写入 `DemoSlugHistory` 并 301。
-13. 软删除的 `Demo` 不出现在任何公开查询；**行永不物理删除**（台账 G19 Q11）——GC 只清派生物（目录 / OSS 对象 / 无引用 blob），擦除只清内容字段。已擦除的 `Demo` 与 revision 一律按 404（§6.4）。
+13. 软删除的 `Demo` 不出现在任何公开查询。⬜ **查询口径**（靠 `ListPublishedDemos` 的 WHERE），不塞进 schema；**行永不物理删除**（台账 G19 Q11）——GC 只清派生物（目录 / OSS 对象 / 无引用 blob），擦除只清内容字段。已擦除的 `Demo` 与 revision 一律按 404（§6.4）。
 14. 生成条件（模型 / 平台 / 平台配置 / 技能 / MCP）是 **revision 级事实**：每个 revision 的关联行只描述该版本；**历史版本可追溯**。demo 层只提供「当前版本」（`current_revision_id`）的派生值，不得作为独立事实源（见 §2.2 / §3.2.1）。
 
 ## 10. 与模型域的衔接
