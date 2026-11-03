@@ -276,6 +276,40 @@ await db.exec("DELETE FROM demo_revisions WHERE demo_id=" + did + " AND rev_no=2
 await ok('删版本级联删清单行',
   "SELECT count(*) FROM demo_revision_files", 0);
 
+// ---------- 5c. demo 域三条不变量触发器（迁移 0009）----------
+// #1 revision 不可变、#2 指针必须是自己的版本、#10 上架渠道要求已审核。
+// 这三条出错时全是静默的 —— 不报错，只是数据从此不对。
+console.log('--- demo 域不变量 ---');
+await ok('三条触发器都在',
+  "SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_demo_revisions_immutable','trg_demos_guard','trg_demo_channels_listed_requires_approved') AND NOT tgisinternal",
+  3);
+await db.exec("INSERT INTO demo_revisions (demo_id, rev_no, demo_type, title) VALUES (" + did + ",3,'zip','inv')");
+await rejects('不变量 1：改 revision 的内容列被拒',
+  "UPDATE demo_revisions SET title='changed' WHERE demo_id=" + did + " AND rev_no=3",
+  '一旦创建即不可变');
+await accepts('不变量 1：改 deleted_at 允许',
+  "UPDATE demo_revisions SET deleted_at=now() WHERE demo_id=" + did + " AND rev_no=3");
+// 造第二个作品：它还是 pending，正好用来验 #2 的「跨作品」与 #10 的「未审核」。
+await db.exec("INSERT INTO demos (slug, title, moderation_state, lifecycle_state) VALUES ('verify-demo-2','二号','pending','draft')");
+const did2 = (await db.query("SELECT id FROM demos WHERE slug='verify-demo-2'")).rows[0].id;
+await db.exec("INSERT INTO demo_revisions (demo_id, rev_no, demo_type, title) VALUES (" + did2 + ",1,'web','b1')");
+
+await rejects('不变量 2：指针指向别的作品的版本被拒',
+  "UPDATE demos SET current_revision_id=(SELECT id FROM demo_revisions WHERE demo_id=" + did2 + " AND rev_no=1) WHERE id=" + did,
+  '不属于作品');
+await accepts('不变量 2：指针指向自己的版本允许',
+  "UPDATE demos SET current_revision_id=(SELECT id FROM demo_revisions WHERE demo_id=" + did + " AND rev_no=3) WHERE id=" + did);
+await rejects('不变量 10：未审核作品上架渠道被拒',
+  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'inv-ch','listed')",
+  '不能上架渠道');
+await accepts('不变量 10：非 listed 渠道不受限',
+  "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'inv-ch2','unlisted')");
+await accepts('不变量 10：审核通过后可以上架',
+  "UPDATE demos SET moderation_state='approved' WHERE id=" + did2 + "; INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'inv-ch3','listed');");
+await rejects('不变量 10 反向：已有上架渠道时退回审核状态被拒',
+  "UPDATE demos SET moderation_state='pending' WHERE id=" + did2,
+  '上架中的渠道');
+
 // ---------- 6. 封面内联两条 CHECK 同值（手册 §1 第 4 行的「两处必须同改」）----------
 console.log('--- 结构性上限 ---');
 await ok('cover_inline 上限（demos）',
