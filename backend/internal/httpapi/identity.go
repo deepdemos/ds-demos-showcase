@@ -71,6 +71,13 @@ func (h *Handler) writeIdentityError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
 	case errors.Is(err, identity.ErrVerificationRequired):
 		writeError(w, http.StatusUnauthorized, api.VerificationRequired, "需要邮箱验证码")
+	case errors.Is(err, identity.ErrAccountBanned):
+		// 403 而不是 401：这不是「你没登录」，是「你是对的但不让进」。
+		// 它只在密码校验通过之后才可能出现，所以不构成账号枚举。
+		writeError(w, http.StatusForbidden, api.Forbidden, messageOf(err))
+	case errors.Is(err, identity.ErrResetCodeInvalid):
+		// 单独一条：重置页面输的是验证码，说成「密码不对」会把人引到错误的方向。
+		writeError(w, http.StatusUnauthorized, api.Unauthorized, messageOf(err))
 	case errors.Is(err, identity.ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, api.Unauthorized, "邮箱或密码不对")
 	case errors.Is(err, identity.ErrRateLimited):
@@ -207,8 +214,14 @@ func clearSessionCookie(w http.ResponseWriter) {
 // clientIP 取客户端地址。
 //
 // **不读 X-Forwarded-For**：那是个可以由客户端随便写的头，读了就等于把限流
-// 的键交给攻击者——他每次换一个假 IP 就能绕开所有阈值。等真正上了反代，
-// 再按「只信已知代理的 XFF」显式配置，而不是现在默认信任。
+// 的键交给攻击者——他每次换一个假 IP 就能绕开所有阈值。
+//
+// 这里读的是 `RemoteAddr`，它对**直连**是正确的。所以**没有挂 `middleware.RealIP`**：
+// chi 的实现会无条件把 `X-Forwarded-For` 的值写进 `RemoteAddr`，等于把上面这条
+// 保证反过来执行（已实测：伪造 XFF 就能让三层限流全部失效）。
+//
+// 上反向代理时必须同时做两件事，缺一件就会出现「所有人共享一个 IP 桶」：
+// ① 按白名单显式解析 XFF（只信已知代理追加的那一跳）；② 更新本注释与运行手册。
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -236,7 +249,7 @@ func (h *Handler) PostAuthEmailCode(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 
-	delivery, err := h.identity.RequestEmailCode(ctx, body.Identifier)
+	delivery, err := h.identity.RequestEmailCode(ctx, body.Identifier, clientIP(r))
 	if err != nil {
 		h.writeIdentityError(w, err)
 		return
@@ -290,7 +303,7 @@ func (h *Handler) PostAuthPasswordResetCode(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 
-	delivery, err := h.identity.RequestPasswordResetCode(ctx, string(body.Email))
+	delivery, err := h.identity.RequestPasswordResetCode(ctx, string(body.Email), clientIP(r))
 	if err != nil {
 		h.writeIdentityError(w, err)
 		return

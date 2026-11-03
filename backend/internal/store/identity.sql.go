@@ -11,21 +11,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countEmailCodeSends = `-- name: CountEmailCodeSends :one
+SELECT count(*)::int AS sends
+FROM login_attempts
+WHERE kind = 'email_code'
+  AND ip_hash = $1::text
+  AND created_at > now() - interval '1 hour'
+`
+
+// 发码配额：同一个 IP 一小时内发了多少封。
+//
+// 它挡的是「换着邮箱把站点当邮件炮台」，不是挡某个人收不到信——后者由
+// kernel 里按 (purpose, identifier) 的 1/分 5/时 管。两层各管一件事。
+func (q *Queries) CountEmailCodeSends(ctx context.Context, ipHash string) (int32, error) {
+	row := q.db.QueryRow(ctx, countEmailCodeSends, ipHash)
+	var sends int32
+	err := row.Scan(&sends)
+	return sends, err
+}
+
 const countIdentifierFailures = `-- name: CountIdentifierFailures :one
 WITH last_ok AS (
     SELECT COALESCE(max(created_at), '-infinity'::timestamptz) AS at
     FROM login_attempts
-    WHERE identifier_hash = $1::text AND succeeded
+    WHERE identifier_hash = $1::text
+      AND succeeded
+      AND kind = 'login'
 )
 SELECT count(*) FILTER (WHERE created_at > last_ok.at)::int AS fails
 FROM login_attempts, last_ok
 WHERE succeeded = false
+  AND kind = 'login'
   AND identifier_hash = $1::text
   AND created_at > now() - interval '10 minutes'
 `
 
 // 第②层（身份域 §11.3）：同一标识符 10 分钟内失败次数，成功登录后清零。
 // 不区分账号是否存在——这正是「无效邮箱也要被要求验证码」的实现。
+// last_ok 必须也带 kind = 'login'：发码记录同样是 succeeded=true，
+// 不筛的话「刚刚发过一封验证码」会被当成「刚刚登录成功」，把之前 5 次失败
+// 一起清零，第②层就永远触发不了。
 func (q *Queries) CountIdentifierFailures(ctx context.Context, identifierHash string) (int32, error) {
 	row := q.db.QueryRow(ctx, countIdentifierFailures, identifierHash)
 	var fails int32
@@ -35,28 +60,24 @@ func (q *Queries) CountIdentifierFailures(ctx context.Context, identifierHash st
 
 const countLoginFailures = `-- name: CountLoginFailures :one
 
-WITH last_ok AS (
-    SELECT COALESCE(max(created_at), '-infinity'::timestamptz) AS at
-    FROM login_attempts
-    WHERE account_id = $1::bigint AND succeeded
-)
 SELECT
     count(*) FILTER (
         WHERE account_id = $1::bigint
           AND ip_hash = $2::text
+          AND created_at > now() - interval '10 minutes'
     )::int AS account_ip_fails,
     count(*) FILTER (
-        WHERE account_id = $1::bigint
-          AND created_at > last_ok.at
-    )::int AS account_fails,
-    count(*) FILTER (WHERE ip_hash = $2::text)::int AS ip_fails,
+        WHERE ip_hash = $2::text
+          AND created_at > now() - interval '10 minutes'
+    )::int AS ip_fails,
     count(*) FILTER (
         WHERE ip_hash = $2::text
           AND created_at > now() - interval '1 hour'
     )::int AS ip_fails_hour
-FROM login_attempts, last_ok
+FROM login_attempts
 WHERE succeeded = false
-  AND created_at > now() - interval '10 minutes'
+  AND kind = 'login'
+  AND created_at > now() - interval '1 hour'
 `
 
 type CountLoginFailuresParams struct {
@@ -66,26 +87,26 @@ type CountLoginFailuresParams struct {
 
 type CountLoginFailuresRow struct {
 	AccountIpFails int32
-	AccountFails   int32
 	IpFails        int32
 	IpFailsHour    int32
 }
 
 // ===== 登录限流（身份域 §11.3）=====
-// 一次查询算完四层口径。account_id 传 NULL 时账号维度恒为 0（`account_id = NULL` 不成立），
+// 三层各自的窗口必须写在**各自的 FILTER 里**，不能写在外层 WHERE。
+//
+// 旧写法外层 `created_at > now() - interval '10 minutes'` 会把内层的
+// 「1 小时」压成「10 分钟」，于是 `ip_fails_hour` 实际是「200 次/10 分钟」——
+// 不是设计要的「200 次/小时」，而且更严，会误伤正常用户。外层只能筛最宽的那个
+// 窗口（1 小时），每一档在 FILTER 里再收窄。
+//
+// account_id 传 NULL 时账号维度恒为 0（`account_id = NULL` 不成立），
 // IP 维度照常计数——这正是「无效邮箱也要被 IP 层看到」的实现方式。
 //
-// 账号维度的「成功登录清零」靠 `created_at > 最后一次成功` 表达，而不是删行：
-// 行是不可变的证据，删了就说不清「这个 IP 之前试过什么」。
+// kind = 'login'：发验证码的记录同表但不算登录失败，不能混进来。
 func (q *Queries) CountLoginFailures(ctx context.Context, arg CountLoginFailuresParams) (CountLoginFailuresRow, error) {
 	row := q.db.QueryRow(ctx, countLoginFailures, arg.AccountID, arg.IpHash)
 	var i CountLoginFailuresRow
-	err := row.Scan(
-		&i.AccountIpFails,
-		&i.AccountFails,
-		&i.IpFails,
-		&i.IpFailsHour,
-	)
+	err := row.Scan(&i.AccountIpFails, &i.IpFails, &i.IpFailsHour)
 	return i, err
 }
 
@@ -365,8 +386,8 @@ func (q *Queries) PurgeLoginAttempts(ctx context.Context) error {
 }
 
 const recordLoginAttempt = `-- name: RecordLoginAttempt :exec
-INSERT INTO login_attempts (ip_hash, account_id, identifier_hash, succeeded)
-VALUES ($1, $2, $3, $4)
+INSERT INTO login_attempts (ip_hash, account_id, identifier_hash, succeeded, kind)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type RecordLoginAttemptParams struct {
@@ -374,16 +395,21 @@ type RecordLoginAttemptParams struct {
 	AccountID      pgtype.Int8
 	IdentifierHash pgtype.Text
 	Succeeded      bool
+	Kind           string
 }
 
 // identifier_hash 是「用户输进来的那个标识符」的 HMAC，与账号存不存在无关。
 // 第②层按它计数，所以对着不存在的邮箱撞库同样会被拦住。
+//
+// kind 把「登录失败」与「发了一封验证码」分开：两者同表，但前者算失败、后者不算。
+// 混在一起的话，正常用户连要两次码就会触发第①层的锁定。
 func (q *Queries) RecordLoginAttempt(ctx context.Context, arg RecordLoginAttemptParams) error {
 	_, err := q.db.Exec(ctx, recordLoginAttempt,
 		arg.IpHash,
 		arg.AccountID,
 		arg.IdentifierHash,
 		arg.Succeeded,
+		arg.Kind,
 	)
 	return err
 }
@@ -420,12 +446,13 @@ func (q *Queries) RevokeWebSession(ctx context.Context, id string) error {
 	return err
 }
 
-const updatePasswordHash = `-- name: UpdatePasswordHash :exec
+const updatePasswordHash = `-- name: UpdatePasswordHash :one
 UPDATE credentials
 SET secret_hash = $2,
     rotated_at  = now(),
     last_used_at = now()
 WHERE account_id = $1 AND kind = 'password'
+RETURNING rotated_at
 `
 
 type UpdatePasswordHashParams struct {
@@ -435,7 +462,12 @@ type UpdatePasswordHashParams struct {
 
 // 同时写 rotated_at：这两件事必须同一个事务，否则会出现「密码换了但旧会话还有效」
 // 或者「会话被踢了但密码没换成」的中间态。
-func (q *Queries) UpdatePasswordHash(ctx context.Context, arg UpdatePasswordHashParams) error {
-	_, err := q.db.Exec(ctx, updatePasswordHash, arg.AccountID, arg.SecretHash)
-	return err
+//
+// 把 rotated_at 用 RETURNING 带回来，而不是更新后再 SELECT 一次：两句话之间
+// 别人也可能改这一行，读回来的就不一定是本次写入的那个时刻了。
+func (q *Queries) UpdatePasswordHash(ctx context.Context, arg UpdatePasswordHashParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, updatePasswordHash, arg.AccountID, arg.SecretHash)
+	var rotated_at pgtype.Timestamptz
+	err := row.Scan(&rotated_at)
+	return rotated_at, err
 }

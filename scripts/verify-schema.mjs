@@ -332,9 +332,21 @@ console.log('--- 开发种子 ---');
   );
 
   await ok(
-    'login_attempts 三个部分索引都在',
+    'login_attempts 四个部分索引都在',
     "SELECT count(*) FROM pg_indexes WHERE tablename = 'login_attempts' AND indexdef LIKE '%WHERE%'",
-    '3',
+    '4',
+  );
+
+  await ok(
+    'login_attempts 有 kind（迁移 0005：发码与登录失败分开计数）',
+    "SELECT count(*) FROM information_schema.columns WHERE table_name = 'login_attempts' AND column_name = 'kind'",
+    '1',
+  );
+
+  await rejects(
+    'login_attempts 的 kind 只接受 login / email_code',
+    "INSERT INTO login_attempts (ip_hash, succeeded, kind) VALUES ('it-bad-kind', false, 'other')",
+    'ck_login_attempts_kind',
   );
 
   for (const [slug, why] of [

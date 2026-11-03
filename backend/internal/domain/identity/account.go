@@ -24,11 +24,37 @@ var (
 	ErrVerificationRequired = errors.New("identity: 需要邮箱验证码")
 	// ErrUnauthorized 是「没登录 / 会话失效」。**不区分原因**——区分了就是给攻击者送信息。
 	ErrUnauthorized = errors.New("identity: 未登录")
+	// ErrAccountBanned 是「账号被封禁了，不能进站」。与 ErrUnauthorized 分开：
+	// 被封的人需要读到「你被封了」而不是「密码错误」，否则他会一直重试。
+	// 它只可能在密码校验通过之后出现，所以不构成账号枚举。
+	ErrAccountBanned = errors.New("identity: 账号已被封禁")
+	// ErrResetCodeInvalid 是「重置密码的验证码不对或已过期」。
+	// 与 ErrUnauthorized 分开：重置页面要提示的是验证码，说成密码错只会让人更困惑。
+	ErrResetCodeInvalid = errors.New("identity: 验证码不对或已过期")
 )
 
 // 用户名规则与 db/schema/10-identity.sql 的 ck 同口径：3–20、[A-Za-z0-9_-]、
 // 按小写唯一（标准对象 §ID-2）。两边必须一致——只在一处收紧等于没有约束。
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{3,20}$`)
+
+// emailPattern 只判「形状像不像一个地址」，不做 RFC 5322 全解析——能不能真收到信
+// 只有发一封才知道。但它必须挡住 `a@b@c` 这类地址：那种地址永远收不到邮件，
+// 验证码与重置码都到不了，账号会**永久不可恢复**。
+var emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// validateEmail 是注册、找回密码、发登录验证码共用的口径。
+//
+// 三处各写一份的话，最松的那一处就是实际生效的那一处。
+func validateEmail(email string) error {
+	// 空白单独报：用户看到「格式不对」通常不知道该删空格。
+	if strings.ContainsAny(email, " \t\r\n") {
+		return fmt.Errorf("%w: 邮箱不能包含空白字符", ErrInvalidInput)
+	}
+	if email == "" || len(email) > maxEmailLen || !emailPattern.MatchString(email) {
+		return fmt.Errorf("%w: 邮箱格式不对", ErrInvalidInput)
+	}
+	return nil
+}
 
 const (
 	minPasswordLen = 10
@@ -62,13 +88,8 @@ type RegisterInput struct {
 // 顺序有意：先校验格式再查重（查重在用到它的那层）。反过来的话，一个格式非法的邮箱
 // 也会打到数据库，既浪费一次查询，也让「格式错」和「已占用」两种错误混在一起。
 func (in RegisterInput) Validate() error {
-	email := strings.TrimSpace(in.Email)
-	if email == "" || len(email) > maxEmailLen || !strings.Contains(email, "@") ||
-		strings.HasPrefix(email, "@") || strings.HasSuffix(email, "@") {
-		return fmt.Errorf("%w: 邮箱格式不对", ErrInvalidInput)
-	}
-	if strings.ContainsAny(email, " \t\r\n") {
-		return fmt.Errorf("%w: 邮箱不能包含空白字符", ErrInvalidInput)
+	if err := validateEmail(strings.TrimSpace(in.Email)); err != nil {
+		return err
 	}
 	// 密码长度按字节算——对中文密码来说这比按字符算更严格，是安全的一侧。
 	if n := len(in.Password); n < minPasswordLen || n > maxPasswordLen {

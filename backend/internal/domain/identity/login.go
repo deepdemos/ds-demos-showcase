@@ -45,6 +45,13 @@ const (
 	lockDuration     = 15 * time.Minute
 )
 
+// 登录尝试表的两种事件。同表不同 kind：登录失败算失败计数，发验证码不算——
+// 混在一起的话，正常用户连要两次码就会触发第①层的锁定。
+const (
+	kindLogin     = "login"
+	kindEmailCode = "email_code"
+)
+
 // Login 校验凭据并发一个会话。
 //
 // 失败一律返回 ErrUnauthorized——不区分「没这个人」与「密码错」。区分了就等于
@@ -107,10 +114,18 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 		limits.record(ctx, s, ipHash, accountID, identifierHash, false)
 		return Account{}, "", ErrUnauthorized
 	}
-	// 已注销的账号不能登录。其余状态（pending / suspended / banned）一律放行，
-	// 让用户能读到自己的状态——前端要显示「你被封了」而不是「密码错误」。
-	if row.Status == "deleted" {
+	// 已注销的账号不能登录；被封禁的也不能——但两者对外要给不同的答案：
+	// deleted 装作查无此人（401），banned 明说「账号已被封禁」（403），
+	// 否则被封的人只会一直重试密码。pending / suspended 仍然放行：未验证与
+	// 临时暂停都还需要用户能读到自己的状态。
+	//
+	// 这个判断在**密码校验通过之后**，所以 403 只发给本来就能登录的人，
+	// 不构成账号枚举。
+	if row.Status == "deleted" || row.Status == "banned" {
 		limits.record(ctx, s, ipHash, accountID, identifierHash, false)
+		if row.Status == "banned" {
+			return Account{}, "", ErrAccountBanned
+		}
 		return Account{}, "", ErrUnauthorized
 	}
 
@@ -223,10 +238,12 @@ func (s *Service) requireEmailCode(ctx context.Context, identifierHash string) b
 	return row >= accountFailLimit
 }
 
-// loginLimits 是一次登录判定出来的四个计数。
+// loginLimits 是一次登录判定出来的三个计数。
+//
+// 曾经还有一个 account（账号维度、不分 IP）。它算了但没人读——第②层走的是
+// CountIdentifierFailures（按标识符，不是按账号），所以那个字段是死的，已删。
 type loginLimits struct {
 	accountIP int32
-	account   int32
 	ip        int32
 	ipHour    int32
 }
@@ -245,7 +262,6 @@ func (s *Service) checkRateLimits(ctx context.Context, ipHash string, accountID 
 	}
 	l := loginLimits{
 		accountIP: row.AccountIpFails,
-		account:   row.AccountFails,
 		ip:        row.IpFails,
 		ipHour:    row.IpFailsHour,
 	}
@@ -282,6 +298,7 @@ func (l loginLimits) record(ctx context.Context, s *Service, ipHash string, acco
 		AccountID:      accountID,
 		IdentifierHash: ident,
 		Succeeded:      succeeded,
+		Kind:           kindLogin,
 	}); err != nil {
 		slog.Warn("记录登录尝试失败", "err", err)
 	}

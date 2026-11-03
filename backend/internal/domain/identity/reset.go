@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/kernel/verification"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
@@ -28,10 +27,15 @@ type ResetCodeDelivery struct {
 //
 // 与登录验证码一样，账号不存在时也照样走一遍生成与频率限制（保持响应形状无关），
 // 只是 To 为空、不投递。
-func (s *Service) RequestPasswordResetCode(ctx context.Context, email string) (ResetCodeDelivery, error) {
+func (s *Service) RequestPasswordResetCode(ctx context.Context, email, ip string) (ResetCodeDelivery, error) {
 	email = strings.TrimSpace(email)
-	if email == "" || !strings.Contains(email, "@") {
-		return ResetCodeDelivery{}, fmt.Errorf("%w: 邮箱格式不对", ErrInvalidInput)
+	if err := validateEmail(email); err != nil {
+		return ResetCodeDelivery{}, err
+	}
+
+	ipHash := s.hashIP(ip)
+	if err := s.checkEmailCodeQuota(ctx, ipHash); err != nil {
+		return ResetCodeDelivery{}, err
 	}
 
 	row, err := s.q.GetPasswordResetTarget(ctx, email)
@@ -55,6 +59,9 @@ func (s *Service) RequestPasswordResetCode(ctx context.Context, email string) (R
 		return ResetCodeDelivery{}, err
 	}
 
+	// 与登录验证码同一条配额（同一个 IP、同一张表），记录点在「生成成功」之后。
+	s.recordEmailCodeSend(ctx, ipHash, s.verification.IdentifierHash(verification.PurposeResetPassword, email))
+
 	if accountID == 0 {
 		return ResetCodeDelivery{Code: code}, nil
 	}
@@ -67,8 +74,8 @@ func (s *Service) RequestPasswordResetCode(ctx context.Context, email string) (R
 // 分开做的后果是「密码换了但旧会话还有效」，那等于没换。
 func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword string) error {
 	email = strings.TrimSpace(email)
-	if email == "" || !strings.Contains(email, "@") {
-		return fmt.Errorf("%w: 邮箱格式不对", ErrInvalidInput)
+	if err := validateEmail(email); err != nil {
+		return err
 	}
 	if n := len(newPassword); n < minPasswordLen || n > maxPasswordLen {
 		return fmt.Errorf("%w: 密码长度必须是 %d–%d 个字符", ErrInvalidInput, minPasswordLen, maxPasswordLen)
@@ -79,8 +86,11 @@ func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword st
 
 	// 验证码先消费：失败就直接返回，不进事务。
 	// 这里不看账号是否存在——不存在的邮箱本来就没有可消费的码，会返回 ErrNotFound。
+	//
+	// 错误是 ErrResetCodeInvalid 而不是 ErrUnauthorized：这一屏用户输的是验证码，
+	// 告诉他「密码不对」会让人去重设密码，而真正的问题在别处。
 	if err := s.verification.Consume(ctx, verification.PurposeResetPassword, email, code); err != nil {
-		return ErrUnauthorized
+		return ErrResetCodeInvalid
 	}
 
 	row, err := s.q.GetPasswordResetTarget(ctx, email)
@@ -106,13 +116,12 @@ func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword st
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
 
-	if err := q.UpdatePasswordHash(ctx, store.UpdatePasswordHashParams{AccountID: row.ID, SecretHash: hash}); err != nil {
+	// rotated_at 用 RETURNING 一起带回来：更新与读取分成两句话的话，中间别人
+	// 也可能改这一行，读回来的就未必是本次写入的那个时刻。
+	// 而且这个时刻用的是库里的 now()，与会话表的时钟同源。
+	rotatedAt, err := q.UpdatePasswordHash(ctx, store.UpdatePasswordHashParams{AccountID: row.ID, SecretHash: hash})
+	if err != nil {
 		return fmt.Errorf("identity: 更新密码失败: %w", err)
-	}
-	// 用库里的 now() 而不是 Go 的时间：会话表与凭证表的时钟必须同源。
-	var rotatedAt pgtype.Timestamptz
-	if err := tx.QueryRow(ctx, "SELECT rotated_at FROM credentials WHERE account_id = $1 AND kind = 'password'", row.ID).Scan(&rotatedAt); err != nil {
-		return fmt.Errorf("identity: 读轮换时刻失败: %w", err)
 	}
 	n, err := q.RevokeSessionsBefore(ctx, store.RevokeSessionsBeforeParams{AccountSub: row.Sub, CreatedAt: rotatedAt})
 	if err != nil {
