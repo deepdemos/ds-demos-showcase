@@ -52,6 +52,10 @@ type Config struct {
 	// **目前还没接设置域**（设置域服务尚未实现），等它落地后改为运行时读；
 	// 在那之前改这个值要发版——已登记在 docs/已知松点.md。
 	UploadMaxPackageMiB int64
+	// UploadMaxPending 是一个作者同时能压多少条待审。默认 5。
+	// 投稿是全站最贵的写路径（200 MiB 包 + 最多 500 MiB 解压），
+	// 没有这道闸时登录用户循环 POST 就能把磁盘写满。
+	UploadMaxPending int
 }
 
 // Load 从环境变量读取配置。
@@ -71,6 +75,7 @@ func Load() Config {
 		MailLogCodes:        os.Getenv("MAIL_LOG_CODES") == "1",
 		StorageRoot:         getenv("STORAGE_ROOT", "./var/storage"),
 		UploadMaxPackageMiB: intenv("UPLOAD_MAX_PACKAGE_MIB", 200),
+		UploadMaxPending:    int(intenv("UPLOAD_MAX_PENDING", 5)),
 	}
 }
 

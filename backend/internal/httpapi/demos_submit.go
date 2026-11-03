@@ -91,7 +91,7 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 	// header.Filename 只用来取扩展名；不参与任何路径拼接。
 	_ = header
 
-	ctx, cancel := context.WithTimeout(r.Context(), submitTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), demo.SubmitTimeout)
 	defer cancel()
 
 	res, err := h.demos.Submit(ctx, demo.SubmitInput{
@@ -158,6 +158,10 @@ func (h *Handler) writeDemoError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnsupportedMediaType, api.InvalidParam, messageOf(err))
 	case errors.Is(err, demo.ErrBadPackage):
 		writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, messageOf(err))
+	case errors.Is(err, demo.ErrTooManyPending):
+		// 429 而不是 400：这不是「你写错了」，是「现在不行，等一会儿」。
+		// 契约里 429 已经存在（登录限流用同一个码）。
+		writeError(w, http.StatusTooManyRequests, api.RateLimited, messageOf(err))
 	default:
 		slog.Error("submit demo failed", "err", err)
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")

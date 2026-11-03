@@ -76,6 +76,7 @@ func main() {
 			pool, queries, files,
 			storage.DefaultLimits(),
 			cfg.UploadMaxPackageMiB<<20,
+			cfg.UploadMaxPending,
 			logger,
 		)
 	} else {

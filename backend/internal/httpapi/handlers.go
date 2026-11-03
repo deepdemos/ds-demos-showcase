@@ -35,9 +35,6 @@ const (
 	// 分页口径与治理域 §P5 一致：默认 50，上限 200。
 	defaultPageSize = 50
 	maxPageSize     = 200
-
-	// submitTimeout 是一次投稿的总时长上限。见 httpapi/submit.go 的注释。
-	submitTimeout = 5 * time.Minute
 )
 
 // Pinger 是 /healthz 依赖的最小接口，便于单测替换。
