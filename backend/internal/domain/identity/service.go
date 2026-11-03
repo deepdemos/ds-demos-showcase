@@ -53,6 +53,12 @@ func (s *Service) Me(ctx context.Context, sessionID string) (Account, error) {
 	if err != nil {
 		return Account{}, fmt.Errorf("identity: 查会话失败: %w", err)
 	}
+	// 会话表里的 status 是**签发时的快照**，封禁之后它不会自己变。
+	// 所以判断必须读 accounts 的当前值——这条查询本来就 JOIN 了 accounts，
+	// 用它就不用再引一条「吊销全部会话」的路径：被封的人手里的 cookie 立刻失效。
+	if row.Status == "banned" {
+		return Account{}, ErrAccountBanned
+	}
 	return Account{
 		Sub:         row.Sub,
 		Username:    row.Username,

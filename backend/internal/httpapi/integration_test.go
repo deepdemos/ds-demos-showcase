@@ -450,3 +450,61 @@ func TestIntegrationLoginRateLimit(t *testing.T) {
 		t.Fatal("429 必须带 Retry-After")
 	}
 }
+
+// 封禁账号在传输层的表现：登录 403 forbidden；**已经发出去的 cookie 也立刻作废**。
+//
+// 会话表里的 status 是签发时的快照，封禁不会回头改它——所以拒绝必须读
+// accounts 的当前值。只改登录判定的话，在线的人换个页签就绕过去了。
+func TestIntegrationBannedAccountHTTP(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM accounts"} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("%s 失败: %v", q, err)
+		}
+	}
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(
+		`{"email":"it-banned@example.com","password":"correct-horse-battery","username":"it-banned","displayName":"封禁测试"}`))
+	req.Header.Set("Content-Type", "application/json")
+	h.PostAuthRegister(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("注册应 201，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatal("注册应下发会话 cookie")
+	}
+
+	// banned 必须有来源状态：db/schema/10-identity.sql 的 ck_accounts_previous_status
+	// 要求 previous_status ∈ {active, suspended}，这里照约束写，不绕过。
+	if _, err := pool.Exec(ctx,
+		"UPDATE accounts SET previous_status=status, status='banned' WHERE id IN (SELECT account_id FROM profiles WHERE lower(username)='it-banned')"); err != nil {
+		t.Fatalf("设置封禁失败: %v", err)
+	}
+
+	// ① 旧 cookie 立刻失效。403 而不是 401：401 会让人以为该重新登录，
+	//    而重新登录只会再吃一次 403。
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	meReq.AddCookie(cookies[0])
+	meRec := httptest.NewRecorder()
+	h.GetMe(meRec, meReq)
+	if meRec.Code != http.StatusForbidden {
+		t.Fatalf("封禁后 /me 应 403，实际 %d（body=%s）", meRec.Code, meRec.Body.String())
+	}
+	if !strings.Contains(meRec.Body.String(), "forbidden") {
+		t.Fatalf("应返回 forbidden，实际 %s", meRec.Body.String())
+	}
+
+	// ② 重新登录：403 + 明说封禁，而不是「密码不对」——否则他会一直重试密码。
+	lrec := httptest.NewRecorder()
+	lreq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(
+		`{"identifier":"it-banned","password":"correct-horse-battery"}`))
+	lreq.Header.Set("Content-Type", "application/json")
+	h.PostAuthLogin(lrec, lreq)
+	if lrec.Code != http.StatusForbidden {
+		t.Fatalf("封禁账号登录应 403，实际 %d（body=%s）", lrec.Code, lrec.Body.String())
+	}
+}
