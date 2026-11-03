@@ -238,5 +238,5 @@ func TestGetDemoNotFound(t *testing.T) {
 // newTestHandler 是测试里的 Handler 构造器：不投递邮件（mailer 传 nil），
 // 这样断言「204 且不发信」时行为与生产一致。
 func newTestHandler(p Pinger, q *store.Queries, id *identity.Service) *Handler {
-	return New(p, q, id, nil)
+	return New(p, q, id, nil, nil)
 }

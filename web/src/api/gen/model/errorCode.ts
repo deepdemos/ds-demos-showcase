@@ -36,4 +36,5 @@ export const ErrorCode = {
   rate_limited: 'rate_limited',
   unavailable: 'unavailable',
   verification_required: 'verification_required',
+  payload_too_large: 'payload_too_large',
 } as const;

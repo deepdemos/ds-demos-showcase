@@ -38,3 +38,6 @@ export * from './me';
 export * from './passwordResetCodeRequest';
 export * from './passwordResetRequest';
 export * from './registerRequest';
+export * from './submissionResult';
+export * from './submissionResultModerationState';
+export * from './submitDemoBody';

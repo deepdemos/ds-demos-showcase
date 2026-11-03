@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 // Config 是进程级的启动配置。
 //
@@ -37,6 +40,18 @@ type Config struct {
 	// MailLogCodes 只在没配 SMTP 时生效：是否把邮件正文（含验证码）写进日志。
 	// 默认 false——验证码进日志在生产上是泄漏。
 	MailLogCodes bool
+
+	// StorageRoot 是作品文件的落盘根目录。默认 ./var/storage（相对工作目录）。
+	//
+	// 它是**部署拓扑**不是运营参数：换盘、换挂载点属于部署动作。所以不进设置域。
+	StorageRoot string
+
+	// UploadMaxPackageMiB 是单个上传包的体积上限（MiB）。
+	//
+	// 默认 200，与 `setting_keys` 里 `demo.upload_package_mib` 的默认值一致。
+	// **目前还没接设置域**（设置域服务尚未实现），等它落地后改为运行时读；
+	// 在那之前改这个值要发版——已登记在 docs/已知松点.md。
+	UploadMaxPackageMiB int64
 }
 
 // Load 从环境变量读取配置。
@@ -48,12 +63,14 @@ func Load() Config {
 
 		VerificationSecret: os.Getenv("VERIFICATION_SECRET"),
 
-		SMTPHost:     os.Getenv("SMTP_HOST"),
-		SMTPPort:     os.Getenv("SMTP_PORT"),
-		SMTPUser:     os.Getenv("SMTP_USER"),
-		SMTPPass:     os.Getenv("SMTP_PASS"),
-		SMTPFrom:     os.Getenv("SMTP_FROM"),
-		MailLogCodes: os.Getenv("MAIL_LOG_CODES") == "1",
+		SMTPHost:            os.Getenv("SMTP_HOST"),
+		SMTPPort:            os.Getenv("SMTP_PORT"),
+		SMTPUser:            os.Getenv("SMTP_USER"),
+		SMTPPass:            os.Getenv("SMTP_PASS"),
+		SMTPFrom:            os.Getenv("SMTP_FROM"),
+		MailLogCodes:        os.Getenv("MAIL_LOG_CODES") == "1",
+		StorageRoot:         getenv("STORAGE_ROOT", "./var/storage"),
+		UploadMaxPackageMiB: intenv("UPLOAD_MAX_PACKAGE_MIB", 200),
 	}
 }
 
@@ -72,4 +89,18 @@ func getenv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// intenv 读正整数配置。值写错时退回默认值而不是启动失败——
+// 这类变量缺失或写错只影响「能不能上传大文件」，不该让整个 API 起不来。
+func intenv(key string, fallback int64) int64 {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }

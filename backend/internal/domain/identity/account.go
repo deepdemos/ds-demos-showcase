@@ -65,6 +65,7 @@ const (
 
 // Account 是 domain 眼中的「一个人」。它不认识 api.Me——那一层的形状属于传输层。
 type Account struct {
+	ID          int64
 	Sub         string
 	Username    string
 	DisplayName string
