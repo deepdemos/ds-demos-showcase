@@ -16,5 +16,6 @@
   "db/migrations/0005_login_attempt_kind.sql": "c34797a485cb1e00a3bd9c7312f1067958072e5949de97ca35bb52ef7f9f60cd",
   "db/migrations/0006_demo_revision_fk.sql": "8b4b5389d910b40bc177c99c32c05bd68609c52cec5f00b217f9b7560156e30c",
   "db/migrations/0007_users_projection.sql": "747a78a1abe1cf3a30b7a7f669f519e750082a8f2f5017d2e9d9e363da8268f9",
-  "db/migrations/0008_demo_domain_fk.sql": "f15bf10557f5d60923f24070ef11e05a575aefb44a02d0b25aff041596feeca1"
+  "db/migrations/0008_demo_domain_fk.sql": "f15bf10557f5d60923f24070ef11e05a575aefb44a02d0b25aff041596feeca1",
+  "db/migrations/0009_demo_domain_invariants.sql": "e35e7d518ace6c1f530e39433cdcd94a5ec4d899746770b185ee752505e09ca9"
 }

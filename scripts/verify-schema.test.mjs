@@ -55,3 +55,44 @@ test('statements: 真实 schema 文件全部能切完，且没有残留空块', 
     }
   }
 });
+
+test('statements: 美元引用里的分号不切（plpgsql 函数体）', () => {
+  const sql = `CREATE FUNCTION f() RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION 'x';
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+SELECT 1;`;
+  const got = statements(sql);
+  assert.equal(got.length, 2);
+  // 函数体里 3 个分号 + 语句末尾 1 个
+  assert.equal((got[0].match(/;/g) || []).length, 4);
+  assert.equal(got[1], 'SELECT 1;');
+});
+
+test('statements: 带标签的美元引用同样不切', () => {
+  const sql = `CREATE FUNCTION g() RETURNS int AS $body$
+BEGIN
+    RETURN 1;
+END;
+$body$ LANGUAGE plpgsql;
+SELECT 2;`;
+  const got = statements(sql);
+  assert.equal(got.length, 2);
+});
+
+test('statements: 字符串里的分号不切', () => {
+  const got = statements("INSERT INTO t (x) VALUES ('a;b');");
+  assert.equal(got.length, 1);
+});
+
+test('statements: 真实迁移文件全部能切完', () => {
+  const dir = path.join(process.cwd(), 'db', 'migrations');
+  if (!fs.existsSync(dir)) return;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.sql'))) {
+    const got = statements(fs.readFileSync(path.join(dir, f), 'utf8'));
+    assert.ok(got.length > 0, f);
+    for (const s of got) assert.ok(s.trim().endsWith(';'), f);
+  }
+});
