@@ -18,5 +18,7 @@
   "db/migrations/0007_users_projection.sql": "747a78a1abe1cf3a30b7a7f669f519e750082a8f2f5017d2e9d9e363da8268f9",
   "db/migrations/0008_demo_domain_fk.sql": "90c8403e0169c9bb818cfa2e5dd6385d390a2be0f8ca63a27f24e6f2d6c836d1",
   "db/migrations/0009_demo_domain_invariants.sql": "d345aae2472313c2caaf5615f3035c61ced4f5abde6ec45b3d615f3e94c5565c",
-  "db/migrations/0010_channels_master.sql": "09e57db7386909cd6ee54bdccc1ab48d79b83a7eb72beb0cd6c12f9aac212084"
+  "db/migrations/0010_channels_master.sql": "09e57db7386909cd6ee54bdccc1ab48d79b83a7eb72beb0cd6c12f9aac212084",
+  "db/migrations/0011_demo_publish_permission.sql": "7d75cb733e1456dd018fb79d057c09c9794133eb2fadc2255b79746024456fd0",
+  "db/migrations/0012_timeline_publish_kind.sql": "80998d6003f1c0a8748d8cfb26c2dea7288a1e82f5536cd779c10a4a78e4b664"
 }

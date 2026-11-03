@@ -57,5 +57,38 @@ VALUES ($1, $2, NULLIF($3::text, ''), $4);
 -- before / after 只存关键字段的快照，不存整行（内容不进展）。
 INSERT INTO audit_log (actor_type, actor_id, actor_role, action,
                        entity_type, entity_id, before, after, reason)
-VALUES ('user', $1, $2, 'review',
-        'demo', $3, $4, $5, $6);
+VALUES ('user', sqlc.arg(actor_id), sqlc.arg(actor_role), sqlc.arg(action),
+        'demo', sqlc.arg(entity_id), sqlc.arg(before), sqlc.arg(after), sqlc.arg(reason));
+
+-- ---------- 发布（治理域 §4.3 的 demo.publish）----------
+
+-- name: GetDemoForPublish :one
+-- 发布前的状态检查。与 GetDemoForReview 分开：这里要 lifecycle_state 与
+-- moderation_state 两个一起判，而审核只看后者。
+SELECT d.id, d.slug, d.lifecycle_state, d.moderation_state, d.deleted_at, d.erased_at
+FROM demos d
+WHERE d.slug = $1;
+
+-- name: PublishDemo :execrows
+-- 同一条语句里判状态并跃迁：并发两次发布只有一次能改走。
+-- 允许的来源状态写在 WHERE 里，`published` 不在其中 —— 重复发布返回 0 行，
+-- 调用方据此回 409，而不是让「已经是发布态」和「刚发布成功」都返回 200。
+UPDATE demos
+SET lifecycle_state = 'published',
+    updated_at = now()
+WHERE slug = $1
+  AND lifecycle_state IN ('draft', 'archived')
+  AND moderation_state = 'approved'
+  AND deleted_at IS NULL
+  AND erased_at IS NULL;
+
+-- name: UpsertDemoChannel :exec
+-- 同一作品同一渠道重复发布时覆盖可见性，不新增行（uq_channel 保证唯一）。
+INSERT INTO demo_channels (demo_id, channel, visibility, lang, published_at, curated_by)
+VALUES ($1, $2, $3, $4, now(), $5)
+ON CONFLICT (demo_id, channel) DO UPDATE
+SET visibility = EXCLUDED.visibility,
+    lang = EXCLUDED.lang,
+    published_at = COALESCE(demo_channels.published_at, EXCLUDED.published_at),
+    curated_by = EXCLUDED.curated_by,
+    updated_at = now();

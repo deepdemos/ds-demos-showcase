@@ -14,6 +14,9 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// 发布作品
+	// (POST /api/v1/admin/demos/{slug}/publish)
+	PublishDemo(w http.ResponseWriter, r *http.Request, slug string)
 	// 待审作品队列
 	// (GET /api/v1/admin/reviews/demo)
 	ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams)
@@ -58,6 +61,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// 发布作品
+// (POST /api/v1/admin/demos/{slug}/publish)
+func (_ Unimplemented) PublishDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // 待审作品队列
 // (GET /api/v1/admin/reviews/demo)
@@ -145,6 +154,37 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// PublishDemo operation middleware
+func (siw *ServerInterfaceWrapper) PublishDemo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PublishDemo(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ListDemoReviewQueue operation middleware
 func (siw *ServerInterfaceWrapper) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request) {
@@ -537,6 +577,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/demos/{slug}/publish", wrapper.PublishDemo)
+	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/reviews/demo", wrapper.ListDemoReviewQueue)
 	})
