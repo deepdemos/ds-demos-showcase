@@ -1,0 +1,22 @@
+# oapi-codegen 配置（类型）：只生成模型 struct
+#
+# 用法（在 api/ 目录里跑，output 路径相对 api/）：
+#   cd api && oapi-codegen -config oapi-codegen-types.yaml openapi.yaml
+# 仓库根的快捷命令：npm run gen:api:go（会依次跑两份配置）
+#
+# 生成产物 **入库**：review 时能直接看到契约改动对 Go 类型的影响。
+# CI 会重新生成并比对，产物与契约不一致就红（见 .github/workflows/ci.yml）。
+#
+# 为什么拆成两份配置：单文件随端点线性增长，6 个端点时到了 904 行，
+# 越过 `file-size` 的 800 行硬线（`docs/已知松点.md` 第 6 条）。拆成
+# 「类型」与「路由」后两者各自可读，改 schema 与加端点也不再撞同一个文件。
+
+package: api
+output: ../backend/internal/api/types.gen.go   # 相对 **api/ 目录**（从 api/ 里跑）
+
+generate:
+  models: true
+
+output-options:
+  # 未在 paths 里引用、但被 components 引用的类型也要保留
+  skip-prune: false

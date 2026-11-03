@@ -137,7 +137,7 @@ test('PR 门禁：文件清单混入代码时不按纯文档放行', () => {
 test('PR 门禁：生成物不计入文件数', () => {
   // 3 个生成物 + 9 个手写 = 12 个文件；只有手写的 9 个算数。
   const files = [
-    'backend/internal/api/api.gen.go',
+    'backend/internal/api/server.gen.go',
     'backend/internal/store/identity.sql.go',
     'web/src/api/gen/index.ts',
     'api/openapi.yaml',
@@ -177,7 +177,7 @@ test('PR 门禁：不再按行数拦截（行数只记录）', () => {
 
 test('PR 门禁：手写文件数仍超限要报错（生成物不背锅）', () => {
   const files = [
-    'backend/internal/api/api.gen.go',
+    'backend/internal/api/server.gen.go',
     ...Array.from({ length: 21 }, (_, i) => `backend/f${i}.go`),
   ];
   const errors = validatePullRequest({ title: 'feat(api): 大改动', body: 'Refs #1', files });
@@ -187,14 +187,14 @@ test('PR 门禁：手写文件数仍超限要报错（生成物不背锅）', ()
 test('PR 门禁：只有生成物的 PR 手写文件数记 0', () => {
   const size = handwrittenFiles([
     'web/src/api/gen/index.ts',
-    'backend/internal/api/api.gen.go',
+    'backend/internal/api/server.gen.go',
   ]);
   assert.equal(size.files, 0);
   assert.equal(size.skipped.length, 2);
 });
 
 test('isGeneratedFile：只认三个已知生成目录', () => {
-  assert.equal(isGeneratedFile('backend/internal/api/api.gen.go'), true);
+  assert.equal(isGeneratedFile('backend/internal/api/server.gen.go'), true);
   assert.equal(isGeneratedFile('backend/internal/store/identity.sql.go'), true);
   assert.equal(isGeneratedFile('web/src/api/gen/index.ts'), true);
   assert.equal(isGeneratedFile('backend/internal/httpapi/identity.go'), false);

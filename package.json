@@ -10,7 +10,7 @@
   "scripts": {
     "test": "node --test scripts/*.test.mjs",
     "verify:schema": "node scripts/verify-schema.mjs",
-    "gen:api:go": "cd api && oapi-codegen -config oapi-codegen.yaml openapi.yaml",
+    "gen:api:go": "cd api && oapi-codegen -config oapi-codegen-types.yaml openapi.yaml && oapi-codegen -config oapi-codegen-server.yaml openapi.yaml",
     "gen:api:web": "npx --yes orval@8.46.0 --config web/orval.config.ts && node scripts/sort-gen-index.mjs",
     "gen:api": "npm run gen:api:go && npm run gen:api:web",
     "check:api-compat": "node scripts/check-api-compat.mjs",
