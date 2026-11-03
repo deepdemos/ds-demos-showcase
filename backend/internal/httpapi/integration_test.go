@@ -88,7 +88,7 @@ func TestIntegrationListAndDetail(t *testing.T) {
 	pool := integrationPool(t)
 	seed(t, pool)
 
-	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil)
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
 
 	// 列表：只有 published 且未擦除的那一条。
 	listRec := httptest.NewRecorder()
@@ -161,7 +161,7 @@ func TestIntegrationGetMe(t *testing.T) {
 	pool := integrationPool(t)
 	const sid = "it-session-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	seedMe(t, pool, sid)
-	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil)
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
 	call := func(cookie string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
 		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: cookie})
@@ -215,7 +215,7 @@ func TestIntegrationRegister(t *testing.T) {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
 	}
-	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil)
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
 
 	register := func(body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
@@ -294,7 +294,7 @@ func TestIntegrationLoginLogout(t *testing.T) {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
 	}
-	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil)
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
 
 	post := func(path, body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
@@ -385,7 +385,7 @@ func TestIntegrationLoginRateLimit(t *testing.T) {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
 	}
-	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil)
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
 
 	register := httptest.NewRecorder()
 	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
@@ -463,7 +463,7 @@ func TestIntegrationBannedAccountHTTP(t *testing.T) {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
 	}
-	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil)
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(

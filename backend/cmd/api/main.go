@@ -11,12 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/httpapi"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/kernel/verification"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/config"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/database"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/mailer"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/storage"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -45,9 +47,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 作品文件存储。本地磁盘是真相源：OSS 推失败作品还能用，反过来不行。
+	// 起不来就启动失败——没有存储就没有投稿，装作能用只会把错误推到用户面前。
+	files, err := storage.NewLocal(cfg.StorageRoot)
+	if err != nil {
+		logger.Error("storage init failed", "root", cfg.StorageRoot, "err", err)
+		os.Exit(1)
+	}
+	logger.Info("storage ready", "root", files.Root())
+
 	var pinger httpapi.Pinger
 	var queries *store.Queries
 	var identitySvc *identity.Service
+	var demoSvc *demo.Service
 
 	if cfg.HasDatabase() {
 		pool, err := database.Open(context.Background(), cfg.DatabaseURL)
@@ -60,13 +72,19 @@ func main() {
 		pinger = pool
 		queries = store.New(pool)
 		identitySvc = identity.New(pool, ipSecret, verification.New(queries, verificationSecret))
+		demoSvc = demo.New(
+			pool, queries, files,
+			storage.DefaultLimits(),
+			cfg.UploadMaxPackageMiB<<20,
+			logger,
+		)
 	} else {
 		logger.Warn("DATABASE_URL 未配置：/healthz 仍可用，业务端点返回 503")
 	}
 
 	server := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries, identitySvc, mail)),
+		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries, identitySvc, mail, demoSvc)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

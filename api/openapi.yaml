@@ -114,6 +114,95 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+    post:
+      operationId: submitDemo
+      tags: [作品]
+      summary: 投稿（multipart，连文件一起上传）
+      description: |
+        需要登录。一次请求同时提交元数据与作品文件，由服务端校验、解压、落库、上传。
+
+        **为什么是后端中转而不是预签名直传**：直传有三个失败点（签名过期、传一半断、
+        确认丢失），每个都要额外清理孤儿对象；本期没有带宽压力，中转把失败点收敛成一个。
+        等带宽成为瓶颈时再换，契约形状不用改——客户端仍然是「一次提交」。
+
+        `package` 支持两种形态：
+        - 一个 zip 包，**包根必须有 `index.html`**
+        - 单个 `.html` / `.svg` 文件
+
+        服务端闸门（数值见 `docs/运行手册-可变常量.md` §3）：包体积、解压后体积、
+        成员数、压缩比四道，任一不过即 422。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, demoType, package]
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                description:
+                  type: string
+                  maxLength: 5000
+                demoType:
+                  type: string
+                  maxLength: 32
+                  description: |
+                    作品类型。取值见 `demo_types` 表——它是主数据，**加一种类型是加一行
+                    数据，不是改契约**，所以这里不定 enum。
+                package:
+                  type: string
+                  format: binary
+                  description: 作品文件（zip 或单个 html/svg）
+      responses:
+        '201':
+          description: 已接收，进入待审核（对外不可见）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+        '400':
+          description: 参数非法（缺字段、标题过长、类型未知）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: 包体积超过上限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: 文件类型不支持（既不是 zip 也不是 html/svg）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 包内容不合格（缺 index.html、压缩炸弹、成员过多等）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 存储或数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/demos/{slug}:
     get:
       operationId: getDemo
@@ -446,7 +535,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required]
+          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required, payload_too_large]
           description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
         message:
           type: string
@@ -519,6 +608,24 @@ components:
           type: integer
           minimum: 0
           description: 满足条件的总条数（不是当前页条数）
+
+    SubmissionResult:
+      type: object
+      additionalProperties: false
+      required: [slug, revisionNo, moderationState, lifecycleState]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+          description: 生成的唯一标识，客户端用它跳详情页
+        revisionNo:
+          type: integer
+          minimum: 1
+        moderationState:
+          type: string
+          enum: [pending, approved, rejected]
+        lifecycleState:
+          $ref: '#/components/schemas/LifecycleState'
 
     LifecycleState:
       type: string

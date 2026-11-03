@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/mailer"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
@@ -34,6 +35,9 @@ const (
 	// 分页口径与治理域 §P5 一致：默认 50，上限 200。
 	defaultPageSize = 50
 	maxPageSize     = 200
+
+	// submitTimeout 是一次投稿的总时长上限。见 httpapi/submit.go 的注释。
+	submitTimeout = 5 * time.Minute
 )
 
 // Pinger 是 /healthz 依赖的最小接口，便于单测替换。
@@ -47,11 +51,19 @@ type Handler struct {
 	queries  *store.Queries    // nil 表示未配置数据库
 	identity *identity.Service // nil 表示身份域未接线
 	mailer   mailer.Mailer     // nil 表示不投递（验证码请求仍然返回 204）
+	demos    *demo.Service     // nil 表示作品域未接线
+
+	// maxUploadBytes 是上传包的体积硬上限，用来给请求体套 MaxBytesReader。
+	maxUploadBytes int64
 }
 
 // New 组装处理器。queries 可以为 nil（未配置数据库），此时业务端点返回 503。
-func New(pinger Pinger, queries *store.Queries, identitySvc *identity.Service, m mailer.Mailer) *Handler {
-	return &Handler{pinger: pinger, queries: queries, identity: identitySvc, mailer: m}
+func New(pinger Pinger, queries *store.Queries, identitySvc *identity.Service, m mailer.Mailer, demos *demo.Service) *Handler {
+	h := &Handler{pinger: pinger, queries: queries, identity: identitySvc, mailer: m, demos: demos}
+	if demos != nil {
+		h.maxUploadBytes = demos.MaxPackageBytes()
+	}
+	return h
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

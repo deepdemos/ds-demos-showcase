@@ -177,6 +177,42 @@
         "type": "string",
         "optional": false
       }
+    },
+    "SubmissionResult": {
+      "lifecycleState": {
+        "type": "LifecycleState",
+        "optional": false
+      },
+      "moderationState": {
+        "type": "SubmissionResultModerationState",
+        "optional": false
+      },
+      "revisionNo": {
+        "type": "int",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "SubmitDemoMultipartBody": {
+      "demoType": {
+        "type": "string",
+        "optional": false
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "package": {
+        "type": "openapi_types.File",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": false
+      }
     }
   },
   "enums": {
@@ -192,6 +228,7 @@
       "forbidden",
       "invalid_param",
       "not_found",
+      "payload_too_large",
       "rate_limited",
       "unauthorized",
       "unavailable",
@@ -207,6 +244,11 @@
       "published",
       "rejected",
       "removed"
+    ],
+    "SubmissionResultModerationState": [
+      "approved",
+      "pending",
+      "rejected"
     ],
     "ListDemosParamsSort": [
       "latest"
@@ -247,6 +289,11 @@
       "method": "ListDemos",
       "pathParams": 0,
       "params": "ListDemosParams"
+    },
+    "POST /api/v1/demos": {
+      "method": "SubmitDemo",
+      "pathParams": 0,
+      "params": null
     },
     "GET /api/v1/demos/{slug}": {
       "method": "GetDemo",

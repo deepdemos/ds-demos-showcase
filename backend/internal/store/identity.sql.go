@@ -292,7 +292,8 @@ func (q *Queries) GetLoginByUsername(ctx context.Context, lower string) (GetLogi
 
 const getMeBySession = `-- name: GetMeBySession :one
 
-SELECT a.sub,
+SELECT a.id,
+       a.sub,
        p.username,
        p.display_name,
        e.email,
@@ -311,6 +312,7 @@ WHERE s.id = $1
 `
 
 type GetMeBySessionRow struct {
+	ID          int64
 	Sub         string
 	Username    string
 	DisplayName string
@@ -328,6 +330,7 @@ func (q *Queries) GetMeBySession(ctx context.Context, id string) (GetMeBySession
 	row := q.db.QueryRow(ctx, getMeBySession, id)
 	var i GetMeBySessionRow
 	err := row.Scan(
+		&i.ID,
 		&i.Sub,
 		&i.Username,
 		&i.DisplayName,

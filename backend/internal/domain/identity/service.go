@@ -60,6 +60,7 @@ func (s *Service) Me(ctx context.Context, sessionID string) (Account, error) {
 		return Account{}, ErrAccountBanned
 	}
 	return Account{
+		ID:          row.ID,
 		Sub:         row.Sub,
 		Username:    row.Username,
 		DisplayName: row.DisplayName,
