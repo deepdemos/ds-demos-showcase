@@ -7,7 +7,7 @@ info:
     本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
 
     当前范围：站点可用性、作品列表与详情、身份（注册 / 登录 / 登出 / 我是谁 / 发验证码 /
-    找回密码），共 10 个端点。实现全部已接入并有集成测试覆盖。
+    找回密码），共 14 个端点。实现全部已接入并有集成测试覆盖。
 
     这份描述会随端点增加而更新——它长期停在「三个端点」正是 `api/surface.json` 基线
     不自动成长的症状（见 `docs/已知松点.md` 第 18 条）。
@@ -192,6 +192,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: 包内容不合格（缺 index.html、压缩炸弹、成员过多等）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 待审作品太多（`UPLOAD_MAX_PENDING`），等审核消化一些再来
           content:
             application/json:
               schema:
@@ -658,7 +664,10 @@ paths:
         拒绝的三种情况，分开返回：
         - 作品不存在（含软删、擦除）→ 404
         - 内容还没通过审核 → 409，`message` 指明「先审」
-        - 已经是 `published` → 409（同渠道重复发布不叠加，换渠道请走上架端点）
+        - 已经是 `published` → 409（同渠道重复发布不叠加）
+        - 追加到**另一个渠道**（如 deep 之后再加 astra）当前不支持：本端点只接受
+          `draft` / `archived` 状态，发布一次后状态即为 `published`。要加第二渠道得
+          新增一个「上架到渠道」端点，见已知松点
         - `removed`（违规下架）→ 409，只能走申诉，不能直接发
 
         `visibility='listed'` 还要求父作品 `approved`——已在上面的 409 里挡过；

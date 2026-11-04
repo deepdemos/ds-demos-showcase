@@ -160,6 +160,38 @@
         "optional": false
       }
     },
+    "PublishRequest": {
+      "channel": {
+        "type": "string",
+        "optional": false
+      },
+      "lang": {
+        "type": "PublishRequestLang",
+        "optional": true
+      },
+      "visibility": {
+        "type": "PublishRequestVisibility",
+        "optional": false
+      }
+    },
+    "PublishResult": {
+      "channel": {
+        "type": "string",
+        "optional": false
+      },
+      "lifecycleState": {
+        "type": "PublishResultLifecycleState",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "visibility": {
+        "type": "PublishResultVisibility",
+        "optional": false
+      }
+    },
     "RegisterRequest": {
       "displayName": {
         "type": "string",
@@ -301,6 +333,23 @@
       "rejected",
       "removed"
     ],
+    "PublishRequestLang": [
+      "en",
+      "zh"
+    ],
+    "PublishRequestVisibility": [
+      "hidden",
+      "listed",
+      "unlisted"
+    ],
+    "PublishResultLifecycleState": [
+      "published"
+    ],
+    "PublishResultVisibility": [
+      "hidden",
+      "listed",
+      "unlisted"
+    ],
     "ReviewDecisionDecision": [
       "approve",
       "reject"
@@ -322,6 +371,11 @@
     ]
   },
   "endpoints": {
+    "POST /api/v1/admin/demos/{slug}/publish": {
+      "method": "PublishDemo",
+      "pathParams": 1,
+      "params": null
+    },
     "GET /api/v1/admin/reviews/demo": {
       "method": "ListDemoReviewQueue",
       "pathParams": 0,
