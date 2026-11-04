@@ -123,8 +123,12 @@ func (s *Service) promoteExisting(ctx context.Context, row store.GetAccountByEma
 
 // createThenPromote 处理「账号还没建」的那条路：走 Register，再提权、再激活。
 //
-// 复用 Register 而不是自己拼 INSERT：账号建在五张表上（accounts / users / profiles /
+// 走 createAccount 而不是自己拼 INSERT：账号建在五张表上（accounts / users / profiles /
 // account_emails / credentials），少写一张就是一个坏账号。
+//
+// 不走 Register：那条路会发一封「验证你的邮箱」的信，而运维命令建出来的账号不需要
+// 也不应该收到它——这里的人在机器上。之前复用 Register 的写法传了 nil 的 verification，
+// 在 CI 上直接段错误（`verification.(*Service).identifierKey` 取 nil 的 key）。
 //
 // **必须显式激活**：`Register` 现在写的是 `pending`（等邮箱验证），而运维命令建出来的
 // 账号没有「验证邮件」这条路——它的前提就是「人能接触到机器、拿到数据库」。
@@ -135,7 +139,7 @@ func (s *Service) createThenPromote(ctx context.Context, in GrantInput, email, r
 	if strings.TrimSpace(in.Username) == "" || in.Password == "" {
 		return GrantResult{}, fmt.Errorf("%w: 请同时提供 -username 与 -password（或用 ADMIN_GRANT_PASSWORD 传口令）", ErrMissingForCreate)
 	}
-	acct, _, err := s.Register(ctx, RegisterInput{
+	acct, err := s.createAccount(ctx, RegisterInput{
 		Email:       email,
 		Password:    in.Password,
 		Username:    strings.TrimSpace(in.Username),

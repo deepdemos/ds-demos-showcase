@@ -27,8 +27,40 @@ import (
 // 同一个形状。投递失败**不回滚注册**：SMTP 抖动不该让人重填表单，更不该把账号
 // 留在半死不活的状态。用户可以到验证页点「重新发送」。
 func (s *Service) Register(ctx context.Context, in RegisterInput) (Account, EmailCodeDelivery, error) {
-	if err := in.Validate(); err != nil {
+	acct, err := s.createAccount(ctx, in)
+	if err != nil {
 		return Account{}, EmailCodeDelivery{}, err
+	}
+
+	// 验证码在事务**之后**发：事务里发信会有「信已发出、事务回滚」的窗口，
+	// 用户拿到一个查不到账号的码。代价是这一步失败时账号已经建好了——那正是
+	// 「投递失败不回滚注册」的语义，用户重发即可。
+	//
+	// `verification` 为 nil 的调用方（`cmd/admin-grant`）不走这条路径——
+	// 它调 createAccount 而不是 Register，因为运维命令的前提是「人能碰机器」，
+	// 不需要也不应该发一封验证信。
+	code, err := s.verification.Issue(ctx, verification.PurposeVerifyEmail, acct.Email, acct.ID)
+	if err != nil {
+		// 发不出码不是注册失败：账号建好了，用户可以到验证页重发。
+		// 但仍然要把错误带出去——调用方要能告诉用户「信没发出去」。
+		return acct, EmailCodeDelivery{}, fmt.Errorf("%w: %w", ErrVerificationSendFailed, err)
+	}
+
+	return acct, EmailCodeDelivery{Code: code, To: acct.Email, Username: acct.DisplayName}, nil
+}
+
+// createAccount 只做「把账号建出来」这一件事：五张表一个事务，状态是 pending。
+//
+// 单独拆出来是因为有两个调用方，它们的后半段不同：
+//   - 注册：建完发验证码（Register）
+//   - 运维命令：建完直接激活，不发信（grant.go 的 createThenPromote）
+//
+// 让运维命令复用 Register 再想办法压掉发信，是最省事的写法，也是这个函数存在之前
+// 的写法——结果 `cmd/admin-grant` 传了 nil 的 verification，在 CI 上直接段错误。
+// 拆开之后「建号」与「通知用户」是两件可以被独立调用的事。
+func (s *Service) createAccount(ctx context.Context, in RegisterInput) (Account, error) {
+	if err := in.Validate(); err != nil {
+		return Account{}, err
 	}
 	in.Email = strings.TrimSpace(in.Email)
 	in.Username = strings.TrimSpace(in.Username)
@@ -36,16 +68,16 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Account, Emai
 
 	hash, err := HashPassword(in.Password)
 	if err != nil {
-		return Account{}, EmailCodeDelivery{}, err
+		return Account{}, err
 	}
 	sub, err := NewSub()
 	if err != nil {
-		return Account{}, EmailCodeDelivery{}, err
+		return Account{}, err
 	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return Account{}, EmailCodeDelivery{}, fmt.Errorf("identity: 开事务失败: %w", err)
+		return Account{}, fmt.Errorf("identity: 开事务失败: %w", err)
 	}
 	// 提交成功后 Rollback 返回 ErrTxClosed，忽略即可。
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -54,57 +86,36 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Account, Emai
 
 	row, err := q.CreateAccount(ctx, sub)
 	if err != nil {
-		return Account{}, EmailCodeDelivery{}, mapRegisterError(err)
+		return Account{}, mapRegisterError(err)
 	}
 	// demo 站的投影行：业务外键指向它的 id。与 accounts 同一事务，
 	// 不存在「有账号没有投影行」的中间态。
 	user, err := q.CreateUser(ctx, sub)
 	if err != nil {
-		return Account{}, EmailCodeDelivery{}, mapRegisterError(err)
+		return Account{}, mapRegisterError(err)
 	}
 	if err := q.CreateProfile(ctx, store.CreateProfileParams{
 		AccountID:   row.ID,
 		Username:    in.Username,
 		DisplayName: in.DisplayName,
 	}); err != nil {
-		return Account{}, EmailCodeDelivery{}, mapRegisterError(err)
+		return Account{}, mapRegisterError(err)
 	}
 	if err := q.CreatePrimaryEmail(ctx, store.CreatePrimaryEmailParams{
 		AccountID: row.ID,
 		Email:     in.Email,
 	}); err != nil {
-		return Account{}, EmailCodeDelivery{}, mapRegisterError(err)
+		return Account{}, mapRegisterError(err)
 	}
 	if err := q.CreatePasswordCredential(ctx, store.CreatePasswordCredentialParams{
 		AccountID:  row.ID,
 		SecretHash: hash,
 	}); err != nil {
-		return Account{}, EmailCodeDelivery{}, mapRegisterError(err)
+		return Account{}, mapRegisterError(err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return Account{}, EmailCodeDelivery{}, fmt.Errorf("identity: 提交注册失败: %w", err)
-	}
-
-	// 验证码在事务**之后**发：事务里发信会有「信已发出、事务回滚」的窗口，
-	// 用户拿到一个查不到账号的码。代价是这一步失败时账号已经建好了——那正是
-	// 「投递失败不回滚注册」的语义，用户重发即可。
-	code, err := s.verification.Issue(ctx, verification.PurposeVerifyEmail, in.Email, row.ID)
-	if err != nil {
-		// 发不出码不是注册失败：账号建好了，用户可以到验证页重发。
-		// 但仍然要把错误带出去——调用方要能告诉用户「信没发出去」。
-		return Account{
-			ID:          row.ID,
-			UserID:      user.ID,
-			Sub:         sub,
-			Username:    in.Username,
-			DisplayName: in.DisplayName,
-			Email:       in.Email,
-			Role:        "user",
-			Status:      "pending",
-			Level:       0,
-			CreatedAt:   row.CreatedAt.Time,
-		}, EmailCodeDelivery{}, fmt.Errorf("%w: %w", ErrVerificationSendFailed, err)
+		return Account{}, fmt.Errorf("identity: 提交注册失败: %w", err)
 	}
 
 	return Account{
@@ -118,7 +129,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Account, Emai
 		Status:      "pending",
 		Level:       0,
 		CreatedAt:   row.CreatedAt.Time,
-	}, EmailCodeDelivery{Code: code, To: in.Email, Username: in.DisplayName}, nil
+	}, nil
 }
 
 // mapRegisterError 把唯一约束冲突翻译成「哪个输入框错了」。

@@ -40,6 +40,28 @@ func mkUser(t *testing.T, s *Service, tag string) (email, username string) {
 	t.Helper()
 	email = fmt.Sprintf("it-%s@example.com", tag)
 	username = fmt.Sprintf("it-%s", tag)
+	// 先把同名残留删掉：清理是注册在 `t.Cleanup` 里的，而 `t.Cleanup` 只在清理**注册之后**
+	// 失败时才跑。用例在注册前就失败（上一轮的脏数据、限流窗口），残留就会一直躺着，
+	// 下一轮撞 `uq_profiles_username` 报「用户名已被使用」——看起来像业务 bug，
+	// 实际是测试自己在给自己下绊子。做成幂等：每次建号前先清同名的。
+	_, _ = s.pool.Exec(context.Background(),
+		"DELETE FROM accounts WHERE id IN (SELECT account_id FROM profiles WHERE lower(username) = lower($1))",
+		username)
+	_, _ = s.pool.Exec(context.Background(),
+		"DELETE FROM account_emails WHERE lower(email) = lower($1)", email)
+
+	// mkUser 是给「测登录/限流/封禁」那些用例用的，它们不关心验证信。
+	// 但 Register 每建一个号就发一条验证码，而 kernel 的限流是按 (purpose, identifier)
+	// ——同一个邮箱一分钟只能发一条。不同用例的邮箱不同，所以本不该撞；
+	// 撞上说明上一轮的残留（测试名变了/被中断）还在窗口里。
+	// 所以建号前先把这个邮箱的窗口清干净，让「建用户」这一层不因为脏数据而随机红。
+	// 限流键是 `identifierKey(purpose, email)`，与账号行无关；而 `verification_codes`
+	// 没有指向 accounts 的外键——上一轮清账号时不会带走码。所以这里按**用途整体清**，
+	// 不是按账号清：残留的码会让下一轮「每分钟 1 条」直接命中。
+	// 本包内用例串行，各建各的账号，清掉不影响任何还没消费的码（它们都在建号之后才发）。
+	_, _ = s.pool.Exec(context.Background(),
+		"DELETE FROM verification_codes WHERE purpose = 'verify_email'")
+
 	_, delivery, err := s.Register(context.Background(), RegisterInput{
 		Email:       email,
 		Password:    "correct-horse-battery",
