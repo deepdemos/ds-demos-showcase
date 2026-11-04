@@ -2,3 +2,5 @@ dist
 pnpm-lock.yaml
 # 契约生成物：格式由 orval 自己决定，不要用本仓库的 prettier 规则去改它
 src/api/gen
+# e2e 运行产物（报告、trace、截图），格式与我们无关
+.e2e

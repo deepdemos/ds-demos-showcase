@@ -119,6 +119,105 @@ jobs:
         if: failure()
         run: echo "::error title=CI 门禁::CI 失败。先读 docs/development-workflow.md：CI 红或发现 bug 必须先提交 issue，再修复；PR 必须关联 issue。"
 
+  # 浏览器端到端冒烟：真 Chromium 打真前端 + 真 Go API + 真 PostgreSQL。
+  #
+  # 它抓的是 tsc / eslint / vitest 结构上抓不到的那一类缺陷——dev 代理漏配导致预览 iframe
+  # 永远空白（PR #218）、跳转到不存在的页面、未登录访问受保护页面不回到登录页。
+  # 这些在单元测试和类型检查里全是绿的。
+  #
+  # **刻意不做 required check**：这是全项目第一次在 CI 里同时拉起 postgres + Go API + vite
+  # 三件套，链越长越容易抖；等观察一阵抖动率再决定要不要拦合并。现在红了不挡 PR，但要看。
+  #
+  # 用例只读：不写库、不投稿、不登录。作品库那条依赖 `db/seeds/0001-dev-demos.sql`
+  # 灌进去的开发种子（每条作品都没有封面，卡片带「无封面」标记）。
+  e2e:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: deepdemos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/deepdemos?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: 装前端依赖
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: 跑迁移
+        working-directory: backend
+        run: go run ./cmd/migrate up
+      - name: 灌开发种子（作品库要有作品可点）
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seeds/0001-dev-demos.sql
+      - name: 起 Go API
+        run: |
+          cd backend
+          go build -o "$RUNNER_TEMP/api" ./cmd/api
+          mkdir -p "$RUNNER_TEMP/storage"
+          export STORAGE_ROOT="$RUNNER_TEMP/storage"
+          export PORT=8080
+          export IP_HASH_SECRET=e2e-ci
+          export VERIFICATION_SECRET=e2e-ci
+          nohup "$RUNNER_TEMP/api" > "$RUNNER_TEMP/api.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/healthz > /dev/null; then echo "API 起来了"; exit 0; fi
+            sleep 1
+          done
+          echo "API 没起来，日志如下："
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+      - name: 起前端 dev server
+        working-directory: web
+        run: |
+          nohup pnpm exec vite --port 7000 --strictPort --host 127.0.0.1 > "$RUNNER_TEMP/vite.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:7000/ > /dev/null; then echo "vite 起来了"; exit 0; fi
+            sleep 1
+          done
+          echo "vite 没起来，日志如下："
+          cat "$RUNNER_TEMP/vite.log"
+          exit 1
+      - name: 跑浏览器冒烟
+        working-directory: web
+        env:
+          APP_URL: http://127.0.0.1:7000
+          E2E_TELEMETRY_DISABLED: '1'
+        run: pnpm test:e2e
+      - name: 留下失败现场（截图 / trace / 报告）
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: e2e-report
+          path: web/.e2e
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: 失败处理指引
+        if: failure()
+        run: echo "::error title=CI 门禁::e2e 冒烟失败（非必需 check，但要看）。先下载 e2e-report 里的 trace.md 看是哪一步断的；常见三类：① 代理没配，请求落回前端 SPA；② 跳转目标不存在；③ 服务没起来（看步骤日志里的 api.log / vite.log）。按 docs/development-workflow.md 先建 issue 再修。"
+
   file-size:
     runs-on: ubuntu-latest
     timeout-minutes: 10
