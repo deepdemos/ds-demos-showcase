@@ -125,6 +125,7 @@ jobs:
   # 永远空白（PR #218）、跳转到不存在的页面、未登录访问受保护页面不回到登录页。
   # 这些在单元测试和类型检查里全是绿的。
   #
+  # 只在 `pull_request` 上跑：合入后的 `push` 不重跑（省钱），代价是 dev 破了要等下一个 PR 才现形。
   # **刻意不做 required check**：这是全项目第一次在 CI 里同时拉起 postgres + Go API + vite
   # 三件套，链越长越容易抖；等观察一阵抖动率再决定要不要拦合并。现在红了不挡 PR，但要看。
   #
@@ -208,7 +209,7 @@ jobs:
         run: pnpm test:e2e
       - name: 留下失败现场（截图 / trace / 报告）
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-report
           path: web/.e2e
