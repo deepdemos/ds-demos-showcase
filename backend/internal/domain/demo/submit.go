@@ -176,7 +176,10 @@ func (s *Service) stage(ctx context.Context, in SubmitInput) (st staged, cleanup
 
 	// 不是 zip：只接受单个 html / svg。按扩展名判断而不是嗅探内容——
 	// 单文件作品的类型是用户声明的，嗅探反而会把「.svg 里带 HTML」这种情况判错。
-	ext := strings.ToLower(filepath.Ext(in.PackagePath))
+	//
+	// 扩展名只能从 PackageName 取：PackagePath 是 `os.CreateTemp` 的随机名，
+	// 没有扩展名。（踩过：这里原来读 PackagePath，于是单文件投稿一律 415。）
+	ext := strings.ToLower(filepath.Ext(in.PackageName))
 	switch ext {
 	case ".html", ".htm":
 		st.singleFile = "html"

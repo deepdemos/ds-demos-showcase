@@ -107,6 +107,28 @@ func writeFile(t *testing.T, name, body string) string {
 	return path
 }
 
+// writeUpload 按**生产里的样子**落一份上传包：路径是 os.CreateTemp 的随机名，
+// **没有扩展名**，原始文件名另外返回。
+//
+// 用 writeFile(…, "index.html") 造单文件包会给出「路径带扩展名」这种生产上不存在的
+// 形态——曾经的 415 缺陷就是被这种形态盖住的。
+func writeUpload(t *testing.T, name, body string) (path, originalName string) {
+	t.Helper()
+	f, err := os.CreateTemp("", "demo-upload-*")
+	if err != nil {
+		t.Fatalf("建临时上传文件失败: %v", err)
+	}
+	if _, err := f.WriteString(body); err != nil {
+		_ = f.Close()
+		t.Fatalf("写临时上传文件失败: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("关闭临时上传文件失败: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(f.Name()) })
+	return f.Name(), name
+}
+
 func TestIntegrationSubmitZip(t *testing.T) {
 	pool := testPool(t)
 	s := testService(t, pool)
@@ -167,12 +189,13 @@ func TestIntegrationSubmitSingleFile(t *testing.T) {
 	s := testService(t, pool)
 	author := mkAuthor(t, pool, "single")
 
-	pkg := writeFile(t, "index.html", "<html>single</html>")
+	pkg, origName := writeUpload(t, "index.html", "<html>single</html>")
 	res, err := s.Submit(context.Background(), SubmitInput{
 		AuthorID:    author,
 		Title:       "单文件作品",
 		DemoType:    "web",
 		PackagePath: pkg,
+		PackageName: origName,
 		PackageSize: fileSize(t, pkg),
 	})
 	if err != nil {
