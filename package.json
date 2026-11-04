@@ -20,7 +20,10 @@
     "db:seed": "cd backend && go run ./cmd/migrate -mode seed",
     "db:seal": "node scripts/check-migrations.mjs --seal",
     "check:migrations": "node scripts/check-migrations.mjs",
-    "check:layering": "node scripts/check-layering.mjs"
+    "check:layering": "node scripts/check-layering.mjs",
+    "check:single-source": "node scripts/check-single-source.mjs",
+    "seal:single-source": "node scripts/check-single-source.mjs --update",
+    "check:negative-cases": "node scripts/check-negative-cases.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.14"

@@ -1,0 +1,36 @@
+# 每周自查：把「靠心情才会做的检查」变成定时任务。
+#
+# 起因（2026-11-04）：四轮独立 review 抓了约 40 条问题，机器只拦了 4 条。差别不在认真不认真，
+# 而在有没有东西在我没主动想起它的时候跑一遍。这个 workflow 就是那个东西。
+#
+# 它只在**有真问题**时建 issue（门禁红 / 松点引用的文件不见了），
+# 并且复用同一个 open issue，每周追加评论——不把噪音搬进 issue 列表。
+name: weekly-audit
+
+on:
+  schedule:
+    # 每周一 01:00 UTC = 北京时间 09:00。
+    - cron: '0 1 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: 跑自查
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/weekly-audit.mjs --issue
+      - name: 失败指引
+        if: failure()
+        run: echo "::error title=每周自查::自查脚本自己跑挂了（不是发现问题，是脚本坏了）。看日志修 scripts/weekly-audit.mjs。"

@@ -1,0 +1,21 @@
+{
+  "visibility-sql": {
+    "backend/db/queries/demos.sql": 5
+  },
+  "visibility-go": {
+    "backend/internal/domain/demo/publish.go": 2,
+    "backend/internal/httpapi/download.go": 1,
+    "backend/internal/httpapi/handlers.go": 1,
+    "backend/internal/httpapi/preview.go": 2
+  },
+  "visibility-web": {
+    "web/src/routes/DemoDetailPage.tsx": 1
+  },
+  "state-write": {
+    "backend/db/queries/review.sql": 2
+  },
+  "audit-write": {
+    "backend/db/queries/identity.sql": 1,
+    "backend/db/queries/review.sql": 1
+  }
+}

@@ -21,6 +21,15 @@ func registerVerified(t *testing.T, pool *pgxpool.Pool, svc *identity.Service, i
 	t.Helper()
 	ctx := context.Background()
 
+	// 把该邮箱的验证码限流窗口清零。
+	//
+	// kernel 按 `(purpose, identifier)` 限「每分钟 1 条」，而 `verification_codes` 没有指向
+	// `accounts` 的外键——清库清不掉它。不清的话同一邮箱在这一分钟内跑第二次会红在
+	// `verification: 发送太频繁`，看起来像功能坏了，实际是测试自己撞了配额。
+	if _, err := pool.Exec(ctx, `DELETE FROM verification_codes WHERE purpose = 'verify_email'`); err != nil {
+		t.Fatalf("清验证码失败: %v", err)
+	}
+
 	acc, delivery, err := svc.Register(ctx, in)
 	if err != nil {
 		t.Fatalf("注册失败: %v", err)

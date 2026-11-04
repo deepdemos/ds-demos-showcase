@@ -3,9 +3,24 @@
 // 不确定的问题必须先 ask，不允许在 review 里默认作者假设。
 import { pathToFileURL } from 'node:url';
 
+import { checkConclusions } from './review-conclusions.mjs';
+
 export const MIN_REVIEW_BODY = 10;
 const REVIEW_STATES = new Set(['COMMENTED', 'APPROVED', 'CHANGES_REQUESTED']);
 const DOC = 'docs/development-workflow.md';
+
+/** 取「晚于最新 commit 的那条」review 正文，用来验结论落地。 */
+export function latestReview(reviews, headCommitDate) {
+  const headTime = Date.parse(headCommitDate ?? '');
+  if (!Number.isFinite(headTime) || !Array.isArray(reviews)) return null;
+  const eligible = reviews
+    .filter((review) => {
+      const t = Date.parse(review?.submitted_at ?? '');
+      return REVIEW_STATES.has(review?.state) && Number.isFinite(t) && t > headTime;
+    })
+    .sort((a, b) => Date.parse(a.submitted_at) - Date.parse(b.submitted_at));
+  return eligible.length > 0 ? eligible[eligible.length - 1] : null;
+}
 
 export function hasReviewComment(reviews, headCommitDate) {
   const headTime = Date.parse(headCommitDate ?? '');
@@ -54,7 +69,21 @@ async function main() {
 
     const reviews = await api(`/pulls/${prNumber}/reviews?per_page=100`, token);
     if (hasReviewComment(reviews, headCommitDate)) {
-      console.log(`review-guard ok: PR #${prNumber} 有晚于 ${headCommitDate} 的 review 评论`);
+      // 时间对了还不够：结论必须落地。每条发现变成 test / gate / 松点 / 明确不修之一，
+      // 「已修」不算——改完就没了，没人能证明它不会再犯。格式见 scripts/review-conclusions.mjs。
+      const latest = latestReview(reviews, headCommitDate);
+      const conclusions = checkConclusions(latest?.body ?? '');
+      if (!conclusions.ok) {
+        for (const problem of conclusions.problems) console.log(`::error::${problem}`);
+        console.error(`review-guard failed：PR #${prNumber} 的 review 结论没有落地（${conclusions.problems.length} 条问题）。`);
+        console.error('每条发现三选一：变 test/gate、记进 docs/已知松点.md、或写清为什么不修。');
+        console.error(`格式见 ${DOC} 的「review 结论落地」一节。`);
+        process.exit(1);
+      }
+      console.log(
+        `review-guard ok: PR #${prNumber} 有晚于 ${headCommitDate} 的 review 评论，` +
+          `结论落地 ${conclusions.landed} 条${conclusions.declared !== null ? `（声明 ${conclusions.declared}）` : ''}`,
+      );
       return;
     }
 
