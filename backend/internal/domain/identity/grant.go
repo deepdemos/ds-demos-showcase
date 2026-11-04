@@ -20,6 +20,12 @@ var ErrUnknownRole = errors.New("identity: 角色未登记")
 // ErrMissingForCreate 是「账号不存在，而建号需要的信息没给全」。
 var ErrMissingForCreate = errors.New("identity: 账号不存在且缺少建号信息")
 
+// ErrAccountNotActive 是「这个账号处于封禁或已注销状态，不能提权」。
+//
+// 这条判断不是洁癖：提权的输入是一个邮箱，而邮箱是会写错的。封禁账号往往正是
+// 出过事的那个人——一个手滑的邮箱不该把他重新变成管理员。
+var ErrAccountNotActive = errors.New("identity: 账号状态不允许提权")
+
 // GrantInput 是「把某个邮箱对应的账号提到某个角色」的输入。
 //
 // 为什么提权与建号合在一处：生产上第一个管理员没有任何已存在的管理员可以点按钮给他授权，
@@ -90,6 +96,9 @@ func (s *Service) promoteExisting(ctx context.Context, row store.GetAccountByEma
 		Email:       email,
 		Role:        row.Role,
 		Status:      row.Status,
+	}
+	if row.Status == "banned" || row.Status == "deleted" {
+		return GrantResult{}, fmt.Errorf("%w: 账号当前是 %s，先解封再提权", ErrAccountNotActive, row.Status)
 	}
 	if row.Role == role {
 		return GrantResult{Account: acct, Role: role}, nil

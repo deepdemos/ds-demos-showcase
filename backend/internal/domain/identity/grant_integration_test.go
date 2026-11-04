@@ -144,3 +144,31 @@ func TestIntegrationGrantRoleRequiresCredentialsForNewAccount(t *testing.T) {
 		t.Fatalf("期望 ErrMissingForCreate，实际 %v", err)
 	}
 }
+
+// 封禁账号不能被提权：提权输入是邮箱，而邮箱会写错；封禁账号往往正是出过事的那个人。
+func TestIntegrationGrantRoleRefusesBannedAccount(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	email, _ := mkUser(t, s, "grant-banned")
+
+	// banned 要求 previous_status 非空（ck_accounts_previous_status），所以一起写。
+	if _, err := pool.Exec(context.Background(),
+		"UPDATE accounts SET status = 'banned', previous_status = 'active' WHERE id = (SELECT account_id FROM account_emails WHERE email = $1)",
+		email); err != nil {
+		t.Fatalf("置为封禁失败: %v", err)
+	}
+
+	_, err := s.GrantRole(context.Background(), GrantInput{Email: email, Role: "admin"})
+	if !errors.Is(err, ErrAccountNotActive) {
+		t.Fatalf("期望 ErrAccountNotActive，实际 %v", err)
+	}
+	var role string
+	if err := pool.QueryRow(context.Background(),
+		"SELECT role FROM accounts WHERE id = (SELECT account_id FROM account_emails WHERE email = $1)",
+		email).Scan(&role); err != nil {
+		t.Fatalf("查角色失败: %v", err)
+	}
+	if role != "user" {
+		t.Errorf("角色被改成了 %q，封禁账号不该被提权", role)
+	}
+}
