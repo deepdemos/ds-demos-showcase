@@ -12,8 +12,11 @@ vi.mock('@/features/auth/AuthContext', () => ({
 
 const listDemoReviewQueue = vi.hoisted(() => vi.fn());
 const reviewDemo = vi.hoisted(() => vi.fn());
+// 页面通过 PublishCard 间接用到 publishDemo；这条 mock 只在渲染「待发布」区块时被碰，
+// 但这个用例的通过动作会让它出现，所以必须给个桩，否则 import 到 undefined 会炸。
+const publishDemo = vi.hoisted(() => vi.fn());
 
-vi.mock('@/api', () => ({ listDemoReviewQueue, reviewDemo }));
+vi.mock('@/api', () => ({ listDemoReviewQueue, reviewDemo, publishDemo }));
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
