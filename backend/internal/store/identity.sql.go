@@ -496,6 +496,37 @@ func (q *Queries) GetPasswordResetTarget(ctx context.Context, lower string) (Get
 	return i, err
 }
 
+const insertRoleSetAudit = `-- name: InsertRoleSetAudit :exec
+
+INSERT INTO audit_log (actor_type, actor_id, actor_role, action,
+                       entity_type, entity_id, before, after, reason)
+VALUES ('system', NULL, 'system', 'role_set',
+        'account', $1, $2, $3, $4)
+`
+
+type InsertRoleSetAuditParams struct {
+	EntityID int64
+	Before   []byte
+	After    []byte
+	Reason   string
+}
+
+// ---------- 提权审计（治理域 §5.2）----------
+// 提权是「能把整个站拆掉」的那一类动作，必须留痕。
+//
+// actor_type 写 `system` 而不是 `user`：这条记录来自运维命令，运行者没有会话。
+// 硬塞一个 user 身份等于伪造 actor——审计表里宁可写「系统做的」，
+// 也不能写一个「看起来像某个人点的」。
+func (q *Queries) InsertRoleSetAudit(ctx context.Context, arg InsertRoleSetAuditParams) error {
+	_, err := q.db.Exec(ctx, insertRoleSetAudit,
+		arg.EntityID,
+		arg.Before,
+		arg.After,
+		arg.Reason,
+	)
+	return err
+}
+
 const markEmailVerified = `-- name: MarkEmailVerified :exec
 UPDATE account_emails
 SET verified_at = now()

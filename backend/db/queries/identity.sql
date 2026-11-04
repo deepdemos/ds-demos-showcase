@@ -244,3 +244,16 @@ WHERE account_id = @account_id
 UPDATE accounts
 SET status = 'active', updated_at = now()
 WHERE id = @id AND status = 'pending';
+
+-- ---------- 提权审计（治理域 §5.2）----------
+
+-- name: InsertRoleSetAudit :exec
+-- 提权是「能把整个站拆掉」的那一类动作，必须留痕。
+--
+-- actor_type 写 `system` 而不是 `user`：这条记录来自运维命令，运行者没有会话。
+-- 硬塞一个 user 身份等于伪造 actor——审计表里宁可写「系统做的」，
+-- 也不能写一个「看起来像某个人点的」。
+INSERT INTO audit_log (actor_type, actor_id, actor_role, action,
+                       entity_type, entity_id, before, after, reason)
+VALUES ('system', NULL, 'system', 'role_set',
+        'account', sqlc.arg(entity_id), sqlc.arg(before), sqlc.arg(after), sqlc.arg(reason));

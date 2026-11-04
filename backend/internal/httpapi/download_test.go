@@ -2,12 +2,16 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
@@ -172,4 +176,108 @@ func downloadValues(row store.GetDemoForDownloadRow) []any {
 // nullableTS 造「有值/无值」的 timestamptz，给上面那张用例表用。
 func nullableTS(valid bool) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Valid: valid}
+}
+
+// TestDownloadCountsAfterSlowTransfer 钉住「计数用独立 context」这条修复。
+//
+// 原来的写法复用进函数时建的 30 秒 ctx，而它从进函数起就在走表：传一个几百兆的包
+// 要几分钟，等 io.Copy 回来它早过期了，于是每一次慢下载都在最后一步失败，
+// 计数器永远停在原地——文件下成功了，账没记上。
+//
+// 这里用一个「卡住直到被放行」的存储，在传输中途取消请求 context：
+// 计数那一步如果还挂在请求上下文上，context 就是已取消的，断言立刻红。
+func TestDownloadCountsAfterSlowTransfer(t *testing.T) {
+	row := downloadRow("published", "approved", "zip", false, false, false, false)
+
+	started := make(chan struct{})
+	gate := make(chan struct{})
+	fs := &gatedStore{started: started, gate: gate}
+	db := &recordingDB{row: fakeRow{values: downloadValues(row)}}
+	h := NewDownload(store.New(db), fs)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/download/demo-slug", nil).WithContext(ctx)
+	req = req.WithContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+
+	// 等到真的开始拷字节，再取消请求上下文——这模拟「客户端传了很久才断开」。
+	<-started
+	cancel()
+	close(gate)
+	<-done
+
+	got := db.execContextErrors()
+	if len(got) != 1 {
+		t.Fatalf("应该记一次下载，实际 Exec 了 %d 次", len(got))
+	}
+	if got[0] != nil {
+		t.Fatalf("计数用的 context 不该跟着请求一起被取消，实际 %v", got[0])
+	}
+}
+
+// gatedStore 在读第一个字节时通知测试、然后卡住等放行。
+type gatedStore struct {
+	started chan struct{}
+	gate    chan struct{}
+	once    bool
+}
+
+func (g *gatedStore) Put(context.Context, string, io.Reader, int64, string) error { return nil }
+func (g *gatedStore) Delete(context.Context, string) error                        { return nil }
+func (g *gatedStore) Stat(context.Context, string) (int64, error)                 { return 6, nil }
+func (g *gatedStore) URL(string) (string, bool)                                   { return "", false }
+func (g *gatedStore) Get(context.Context, string) (io.ReadCloser, error) {
+	return &gatedReader{store: g}, nil
+}
+
+type gatedReader struct {
+	store *gatedStore
+	done  bool
+}
+
+func (r *gatedReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.store.once = true
+	close(r.store.started)
+	<-r.store.gate
+	r.done = true
+	return copy(p, "bytes!"), nil
+}
+
+func (r *gatedReader) Close() error { return nil }
+
+// recordingDB 记下每次 Exec 时 context 的状态。
+type recordingDB struct {
+	row  pgx.Row
+	mu   sync.Mutex
+	errs []error
+}
+
+func (d *recordingDB) Exec(ctx context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.errs = append(d.errs, ctx.Err())
+	return pgconn.CommandTag{}, nil
+}
+
+func (d *recordingDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errors.New("recordingDB: Query 不该被调用")
+}
+
+func (d *recordingDB) QueryRow(context.Context, string, ...any) pgx.Row { return d.row }
+
+func (d *recordingDB) execContextErrors() []error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]error, len(d.errs))
+	copy(out, d.errs)
+	return out
 }

@@ -304,16 +304,19 @@ INDEX  (channel, visibility, featured_order)
 **渠道与可见性正交**：
 
 - 作品可以在 `deep` 上 `listed`，同时在 `astra` 上不存在（无行）
-- `astra` 要求 `lang='en'`，这是**渠道规则**，由发布时校验，不是全局字段
+- `astra` 要求 `lang='en'`，这是**渠道规则**，由发布时校验，不是全局字段。校验点在 `backend/internal/domain/demo/publish.go` 的 `channelRequiredLang`（`Publish` 里判，不只在发布表单里判）——只在浏览器里挡的校验等于没有，`curl` 一次就能绕过去
 - 首页精选 = `featured=true` + `visibility='listed'`
 
 **预览与下载的可见性口径**（实现约定，不是新增字段）：
 
 | 入口 | 放行条件 | 谁能绕过 |
 | --- | --- | --- |
-| 列表 / 详情 | `moderation_state=approved` + `lifecycle_state=published` + 渠道有 `listed` | 无 |
-| 预览 `/preview/{slug}` | 同上，但渠道接受 `listed` **或** `unlisted` | 作者本人、持 `demo.review` 的审核员 |
-| 下载 `/download/{slug}` | 与预览同一条谓词 | **无**（草稿不该存在于任何下载路径） |
+| 列表 | `moderation_state=approved` + `lifecycle_state=published` + 渠道有 `listed` | 无 |
+| 详情 `/demos/{slug}` | 同列表，但渠道接受 `listed` **或** `unlisted` | 无 |
+| 预览 `/preview/{slug}` | 与详情同一条谓词 | 作者本人、持 `demo.review` 的审核员 |
+| 下载 `/download/{slug}` | 与详情同一条谓词 | **无**（草稿不该存在于任何下载路径） |
+
+**列表与其余三处必须分开写**：`listed` 与 `unlisted` 的差别只体现在列表上（`unlisted` 的定义就是「不上列表、知道地址能看」）。把四行合成「列表 / 详情同一条件」会让 `unlisted` 要么全站不可见、要么直接出现在列表里——前者违反标准对象 §EN-1，后者等于没有这个档位。
 
 `unlisted` 的定义是「不上列表，但知道地址就能看」，所以它可以预览、可以下载，只是不出现在列表里；`hidden` 三个入口都拒。绕过渠道判定只对作者与审核员成立——他们看的是「还没对外」的东西，把渠道判定套上去等于让他们看不见自己正在审的作品。
 

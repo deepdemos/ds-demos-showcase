@@ -236,6 +236,15 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 	if !tombstone && row.ModerationState != "approved" {
 		return api.DemoDetail{}, false
 	}
+	// 渠道对外可见：`hidden` 的作品对外不存在。
+	//
+	// 这条以前漏了，导致「列表里看不见、详情页却完整返回 200」——一个作品被设成
+	// hidden 之后，知道 slug 的人仍然能读到标题、简介、封面，而 iframe 预览已经 404，
+	// 页面变成「有正文、无内容」的半截状态。三处入口（列表 / 详情 / 预览 / 下载）
+	// 必须同一口径：列表 `listed`（unlisted 不上列表）；其余三处 `listed|unlisted`。
+	if !tombstone && !row.HasVisibleChannel {
+		return api.DemoDetail{}, false
+	}
 
 	detail := api.DemoDetail{
 		Slug:           row.Slug,

@@ -55,6 +55,22 @@ describe('AdminReviewPage', () => {
     expect(screen.queryByText('没有待审作品')).not.toBeInTheDocument();
   });
 
+  test('401 展示「登录已过期」并给出登录去处', async () => {
+    auth.me = { sub: 'x', username: 'u' };
+    // 会话过期时 /me 的缓存还没失效，所以页面会进到这里而不是跳登录。
+    // 以前只判 403，401 会渲染成一片空白——既没有错误态也没有队列。
+    listDemoReviewQueue.mockResolvedValue({ status: 401, data: { message: '未登录' } });
+    renderPage();
+
+    expect(await screen.findByText('登录已过期')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute(
+      'href',
+      '/login?return_to=/admin/reviews',
+    );
+    // 401 不能和 403 混：说「没有审核权限」会让人去申请权限，而实际上只是要重新登录。
+    expect(screen.queryByText('没有审核权限')).not.toBeInTheDocument();
+  });
+
   test('队列为空时给出空态', async () => {
     auth.me = { sub: 'x', username: 'u' };
     listDemoReviewQueue.mockResolvedValue({ status: 200, data: { items: [] } });

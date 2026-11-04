@@ -30,6 +30,15 @@ const (
 	publishLangDefault = "zh"
 )
 
+// channelRequiredLang 是「这个渠道只收哪种语言」的唯一登记处。
+//
+// 为什么不查库：渠道的语言要求是产品约定，不是运营数据——`channels` 表里
+// 没有这一列，为一个稳定的两行映射加一列 + 一次迁移不划算。等渠道多到
+// 需要运营自己配的时候，再把它挪进 `channels.required_lang`。
+var channelRequiredLang = map[string]string{
+	"astra": "en",
+}
+
 var (
 	// ErrNotApproved 表示内容还没通过审核，不能发布。
 	ErrNotApproved = errors.New("demo: 作品还没通过审核")
@@ -82,6 +91,15 @@ func (s *Service) Publish(ctx context.Context, actor ReviewActor, in PublishInpu
 	case "zh", "en":
 	default:
 		return out, fmt.Errorf("%w: lang 只能是 zh 或 en", ErrInvalidInput)
+	}
+	// 渠道对语言有硬要求：Astra 橱窗只收英文作品（Demo 域 §3.5 / §7.4）。
+	//
+	// 以前这条只在发布表单里挡着（前端把语言锁成 en 并禁用下拉），后端不判——
+	// 一道只在浏览器里存在的校验等于没有：curl 一次就能把中文作品发到英文橱窗，
+	// 而那个橱窗的读者一个字也读不懂。
+	if req, ok := channelRequiredLang[in.Channel]; ok && in.Lang != req {
+		return out, fmt.Errorf("%w: 渠道 %s 只收 %s 作品，当前是 %s",
+			ErrInvalidInput, in.Channel, req, in.Lang)
 	}
 	if actor.Role == "" {
 		return out, fmt.Errorf("%w: 缺少角色", ErrInvalidInput)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -114,7 +115,7 @@ func (s *Service) promoteExisting(ctx context.Context, row store.GetAccountByEma
 	if row.Role == role {
 		return GrantResult{Account: acct, Role: role, Changed: activated}, nil
 	}
-	if err := s.setRole(ctx, row.ID, role); err != nil {
+	if err := s.setRole(ctx, row.ID, role, row.Role); err != nil {
 		return GrantResult{}, err
 	}
 	acct.Role = role
@@ -152,7 +153,9 @@ func (s *Service) createThenPromote(ctx context.Context, in GrantInput, email, r
 		return GrantResult{}, fmt.Errorf("identity: 账号已建好（#%d）但启用失败，重跑本命令可补上: %w", acct.ID, err)
 	}
 	acct.Status = "active"
-	if err := s.setRole(ctx, acct.ID, role); err != nil {
+	// createThenPromote 建出来的账号角色一律是 user（createAccount 写死的），
+	// 所以这里的 fromRole 是确定的。
+	if err := s.setRole(ctx, acct.ID, role, "user"); err != nil {
 		// 账号已经建好了，提权没成功。如实说清楚，别让人以为整个操作回滚了——
 		// 重跑一次这个命令就能补上提权那一步。
 		return GrantResult{}, fmt.Errorf("identity: 账号已建好（#%d）但提权失败，重跑本命令可补上: %w", acct.ID, err)
@@ -172,9 +175,57 @@ func (s *Service) activate(ctx context.Context, id int64, email string) error {
 	return nil
 }
 
-func (s *Service) setRole(ctx context.Context, id int64, role string) error {
-	if err := s.q.SetAccountRole(ctx, store.SetAccountRoleParams{ID: id, Role: role}); err != nil {
+// setRole 改角色并留痕，两件事在同一个事务里。
+//
+// # 为什么要写审计
+//
+// 这个命令把某个邮箱变成 admin，而 admin 能改别人作品、能发布、能看审核队列……
+// 换句话说它能改「谁能拆掉整个站」的名单。审计表的用途正是回答「这个人的权限是谁、
+// 什么时候、凭什么给的」——不写这一行，一次提权在库里就只留下 `accounts.role`
+// 的变化结果，没有任何经过。治理域 §5.2 要求所有权限变更入 `audit_log`。
+//
+// # 为什么 before/after 只存角色
+//
+// 与现有的审核审计同一口径：只存关键字段的快照，不存整行（内容不进展）。
+// 这里的关键字段就是 `role`。
+//
+// # 为什么在事务里
+//
+// 分开写会出现「角色改了、审计没写」——而审计缺失恰恰是最需要审计的那次操作。
+func (s *Service) setRole(ctx context.Context, id int64, role, fromRole string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("identity: 开事务失败: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := s.q.WithTx(tx)
+	if err := q.SetAccountRole(ctx, store.SetAccountRoleParams{ID: id, Role: role}); err != nil {
 		return fmt.Errorf("identity: 改角色失败: %w", err)
 	}
+	if err := q.InsertRoleSetAudit(ctx, store.InsertRoleSetAuditParams{
+		EntityID: id,
+		Before:   roleSnapshot(fromRole),
+		After:    roleSnapshot(role),
+		Reason:   grantAuditReason,
+	}); err != nil {
+		return fmt.Errorf("identity: 写提权审计失败: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("identity: 提交事务失败: %w", err)
+	}
 	return nil
+}
+
+// grantAuditReason 是写进 audit_log.reason 的那句话。审计里一句人话比一串机器可读的
+// 结构化字段更有用：翻审计的人首先想知道「这是谁在干什么」，而不是「这属于哪一类」。
+const grantAuditReason = "运维命令 cmd/admin-grant 提权（运行者在机器上，无会话身份）"
+
+// roleSnapshot 造 before/after 的 JSON 快照。fromRole 为空表示「提权前不知道原角色」，
+// 那种情况只写 after，不编一个假的 before。
+func roleSnapshot(role string) []byte {
+	if role == "" {
+		return nil
+	}
+	return []byte(`{"role":` + strconv.Quote(role) + `}`)
 }

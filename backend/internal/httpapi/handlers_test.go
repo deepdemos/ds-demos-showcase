@@ -256,6 +256,19 @@ func newTestHandler(p Pinger, q *store.Queries, id *identity.Service) *Handler {
 //
 // 这个组合当前没有端点能造出来（触发器 trg_demos_guard 还会拦「还有 listed 渠道时
 // 退审」），但它一旦能出现，就是「审核形同虚设」的唯一入口——所以要在纯函数层钉住。
+// hidden 渠道的作品对外不存在：详情必须 404。
+//
+// 之前漏了这条判定，于是「列表里看不见、详情页却完整 200」——知道 slug 的人仍能读到
+// 标题、简介、封面，而 iframe 预览已经 404，页面变成「有正文、无内容」的半截状态。
+func TestGetDemoHiddenChannelIs404(t *testing.T) {
+	row := detailRow("published", "标题", false, false)
+	row.HasVisibleChannel = false
+	response := getDemo(t, row)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("hidden 渠道期望 404，实际 %d（body=%s）", response.Code, response.Body.String())
+	}
+}
+
 func TestGetDemoPublishedButNotApproved(t *testing.T) {
 	row := detailRow("published", "标题", false, false)
 	row.ModerationState = "rejected"
