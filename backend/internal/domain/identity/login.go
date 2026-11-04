@@ -116,17 +116,26 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 	}
 	// 已注销的账号不能登录；被封禁的也不能——但两者对外要给不同的答案：
 	// deleted 装作查无此人（401），banned 明说「账号已被封禁」（403），
-	// 否则被封的人只会一直重试密码。pending / suspended 仍然放行：未验证与
-	// 临时暂停都还需要用户能读到自己的状态。
+	// 否则被封的人只会一直重试密码。
 	//
-	// 这个判断在**密码校验通过之后**，所以 403 只发给本来就能登录的人，
+	// `pending` 从 2026-11 起也不放行：注册不再发会话，未验证的账号根本不该有
+	// 任何进入机会。它给的是 403 + `email_not_verified`，前端据此把人送到验证页——
+	// 报「密码不对」会让这类用户一直重试。
+	//
+	// `suspended` 仍然放行：临时暂停是内容层面的处置，不是身份问题。
+	//
+	// 这几个判断都在**密码校验通过之后**，所以 403 只发给本来就知道密码的人，
 	// 不构成账号枚举。
-	if row.Status == "deleted" || row.Status == "banned" {
+	if row.Status == "deleted" || row.Status == "banned" || row.Status == "pending" {
 		limits.record(ctx, s, ipHash, accountID, identifierHash, false)
-		if row.Status == "banned" {
+		switch row.Status {
+		case "banned":
 			return Account{}, "", ErrAccountBanned
+		case "pending":
+			return Account{}, "", ErrEmailNotVerified
+		default:
+			return Account{}, "", ErrUnauthorized
 		}
-		return Account{}, "", ErrUnauthorized
 	}
 
 	sessionID, err := newSessionID()

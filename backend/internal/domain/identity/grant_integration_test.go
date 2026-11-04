@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // 运维命令 `cmd/admin-grant` 背后的那段逻辑：提权 / 建号并提权 / 幂等 / 拒绝未登记角色。
@@ -170,5 +172,88 @@ func TestIntegrationGrantRoleRefusesBannedAccount(t *testing.T) {
 	}
 	if role != "user" {
 		t.Errorf("角色被改成了 %q，封禁账号不该被提权", role)
+	}
+}
+
+// TestIntegrationGrantCreatesAccountWithoutVerification 钉住「运维命令不发验证信」。
+//
+// 之前 `createThenPromote` 复用 `Register`，而 `cmd/admin-grant` 传的是
+// `identity.New(pool, nil, nil)`——没有 verification 服务。CI 上直接段错误：
+//
+//	panic: runtime error: invalid memory address or nil pointer dereference
+//	verification.(*Service).hash(...) → identifierKey(...) → Issue(...) → Register(...)
+//
+// 本地没复现是因为开发库早已有管理员，命令走的是「已存在」分支，压根没建号。
+// 这条用例用**不带 verification 的服务**建号，把那条路钉死。
+func TestIntegrationGrantCreatesAccountWithoutVerification(t *testing.T) {
+	pool := testPool(t)
+	// 故意不传 verification：这正是 cmd/admin-grant 的构造方式。
+	s := New(pool, nil, nil)
+
+	const email = "it-grant-noverify@example.com"
+	const username = "it-grant-noverify"
+	// 上一轮可能被中断在清理之前（建号成功、提权断言失败），残留会让这一轮撞唯一索引。
+	t.Cleanup(cleanupGrantUser(t, pool, email, username))
+	_, _ = pool.Exec(context.Background(), `DELETE FROM profiles WHERE lower(username) = $1`, username)
+	_, _ = pool.Exec(context.Background(), `DELETE FROM account_emails WHERE lower(email) = $1`, email)
+
+	res, err := s.GrantRole(context.Background(), GrantInput{
+		Email:       email,
+		Role:        "admin",
+		Username:    username,
+		DisplayName: "运维建的",
+		Password:    "grant-noverify-pass",
+	})
+	if err != nil {
+		t.Fatalf("没有 verification 服务时不该失败: %v", err)
+	}
+	if !res.Created {
+		t.Fatal("账号不存在，应该走建号分支")
+	}
+	if res.Account.Status != "active" {
+		t.Fatalf("运维建的账号应该直接激活，实际 status=%q", res.Account.Status)
+	}
+	// 邮箱也要标成已验证，否则以后加「必须验证才能做 X」的规则时，第一个管理员先被自己挡住。
+	var verified bool
+	if err := pool.QueryRow(context.Background(),
+		`SELECT verified_at IS NOT NULL FROM account_emails WHERE lower(email) = $1`, email).Scan(&verified); err != nil {
+		t.Fatalf("查 verified_at 失败: %v", err)
+	}
+	if !verified {
+		t.Fatal("运维建的账号邮箱应该标成已验证")
+	}
+	// 没发信就不该给**这个账号**留下验证码：否则「运维建号」这条路会顺手塞进一条可被消费的码。
+	// 只数自己这一条——测试库不保证别处的残留是空的。
+	var codes int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM verification_codes WHERE purpose = 'verify_email' AND account_id = $1`,
+		res.Account.ID).Scan(&codes); err != nil {
+		t.Fatalf("查验证码失败: %v", err)
+	}
+	if codes != 0 {
+		t.Fatalf("运维建号不该发验证码，实际写了 %d 条", codes)
+	}
+}
+
+// cleanupGrantUser 清掉运维命令建出来的账号。测试库不做全表清空（别的包可能正在用），
+// 所以按邮箱/用户名精确删。顺序：profiles → account_emails → accounts → users。
+func cleanupGrantUser(t *testing.T, pool *pgxpool.Pool, email, username string) func() {
+	t.Helper()
+	return func() {
+		ctx := context.Background()
+		var accountID int64
+		_ = pool.QueryRow(ctx, `SELECT account_id FROM account_emails WHERE lower(email) = $1`, email).Scan(&accountID)
+		_, _ = pool.Exec(ctx, `DELETE FROM profiles WHERE lower(username) = $1`, username)
+		_, _ = pool.Exec(ctx, `DELETE FROM account_emails WHERE lower(email) = $1`, email)
+		if accountID != 0 {
+			_, _ = pool.Exec(ctx, `DELETE FROM verification_codes WHERE account_id = $1`, accountID)
+			_, _ = pool.Exec(ctx, `DELETE FROM credentials WHERE account_id = $1`, accountID)
+			var sub string
+			_ = pool.QueryRow(ctx, `SELECT sub FROM accounts WHERE id = $1`, accountID).Scan(&sub)
+			_, _ = pool.Exec(ctx, `DELETE FROM accounts WHERE id = $1`, accountID)
+			if sub != "" {
+				_, _ = pool.Exec(ctx, `DELETE FROM users WHERE sub = $1`, sub)
+			}
+		}
 	}
 }

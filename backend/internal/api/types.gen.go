@@ -25,6 +25,7 @@ const (
 // Defines values for ErrorCode.
 const (
 	Conflict             ErrorCode = "conflict"
+	EmailNotVerified     ErrorCode = "email_not_verified"
 	Forbidden            ErrorCode = "forbidden"
 	InvalidParam         ErrorCode = "invalid_param"
 	NotFound             ErrorCode = "not_found"
@@ -266,6 +267,17 @@ type PublishResultLifecycleState string
 // PublishResultVisibility defines model for PublishResult.Visibility.
 type PublishResultVisibility string
 
+// RegisterAccepted defines model for RegisterAccepted.
+type RegisterAccepted struct {
+	// Email 回显注册用的邮箱，前端直接带到验证页
+	Email string `json:"email"`
+
+	// VerificationSent 验证信是否发出去了。`false` 表示账号建好了但 SMTP 没成功——
+	// 前端应提示「去验证页点重新发送」，而不是当成注册失败。
+	// 不要用它判断账号存不存在：账号一定存在（这个响应只在 201 出现）。
+	VerificationSent bool `json:"verificationSent"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	// DisplayName 可为空串，展示时回退到 username
@@ -337,6 +349,17 @@ type SubmissionResult struct {
 // SubmissionResultModerationState defines model for SubmissionResult.ModerationState.
 type SubmissionResultModerationState string
 
+// VerifyEmailRequest defines model for VerifyEmailRequest.
+type VerifyEmailRequest struct {
+	Code  string              `json:"code"`
+	Email openapi_types.Email `json:"email"`
+}
+
+// VerifyEmailResendRequest defines model for VerifyEmailResendRequest.
+type VerifyEmailResendRequest struct {
+	Email openapi_types.Email `json:"email"`
+}
+
 // ListDemoReviewQueueParams defines parameters for ListDemoReviewQueue.
 type ListDemoReviewQueueParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -393,6 +416,12 @@ type PostAuthPasswordResetCodeJSONRequestBody = PasswordResetCodeRequest
 
 // PostAuthRegisterJSONRequestBody defines body for PostAuthRegister for application/json ContentType.
 type PostAuthRegisterJSONRequestBody = RegisterRequest
+
+// PostAuthVerifyEmailJSONRequestBody defines body for PostAuthVerifyEmail for application/json ContentType.
+type PostAuthVerifyEmailJSONRequestBody = VerifyEmailRequest
+
+// PostAuthVerifyEmailResendJSONRequestBody defines body for PostAuthVerifyEmailResend for application/json ContentType.
+type PostAuthVerifyEmailResendJSONRequestBody = VerifyEmailResendRequest
 
 // SubmitDemoMultipartRequestBody defines body for SubmitDemo for multipart/form-data ContentType.
 type SubmitDemoMultipartRequestBody SubmitDemoMultipartBody

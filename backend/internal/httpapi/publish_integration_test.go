@@ -30,7 +30,7 @@ func TestIntegrationPublishPermission(t *testing.T) {
 	h := New(pool, q, idSvc, nil, demoSvc)
 
 	mk := func(tag string) (string, string) {
-		acc, sid, err := idSvc.Register(context.Background(), identity.RegisterInput{
+		acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
 			Email:       "it-pub-" + tag + "@example.com",
 			Password:    "publishtest123",
 			Username:    "it-pub-" + tag,

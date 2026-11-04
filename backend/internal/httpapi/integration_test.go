@@ -141,7 +141,7 @@ func TestIntegrationListAndDetail(t *testing.T) {
 func seedMe(t *testing.T, pool *pgxpool.Pool, sessionID string) {
 	t.Helper()
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM demo_stats", "DELETE FROM demo_channels", "DELETE FROM demo_revisions", "DELETE FROM demos", "DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
@@ -221,7 +221,7 @@ func TestIntegrationGetMe(t *testing.T) {
 func TestIntegrationRegister(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM demo_stats", "DELETE FROM demo_channels", "DELETE FROM demo_revisions", "DELETE FROM demos", "DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
@@ -236,40 +236,92 @@ func TestIntegrationRegister(t *testing.T) {
 		return rec
 	}
 
-	// 正常注册：201 + 会话 cookie + 不回声密码。
+	// 正常注册：201 + 不下发会话 + 不回声密码。
 	rec := register(`{"email":"it-reg@example.com","password":"correct-horse-battery","username":"it-reg","displayName":"注册测试"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("注册应 201，实际 %d（body=%s）", rec.Code, rec.Body.String())
 	}
-	cookies := rec.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != sessionCookie || !cookies[0].HttpOnly || !cookies[0].Secure {
-		t.Fatalf("会话 cookie 不对: %+v", cookies)
+	// 注册不再发会话：设计 §8.1 要求 `pending` 账号拿不到任何 token。
+	if cookies := rec.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("注册不该下发 cookie，实际 %+v", cookies)
 	}
 	if strings.Contains(rec.Body.String(), "correct-horse-battery") {
 		t.Fatal("响应体里出现了明文密码")
 	}
-	var me api.Me
-	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil {
-		t.Fatalf("响应不是合法 Me: %v", err)
+	var accepted api.RegisterAccepted
+	if err := json.Unmarshal(rec.Body.Bytes(), &accepted); err != nil {
+		t.Fatalf("响应不是合法 RegisterAccepted: %v", err)
 	}
-	if me.Username != "it-reg" || me.Status != api.AccountStatusActive || me.Sub == "" {
-		t.Fatalf("字段不对: %+v", me)
+	// mailer 传的是 nil，所以这里必须是 false——「信没发出去」要说真话。
+	if accepted.Email != "it-reg@example.com" || accepted.VerificationSent {
+		t.Fatalf("字段不对: %+v", accepted)
 	}
 
-	// 刚注册拿到的 cookie 必须立刻能用。
-	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
-	meReq.AddCookie(cookies[0])
-	meRec := httptest.NewRecorder()
-	h.GetMe(meRec, meReq)
-	if meRec.Code != http.StatusOK {
-		t.Fatalf("注册后 /me 应 200，实际 %d（body=%s）", meRec.Code, meRec.Body.String())
+	// 库里是新账号，状态 pending。
+	var sub, status string
+	if err := pool.QueryRow(ctx, `
+		SELECT a.sub, a.status FROM accounts a
+		JOIN account_emails e ON e.account_id = a.id
+		WHERE lower(e.email) = 'it-reg@example.com'`).Scan(&sub, &status); err != nil {
+		t.Fatalf("查账号失败: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("注册后状态 = %q，想要 pending", status)
+	}
+
+	// 拿到验证码（走真实的重发路径？不行——注册那条码在 1 分钟内不能再要）。
+	// 直接从库里取：测试要验的是 HTTP 层的验证端点，不是投递。
+	code := pendingCode(t, pool, "it-reg@example.com")
+	verify := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify-email", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		h.PostAuthVerifyEmail(rec, req)
+		return rec
+	}
+	if rec := verify(`{"email":"it-reg@example.com","code":"` + code + `"}`); rec.Code != http.StatusNoContent {
+		t.Fatalf("验证应 204，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	// 验证过之后就登得进来。
+	loginRec := httptest.NewRecorder()
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		strings.NewReader(`{"identifier":"it-reg@example.com","password":"correct-horse-battery"}`))
+	loginReq.Header.Set("Content-Type", "application/json")
+	h.PostAuthLogin(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("验证后登录应 200，实际 %d（body=%s）", loginRec.Code, loginRec.Body.String())
+	}
+
+	// 未验证的账号登录：403 + email_not_verified，不是 401「密码不对」。
+	if rec := register(`{"email":"it-unverified@example.com","password":"correct-horse-battery","username":"it-unv","displayName":"x"}`); rec.Code != http.StatusCreated {
+		t.Fatalf("注册应 201，实际 %d", rec.Code)
+	}
+	pendingRec := httptest.NewRecorder()
+	pendingReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		strings.NewReader(`{"identifier":"it-unverified@example.com","password":"correct-horse-battery"}`))
+	pendingReq.Header.Set("Content-Type", "application/json")
+	h.PostAuthLogin(pendingRec, pendingReq)
+	if pendingRec.Code != http.StatusForbidden {
+		t.Fatalf("未验证账号登录应 403，实际 %d（body=%s）", pendingRec.Code, pendingRec.Body.String())
+	}
+	var errBody api.Error
+	if err := json.Unmarshal(pendingRec.Body.Bytes(), &errBody); err != nil {
+		t.Fatalf("错误响应不合法: %v", err)
+	}
+	if errBody.Code != api.EmailNotVerified {
+		t.Fatalf("错误码 = %q，想要 email_not_verified", errBody.Code)
+	}
+
+	// 验证码错：401。
+	if rec := verify(`{"email":"it-unverified@example.com","code":"000000"}`); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("错码应 401，实际 %d（body=%s）", rec.Code, rec.Body.String())
 	}
 
 	// 数据库里只留哈希：明文不得入库。
 	var stored string
 	if err := pool.QueryRow(ctx, `
 		SELECT c.secret_hash FROM credentials c
-		JOIN accounts a ON a.id = c.account_id WHERE a.sub = $1`, me.Sub).Scan(&stored); err != nil {
+		JOIN accounts a ON a.id = c.account_id WHERE a.sub = $1`, sub).Scan(&stored); err != nil {
 		t.Fatalf("查凭证失败: %v", err)
 	}
 	if !strings.HasPrefix(stored, "$argon2id$") || strings.Contains(stored, "correct-horse-battery") {
@@ -289,18 +341,18 @@ func TestIntegrationRegister(t *testing.T) {
 		t.Fatalf("短密码应 400，实际 %d", rec.Code)
 	}
 	var n int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM profiles WHERE lower(username) IN ('it-reg','other-one','it-short')`).Scan(&n); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM profiles WHERE lower(username) IN ('it-reg','other-one','it-short','it-unv')`).Scan(&n); err != nil {
 		t.Fatalf("计数失败: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("失败路径不应留下账号行，实际 %d 条", n)
+	if n != 2 {
+		t.Fatalf("失败路径不应留下账号行，实际 %d 条（应为 it-reg + it-unv）", n)
 	}
 }
 
 func TestIntegrationLoginLogout(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM demo_stats", "DELETE FROM demo_channels", "DELETE FROM demo_revisions", "DELETE FROM demos", "DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
@@ -322,6 +374,8 @@ func TestIntegrationLoginLogout(t *testing.T) {
 	if rec := post("/api/v1/auth/register", `{"email":"it-login@example.com","password":"correct-horse-battery","username":"it-login","displayName":"登录测试"}`); rec.Code != http.StatusCreated {
 		t.Fatalf("注册应 201，实际 %d（body=%s）", rec.Code, rec.Body.String())
 	}
+	// 注册只到 pending，登录用例要的是「能登」这个前提，所以先把邮箱验证掉。
+	verifyEmailForTest(t, pool, h, "it-login@example.com")
 
 	// 邮箱、用户名、大小写变体都能登进去，且每次发的是不同会话。
 	for _, id := range []string{"it-login@example.com", "IT-LOGIN@example.com", "it-login", "IT-LOGIN"} {
@@ -406,6 +460,9 @@ func TestIntegrationLoginRateLimit(t *testing.T) {
 	if register.Code != http.StatusCreated {
 		t.Fatalf("注册应 201，实际 %d（body=%s）", register.Code, register.Body.String())
 	}
+	// 这条用例要测的是登录第②层限流，不是邮箱验证：先把验证做掉，
+	// 否则「密码正确但没带验证码」会先被 403 email_not_verified 拦下。
+	verifyEmailForTest(t, pool, h, "it-limit@example.com")
 
 	// 登录辅助：RemoteAddr 固定，body 里按需带验证码。
 	login := func(ip, password, code string) *httptest.ResponseRecorder {
@@ -469,7 +526,7 @@ func TestIntegrationLoginRateLimit(t *testing.T) {
 func TestIntegrationBannedAccountHTTP(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	for _, q := range []string{"DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
+	for _, q := range []string{"DELETE FROM demo_stats", "DELETE FROM demo_channels", "DELETE FROM demo_revisions", "DELETE FROM demos", "DELETE FROM web_sessions", "DELETE FROM users", "DELETE FROM accounts"} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatalf("%s 失败: %v", q, err)
 		}
@@ -484,9 +541,19 @@ func TestIntegrationBannedAccountHTTP(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("注册应 201，实际 %d（body=%s）", rec.Code, rec.Body.String())
 	}
-	cookies := rec.Result().Cookies()
+	// 注册不再发会话，所以要自己拿一个：先验证邮箱，再登录。
+	verifyEmailForTest(t, pool, h, "it-banned@example.com")
+	loginRec := httptest.NewRecorder()
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(
+		`{"identifier":"it-banned","password":"correct-horse-battery"}`))
+	loginReq.Header.Set("Content-Type", "application/json")
+	h.PostAuthLogin(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("登录应 200，实际 %d（body=%s）", loginRec.Code, loginRec.Body.String())
+	}
+	cookies := loginRec.Result().Cookies()
 	if len(cookies) != 1 {
-		t.Fatal("注册应下发会话 cookie")
+		t.Fatal("登录应下发会话 cookie")
 	}
 
 	// banned 必须有来源状态：db/schema/10-identity.sql 的 ck_accounts_previous_status

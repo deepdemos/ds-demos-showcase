@@ -28,8 +28,10 @@ WHERE s.id = $1
 -- ===== 注册（一事务六张表）=====
 
 -- name: CreateAccount :one
+-- 新账号一律 `pending`：邮箱还没证明过属于本人，所以既不能登录，也不能投稿。
+-- 表上 default 就是 pending，这里仍显式写出——读这一行的人不该去翻 schema 才知道。
 INSERT INTO accounts (sub, status, role)
-VALUES ($1, 'active', 'user')
+VALUES ($1, 'pending', 'user')
 RETURNING id, created_at;
 
 -- name: CreateProfile :exec
@@ -212,3 +214,33 @@ WHERE id = @id;
 
 -- name: RoleExists :one
 SELECT EXISTS (SELECT 1 FROM roles WHERE key = @key::text)::bool AS exists;
+
+-- ===== 邮箱验证（issue #169）=====
+
+-- name: GetAccountForVerification :one
+-- 按邮箱找账号，并带回「已经验证过没有」。
+-- 只取一列 verified_at 而不取 emails 全部：这个查询只服务于「能不能验」，别的不需要。
+SELECT a.id,
+       a.sub,
+       a.status,
+       p.username,
+       p.display_name,
+       e.email,
+       e.verified_at
+FROM accounts a
+JOIN profiles p ON p.account_id = a.id
+JOIN account_emails e ON e.account_id = a.id
+WHERE lower(e.email) = lower(@email::text);
+
+-- name: MarkEmailVerified :exec
+-- 只标主邮箱那一行；同一账号若有多条邮箱（未来可能加），验证的是被请求的那一条。
+UPDATE account_emails
+SET verified_at = now()
+WHERE account_id = @account_id
+  AND lower(email) = lower(@email::text);
+
+-- name: ActivatePendingAccount :exec
+-- 只从 pending 转 active：已验证过的账号重复调用不该把它从 suspended 拉回 active。
+UPDATE accounts
+SET status = 'active', updated_at = now()
+WHERE id = @id AND status = 'pending';
