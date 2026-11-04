@@ -22,6 +22,9 @@ export function LoginPage() {
   const [needCode, setNeedCode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 「邮箱还没验证」单独一位状态：它要的不是一句错误提示，而是一个能点的去处。
+  // 混进 error 字符串里，用户只能看到「邮箱还没验证」然后无处可去。
+  const [needVerify, setNeedVerify] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -44,6 +47,11 @@ export function LoginPage() {
       if (body.code === 'verification_required') {
         setNeedCode(true);
         setError('尝试次数较多，请填写邮箱验证码');
+        return;
+      }
+      if (body.code === 'email_not_verified') {
+        setNeedVerify(true);
+        setError(body.message);
         return;
       }
       setError(body.message);
@@ -97,6 +105,14 @@ export function LoginPage() {
           <p className="m-0 text-sm text-red-600 dark:text-red-400" role="alert">
             {error}
           </p>
+        )}
+        {needVerify && (
+          <Link
+            to={`/verify-email?email=${encodeURIComponent(identifier)}`}
+            className="text-sm text-blue-600 dark:text-blue-400"
+          >
+            去验证邮箱
+          </Link>
         )}
 
         <Button type="submit" disabled={busy}>

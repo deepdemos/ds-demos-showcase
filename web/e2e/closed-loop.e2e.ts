@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,6 +44,47 @@ import { expect } from 'e2e';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@e2e.local';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'e2e-admin-password';
 
+/**
+ * 从 API 日志里读某个邮箱收到的验证码。
+ *
+ * # 为什么读日志而不是读库
+ *
+ * 库里存的是 HMAC 哈希——拿不到明文，这是对的。测试要拿到码只有两条路：
+ * 真收邮件（CI 里没有 SMTP），或者让开发期的邮件实现把正文写进日志
+ * （`MAIL_LOG_CODES=1`，见 `backend/internal/platform/mailer/log.go`）。
+ *
+ * # 为什么这条用例不能跳过验证
+ *
+ * 「注册 → 验证 → 登录」是这一轮新加的一道门。用一个提权后门绕过去，等于把
+ * 刚修好的东西从测试里抹掉——历史上正是这种「测试绕过真实路径」让
+ * 单文件投稿的 415 一直绿着（见 PR #220 的教训）。
+ */
+function readVerificationCode(email: string): string {
+  const path = process.env.E2E_API_LOG;
+  if (!path) {
+    throw new Error(
+      'E2E_API_LOG 未设置：闭环用例需要从 API 日志里读验证码。' +
+        '启动 API 时把输出重定向到文件，并把路径传进来（同时设 MAIL_LOG_CODES=1）。',
+    );
+  }
+  const lines = readFileSync(path, 'utf8')
+    .split('\n')
+    // 日志是 JSON 行（slog），不是纯文本：邮件地址在 `"to":"..."` 里。
+    // 同时按「正文里有验证码」再筛一次，避免把别的提到这个地址的行算进来。
+    .filter((line) => line.includes(`"${email}"`) && line.includes('验证码是'));
+  if (lines.length === 0) {
+    throw new Error(`日志里找不到发给 ${email} 的验证码（日志：${path}）`);
+  }
+  // 取最后一封：重发过一次的话，早的那条可能已经过期。
+  // 正则必须锚在「验证码是」后面：日志行是 JSON，前面 time 字段的微秒
+  // （如 `0447852`）里也有连续 6 位数字，裸 `\d{6}` 会抓到它。
+  const match = /验证码是 (\d{6})/.exec(lines[lines.length - 1]);
+  if (!match) {
+    throw new Error(`日志行里没有 6 位码：${lines[lines.length - 1]}`);
+  }
+  return match[1];
+}
+
 test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', async ({ app, screen, browser }) => {
   const runId = Date.now().toString(36);
   const email = `e2e-${runId}@example.com`;
@@ -60,13 +101,26 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
     'utf8',
   );
 
-  // ---- 1. 作者注册（注册完即是登录态）------------------------------------
+  // ---- 1. 作者注册 → 验证邮箱 → 登录 ------------------------------------
+  //
+  // 注册完**不是**登录态：账号落在 `pending`，要证明邮箱是自己的才能进站。
   await app.open('/register');
   await screen.getByLabel('邮箱').fill(email);
   await screen.getByLabel('用户名').fill(username);
   await screen.getByLabel(/密码/).fill(authorPassword);
   // 页头也有一个「登录」按钮（点了只是跳 /login），表单提交按钮在 DOM 后面。
   await screen.getByRole('button', { name: '注册' }).click();
+
+  // 注册页把邮箱带到了验证页，这里不用再填一次。
+  await expect(screen.getByRole('heading', { name: '验证邮箱' })).toBeVisible();
+  await screen.getByLabel('验证码').fill(readVerificationCode(email));
+  await screen.getByRole('button', { name: '完成验证' }).click();
+
+  // 验证成功跳登录页（不自动登录）。
+  await expect(screen.getByRole('heading', { name: '登录' })).toBeVisible();
+  await screen.getByLabel('邮箱或用户名').fill(email);
+  await screen.getByLabel('密码').fill(authorPassword);
+  await screen.getByRole('button', { name: '登录' }).last().click();
   // 登录成功的判据是页头换成「登出」——停在哪一页都不能说明成功。
   await expect(screen.getByRole('button', { name: '登出' })).toBeVisible();
 
