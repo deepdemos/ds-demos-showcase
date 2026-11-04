@@ -96,7 +96,9 @@ export function diffSurface(base, cur) {
     if (!a.params && b.params) push('warn', route, '新增查询参数（对老客户端是可选，但服务端要能容忍不传）');
   }
   for (const route of Object.keys(cur.endpoints)) {
-    if (!base.endpoints[route]) push('ok', route, '新增端点');
+    // 基线里没有 = 基线过期，而不是「没问题」。以前这里是 ok 级：加了端点基线不更新门禁照样绿，
+    // 于是 surface.json 悄悄落后于契约（实测落后两个端点，是反例矩阵门禁先发现的）。
+    if (!base.endpoints[route]) push('stale', route, '基线缺端点（新增端点必须同步跑 --update 重签）');
   }
 
   // 模型
@@ -125,7 +127,7 @@ export function diffSurface(base, cur) {
     }
   }
   for (const name of Object.keys(cur.models)) {
-    if (!base.models[name]) push('ok', name, '新增模型');
+    if (!base.models[name]) push('stale', name, '基线缺模型（新增模型必须同步跑 --update 重签）');
   }
 
   // 枚举
@@ -177,10 +179,18 @@ function main() {
 
   const findings = diffSurface(base, cur);
   const breaking = findings.filter((f) => f.level === 'breaking');
+  const stale = findings.filter((f) => f.level === 'stale');
   const warns = findings.filter((f) => f.level === 'warn');
 
   for (const f of breaking) console.log(`::error::[breaking] ${f.scope}：${f.message}`);
+  for (const f of stale) console.log(`::error::[stale] ${f.scope}：${f.message}`);
   for (const f of warns) console.log(`[warn] ${f.scope}：${f.message}`);
+
+  if (stale.length > 0) {
+    console.error(`契约基线过期（${stale.length} 条）：契约里有的东西 api/surface.json 里没有。`);
+    console.error('跑 node scripts/check-api-compat.mjs --update 重签，并把 api/surface.json 一起提交。');
+    process.exit(1);
+  }
 
   if (breaking.length > 0) {
     console.error(`契约兼容门禁失败（${breaking.length} 条破坏性变更）。`);

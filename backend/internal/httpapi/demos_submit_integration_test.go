@@ -93,3 +93,57 @@ func TestIntegrationSubmitSingleFilePackage(t *testing.T) {
 		})
 	}
 }
+
+// 未登录投稿必须 401，且不能建出任何行。
+//
+// 这条以前没有：投稿用例只走成功路径，鉴权坏了也一路绿。反例矩阵把它逼出来了。
+func TestIntegrationSubmitRequiresLogin(t *testing.T) {
+	pool := integrationPool(t)
+	q := store.New(pool)
+	files, err := storage.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatalf("初始化存储失败: %v", err)
+	}
+	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
+	h := New(pool, q, integrationIdentity(t, pool), nil, demoSvc)
+
+	var before int64
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM demos`).Scan(&before); err != nil {
+		t.Fatalf("数作品失败: %v", err)
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("title", "没有登录的投稿"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("demoType", "web"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := mw.CreateFormFile("package", "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte(`<!doctype html><p>hi</p>`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/demos", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.SubmitDemo(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("未登录投稿 = %d，想要 401；响应体：%s", rec.Code, rec.Body.String())
+	}
+	var after int64
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM demos`).Scan(&after); err != nil {
+		t.Fatalf("数作品失败: %v", err)
+	}
+	if after != before {
+		t.Fatalf("被拒的投稿建出了行：%d → %d", before, after)
+	}
+}

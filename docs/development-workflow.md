@@ -58,6 +58,8 @@
     node scripts/check-migrations.mjs
     node scripts/check-api-compat.mjs  # 契约兼容，见 api/COMPATIBILITY.md
     node scripts/check-layering.mjs    # 后端分层，见 后端分层约定.md
+    node scripts/check-single-source.mjs   # 同一件事不许写第二遍，见下
+    node scripts/check-negative-cases.mjs  # 每个端点至少一条反例，见下
     node scripts/verify-schema.mjs   # 真库校验，见下
 
 **为什么根目录是 npm、`web/` 是 pnpm**：根目录只有一件事要做——把 `db/schema/*.sql` 灌进一个
@@ -75,6 +77,45 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 - 单文件 >800 行：直接失败，必须拆分。
 - 按物理行统计；不要用压缩/生成代码绕过。
 
+### 单一出处门禁（`check-single-source.mjs`）
+
+同一个判断只允许有一个出处。它拦的是这类形状：`hidden` 渠道的可见性判定同时写在
+SQL（`db/queries/demos.sql`）、Go（`publish.go` / `download.go` / `handlers.go` / `preview.go`）
+和前端的 `DemoDetailPage.tsx` 里——任何一处改了口径，另外几处就悄悄不一致。
+
+规则表在脚本顶部（可见性 SQL / 可见性 Go / 可见性前端 / 状态写入 / 审计写入）。存量记在
+`scripts/single-source.baseline.json`，门禁只防「变多」：
+
+- 新文件出现副本 → `emerged`，红；
+- 同一文件副本变多 → `growth`，红；
+- 清理后没同步收紧基线 → `stale`，红；
+- `--update` **拒绝把基线变大**（只有基线不存在时才允许首次立账）。
+
+存量清零不要求一次做完，但每笔改动顺手收一点。
+
+> 它**能证明**：没有出现新的第二份判定。
+> 它**不能证明**：现有 16 处副本之间逻辑真的等价——那需要把它们合并到一个函数里，是另一件事。
+
+### 反例矩阵（`check-negative-cases.mjs`）
+
+每个端点至少一条「它必须拒绝什么」，登记在 `api/negative-cases.json`：
+
+```json
+"GET /api/v1/demos/{slug}": [
+  { "case": "渠道为 hidden 的作品对匿名访问者 404", "test": { "file": "backend/internal/httpapi/handlers_test.go", "name": "TestGetDemoHiddenChannelIs404" } }
+]
+```
+
+门禁校验三件事：契约里每个端点都有反例、契约外的对外处理器（`/preview`、`/download`）也有、
+每条反例指向的测试**真的存在**（Go 认 `func Name(`，前端认 `test('名字'`）。
+加了端点不写反例 = 红——`POST /api/v1/demos` 的未登录 401 就是因为这道门禁才补上的。
+
+> 它**能证明**：有一条测试叫这个名字。
+> 它**不能证明**：那条测试断言得对。断言质量只能靠反向验证（把实现改坏一次，看它是否真红）。
+
+契约基线 `api/surface.json` 也是这道门禁的依赖：`check-api-compat.mjs` 现在把「契约里有、
+基线里没有」判成 `stale` 并失败（以前是 `ok`，于是基线可以悄悄落后于契约——实测落后过两个端点）。
+
 ## 3.1 提交信息
 
 - 提交信息不得包含 AI 署名 trailer：禁止 `Co-authored-by: Copilot <…>`、`Co-authored-by: DeepSeek <…>` 等任何 AI 工具署名。
@@ -88,6 +129,35 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 - review 评论必须晚于最新 commit；push 后旧 review 失效，必须重新 review。review 提交后重跑 pr-guard（gh run rerun <run-id> --failed）或等下一次 CI，避免旧红色结果留在 required check 上。
 - CI 的 pr-guard 会检查 PR 上有晚于最新 commit、body ≥10 字符的 review 评论；不足直接红。
 - review 中遇到不确定的问题，必须要求作者先 ask 用户/负责人并记录结论；未经确认的假设视为潜在问题，禁止合并。
+
+### review 结论落地（`check-review.mjs` 会校验）
+
+**每条发现都必须变成三种东西之一，「已修」不算收口。**
+
+改完就没了的东西不可验证：没人能证明它不会再犯。2026-11-04 四轮 review 约 50 条发现全部「已修」却一条没变成门禁，于是下一轮又从零开始——所以这条写进门禁，而不是写在习惯里。
+
+review 正文里必须有一段 `## 结论落地`：
+
+```
+## 结论落地
+共 4 条。
+- F1 详情没判渠道 → test: TestGetDemoHiddenChannelIs404
+- F2 可见性判定写了十二遍 → gate: scripts/check-single-source.mjs
+- F3 历史版本下载 → loose: 30
+- F4 单文件扩展名可伪造 → wontfix: 走魔数嗅探，伪造扩展名改不了解析结果
+```
+
+四种收口方式：
+
+| 写法 | 含义 | 门禁怎么验 |
+| --- | --- | --- |
+| `test: <名字>` | 变成一条测试 | 后端函数名 / 前端用例名必须真的存在 |
+| `gate: <路径>` | 变成一道门禁 | 脚本文件必须存在 |
+| `loose: <编号>` | 认了不做，记进 [`已知松点.md`](已知松点.md) | 那一条必须真的在文档里 |
+| `wontfix: <理由>` | 决定不改 | 理由 ≥10 字，否则下一轮会被重新提出 |
+
+「共 N 条」不是形式：它是唯一能验的完整性约束——声明几条就必须落地几条，少一条就红。
+
 
 ### 盲审（agent 可派发子 agent）
 
@@ -189,7 +259,23 @@ CI 红时先看是不是集成测试，再判断是不是自己的改动引起�
 门禁每一种都有它**证明不了**的东西（`check-constants` 不证明值没变、`check-api-compat` 抓不到同名改语义……）。这些边界集中在 [`已知松点.md`](已知松点.md) 里，发现新的就加一条。
 - CI 红、review 未通过、issue 未关联时禁止合并；管理员也不例外。
 
-## 6. 合并
+## 6. 每周自查（不靠心情）
+
+定时任务：`.github/workflows/weekly-audit.yml`，每周一 09:00（北京时间）跑一次，也可 `workflow_dispatch` 手动触发。
+
+它只做三件**机械可判**的事（`node scripts/weekly-audit.mjs`）：
+
+1. **门禁还绿不绿**：自己跑一遍单一出处 / 反例矩阵 / 契约兼容 / 契约 / 常量 / 标准对象 / 迁移 / 分层八道静态门禁，不信上一次 CI 的记忆；
+2. **文档漂移**：`docs/已知松点.md` 里用反引号引用的仓库路径还在不在。松点写「判定在 `backend/x.go`」，而那个文件被移走了，这条松点就变成假的——一个不存在的文件比一条过期松点更糟，读者会去找它，然后怀疑整份文档；
+3. **债务存量**：单一出处基线里还欠着多少处副本，按规则分组记账。
+
+只在**有真问题**（门禁红 / 有失效引用）时建 issue，且复用同一个 open issue 追加评论，不把噪音搬进 issue 列表。债务存量只记录、不建 issue——那道门禁只防「变多」，不要求清零。
+
+> 它**能证明**：文档里引用的文件真的还在；门禁在没人推动的情况下仍然是绿的。
+> 它**不能证明**：某条松点还该不该留着。那需要人判断，脚本不假装能判断。
+
+
+## 7. 合并
 
 满足全部条件才能合并：
 

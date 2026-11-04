@@ -200,6 +200,16 @@
         "optional": false
       }
     },
+    "RegisterAccepted": {
+      "email": {
+        "type": "string",
+        "optional": false
+      },
+      "verificationSent": {
+        "type": "bool",
+        "optional": false
+      }
+    },
     "RegisterRequest": {
       "displayName": {
         "type": "string",
@@ -292,6 +302,22 @@
         "optional": false
       }
     },
+    "VerifyEmailRequest": {
+      "code": {
+        "type": "string",
+        "optional": false
+      },
+      "email": {
+        "type": "openapi_types.Email",
+        "optional": false
+      }
+    },
+    "VerifyEmailResendRequest": {
+      "email": {
+        "type": "openapi_types.Email",
+        "optional": false
+      }
+    },
     "SubmitDemoMultipartBody": {
       "demoType": {
         "type": "string",
@@ -321,6 +347,7 @@
     ],
     "ErrorCode": [
       "conflict",
+      "email_not_verified",
       "forbidden",
       "invalid_param",
       "not_found",
@@ -421,6 +448,16 @@
     },
     "POST /api/v1/auth/register": {
       "method": "PostAuthRegister",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/auth/verify-email": {
+      "method": "PostAuthVerifyEmail",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/auth/verify-email/resend": {
+      "method": "PostAuthVerifyEmailResend",
       "pathParams": 0,
       "params": null
     },
