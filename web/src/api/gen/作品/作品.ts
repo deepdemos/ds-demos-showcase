@@ -5,7 +5,7 @@
  * 本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
  *
  * 当前范围：站点可用性、作品列表与详情、身份（注册 / 登录 / 登出 / 我是谁 / 发验证码 /
- * 找回密码），共 10 个端点。实现全部已接入并有集成测试覆盖。
+ * 找回密码），共 14 个端点。实现全部已接入并有集成测试覆盖。
  *
  * 这份描述会随端点增加而更新——它长期停在「三个端点」正是 `api/surface.json` 基线
  * 不自动成长的症状（见 `docs/已知松点.md` 第 18 条）。
@@ -123,6 +123,11 @@ export type submitDemoResponse422 = {
   status: 422
 }
 
+export type submitDemoResponse429 = {
+  data: Error
+  status: 429
+}
+
 export type submitDemoResponse503 = {
   data: Error
   status: 503
@@ -131,7 +136,7 @@ export type submitDemoResponse503 = {
 export type submitDemoResponseSuccess = (submitDemoResponse201) & {
   headers: Headers;
 };
-export type submitDemoResponseError = (submitDemoResponse400 | submitDemoResponse401 | submitDemoResponse413 | submitDemoResponse415 | submitDemoResponse422 | submitDemoResponse503) & {
+export type submitDemoResponseError = (submitDemoResponse400 | submitDemoResponse401 | submitDemoResponse413 | submitDemoResponse415 | submitDemoResponse422 | submitDemoResponse429 | submitDemoResponse503) & {
   headers: Headers;
 };
 
