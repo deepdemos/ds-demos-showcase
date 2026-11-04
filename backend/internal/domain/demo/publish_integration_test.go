@@ -139,6 +139,50 @@ func TestIntegrationPublishRejectsBadInput(t *testing.T) {
 	}
 }
 
+// Astra 橱窗只收英文作品（Demo 域 §3.5 / §7.4）。
+//
+// 这条校验以前只活在前端发布表单里（把语言锁成 en 并禁用下拉），后端不判——
+// 一道只在浏览器里存在的校验等于没有：curl 一次就能把中文作品发进英文橱窗。
+func TestIntegrationPublishAstraRequiresEnglish(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	slug := approvedOne(t, s, pool, "pub-astra")
+	actor := publisher(t, pool, "pub-astra")
+
+	if _, err := s.Publish(context.Background(), actor, PublishInput{
+		Slug: slug, Channel: "astra", Visibility: "listed", Lang: "zh",
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("astra + zh 应 ErrInvalidInput，实际 %v", err)
+	}
+	// 失败不该留下半截状态。
+	var lifecycle string
+	var channels int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT d.lifecycle_state, (SELECT count(*) FROM demo_channels c WHERE c.demo_id = d.id)
+		 FROM demos d WHERE d.slug = $1`, slug,
+	).Scan(&lifecycle, &channels); err != nil {
+		t.Fatalf("查状态失败: %v", err)
+	}
+	if lifecycle != "draft" || channels != 0 {
+		t.Fatalf("astra 语言不符后状态 = %s / %d 个渠道行, want draft / 0", lifecycle, channels)
+	}
+
+	// 英文就放行。
+	if _, err := s.Publish(context.Background(), actor, PublishInput{
+		Slug: slug, Channel: "astra", Visibility: "listed", Lang: "en",
+	}); err != nil {
+		t.Fatalf("astra + en 应当成功，实际 %v", err)
+	}
+
+	// deep 没有语言要求：中文照发。
+	slug2 := approvedOne(t, s, pool, "pub-astra-b")
+	if _, err := s.Publish(context.Background(), actor, PublishInput{
+		Slug: slug2, Channel: "deep", Visibility: "listed", Lang: "zh",
+	}); err != nil {
+		t.Fatalf("deep + zh 应当成功，实际 %v", err)
+	}
+}
+
 func TestIntegrationPublishRemovedIsRejected(t *testing.T) {
 	pool := testPool(t)
 	s := testService(t, pool)

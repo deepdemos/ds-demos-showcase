@@ -43,6 +43,10 @@ import (
 // `has_visible_channel` 是同一件事的两处写法——所以只在这一处算，别在别处再算一遍。
 const downloadTimeout = 30 * time.Second
 
+// countTimeout 是「传完之后记一次下载」的预算。它跟传输时长无关，
+// 所以单独给一个很短的值——这一步只是一条 UPSERT。
+const countTimeout = 5 * time.Second
+
 // Download 托管 `/download/{slug}`。
 //
 // 不实现 api.ServerInterface：不是契约端点（理由见上方注释），由 router.go 直接挂到 chi。
@@ -126,7 +130,17 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = f.Close() }()
 
+	// 先问大小再发头：`Content-Length` 让浏览器能画进度条、能在断线后判断是不是传完了。
+	//
+	// 以前这里没有长度，传输靠 chunked 编码收尾——两边都不知道「还剩多少」，
+	// 一个 30 MB 的包传到一半断线，客户端看到的是一个正常结束的短文件。
+	// Stat 失败不该拦下载（文件可能可读但元数据查不到），所以只降级不报错。
 	setDownloadHeaders(w, name)
+	if size, err := d.files.Stat(ctx, key); err == nil && size >= 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	} else if err != nil {
+		slog.Warn("download: 取文件大小失败，改按分块传输", "key", key, "err", err)
+	}
 
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
@@ -139,8 +153,17 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 计数放在字节真正写完之后：半路断掉的传输不该算一次下载。
+	//
+	// **必须换一个 context**：上面那个 ctx 是给「查库 + 打开文件」用的 30 秒预算，
+	// 而它从进函数起就在走表——传一个 300 MB 的包要几分钟，等 io.Copy 回来它早过期了，
+	// 于是每一次慢下载都会在「最后一步」失败，计数器永远停在原地。
+	// 客户端断开时 r.Context() 会被取消，但「文件已经传完」这件事仍然成立，
+	// 所以这里用 WithoutCancel 接着 r.Context() 的取消语义之外的部分。
+	countCtx, cancelCount := context.WithTimeout(context.WithoutCancel(r.Context()), countTimeout)
+	defer cancelCount()
+
 	// 失败只记日志——用户已经拿到文件了，不该因为计数失败给他一个错误页。
-	if err := d.queries.BumpDownloadCount(ctx, row.ID); err != nil {
+	if err := d.queries.BumpDownloadCount(countCtx, row.ID); err != nil {
 		slog.Error("download: 计数失败", "slug", slug, "err", err)
 	}
 }

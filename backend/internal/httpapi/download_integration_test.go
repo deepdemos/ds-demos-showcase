@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -151,6 +152,12 @@ func TestIntegrationDownload(t *testing.T) {
 	}
 	if body := response.Body.String(); body != "PK\x03\x04zip-bytes-dl-zip" {
 		t.Fatalf("字节不对: %q", body)
+	}
+
+	// 1b) 有 Content-Length：没有它，传输靠 chunked 收尾，两边都不知道还剩多少，
+	// 一个包传到一半断线时客户端看到的是一个"正常结束"的短文件。
+	if got := response.Header().Get("Content-Length"); got != strconv.Itoa(len("PKzip-bytes-dl-zip")) {
+		t.Fatalf("Content-Length 不对: %q", got)
 	}
 
 	// 2) 计数真的落库了，而且只加一次。

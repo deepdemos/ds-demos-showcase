@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -50,6 +51,55 @@ func TestIntegrationGrantRolePromotesExistingAccount(t *testing.T) {
 }
 
 // 重跑不能出错、不能重复建号——运维命令最常被跑第二次（第一次跑一半断掉）。
+// 提权必须留痕：audit_log 里要有 system actor 的 role_set，before/after 是角色快照。
+//
+// 这条不是「锦上添花」——审计表存在的意义就是回答「这个人的权限是谁、什么时候、
+// 凭什么给的」。漏写一行之后，一次提权在库里只剩 `accounts.role` 的结果，
+// 没有任何经过，而这恰好是唯一能改「谁能拆掉整个站」的动作。
+func TestIntegrationGrantRoleWritesAuditLog(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	email, _ := mkUser(t, s, "grant-audit")
+
+	res, err := s.GrantRole(context.Background(), GrantInput{Email: email, Role: "admin"})
+	if err != nil {
+		t.Fatalf("提权失败: %v", err)
+	}
+
+	var actorType, actorRole, action, entityType string
+	var entityID int64
+	var before, after []byte
+	if err := pool.QueryRow(context.Background(), `
+		SELECT actor_type, actor_role, action, entity_type, entity_id, before, after
+		FROM audit_log
+		WHERE entity_type = 'account' AND entity_id = $1 AND action = 'role_set'
+		ORDER BY id DESC LIMIT 1`, res.Account.ID,
+	).Scan(&actorType, &actorRole, &action, &entityType, &entityID, &before, &after); err != nil {
+		t.Fatalf("没找到提权审计记录: %v", err)
+	}
+	if actorType != "system" || actorRole != "system" {
+		t.Errorf("actor = %s/%s，期望 system/system（运维命令没有会话身份）", actorType, actorRole)
+	}
+	if entityType != "account" || entityID != res.Account.ID {
+		t.Errorf("实体 = %s/%d，期望 account/%d", entityType, entityID, res.Account.ID)
+	}
+	// 按 JSON 比而不是按字节比：jsonb 会把键值之间的空白规范化（`{"role":"user"}`
+	// 取回来是 `{"role": "user"}`），字节比较会让一个正确的实现看起来是错的。
+	var beforeRole, afterRole map[string]string
+	if err := json.Unmarshal(before, &beforeRole); err != nil {
+		t.Fatalf("before 不是合法 JSON: %v（%s）", err, before)
+	}
+	if err := json.Unmarshal(after, &afterRole); err != nil {
+		t.Fatalf("after 不是合法 JSON: %v（%s）", err, after)
+	}
+	if beforeRole["role"] != "user" {
+		t.Errorf("before.role = %q，期望 user", beforeRole["role"])
+	}
+	if afterRole["role"] != "admin" {
+		t.Errorf("after.role = %q，期望 admin", afterRole["role"])
+	}
+}
+
 func TestIntegrationGrantRoleIsIdempotent(t *testing.T) {
 	pool := testPool(t)
 	s := testService(t, pool)
