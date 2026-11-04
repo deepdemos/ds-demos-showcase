@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { expect, test } from 'vitest';
-import { DemoPreview, tombstoneText } from './DemoDetailPage';
+import { DemoDownload, DemoPreview, tombstoneText } from './DemoDetailPage';
 
 /**
  * 墓碑文案按「怎么消失的」分三种。标准对象 §ST-2 要求 archived 与 removed 的墓碑内容
@@ -51,4 +51,22 @@ test('预览 iframe 指向该作品的预览路径', () => {
     </MemoryRouter>,
   );
   expect(screen.getByTitle('作品预览')).toHaveAttribute('src', '/preview/demo-abc/');
+});
+
+/**
+ * 下载入口的 href 必须是 /download/{slug}。
+ *
+ * 这条断言钉的是「与 `/preview` 分家」这个决定：把下载塞回预览路径，
+ * 浏览器会按 Content-Type 渲染而不是落盘，作品里的脚本就跑到页面里来了。
+ */
+test('下载入口指向该作品的下载路径', () => {
+  render(
+    <MemoryRouter>
+      <DemoDownload slug="demo-abc" />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('link', { name: '下载作品' })).toHaveAttribute(
+    'href',
+    '/download/demo-abc',
+  );
 });

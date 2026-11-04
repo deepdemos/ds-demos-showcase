@@ -44,7 +44,7 @@ import { expect } from 'e2e';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@e2e.local';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'e2e-admin-password';
 
-test('投稿 → 待审 → 通过 → 发布 → 公开可见', async ({ app, screen }) => {
+test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', async ({ app, screen, browser }) => {
   const runId = Date.now().toString(36);
   const email = `e2e-${runId}@example.com`;
   const username = `e2e-${runId}`;
@@ -113,4 +113,45 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见', async ({ app, s
   await screen.getByRole('button', { name: '登出' }).click();
   await app.open('/demos');
   await expect(screen.getByText(title)).toBeVisible();
+
+  // ---- 8. 匿名访问者能把作品下回去（DEMO-038~041）-----------------------
+  //
+  // 点进详情再从详情页下载：这条路径同时钉住三件事——
+  //   a. 详情接口真的回了 downloadable=true（不是前端按类型猜的）；
+  //   b. /download 端点对匿名访问者放行（可见性判定写对了）；
+  //   c. 响应带 Content-Disposition: attachment（浏览器会落盘而不是渲染）。
+  //
+  // 用 fetch 直接读响应头而不是真点链接：`<a download>` 的落盘行为没法在
+  // 页面上下文里断言，而「响应头对不对」才是我们真正能控制的那部分。
+  await screen.getByText(title).click();
+  const downloadLink = screen.getByRole('link', { name: '下载作品' });
+  await expect(downloadLink).toBeVisible();
+
+  // slug 从下载链接里取，而不是再拼一遍：链接是「服务端说能下」的那一份，
+  // 用例跟着它走，等于顺带验了「前端展示的地址与后端认的 slug 是同一个」。
+  const href = await downloadLink.getAttribute('href');
+  const slug = (href ?? '').replace('/download/', '');
+  if (!slug || slug === href) {
+    throw new Error(`下载链接的 href 不对：${JSON.stringify(href)}`);
+  }
+
+  const download = await browser.evaluate(async (slug: string) => {
+    const response = await fetch(`/download/${slug}`);
+    return {
+      status: response.status,
+      disposition: response.headers.get('content-disposition') ?? '',
+      contentType: response.headers.get('content-type') ?? '',
+      length: (await response.blob()).size,
+    };
+  }, slug);
+
+  if (download.status !== 200) {
+    throw new Error(`下载期望 200，实际 ${download.status}（作品 ${slug}）`);
+  }
+  if (!download.disposition.includes('attachment')) {
+    throw new Error(`下载响应缺 attachment，实际 ${JSON.stringify(download.disposition)}`);
+  }
+  if (download.length === 0) {
+    throw new Error('下载回来的文件是空的');
+  }
 });

@@ -9,9 +9,17 @@
         "type": "time.Time",
         "optional": false
       },
+      "demoType": {
+        "type": "string",
+        "optional": false
+      },
       "description": {
         "type": "string",
         "optional": true
+      },
+      "downloadable": {
+        "type": "bool",
+        "optional": false
       },
       "lifecycleState": {
         "type": "LifecycleState",

@@ -95,6 +95,8 @@ export function DemoDetailPage() {
             {data.demo.description ?? '作者没有填写简介。'}
           </p>
 
+          {data.demo.downloadable ? <DemoDownload slug={slug} /> : null}
+
           {data.demo.lifecycleState === 'published' ? <DemoPreview slug={slug} /> : null}
         </article>
       )}
@@ -134,5 +136,37 @@ export function DemoPreview({ slug }: { slug: string }) {
         referrerPolicy="no-referrer"
       />
     </section>
+  );
+}
+
+/**
+ * 下载入口。
+ *
+ * # 为什么用 downloadable 而不是自己按 demoType 判断
+ *
+ * 「能不能下」不是「类型是什么」的函数：外链作品没有本站文件、墓碑态不承载内容、
+ * 渠道是 hidden 时作品对外不存在。这些判定只在服务端有一份（`GetDemoForDownload`），
+ * 前端再推一遍就是第二份事实源，且推错的后果是「按钮点了 404」。
+ *
+ * # 为什么是 <a download> 而不是 fetch + Blob
+ *
+ * 服务端已经给了 `Content-Disposition: attachment`，浏览器会直接落盘。
+ * 走 fetch 再 `URL.createObjectURL` 要多占一份内存（作品包可能有几十 MB），
+ * 而且丢掉「下载进度」这个浏览器原生能力。
+ */
+export function DemoDownload({ slug }: { slug: string }) {
+  return (
+    <p className="mt-4">
+      <a
+        href={`/download/${encodeURIComponent(slug)}`}
+        download
+        className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+      >
+        下载作品
+      </a>
+      <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+        原始上传包（单文件作品为原文件）
+      </span>
+    </p>
   );
 }

@@ -84,8 +84,12 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              cfg.Addr(),
-		Handler:           httpapi.NewRouter(httpapi.New(pinger, queries, identitySvc, mail, demoSvc), httpapi.NewPreview(queries, files, identitySvc)),
+		Addr: cfg.Addr(),
+		Handler: httpapi.NewRouter(
+			httpapi.New(pinger, queries, identitySvc, mail, demoSvc),
+			httpapi.NewPreview(queries, files, identitySvc),
+			httpapi.NewDownload(queries, files),
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

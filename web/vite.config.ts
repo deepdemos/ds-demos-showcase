@@ -14,8 +14,12 @@ export default defineConfig({
     // 表现是「作品详情能打开，但里面永远空白」——而生产和 CI 都不会暴露这个问题，
     // 因为那边 Nginx 把 /preview 和 /api 一起反代给 Go。
     proxy: {
+      // `/download` 同理，而且漏了更隐蔽：Vite 的 SPA fallback 会回 200 + index.html，
+      // 页面上「下载作品」点下去拿到的是一个 HTML 页面（浏览器会当页面渲染、而不是落盘），
+      // 没有任何报错。这条和 `/preview` 是同一个坑，第 218 号 PR 补了前者、漏了后者。
       '/api': 'http://127.0.0.1:8080',
       '/preview': 'http://127.0.0.1:8080',
+      '/download': 'http://127.0.0.1:8080',
     },
   },
   test: {
