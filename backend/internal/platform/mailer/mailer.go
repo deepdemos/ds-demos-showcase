@@ -7,10 +7,17 @@ package mailer
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
 )
+
+// ErrNotConfigured 表示「这台机器没配 SMTP，信没有真的发出」。
+//
+// 调用方据此区分两种失败：配置问题（这条）与投递问题（SMTP 报错）。
+// 前者的处理是「告诉用户信没发出去，且他知道该找谁」；后者是「重试」。
+var ErrNotConfigured = errors.New("mailer: 未配置 SMTP，邮件没有真的发出")
 
 // Mailer 发一封纯文本邮件。
 type Mailer interface {

@@ -30,7 +30,8 @@ type Config struct {
 	VerificationSecret string
 
 	// 发信配置。它们是**部署拓扑**（用哪家邮件服务商、什么凭据），不是运营参数，
-	// 所以不进设置域。全为空时程序仍能启动：邮件会由 logMailer 记一条告警而不发出。
+	// 所以不进设置域。全为空时程序仍能启动：logMailer 记一条告警，
+	// 并让 Send 返回 ErrNotConfigured，于是注册响应里的 verificationSent 是 false。
 	SMTPHost string
 	SMTPPort string
 	SMTPUser string

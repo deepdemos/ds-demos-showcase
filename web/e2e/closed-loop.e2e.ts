@@ -113,6 +113,17 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
 
   // 注册页把邮箱带到了验证页，这里不用再填一次。
   await expect(screen.getByRole('heading', { name: '验证邮箱' })).toBeVisible();
+
+  // 这一条断言的是「没配 SMTP 时界面有没有说实话」。
+  //
+  // 开发机与 CI 都没配 SMTP，所以 `logMailer.Send` 返回 `ErrNotConfigured`，
+  // 注册响应里 `verificationSent` 是 false，注册页带 `sent=0` 跳过来，这里就该出现提示条。
+  // **如果哪天给 e2e 环境配了真 SMTP，这条断言要去掉**——那时信是真的发出去了。
+  await expect(screen.getByText(/验证信没发出去/)).toBeVisible();
+
+  // 但码仍然拿得到：logMailer 在返回错误**之前**已经把正文写进日志了
+  // （`MAIL_LOG_CODES=1`）。「信没发出去」与「码在日志里」同时成立，不矛盾——
+  // 前者是用户视角的事实，后者是开发环境的旁路。
   await screen.getByLabel('验证码').fill(readVerificationCode(email));
   await screen.getByRole('button', { name: '完成验证' }).click();
 

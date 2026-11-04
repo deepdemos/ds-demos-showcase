@@ -31,7 +31,8 @@ func main() {
 	ipSecret := loadIPSecret(cfg)
 	verificationSecret := loadVerificationSecret(cfg)
 
-	// 邮件通道。没配 SMTP 时拿到的是 logMailer：它不假装发出去，只告警。
+	// 邮件通道。没配 SMTP 时拿到的是 logMailer：不发送、打一条告警，
+	// 并且 Send 返回 ErrNotConfigured——调用方据此告诉用户「信没发出去」。
 	mail, err := mailer.New(mailer.Config{
 		Host:     cfg.SMTPHost,
 		Port:     cfg.SMTPPort,

@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"errors"
 	"log/slog"
 	"math/big"
 	"net"
@@ -30,8 +31,12 @@ func TestLogMailer_默认不把正文写进日志(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if err := m.Send(context.Background(), "a@example.com", "主题", "验证码 123456"); err != nil {
-		t.Fatalf("Send: %v", err)
+	// 没配 SMTP 时 Send 必须失败：返回值是调用方唯一能看到的信号。
+	// 以前这里 `return nil`，于是注册响应里的 verificationSent 恒为 true——
+	// 用户被告知「验证信已发出」，然后去等一封永远不会来的邮件。
+	err = m.Send(context.Background(), "a@example.com", "主题", "验证码 123456")
+	if !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("未配置 SMTP 时 Send 应返回 ErrNotConfigured，实际: %v", err)
 	}
 
 	out := buf.String()
@@ -55,8 +60,8 @@ func TestLogMailer_显式打开才写正文(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if err := m.Send(context.Background(), "a@example.com", "主题", "验证码 123456"); err != nil {
-		t.Fatalf("Send: %v", err)
+	if err := m.Send(context.Background(), "a@example.com", "主题", "验证码 123456"); !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("未配置 SMTP 时仍应返回 ErrNotConfigured，实际: %v", err)
 	}
 	if !strings.Contains(buf.String(), "123456") {
 		t.Fatalf("打开 LogCodes 后应能看到正文，实际: %s", buf.String())

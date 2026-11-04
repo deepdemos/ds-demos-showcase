@@ -3,12 +3,15 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/mailer"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -157,5 +160,63 @@ func TestIntegrationVerifyResendAlwaysNoContent(t *testing.T) {
 	// 格式不对：400。
 	if code := resend("not-an-email"); code != http.StatusBadRequest {
 		t.Fatalf("格式不对应 400，实际 %d", code)
+	}
+}
+
+// TestIntegrationRegisterReportsUndeliveredMail 钉住「没配 SMTP 时不能骗用户」。
+//
+// 这条用例的由来：`logMailer.Send` 原先 `return nil`，于是注册响应里的
+// `verificationSent` 恒为 true——用户被告知「验证信已发出」，然后去等一封
+// 永远不会来的邮件。返回值是调用方唯一能看到的信号，注释不是。
+func TestIntegrationRegisterReportsUndeliveredMail(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+
+	for _, q := range []string{
+		"DELETE FROM verification_codes", "DELETE FROM demo_stats", "DELETE FROM demo_channels",
+		"DELETE FROM demo_revisions", "DELETE FROM demos", "DELETE FROM web_sessions",
+		"DELETE FROM users", "DELETE FROM accounts",
+	} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("%s 失败: %v", q, err)
+		}
+	}
+
+	// 没配 SMTP 时 mailer.New 返回的就是 logMailer。
+	m, err := mailer.New(mailer.Config{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatalf("mailer.New: %v", err)
+	}
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), m, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		strings.NewReader(`{"email":"it-nomail@example.com","password":"correct-horse-battery","username":"it-nomail","displayName":"没发信"}`))
+	req.Header.Set("Content-Type", "application/json")
+	h.PostAuthRegister(rec, req)
+
+	// 账号**照样建好**：让用户重填表单只会建出第二个，然后撞 409。
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("注册应 201，实际 %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	var accepted struct {
+		Email            string `json:"email"`
+		VerificationSent bool   `json:"verificationSent"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &accepted); err != nil {
+		t.Fatalf("响应不合法: %v", err)
+	}
+	if accepted.VerificationSent {
+		t.Fatal("没配 SMTP 时 verificationSent 必须是 false——不能骗用户去等一封不会来的信")
+	}
+
+	var status string
+	if err := pool.QueryRow(ctx, `
+		SELECT a.status FROM accounts a JOIN account_emails e ON e.account_id = a.id
+		WHERE lower(e.email) = 'it-nomail@example.com'`).Scan(&status); err != nil {
+		t.Fatalf("查账号失败: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("账号状态 = %q，想要 pending", status)
 	}
 }
