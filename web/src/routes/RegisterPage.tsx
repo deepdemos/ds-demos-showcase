@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button, Input } from '@/components/ui';
 import { postAuthRegister, type Error as ApiError } from '@/api';
-import { useAuth } from '@/features/auth/AuthContext';
 
 // 与后端同口径的最小校验。前端校验只为省一次往返，真正的判定在服务端——
 // 这里放过的值服务端还会再拒一次，所以不必追求完备。
@@ -11,7 +10,6 @@ const PASSWORD_MIN = 10;
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { setMe } = useAuth();
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -40,8 +38,13 @@ export function RegisterPage() {
         password,
       });
       if (response.status === 201) {
-        setMe(response.data);
-        navigate('/', { replace: true });
+        // 注册不再直接登录（账号是 `pending`，要先去验证邮箱）。
+        // `sent=0` 把「信没发出去」这个事实带到验证页——否则用户会对着一个
+        // 永远不来的邮件等下去。
+        const query = response.data.verificationSent ? '' : '&sent=0';
+        navigate(`/verify-email?email=${encodeURIComponent(response.data.email)}${query}`, {
+          replace: true,
+        });
         return;
       }
       setError((response.data as ApiError).message);
@@ -56,7 +59,7 @@ export function RegisterPage() {
     <section className="mx-auto w-full max-w-sm px-4 py-12">
       <h1 className="text-2xl font-semibold">注册</h1>
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        注册后即可投稿。投稿内容需要经过审核才会公开。
+        注册后需要先验证邮箱，验证完才能登录。投稿内容需要经过审核才会公开。
       </p>
 
       <form className="mt-6 flex flex-col gap-4" onSubmit={onSubmit}>
