@@ -46,6 +46,7 @@
     pnpm --dir web build
     node scripts/check-file-size.mjs
     node --test scripts/*.test.mjs
+    pnpm --dir web test:e2e      # 浏览器冒烟，要求 API + 前端已经起着，见 开发环境.md
     cd backend && go vet ./... && go test ./...
 
 仓库工具（`scripts/` 下的门禁脚本）在**根目录**用 npm 装依赖，只有 `contract` 相关的那几个需要：
@@ -129,8 +130,10 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 | file-size | 单文件 >500 警告，>800 失败；脚本自检 |
 | contract | 契约（目录表引用一致）、表结构静态检查、可变常量锚点、迁移门禁、**契约兼容**、**真库校验** |
 | pr-guard | issue 关联、单一标题、手写部分 ≤20 文件（生成物不计，行数不限）、必须存在晚于最新 commit 的 review 评论 |
+| e2e | 浏览器冒烟（真 Chromium + 真 API + 真 PG）：页面能打开、跳转落点对、代理没漏配。**非必需 check** |
 
 - required checks：backend、frontend、ui-contract、file-size、contract、pr-guard（三个长期分支都启用）。`contract` 自 2026-11-01 起加入（ruleset `protect-dev` / `protect-main-release` 同步更新）。
+- **`e2e` 不在 required checks 里**（2026-11-04 加入时就是非必需的）：它要同时拉起 postgres + Go API + vite 三件套，链最长、最易抖。先观察抖动率，稳定后再讨论要不要拦合并；现在红了不挡 PR，但**要有人看**——失败先下载 `e2e-report` 工件里的 `trace.md`。
 - 所有 job 失败时会输出指引，要求先读本文件。
 
 ### 接口契约

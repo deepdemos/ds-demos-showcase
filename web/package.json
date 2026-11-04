@@ -10,8 +10,9 @@
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
+    "test:e2e": "e2e run",
     "check:ui": "node scripts/check-ui-contract.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -25,6 +26,7 @@
     "react-router": "7.18.4"
   },
   "devDependencies": {
+    "@e2e-dev/web": "0.15.4",
     "@eslint/js": "10.0.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
@@ -33,6 +35,7 @@
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "6.1.2",
+    "e2e": "0.22.0",
     "eslint": "10.13.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.13.0",
