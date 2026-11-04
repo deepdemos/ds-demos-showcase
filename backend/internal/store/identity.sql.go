@@ -223,6 +223,41 @@ func (q *Queries) CreateWebSession(ctx context.Context, arg CreateWebSessionPara
 	return err
 }
 
+const getAccountByEmail = `-- name: GetAccountByEmail :one
+SELECT a.id, a.sub, a.role, a.status, p.username, p.display_name
+FROM accounts a
+JOIN account_emails e ON e.account_id = a.id
+JOIN profiles p ON p.account_id = a.id
+WHERE lower(e.email) = lower($1::text)
+`
+
+type GetAccountByEmailRow struct {
+	ID          int64
+	Sub         string
+	Role        string
+	Status      string
+	Username    string
+	DisplayName string
+}
+
+// 运维命令（cmd/admin-grant）用：按邮箱找账号。
+// 邮箱在 account_emails（一个账号可以有多个），uq_account_emails_email 保证极小写唯一，
+// 所以这里最多命中一个账号，不需要再挑 primary。
+// 注意：不 JOIN accounts.role 的取值域——role 列没有外键，合法性由 RoleExists 单独查。
+func (q *Queries) GetAccountByEmail(ctx context.Context, email string) (GetAccountByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getAccountByEmail, email)
+	var i GetAccountByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sub,
+		&i.Role,
+		&i.Status,
+		&i.Username,
+		&i.DisplayName,
+	)
+	return i, err
+}
+
 const getLoginByEmail = `-- name: GetLoginByEmail :one
 
 SELECT a.id, a.sub, a.status, a.role, a.level, a.created_at,
@@ -471,6 +506,36 @@ UPDATE web_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL
 
 func (q *Queries) RevokeWebSession(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, revokeWebSession, id)
+	return err
+}
+
+const roleExists = `-- name: RoleExists :one
+SELECT EXISTS (SELECT 1 FROM roles WHERE key = $1::text)::bool AS exists
+`
+
+func (q *Queries) RoleExists(ctx context.Context, key string) (bool, error) {
+	row := q.db.QueryRow(ctx, roleExists, key)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const setAccountRole = `-- name: SetAccountRole :exec
+UPDATE accounts
+SET role = $1::text, updated_at = now()
+WHERE id = $2
+`
+
+type SetAccountRoleParams struct {
+	Role string
+	ID   int64
+}
+
+// accounts.role 没有外键指向 roles（两域同库但刻意不加），所以调用方必须先
+// 用 RoleExists 确认这个角色是登记过的；否则一个拼错的角色名会安静地留在库里，
+// 表现为「这个人什么权限都没有」而不是「配置错了」。
+func (q *Queries) SetAccountRole(ctx context.Context, arg SetAccountRoleParams) error {
+	_, err := q.db.Exec(ctx, setAccountRole, arg.Role, arg.ID)
 	return err
 }
 

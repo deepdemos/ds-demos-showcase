@@ -190,3 +190,25 @@ WHERE account_sub = $1
 -- 与 accounts 同一个事务里建，生命周期一致。
 INSERT INTO users (sub) VALUES ($1)
 RETURNING id, sub;
+
+-- name: GetAccountByEmail :one
+-- 运维命令（cmd/admin-grant）用：按邮箱找账号。
+-- 邮箱在 account_emails（一个账号可以有多个），uq_account_emails_email 保证极小写唯一，
+-- 所以这里最多命中一个账号，不需要再挑 primary。
+-- 注意：不 JOIN accounts.role 的取值域——role 列没有外键，合法性由 RoleExists 单独查。
+SELECT a.id, a.sub, a.role, a.status, p.username, p.display_name
+FROM accounts a
+JOIN account_emails e ON e.account_id = a.id
+JOIN profiles p ON p.account_id = a.id
+WHERE lower(e.email) = lower(@email::text);
+
+-- name: SetAccountRole :exec
+-- accounts.role 没有外键指向 roles（两域同库但刻意不加），所以调用方必须先
+-- 用 RoleExists 确认这个角色是登记过的；否则一个拼错的角色名会安静地留在库里，
+-- 表现为「这个人什么权限都没有」而不是「配置错了」。
+UPDATE accounts
+SET role = @role::text, updated_at = now()
+WHERE id = @id;
+
+-- name: RoleExists :one
+SELECT EXISTS (SELECT 1 FROM roles WHERE key = @key::text)::bool AS exists;
