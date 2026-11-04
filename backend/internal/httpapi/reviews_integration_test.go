@@ -92,3 +92,50 @@ func TestIntegrationReviewPermission(t *testing.T) {
 		})
 	}
 }
+
+// 裁决值不是 approve/reject 时必须 400。
+//
+// 少了这道校验，decision:"yes" 会因为「不等于 approve」被当成驳回，并且返回 200——
+// 审核员以为自己点了通过，实际作品被驳回了。decodeJSON 的 DisallowUnknownFields
+// 只管字段名，不管枚举值，所以这条只能在 handler 里判。
+func TestIntegrationReviewRejectsUnknownDecision(t *testing.T) {
+	pool := integrationPool(t)
+	q := store.New(pool)
+	idSvc := integrationIdentity(t, pool)
+
+	files, err := storage.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatalf("初始化存储失败: %v", err)
+	}
+	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
+	h := New(pool, q, idSvc, nil, demoSvc)
+
+	acc, sid, err := idSvc.Register(context.Background(), identity.RegisterInput{
+		Email:       "it-bad-decision@example.com",
+		Password:    "reviewtest123",
+		Username:    "it-bad-decision",
+		DisplayName: "管理员",
+	})
+	if err != nil {
+		t.Fatalf("注册失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE sub = $1`, acc.Sub)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM accounts WHERE sub = $1`, acc.Sub)
+	})
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE accounts SET role = 'admin' WHERE sub = $1`, acc.Sub); err != nil {
+		t.Fatalf("提权失败: %v", err)
+	}
+
+	// 权限先过（admin 有 demo.review），所以这里能走到决定值校验那一步。
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/reviews/demo/x",
+		strings.NewReader(`{"decision":"yes"}`))
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
+	rec := httptest.NewRecorder()
+	h.ReviewDemo(rec, req, "x")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("非法 decision：expected 400，got %d（body=%s）", rec.Code, rec.Body.String())
+	}
+}

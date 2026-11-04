@@ -74,8 +74,18 @@ export function SubmitPage() {
           作品处于待审核状态，通过并发布后才会出现在作品库里。你可以先自己预览一下：
         </p>
         <p className="mt-4 flex gap-3">
-          <Link to={`/demos/${done.slug}`} className="text-blue-600 dark:text-blue-400">
-            查看这条作品
+          {/*
+            这里是预览地址而不是 /demos/{slug}：作品还是 draft + pending，
+            而详情页对 draft/pending/rejected 一律返回 404——作者点「查看」会撞死路。
+            预览地址对作者本人与审核员开放，正是这个阶段的查看入口。
+          */}
+          <Link
+            to={`/preview/${encodeURIComponent(done.slug)}/`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 dark:text-blue-400"
+          >
+            预览这条作品
           </Link>
           <Link to="/demos" className="text-blue-600 dark:text-blue-400">
             去作品库

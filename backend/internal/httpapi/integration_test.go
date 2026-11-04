@@ -74,6 +74,15 @@ func seed(t *testing.T, pool *pgxpool.Pool) {
 			t.Fatalf("插入 %s 失败: %v", r.slug, err)
 		}
 	}
+
+	// 列表的可见性谓词要求至少一条 visibility='listed' 的渠道行（迁移 0013 会把
+	// 存量数据补齐，但测试自己造的行没有渠道）。只给真正该出现在列表里的那一条。
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO demo_channels (demo_id, channel, visibility, lang)
+		SELECT id, 'deep', 'listed', 'zh' FROM demos WHERE slug = 'it-published'
+		ON CONFLICT (demo_id, channel) DO NOTHING`); err != nil {
+		t.Fatalf("插入渠道行失败: %v", err)
+	}
 }
 
 // integrationIdentity 装一个完整的身份域（含第②层要的验证码机制）。
@@ -508,5 +517,52 @@ func TestIntegrationBannedAccountHTTP(t *testing.T) {
 	h.PostAuthLogin(lrec, lreq)
 	if lrec.Code != http.StatusForbidden {
 		t.Fatalf("封禁账号登录应 403，实际 %d（body=%s）", lrec.Code, lrec.Body.String())
+	}
+}
+
+// 可见性三值的两处落地：渠道 unlisted/hidden 不该进列表，未过审的 published 不该出内容。
+func TestIntegrationVisibilityAndModeration(t *testing.T) {
+	pool := integrationPool(t)
+	seed(t, pool)
+
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
+	listTotal := func() float64 {
+		rec := httptest.NewRecorder()
+		h.ListDemos(rec, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil), api.ListDemosParams{})
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("列表响应不是 JSON: %v", err)
+		}
+		n, _ := body["total"].(float64)
+		return n
+	}
+
+	ctx := context.Background()
+	if got := listTotal(); got != 1 {
+		t.Fatalf("基线：expected 1，got %v", got)
+	}
+
+	// 渠道改成 hidden → 列表里应当消失。这条以前是死的（查询根本没有渠道条件）。
+	if _, err := pool.Exec(ctx, `UPDATE demo_channels SET visibility = 'hidden'`); err != nil {
+		t.Fatalf("改渠道可见性失败: %v", err)
+	}
+	if got := listTotal(); got != 0 {
+		t.Fatalf("隐藏渠道后：expected 0，got %v", got)
+	}
+	// 注意顺序：触发器 trg_demos_guard 拒绝「还有 listed 渠道时 approved → 非 approved」，
+	// 所以先把渠道藏起来再退审。这也说明这条不变量真的在拦，不是纸面条款。
+	//
+	// published 但没审过 → 列表不出现，详情 404。当前没有端点能造出这个组合，
+	// 但它是「审核形同虚设」的唯一入口，值得在数据层钉住。
+	if _, err := pool.Exec(ctx, `UPDATE demos SET moderation_state = 'rejected' WHERE slug = 'it-published'`); err != nil {
+		t.Fatalf("改审核态失败: %v", err)
+	}
+	if got := listTotal(); got != 0 {
+		t.Fatalf("未过审后列表：expected 0，got %v", got)
+	}
+	rec := httptest.NewRecorder()
+	h.GetDemo(rec, httptest.NewRequest(http.MethodGet, "/api/v1/demos/it-published", nil), "it-published")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("未过审的详情：expected 404，got %d", rec.Code)
 	}
 }

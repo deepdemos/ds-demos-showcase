@@ -71,3 +71,18 @@ WHERE slug = 'edge-soft-deleted' AND deleted_at IS NULL;
 
 UPDATE demos SET deleted_at = '2026-08-22 12:00:00+08', erased_at = '2026-08-22 12:05:00+08'
 WHERE slug = 'edge-erased' AND erased_at IS NULL;
+
+-- ===== 渠道行（列表可见性靠它）=====
+-- 列表要求「至少一条 visibility='listed' 的渠道行」，所以种子数据也必须造。
+-- 只给已发布且审过的行：归档 / 移除 / 软删 / 已擦除的本来就不该出现在作品库里。
+INSERT INTO demo_channels (demo_id, channel, visibility, lang, published_at)
+-- published_at 留 NULL：这些作品的真实发布时间没有留存，写 now() 是编造，
+-- 写 d.created_at 又会撞 ck_channel_time（published_at 必须 >= 渠道行自己的 created_at）。
+-- NULL 的语义就是「不知道」，列表也不读这一列。
+SELECT d.id, 'deep', 'listed', 'zh', NULL::timestamptz
+FROM demos d
+WHERE d.lifecycle_state = 'published'
+  AND d.moderation_state = 'approved'
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+ON CONFLICT (demo_id, channel) DO NOTHING;

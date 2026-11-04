@@ -124,4 +124,33 @@ describe('AdminReviewPage', () => {
     expect(link).toHaveAttribute('href', '/preview/demo-abc/v1/');
     expect(link).toHaveAttribute('target', '_blank');
   });
+
+  test('非 2xx 也要报错——orval 非 2xx 不 throw', async () => {
+    auth.me = { sub: 'm', username: 'mod' };
+    listDemoReviewQueue.mockResolvedValue({
+      status: 200,
+      data: {
+        items: [
+          {
+            slug: 'demo-abc',
+            title: '一个作品',
+            description: null,
+            authorName: 'someone',
+            moderationState: 'pending',
+            submittedAt: '2026-11-01T00:00:00Z',
+            previewPath: '/preview/demo-abc/v1/',
+          },
+        ],
+      },
+    });
+    // 409 = 这条作品刚被别人审过。orval 会照常 resolve，所以页面必须自己看 status。
+    reviewDemo.mockResolvedValue({ status: 409, data: { message: '作品不处于待审状态' } });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '通过' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('作品不处于待审状态');
+    });
+  });
 });

@@ -34,11 +34,15 @@ func (q *Queries) CountPendingDemosByAuthor(ctx context.Context, authorID pgtype
 
 const countPublishedDemos = `-- name: CountPublishedDemos :one
 SELECT count(*)
-FROM demos
-WHERE moderation_state = 'approved'
-  AND lifecycle_state = 'published'
-  AND deleted_at IS NULL
-  AND erased_at IS NULL
+FROM demos d
+WHERE d.moderation_state = 'approved'
+  AND d.lifecycle_state = 'published'
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+  AND EXISTS (
+      SELECT 1 FROM demo_channels c
+      WHERE c.demo_id = d.id AND c.visibility = 'listed'
+  )
 `
 
 func (q *Queries) CountPublishedDemos(ctx context.Context) (int64, error) {
@@ -147,22 +151,23 @@ func (q *Queries) DeleteDemoForCleanup(ctx context.Context, id int64) error {
 
 const getDemoBySlug = `-- name: GetDemoBySlug :one
 SELECT id, slug, title, description, cover_url,
-       lifecycle_state, created_at, updated_at, deleted_at, erased_at
+       lifecycle_state, moderation_state, created_at, updated_at, deleted_at, erased_at
 FROM demos
 WHERE slug = $1
 `
 
 type GetDemoBySlugRow struct {
-	ID             int64
-	Slug           string
-	Title          pgtype.Text
-	Description    pgtype.Text
-	CoverUrl       pgtype.Text
-	LifecycleState string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	ErasedAt       pgtype.Timestamptz
+	ID              int64
+	Slug            string
+	Title           pgtype.Text
+	Description     pgtype.Text
+	CoverUrl        pgtype.Text
+	LifecycleState  string
+	ModerationState string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	ErasedAt        pgtype.Timestamptz
 }
 
 // 不加可见性过滤：归档/移除的作品要能取出来渲染墓碑页。
@@ -177,6 +182,7 @@ func (q *Queries) GetDemoBySlug(ctx context.Context, slug string) (GetDemoBySlug
 		&i.Description,
 		&i.CoverUrl,
 		&i.LifecycleState,
+		&i.ModerationState,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -189,6 +195,7 @@ const getDemoForPreview = `-- name: GetDemoForPreview :one
 SELECT d.id,
        d.slug,
        d.lifecycle_state,
+       d.moderation_state,
        d.deleted_at,
        d.erased_at,
        COALESCE(r.rev_no, 0)::int AS current_rev_no,
@@ -205,6 +212,7 @@ type GetDemoForPreviewRow struct {
 	ID                int64
 	Slug              string
 	LifecycleState    string
+	ModerationState   string
 	DeletedAt         pgtype.Timestamptz
 	ErasedAt          pgtype.Timestamptz
 	CurrentRevNo      int32
@@ -224,6 +232,7 @@ func (q *Queries) GetDemoForPreview(ctx context.Context, slug string) (GetDemoFo
 		&i.ID,
 		&i.Slug,
 		&i.LifecycleState,
+		&i.ModerationState,
 		&i.DeletedAt,
 		&i.ErasedAt,
 		&i.CurrentRevNo,
@@ -236,13 +245,19 @@ func (q *Queries) GetDemoForPreview(ctx context.Context, slug string) (GetDemoFo
 
 const listPublishedDemos = `-- name: ListPublishedDemos :many
 
-SELECT id, slug, title, cover_url, created_at
-FROM demos
-WHERE moderation_state = 'approved'
-  AND lifecycle_state = 'published'
-  AND deleted_at IS NULL
-  AND erased_at IS NULL
-ORDER BY created_at DESC, id DESC
+SELECT d.id, d.slug, d.title, d.cover_url, d.created_at
+FROM demos d
+WHERE d.moderation_state = 'approved'
+  AND d.lifecycle_state = 'published'
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+  -- 渠道可见性：unlisted（可直链、不上列表）与 hidden（对外不可见）都必须生效，
+  -- 否则发布时选的 visibility 就是个摆设。
+  AND EXISTS (
+      SELECT 1 FROM demo_channels c
+      WHERE c.demo_id = d.id AND c.visibility = 'listed'
+  )
+ORDER BY d.created_at DESC, d.id DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -261,11 +276,13 @@ type ListPublishedDemosRow struct {
 
 // 作品列表与详情。
 //
-// 「公开可见」的判定口径（两处必须一致，改一处就要改另一处）：
+// 「公开可见」的判定口径（列表、详情、预览三处必须一致，改一处就要改其余两处）：
 //
+//	moderation_state = 'approved'   —— 审过了。没审过就展示，等于审核形同虚设
 //	lifecycle_state = 'published'   —— 已发布，见标准对象 §ST-2 的可见性档位
 //	deleted_at IS NULL              —— 没被删除
 //	erased_at IS NULL               —— 没被擦除（擦除是逻辑封存，行还在但对外不存在）
+//	至少一条 visibility='listed' 的渠道行 —— unlisted / hidden 必须真的不出现
 //
 // 已经归档（archived）或移除（removed）的作品**不在列表里**，但详情页仍可访问（墓碑），
 // 所以这里查询条件与 GetDemoBySlug 故意不同——这不是漏写。
