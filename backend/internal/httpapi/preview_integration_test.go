@@ -54,12 +54,20 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 		slug      string
 		lifecycle string
 		erased    bool
+		// visibility 为空表示不建渠道行。
+		//
+		// 触发器 trg_demos_guard 拒绝给未审过的作品上架渠道，所以
+		// 「pending/rejected + 渠道」这个组合在库里造不出来——
+		// pv-draft 因此没有渠道行，它的判定由 lifecycle 兜住，不靠渠道。
+		visibility string
 	}
 	specs := []demoSpec{
-		{"pv-draft", "draft", false},
-		{"pv-published", "published", false},
-		{"pv-archived", "archived", false},
-		{"pv-erased", "published", true},
+		{"pv-draft", "draft", false, ""},
+		{"pv-published", "published", false, "listed"},
+		// hidden 渠道：作品对外不存在。预览必须与下载同一口径地拒掉它。
+		{"pv-hidden", "published", false, "hidden"},
+		{"pv-archived", "archived", false, "listed"},
+		{"pv-erased", "published", true, "listed"},
 	}
 
 	for _, s := range specs {
@@ -78,6 +86,14 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 			s.slug, title, desc, s.lifecycle, authorUserID, s.erased).Scan(&demoID)
 		if err != nil {
 			t.Fatalf("插入 %s 失败: %v", s.slug, err)
+		}
+
+		if s.visibility != "" {
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO demo_channels (demo_id, channel, visibility, lang)
+				VALUES ($1, 'deep', $2, 'zh')`, demoID, s.visibility); err != nil {
+				t.Fatalf("插入 %s 的渠道失败: %v", s.slug, err)
+			}
 		}
 
 		var revID int64
@@ -183,6 +199,12 @@ func TestIntegrationPreviewVisibility(t *testing.T) {
 		{"草稿-作者", "/preview/pv-draft/v1/index.html", pvAuthorSID, 200, "pv-draft"},
 		// 草稿：持 demo.review 的审核员能看——这是审核的前提。
 		{"草稿-审核员", "/preview/pv-draft/v1/index.html", pvModSID, 200, "pv-draft"},
+		// hidden 渠道：已发布 + 已审过，但渠道对外不可见——匿名 404。
+		// 这条是本轮补的判定；之前预览完全不看渠道，hidden 作品的直链能看完整内容。
+		{"hidden渠道-匿名", "/preview/pv-hidden/v1/index.html", "", 404, ""},
+		// 但作者与审核员仍然要看得到：他们看的是「还没对外」的东西，本来就该绕过渠道判定。
+		{"hidden渠道-作者", "/preview/pv-hidden/v1/index.html", pvAuthorSID, 200, "pv-hidden"},
+		{"hidden渠道-审核员", "/preview/pv-hidden/v1/index.html", pvModSID, 200, "pv-hidden"},
 		// 已归档：不是 published，因此走草稿同一条路径——作者与审核员能看，匿名不能。
 		{"已归档-匿名", "/preview/pv-archived/v1/index.html", "", 404, ""},
 		{"已归档-作者", "/preview/pv-archived/v1/index.html", pvAuthorSID, 200, "pv-archived"},

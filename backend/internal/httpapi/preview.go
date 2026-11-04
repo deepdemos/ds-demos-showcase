@@ -128,10 +128,22 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 对外可见 = 已发布 **且** 审过。两者缺一都只有作者与审核员能看，
-	// 因为「审核通过」与「发布」是两次独立的状态跃迁（设计 §7.4）。
-	published := row.LifecycleState == "published" && row.ModerationState == "approved"
+	// 对外可见 = 已发布 **且** 审过 **且** 渠道不是 hidden。
+	//
+	// 前两条缺一都只有作者与审核员能看，因为「审核通过」与「发布」是两次独立的
+	// 状态跃迁（设计 §7.4）。第三条是本轮补的：之前预览完全不看渠道，
+	// 于是 hidden 的作品「从列表里藏起来了，但知道直链的人仍然能看完整内容」——
+	// 下载端点在上一轮已经判了渠道，预览没判，两处口径不一致。
+	//
+	// 判定放在 `published` 里而不是加一道独立的 404：缓存头
+	// （`cacheControlOf(published, versioned)`）与它共用同一个布尔，
+	// 分开写会出现「按不可见处理但给了 immutable 长缓存」这种自相矛盾的组合。
+	published := row.LifecycleState == "published" &&
+		row.ModerationState == "approved" &&
+		row.HasVisibleChannel
 	if !published && !p.mayPreviewDraft(ctx, r, row.AuthorSub) {
+		// 作者视图不受渠道影响：作者要能在发布到 hidden 之后仍然检查自己的作品，
+		// 审核员同理（他们看的是「还没对外」的东西，本来就该绕过渠道判定）。
 		http.NotFound(w, r)
 		return
 	}
