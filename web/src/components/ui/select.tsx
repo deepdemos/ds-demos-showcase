@@ -8,7 +8,11 @@ export interface SelectOption {
 export interface SelectProps {
   /** 当前值 */
   value: string;
-  options: SelectOption[];
+  /**
+   * 选项。**接受 readonly 数组**：调用方常用 `as const` 把取值钉成字面量类型，
+   * 好让选中的值直接符合接口契约里的枚举；控件本身不修改这个数组，没有理由要求可写。
+   */
+  options: readonly SelectOption[];
   onChange: (value: string) => void;
   disabled?: boolean;
   /** 可访问名。没有可见 `<label>` 时必填，否则读屏软件只会念「组合框」。 */

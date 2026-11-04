@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PublishCard } from '@/features/admin/publish-card';
 import { useAuth } from '@/features/auth/AuthContext';
 
 /**
@@ -37,11 +38,21 @@ const REASON_MAX = 500;
  * 预览是第三方代码（作者上传的 HTML），放进本页的 iframe 等于把审核员
  * 留在一个可能弹窗、可能占满、可能劫持键盘的页面里做裁决。
  * 新标签页里它是个独立文档，CSP sandbox 也是那边在服务端注的。
+ *
+ * # 已知限制：通过之后没当场发布，就找不回来了
+ *
+ * `GET /admin/reviews/demo` 只列待审作品，没有「已通过待发布」列表端点。所以这一页
+ * 的发布卡片只活在本次会话里，刷新就消失，那条作品会停在 `draft` 且界面上无处可寻。
+ * 要彻底解决需要一个「已通过待发布」列表（后端 + 契约），见 `docs/已知松点.md`。
  */
 export function AdminReviewPage() {
   const { me, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  // 本次会话里刚通过、还没发布的作品。
+  // 队列只列待审，一条作品通过后就从 queue 里消失了；不留这一份，管理员点完
+  // 「通过」就再也找不到它，作品会永远停在 draft。刷新页面会丢——见文件末尾注释。
+  const [approved, setApproved] = useState<ReviewQueueItem[]>([]);
 
   const queue = useQuery({
     queryKey: ['admin', 'reviews', 'demo'],
@@ -54,10 +65,10 @@ export function AdminReviewPage() {
     // 直接 return 会让 mutationFn 永远 resolve，`decide.isError` 变成死代码，
     // 于是 409（被别人抢先审了）/ 403（权限被撤）/ 503 全都没有任何提示。
     // 所以这里必须自己看 status，把失败翻成异常。
-    mutationFn: async (input: { slug: string; decision: 'approve' | 'reject' }) => {
-      const res = await reviewDemo(input.slug, {
+    mutationFn: async (input: { item: ReviewQueueItem; decision: 'approve' | 'reject' }) => {
+      const res = await reviewDemo(input.item.slug, {
         decision: input.decision,
-        reason: reasons[input.slug] || undefined,
+        reason: reasons[input.item.slug] || undefined,
       });
       if (res.status !== 200) {
         const message =
@@ -68,7 +79,13 @@ export function AdminReviewPage() {
       }
       return res;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      if (variables.decision === 'approve') {
+        // 先收进「待发布」列表再刷新队列：队列一刷新这条就不在了。
+        setApproved((prev) =>
+          prev.some((item) => item.slug === variables.item.slug) ? prev : [...prev, variables.item],
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: ['admin', 'reviews', 'demo'] });
     },
   });
@@ -114,6 +131,22 @@ export function AdminReviewPage() {
         </p>
       ) : null}
 
+      {approved.length > 0 ? (
+        <section className="space-y-3">
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium">刚通过 · 待发布</h2>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              通过 ≠ 已发布。只有在这里发出去的作品才会出现在作品库。
+            </p>
+          </div>
+          <ul className="list-none space-y-4 p-0">
+            {approved.map((item) => (
+              <PublishCard key={item.slug} slug={item.slug} title={item.title ?? '（无标题）'} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {queue.data?.status === 200 && queue.data.data.items.length === 0 ? (
         <EmptyState title="没有待审作品" description="有新投稿时会出现在这里。" />
       ) : null}
@@ -126,8 +159,8 @@ export function AdminReviewPage() {
               item={item}
               reason={reasons[item.slug] ?? ''}
               onReasonChange={(value) => setReasons((prev) => ({ ...prev, [item.slug]: value }))}
-              onDecide={(decision) => decide.mutate({ slug: item.slug, decision })}
-              busy={decide.isPending && decide.variables?.slug === item.slug}
+              onDecide={(decision) => decide.mutate({ item, decision })}
+              busy={decide.isPending && decide.variables?.item.slug === item.slug}
             />
           ))}
         </ul>
