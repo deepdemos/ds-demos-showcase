@@ -45,7 +45,14 @@ type SubmitInput struct {
 	Description string
 	DemoType    string
 	// PackagePath 是原始上传包在本机的临时路径。
+	//
+	// 注意它**没有扩展名**（`os.CreateTemp` 生成的随机名），所以判断类型时
+	// 必须看 PackageName，不能看它。踩过：只看 PackagePath 时
+	// `filepath.Ext` 恒为空串，单文件 html/svg 投稿 100% 报「不支持的作品包类型」。
 	PackagePath string
+	// PackageName 是客户端带过来的原始文件名，**只用来取扩展名**，
+	// 不参与任何路径拼接。
+	PackageName string
 	// PackageSize 是它的字节数（由调用方边写边数，不信客户端给的 Content-Length）。
 	PackageSize int64
 }

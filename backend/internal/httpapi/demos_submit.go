@@ -89,8 +89,6 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = os.Remove(pkgPath) }()
 
 	// header.Filename 只用来取扩展名；不参与任何路径拼接。
-	_ = header
-
 	ctx, cancel := context.WithTimeout(r.Context(), demo.SubmitTimeout)
 	defer cancel()
 
@@ -100,6 +98,7 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 		Description: description,
 		DemoType:    demoType,
 		PackagePath: pkgPath,
+		PackageName: header.Filename,
 		PackageSize: pkgSize,
 	})
 	if err != nil {
