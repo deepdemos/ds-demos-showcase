@@ -71,6 +71,12 @@ func (h *Handler) writeIdentityError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
 	case errors.Is(err, identity.ErrVerificationRequired):
 		writeError(w, http.StatusUnauthorized, api.VerificationRequired, "需要邮箱验证码")
+	case errors.Is(err, identity.ErrEmailNotVerified):
+		// 403 + 独立错误码：前端据此把人送到验证页，而不是让他重试密码。
+		writeError(w, http.StatusForbidden, api.EmailNotVerified, messageOf(err))
+	case errors.Is(err, identity.ErrVerifyCodeInvalid):
+		// 401 而不是 400：码不对是「没证明成功」，与「参数形状不对」不是一类。
+		writeError(w, http.StatusUnauthorized, api.Unauthorized, messageOf(err))
 	case errors.Is(err, identity.ErrAccountBanned):
 		// 403 而不是 401：这不是「你没登录」，是「你是对的但不让进」。
 		// 它只在密码校验通过之后才可能出现，所以不构成账号枚举。
@@ -134,18 +140,104 @@ func (h *Handler) PostAuthRegister(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), registerTimeout)
 	defer cancel()
 
-	account, sessionID, err := h.identity.Register(ctx, identity.RegisterInput{
+	account, delivery, err := h.identity.Register(ctx, identity.RegisterInput{
 		Email:       string(body.Email),
 		Password:    body.Password,
 		Username:    body.Username,
 		DisplayName: body.DisplayName,
 	})
+	if err != nil && !errors.Is(err, identity.ErrVerificationSendFailed) {
+		h.writeIdentityError(w, err)
+		return
+	}
+	// 走到这里的可能有两种：
+	//   ① err == nil，账号建好、码也生成了 → 发信；
+	//   ② err 是 ErrVerificationSendFailed，账号建好了但**码都没生成**（Issue 失败）。
+	// 两种都回 201：账号是真的存在，让用户重填表单只会建出第二个（然后撞 409）。
+	sent := false
+	if delivery.To != "" && h.mailer != nil && delivery.Code != "" {
+		// 同步发：响应里的 verificationSent 必须说真话。SMTP 慢一点（有 20 秒上限）
+		// 比「告诉用户信发了其实没发」要好——后者会让人一直等一封不存在的邮件。
+		sent = h.sendVerifyEmail(mailerDelivery{Code: delivery.Code, To: delivery.To})
+	}
+	if err != nil {
+		slog.Warn("注册成功但验证信没发出去", "email", account.Email, "err", err)
+	}
+	writeJSON(w, http.StatusCreated, api.RegisterAccepted{
+		Email:            account.Email,
+		VerificationSent: sent,
+	})
+}
+
+// PostAuthVerifyEmail 实现 POST /api/v1/auth/verify-email。
+//
+// 成功后**不下发会话**：这一步证明的是邮箱归属，不是身份。两个动作各自只做一件事。
+func (h *Handler) PostAuthVerifyEmail(w http.ResponseWriter, r *http.Request) {
+	if h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+	var body api.PostAuthVerifyEmailJSONRequestBody
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体不是合法的 JSON")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+
+	if err := h.identity.VerifyEmail(ctx, string(body.Email), body.Code); err != nil {
+		h.writeIdentityError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PostAuthVerifyEmailResend 实现 POST /api/v1/auth/verify-email/resend。
+//
+// **一律 204**，与 PostAuthEmailCode 同一个理由：账号不存在、已注销、或已经验证过，
+// 都走一遍生成与限流，只是不投递。响应形状与账号状态无关，所以它探不出谁注册过。
+func (h *Handler) PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request) {
+	if h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+	var body api.PostAuthVerifyEmailResendJSONRequestBody
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体不是合法的 JSON")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+
+	delivery, err := h.identity.RequestEmailVerification(ctx, string(body.Email), clientIP(r))
 	if err != nil {
 		h.writeIdentityError(w, err)
 		return
 	}
-	setSessionCookie(w, sessionID, sessionMaxAgeSeconds)
-	writeJSON(w, http.StatusCreated, toMe(account))
+	if delivery.To != "" && h.mailer != nil {
+		// 这里可以异步：204 不承诺「信已发出」，用户可以过一会儿检查邮箱。
+		go h.sendVerifyEmail(mailerDelivery{Code: delivery.Code, To: delivery.To})
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// sendVerifyEmail 发一封「验证你的邮箱」的信。
+//
+// 与登录码的信分开写：正文说的是不同的动作（注册验证 vs 登录），
+// 用同一个模板会让人分不清自己收到的是哪一封。
+func (h *Handler) sendVerifyEmail(d mailerDelivery) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), loginCodeTimeout)
+	defer cancel()
+	subject := "验证你的邮箱"
+	body := fmt.Sprintf("你的验证码是 %s，%d 分钟内有效。\n\n验证之后就能登录了。如果这不是你本人操作，忽略这封邮件即可。\n",
+		d.Code, int(verification.CodeTTL.Minutes()))
+	if err := h.mailer.Send(ctx, d.To, subject, body); err != nil {
+		slog.Warn("发送验证邮件失败", "err", err)
+		return false
+	}
+	return true
 }
 
 // PostAuthLogin 实现 POST /api/v1/auth/login。

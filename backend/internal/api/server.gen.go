@@ -41,6 +41,12 @@ type ServerInterface interface {
 	// 注册
 	// (POST /api/v1/auth/register)
 	PostAuthRegister(w http.ResponseWriter, r *http.Request)
+	// 验证邮箱
+	// (POST /api/v1/auth/verify-email)
+	PostAuthVerifyEmail(w http.ResponseWriter, r *http.Request)
+	// 重发验证邮件
+	// (POST /api/v1/auth/verify-email/resend)
+	PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request)
 	// 作品列表
 	// (GET /api/v1/demos)
 	ListDemos(w http.ResponseWriter, r *http.Request, params ListDemosParams)
@@ -113,6 +119,18 @@ func (_ Unimplemented) PostAuthPasswordResetCode(w http.ResponseWriter, r *http.
 // 注册
 // (POST /api/v1/auth/register)
 func (_ Unimplemented) PostAuthRegister(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 验证邮箱
+// (POST /api/v1/auth/verify-email)
+func (_ Unimplemented) PostAuthVerifyEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 重发验证邮件
+// (POST /api/v1/auth/verify-email/resend)
+func (_ Unimplemented) PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -325,6 +343,34 @@ func (siw *ServerInterfaceWrapper) PostAuthRegister(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAuthRegister(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthVerifyEmail operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthVerifyEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthVerifyEmail(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthVerifyEmailResend operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthVerifyEmailResend(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -603,6 +649,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/register", wrapper.PostAuthRegister)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/verify-email", wrapper.PostAuthVerifyEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/verify-email/resend", wrapper.PostAuthVerifyEmailResend)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demos", wrapper.ListDemos)

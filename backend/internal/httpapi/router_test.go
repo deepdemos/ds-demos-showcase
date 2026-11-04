@@ -33,6 +33,14 @@ func (s *stub) PostAuthRegister(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "register")
 }
 
+func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "verify-email")
+}
+
+func (s *stub) PostAuthVerifyEmailResend(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "verify-email-resend")
+}
+
 func (s *stub) PostAuthLogin(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "login")
 }

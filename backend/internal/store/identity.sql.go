@@ -11,6 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activatePendingAccount = `-- name: ActivatePendingAccount :exec
+UPDATE accounts
+SET status = 'active', updated_at = now()
+WHERE id = $1 AND status = 'pending'
+`
+
+// 只从 pending 转 active：已验证过的账号重复调用不该把它从 suspended 拉回 active。
+func (q *Queries) ActivatePendingAccount(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, activatePendingAccount, id)
+	return err
+}
+
 const countEmailCodeSends = `-- name: CountEmailCodeSends :one
 SELECT count(*)::int AS sends
 FROM login_attempts
@@ -113,7 +125,7 @@ func (q *Queries) CountLoginFailures(ctx context.Context, arg CountLoginFailures
 const createAccount = `-- name: CreateAccount :one
 
 INSERT INTO accounts (sub, status, role)
-VALUES ($1, 'active', 'user')
+VALUES ($1, 'pending', 'user')
 RETURNING id, created_at
 `
 
@@ -123,6 +135,8 @@ type CreateAccountRow struct {
 }
 
 // ===== 注册（一事务六张表）=====
+// 新账号一律 `pending`：邮箱还没证明过属于本人，所以既不能登录，也不能投稿。
+// 表上 default 就是 pending，这里仍显式写出——读这一行的人不该去翻 schema 才知道。
 func (q *Queries) CreateAccount(ctx context.Context, sub string) (CreateAccountRow, error) {
 	row := q.db.QueryRow(ctx, createAccount, sub)
 	var i CreateAccountRow
@@ -254,6 +268,49 @@ func (q *Queries) GetAccountByEmail(ctx context.Context, email string) (GetAccou
 		&i.Status,
 		&i.Username,
 		&i.DisplayName,
+	)
+	return i, err
+}
+
+const getAccountForVerification = `-- name: GetAccountForVerification :one
+
+SELECT a.id,
+       a.sub,
+       a.status,
+       p.username,
+       p.display_name,
+       e.email,
+       e.verified_at
+FROM accounts a
+JOIN profiles p ON p.account_id = a.id
+JOIN account_emails e ON e.account_id = a.id
+WHERE lower(e.email) = lower($1::text)
+`
+
+type GetAccountForVerificationRow struct {
+	ID          int64
+	Sub         string
+	Status      string
+	Username    string
+	DisplayName string
+	Email       string
+	VerifiedAt  pgtype.Timestamptz
+}
+
+// ===== 邮箱验证（issue #169）=====
+// 按邮箱找账号，并带回「已经验证过没有」。
+// 只取一列 verified_at 而不取 emails 全部：这个查询只服务于「能不能验」，别的不需要。
+func (q *Queries) GetAccountForVerification(ctx context.Context, email string) (GetAccountForVerificationRow, error) {
+	row := q.db.QueryRow(ctx, getAccountForVerification, email)
+	var i GetAccountForVerificationRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sub,
+		&i.Status,
+		&i.Username,
+		&i.DisplayName,
+		&i.Email,
+		&i.VerifiedAt,
 	)
 	return i, err
 }
@@ -437,6 +494,24 @@ func (q *Queries) GetPasswordResetTarget(ctx context.Context, lower string) (Get
 		&i.Email,
 	)
 	return i, err
+}
+
+const markEmailVerified = `-- name: MarkEmailVerified :exec
+UPDATE account_emails
+SET verified_at = now()
+WHERE account_id = $1
+  AND lower(email) = lower($2::text)
+`
+
+type MarkEmailVerifiedParams struct {
+	AccountID int64
+	Email     string
+}
+
+// 只标主邮箱那一行；同一账号若有多条邮箱（未来可能加），验证的是被请求的那一条。
+func (q *Queries) MarkEmailVerified(ctx context.Context, arg MarkEmailVerifiedParams) error {
+	_, err := q.db.Exec(ctx, markEmailVerified, arg.AccountID, arg.Email)
+	return err
 }
 
 const purgeLoginAttempts = `-- name: PurgeLoginAttempts :exec

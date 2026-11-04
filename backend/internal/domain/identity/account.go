@@ -28,6 +28,15 @@ var (
 	// 被封的人需要读到「你被封了」而不是「密码错误」，否则他会一直重试。
 	// 它只可能在密码校验通过之后出现，所以不构成账号枚举。
 	ErrAccountBanned = errors.New("identity: 账号已被封禁")
+	// ErrVerificationSendFailed 是「账号建好了，但验证信没发出去」。
+	// 它不代表注册失败——账号是真的，用户可以到验证页重发。传输层据此在 201 响应里
+	// 带上 `verificationSent: false`，前端据此提示「信没发出去，去验证页重发」。
+	ErrVerificationSendFailed = errors.New("identity: 验证信没发出去")
+	// ErrEmailNotVerified 是「邮箱还没验证过，账号还没启用」。
+	// 与 ErrUnauthorized 分开：这类用户密码是对的，报「密码不对」会让他一直重试；
+	// 前端也要据此给出「去验证 / 重新发送」的入口，而不是一句「登录失败」。
+	// 它只在密码校验通过之后出现，所以不构成账号枚举。
+	ErrEmailNotVerified = errors.New("identity: 邮箱还没验证，请先完成验证")
 	// ErrResetCodeInvalid 是「重置密码的验证码不对或已过期」。
 	// 与 ErrUnauthorized 分开：重置页面要提示的是验证码，说成密码错只会让人更困惑。
 	ErrResetCodeInvalid = errors.New("identity: 验证码不对或已过期")

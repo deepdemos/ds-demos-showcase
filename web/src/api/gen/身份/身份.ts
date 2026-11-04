@@ -4,8 +4,12 @@
  * DeepDemos API
  * 本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
  *
- * 当前范围：站点可用性、作品列表与详情、身份（注册 / 登录 / 登出 / 我是谁 / 发验证码 /
- * 找回密码），共 14 个端点。实现全部已接入并有集成测试覆盖。
+ * 当前范围：站点可用性、作品列表与详情、身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 /
+ * 发验证码 / 找回密码），共 16 个端点。实现全部已接入并有集成测试覆盖。
+ *
+ * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
+ * 它们的响应体是 HTML / zip 字节而不是 JSON，「所有端点返回 JSON、错误有统一 ErrorBody」
+ * 这条前提对它们不成立。判定逻辑在 `backend/internal/httpapi/preview.go` 与 `download.go`。
  *
  * 这份描述会随端点增加而更新——它长期停在「三个端点」正是 `api/surface.json` 基线
  * 不自动成长的症状（见 `docs/已知松点.md` 第 18 条）。
@@ -27,12 +31,178 @@ import type {
   Me,
   PasswordResetCodeRequest,
   PasswordResetRequest,
-  RegisterRequest
+  RegisterAccepted,
+  RegisterRequest,
+  VerifyEmailRequest,
+  VerifyEmailResendRequest
 } from '../model';
 
 
+export type postAuthVerifyEmailResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postAuthVerifyEmailResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type postAuthVerifyEmailResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type postAuthVerifyEmailResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type postAuthVerifyEmailResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type postAuthVerifyEmailResponseSuccess = (postAuthVerifyEmailResponse204) & {
+  headers: Headers;
+};
+export type postAuthVerifyEmailResponseError = (postAuthVerifyEmailResponse400 | postAuthVerifyEmailResponse401 | postAuthVerifyEmailResponse429 | postAuthVerifyEmailResponse503) & {
+  headers: Headers;
+};
+
+export type postAuthVerifyEmailResponse = (postAuthVerifyEmailResponseSuccess | postAuthVerifyEmailResponseError)
+
+export const getPostAuthVerifyEmailUrl = () => {
+
+
+
+
+  return `/api/v1/auth/verify-email`
+}
+
+/**
+ * 消费验证码，把账号从 `pending` 推到 `active`，并给主邮箱盖上 `verified_at`。
+ *
+ * **成功后不自动登录**：这一步证明的是邮箱归属，不是身份。用户拿着刚验证过的
+ * 邮箱再登录一次，才拿到会话——两个动作各自只做一件事。
+ *
+ * 已经验证过的账号再提交一次直接返回 204（幂等，不消费码）：用户可能刷新页面
+ * 重提交，回一句「验证码不对」只会让他以为码坏了。
+ * @summary 验证邮箱
+ */
+export const postAuthVerifyEmail = async (verifyEmailRequest: VerifyEmailRequest, options?: RequestInit): Promise<postAuthVerifyEmailResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPostAuthVerifyEmailUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(verifyEmailRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthVerifyEmailResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as postAuthVerifyEmailResponse
+}
+
+
+export type postAuthVerifyEmailResendResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postAuthVerifyEmailResendResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type postAuthVerifyEmailResendResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type postAuthVerifyEmailResendResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type postAuthVerifyEmailResendResponseSuccess = (postAuthVerifyEmailResendResponse204) & {
+  headers: Headers;
+};
+export type postAuthVerifyEmailResendResponseError = (postAuthVerifyEmailResendResponse400 | postAuthVerifyEmailResendResponse429 | postAuthVerifyEmailResendResponse503) & {
+  headers: Headers;
+};
+
+export type postAuthVerifyEmailResendResponse = (postAuthVerifyEmailResendResponseSuccess | postAuthVerifyEmailResendResponseError)
+
+export const getPostAuthVerifyEmailResendUrl = () => {
+
+
+
+
+  return `/api/v1/auth/verify-email/resend`
+}
+
+/**
+ * 给还没验证的账号再发一封。与发登录验证码共用同一套 IP 配额
+ * （每个 IP 每小时 20 封）——换个邮箱就是新额度的话，1000 个邮箱等于没有上限。
+ *
+ * **一律 204**：账号不存在、已注销、或邮箱本来就验证过，都走一遍生成与限流，
+ * 只是不投递。响应形状与账号是否存在无关，所以这个端点探不出谁注册过。
+ * @summary 重发验证邮件
+ */
+export const postAuthVerifyEmailResend = async (verifyEmailResendRequest: VerifyEmailResendRequest, options?: RequestInit): Promise<postAuthVerifyEmailResendResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPostAuthVerifyEmailResendUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(verifyEmailResendRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postAuthVerifyEmailResendResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as postAuthVerifyEmailResendResponse
+}
+
+
 export type postAuthRegisterResponse201 = {
-  data: Me
+  data: RegisterAccepted
   status: 201
 }
 
@@ -69,7 +239,12 @@ export const getPostAuthRegisterUrl = () => {
 }
 
 /**
- * 建账号并直接给一个会话——注册完就是登录态，前端不需要再调一次登录。
+ * 建账号并发一封验证邮件。**注册完不是登录态**：账号落在 `pending`，要先去
+ * `POST /api/v1/auth/verify-email` 证明邮箱是自己的，之后才能登录。
+ *
+ * 为什么这么设计：没有这一步时「邮箱」只是用户随手敲的字符串，抢注别人的邮箱
+ * 会让真正的主人在注册时撞 409，更麻烦的是找回密码——重置码寄往一个不属于
+ * 注册者的地址，账号直接变砖。
  *
  * **邮箱与用户名都不区分大小写判重**（数据库上是 `lower(...)` 唯一索引），
  * 所以 `Alice` 与 `alice` 会撞 409，而不是建出两个账号。
