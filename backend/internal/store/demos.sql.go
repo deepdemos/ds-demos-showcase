@@ -298,7 +298,14 @@ SELECT d.id,
        COALESCE(r.rev_no, 0)::int AS current_rev_no,
        r.deleted_at AS revision_deleted_at,
        r.erased_at  AS revision_erased_at,
-       COALESCE(u.sub, '')::text AS author_sub
+       COALESCE(u.sub, '')::text AS author_sub,
+       -- 渠道可见性：与 /download 同一口径（listed 或 unlisted 才算对外可见）。
+       -- 之前预览完全不判这一列，导致 hidden 的作品「从列表里藏起来了，但知道直链的人
+       -- 仍然能看完整内容」。下载那一轮把这个口子堵了一半（下载判了），预览没动。
+       EXISTS (
+           SELECT 1 FROM demo_channels c
+           WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
+       )::bool AS has_visible_channel
 FROM demos d
 LEFT JOIN users u ON u.id = d.author_id
 LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
@@ -316,6 +323,7 @@ type GetDemoForPreviewRow struct {
 	RevisionDeletedAt pgtype.Timestamptz
 	RevisionErasedAt  pgtype.Timestamptz
 	AuthorSub         string
+	HasVisibleChannel bool
 }
 
 // 预览托管用：一次取到「这是什么状态、作者是谁、当前是第几版」。
@@ -336,6 +344,7 @@ func (q *Queries) GetDemoForPreview(ctx context.Context, slug string) (GetDemoFo
 		&i.RevisionDeletedAt,
 		&i.RevisionErasedAt,
 		&i.AuthorSub,
+		&i.HasVisibleChannel,
 	)
 	return i, err
 }
