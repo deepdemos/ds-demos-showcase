@@ -245,11 +245,18 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 	}
 	if tombstone {
 		// 墓碑态：标题与简介置空，保留 slug / 时间 / 状态，让页面能说「这里曾经有过一个作品」。
+		// demoType 留空、downloadable 为 false——墓碑不承载内容，也没有可下载的文件。
 		return detail, true
 	}
 	detail.Title = textPtr(row.Title)
 	detail.Description = textPtr(row.Description)
 	detail.CoverUrl = textPtr(row.CoverUrl)
+	detail.DemoType = row.DemoType
+	// downloadable 的口径与 httpapi/download.go 必须一致，否则按钮点了 404：
+	// 有文件可给（不是 link）+ 渠道对外可见（listed 或 unlisted）。
+	// 这里不判存储里文件是否存在——那要多一次 Stat 往返，
+	// 而「文件被外力删掉」属于事故，不该由详情页替它兜底（下载会明确 404）。
+	detail.Downloadable = row.DemoType != "" && row.DemoType != "link" && row.HasVisibleChannel
 	return detail, true
 }
 

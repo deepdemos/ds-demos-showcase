@@ -21,8 +21,8 @@ import (
 // 实测：真实地址 203.0.113.7 + 伪造 XFF 1.2.3.4 时，clientIP() 返回 1.2.3.4。
 //
 // 上反向代理后要按白名单显式解析 XFF（见 httpapi.clientIP 的注释与运行手册 §3）。
-// preview 可以为 nil（未接线存储），此时预览路径统一 404。
-func NewRouter(si api.ServerInterface, preview *Preview) http.Handler {
+// preview 与 download 都可以为 nil（未接线存储），此时对应路径统一 404。
+func NewRouter(si api.ServerInterface, preview *Preview, download *Download) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID, middleware.Recoverer)
 
@@ -33,7 +33,19 @@ func NewRouter(si api.ServerInterface, preview *Preview) http.Handler {
 	router.Method("GET", "/preview/{slug}", previewOrNotFound(preview))
 	router.Method("HEAD", "/preview/{slug}", previewOrNotFound(preview))
 
+	// 下载同样不是契约端点（响应体是 zip / html 字节，不是 JSON），理由见 download.go 顶部。
+	// 两个处理器各占一个路径段，不冲突。
+	router.Method("GET", "/download/{slug}", downloadOrNotFound(download))
+	router.Method("HEAD", "/download/{slug}", downloadOrNotFound(download))
+
 	return api.HandlerFromMux(si, router)
+}
+
+func downloadOrNotFound(d *Download) http.Handler {
+	if d != nil {
+		return d
+	}
+	return http.NotFoundHandler()
 }
 
 func previewOrNotFound(p *Preview) http.Handler {

@@ -34,12 +34,16 @@ func (r fakeRow) Scan(dest ...any) error {
 		switch d := dest[i].(type) {
 		case *int64:
 			*d = r.values[i].(int64)
+		case *int32:
+			*d = r.values[i].(int32)
 		case *string:
 			*d = r.values[i].(string)
 		case *pgtype.Text:
 			*d = r.values[i].(pgtype.Text)
 		case *pgtype.Timestamptz:
 			*d = r.values[i].(pgtype.Timestamptz)
+		case *bool:
+			*d = r.values[i].(bool)
 		default:
 			panic("fakeRow: unsupported scan target")
 		}
@@ -150,10 +154,15 @@ func detailRow(state string, title string, deleted, erased bool) store.GetDemoBy
 		CoverUrl:        pgtype.Text{String: "https://example.test/c.png", Valid: title != ""},
 		LifecycleState:  state,
 		ModerationState: "approved",
-		CreatedAt:       ts(now),
-		UpdatedAt:       ts(now),
-		DeletedAt:       pgtype.Timestamptz{Valid: deleted},
-		ErasedAt:        pgtype.Timestamptz{Valid: erased},
+		DemoType:        "web",
+		SingleFile:      "",
+		// detailRow 默认给「渠道对外可见」，因为绝大多数用例要的是「正常可见的作品」。
+		// 需要 hidden 渠道的用例自己改这一列。
+		HasVisibleChannel: true,
+		CreatedAt:         ts(now),
+		UpdatedAt:         ts(now),
+		DeletedAt:         pgtype.Timestamptz{Valid: deleted},
+		ErasedAt:          pgtype.Timestamptz{Valid: erased},
 	}
 }
 
@@ -163,6 +172,7 @@ func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorde
 	newTestHandler(nil, store.New(fakeDB{row: fakeRow{values: []any{
 		row.ID, row.Slug, row.Title, row.Description, row.CoverUrl,
 		row.LifecycleState, row.ModerationState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
+		row.DemoType, row.SingleFile, row.HasVisibleChannel,
 	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
 	return response
 }

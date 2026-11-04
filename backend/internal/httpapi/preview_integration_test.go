@@ -156,7 +156,7 @@ func previewGet(p *Preview, target, sessionID string) *httptest.ResponseRecorder
 		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sessionID})
 	}
 	w := httptest.NewRecorder()
-	NewRouter(&stub{}, p).ServeHTTP(w, req)
+	NewRouter(&stub{}, p, nil).ServeHTTP(w, req)
 	return w
 }
 

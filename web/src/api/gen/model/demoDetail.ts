@@ -29,4 +29,17 @@ export type DemoDetail = DemoSummary & ({
      */
   description: string | null;
   updatedAt: string;
+  /**
+     * 作品类型，取自 `demo_types` 主数据（`web` / `zip` / `link` / `image`）。
+     * 墓碑态为空串——墓碑不承载内容，也就没有类型可言。
+     */
+  demoType: string;
+  /**
+     * 这个作品现在能不能下载。
+     *
+     * `false` 有几种原因：墓碑态、外链作品（`link` 只给外链地址，不给本站包）、
+     * 或者文件已经不在存储里。前端据此决定出不出「下载作品」，
+     * **不要自己按 `demoType` 猜**——猜出来的按钮会点出 404。
+     */
+  downloadable: boolean;
 });

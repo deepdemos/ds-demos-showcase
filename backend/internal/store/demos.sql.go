@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bumpDownloadCount = `-- name: BumpDownloadCount :exec
+INSERT INTO demo_stats (demo_id, download_count)
+VALUES ($1, 1)
+ON CONFLICT (demo_id) DO UPDATE
+SET download_count = demo_stats.download_count + 1,
+    updated_at     = now()
+`
+
+// demo_stats 之前是空表（连行都没人建），这是第一处写它。
+// UPSERT 而不是先 SELECT 再 UPDATE：两次往返之间别的请求也能插进来，
+// 而这里要的是「原子 +1」，不是「读改写」。
+func (q *Queries) BumpDownloadCount(ctx context.Context, demoID int64) error {
+	_, err := q.db.Exec(ctx, bumpDownloadCount, demoID)
+	return err
+}
+
 const countPendingDemosByAuthor = `-- name: CountPendingDemosByAuthor :one
 SELECT count(*)::int
 FROM demos
@@ -150,28 +166,43 @@ func (q *Queries) DeleteDemoForCleanup(ctx context.Context, id int64) error {
 }
 
 const getDemoBySlug = `-- name: GetDemoBySlug :one
-SELECT id, slug, title, description, cover_url,
-       lifecycle_state, moderation_state, created_at, updated_at, deleted_at, erased_at
-FROM demos
-WHERE slug = $1
+SELECT d.id, d.slug, d.title, d.description, d.cover_url,
+       d.lifecycle_state, d.moderation_state, d.created_at, d.updated_at,
+       d.deleted_at, d.erased_at,
+       COALESCE(r.demo_type, '')::text AS demo_type,
+       COALESCE(r.single_file, '')::text AS single_file,
+       EXISTS (
+           SELECT 1 FROM demo_channels c
+           WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
+       )::bool AS has_visible_channel
+FROM demos d
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.slug = $1
 `
 
 type GetDemoBySlugRow struct {
-	ID              int64
-	Slug            string
-	Title           pgtype.Text
-	Description     pgtype.Text
-	CoverUrl        pgtype.Text
-	LifecycleState  string
-	ModerationState string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	ErasedAt        pgtype.Timestamptz
+	ID                int64
+	Slug              string
+	Title             pgtype.Text
+	Description       pgtype.Text
+	CoverUrl          pgtype.Text
+	LifecycleState    string
+	ModerationState   string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	ErasedAt          pgtype.Timestamptz
+	DemoType          string
+	SingleFile        string
+	HasVisibleChannel bool
 }
 
 // 不加可见性过滤：归档/移除的作品要能取出来渲染墓碑页。
 // 「要不要给 404」由调用方按 lifecycle_state / erased_at 判定。
+//
+// 多带三列是给「下载」用的：demo_type / single_file 决定下载的是哪个文件，
+// has_visible_channel 决定这张卡片该不该出下载按钮（hidden 渠道的作品对外不可见，
+// 与 /download 端点的判定保持同一口径，否则按钮点了会 404）。
 func (q *Queries) GetDemoBySlug(ctx context.Context, slug string) (GetDemoBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getDemoBySlug, slug)
 	var i GetDemoBySlugRow
@@ -187,6 +218,72 @@ func (q *Queries) GetDemoBySlug(ctx context.Context, slug string) (GetDemoBySlug
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.ErasedAt,
+		&i.DemoType,
+		&i.SingleFile,
+		&i.HasVisibleChannel,
+	)
+	return i, err
+}
+
+const getDemoForDownload = `-- name: GetDemoForDownload :one
+
+SELECT d.id,
+       d.slug,
+       d.lifecycle_state,
+       d.moderation_state,
+       d.deleted_at,
+       d.erased_at,
+       COALESCE(r.rev_no, 0)::int AS current_rev_no,
+       COALESCE(r.single_file, '')::text AS single_file,
+       COALESCE(r.demo_type, '')::text AS demo_type,
+       r.deleted_at AS revision_deleted_at,
+       r.erased_at  AS revision_erased_at,
+       EXISTS (
+           SELECT 1 FROM demo_channels c
+           WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
+       )::bool AS has_visible_channel
+FROM demos d
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.slug = $1
+`
+
+type GetDemoForDownloadRow struct {
+	ID                int64
+	Slug              string
+	LifecycleState    string
+	ModerationState   string
+	DeletedAt         pgtype.Timestamptz
+	ErasedAt          pgtype.Timestamptz
+	CurrentRevNo      int32
+	SingleFile        string
+	DemoType          string
+	RevisionDeletedAt pgtype.Timestamptz
+	RevisionErasedAt  pgtype.Timestamptz
+	HasVisibleChannel bool
+}
+
+// ===== 下载（DEMO-038~041）=====
+// 下载要一次拿到「该不该给、给哪个文件」两件事，所以与预览分开查：
+// 预览按相对路径取任意文件，下载只认原件（单文件作品是它自己，多文件作品是 source.zip）。
+//
+// **单独判渠道可见性**：预览现在不看渠道（已知不一致，另开 issue），
+// 下载必须看——否则 hidden 的作品会变成「藏起来了但谁都能下」。
+func (q *Queries) GetDemoForDownload(ctx context.Context, slug string) (GetDemoForDownloadRow, error) {
+	row := q.db.QueryRow(ctx, getDemoForDownload, slug)
+	var i GetDemoForDownloadRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.LifecycleState,
+		&i.ModerationState,
+		&i.DeletedAt,
+		&i.ErasedAt,
+		&i.CurrentRevNo,
+		&i.SingleFile,
+		&i.DemoType,
+		&i.RevisionDeletedAt,
+		&i.RevisionErasedAt,
+		&i.HasVisibleChannel,
 	)
 	return i, err
 }
