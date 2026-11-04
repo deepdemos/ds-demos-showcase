@@ -124,7 +124,14 @@ export function AdminReviewPage() {
         // description 是纯字符串（组件刻意不接任意节点，免得错误态被拼成广告牌），
         // 而这里需要一个真的能点的出口。
         <div className="space-y-1 text-center">
-          <ErrorState title="登录已过期" description="重新登录后即可继续审核。" />
+          {/* 给了重试：在另一个标签页登录之后，回来点一下就能接着审，不用刷新整页。
+              `check:ui` 也要求控件有接线——一个只有标题和一句话的错误态会被判为占位实现。 */}
+          <ErrorState
+            title="登录已过期"
+            description="重新登录后即可继续审核。"
+            onRetry={() => void queue.refetch()}
+            retrying={queue.isFetching}
+          />
           <Link
             to="/login?return_to=/admin/reviews"
             className="text-sm text-neutral-600 underline hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100"
