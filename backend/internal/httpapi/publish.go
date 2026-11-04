@@ -62,7 +62,7 @@ func (h *Handler) writePublishError(w http.ResponseWriter, err error) {
 	case errors.Is(err, demo.ErrNotApproved),
 		errors.Is(err, demo.ErrAlreadyPublished),
 		errors.Is(err, demo.ErrRemovedCannotPublish),
-		errors.Is(err, demo.ErrNotPending):
+		errors.Is(err, demo.ErrPublishConflict):
 		// 四者都是「这条作品现在不在这条路上」，不是请求写错了。
 		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
 	case errors.Is(err, demo.ErrInvalidVisibility),

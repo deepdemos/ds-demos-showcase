@@ -35,6 +35,10 @@ var (
 	ErrNotApproved = errors.New("demo: 作品还没通过审核")
 	// ErrAlreadyPublished 表示作品已经是 published。
 	ErrAlreadyPublished = errors.New("demo: 作品已经发布")
+	// ErrPublishConflict 表示查到状态之后、改之前被别的写者抢先改了。
+	// 单独一个哨兵是因为「不处于待审状态」（ErrNotPending）是审核链路的话术，
+	// 在发布链路上答非所问——调用方看到「待审」会以为自己走错了端点。
+	ErrPublishConflict = errors.New("demo: 作品状态刚刚被改过，请刷新后重试")
 	// ErrRemovedCannotPublish 表示违规下架的作品不能直接发布。
 	ErrRemovedCannotPublish = errors.New("demo: 违规下架的作品不能直接发布，请走申诉")
 	// ErrInvalidChannel 表示渠道码值不可用（未登记 / 已停用）。
@@ -129,7 +133,7 @@ func (s *Service) Publish(ctx context.Context, actor ReviewActor, in PublishInpu
 		if n != 1 {
 			// 走到这里说明上面刚查过的状态在事务里被别人改了。
 			// 可能是并发发布，也可能是同时被审核退回。两种都回 409。
-			return ErrNotPending
+			return ErrPublishConflict
 		}
 
 		if err := q.UpsertDemoChannel(ctx, store.UpsertDemoChannelParams{

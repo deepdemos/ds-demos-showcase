@@ -143,6 +143,20 @@ func (h *Handler) ReviewDemo(w http.ResponseWriter, r *http.Request, slug string
 		return
 	}
 
+	// 裁决值必须显式校验。契约里 ReviewDecision.decision 是 required + enum，
+	// 而 decodeJSON 的 DisallowUnknownFields 只管字段名、不管枚举值——
+	// 少了这段，decision:"yes" 会因为「不等于 approve」被当成驳回，还返回 200。
+	var approve bool
+	switch body.Decision {
+	case api.Approve:
+		approve = true
+	case api.Reject:
+		approve = false
+	default:
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "decision 只能是 approve 或 reject")
+		return
+	}
+
 	reason := ""
 	if body.Reason != nil {
 		reason = *body.Reason
@@ -150,7 +164,7 @@ func (h *Handler) ReviewDemo(w http.ResponseWriter, r *http.Request, slug string
 
 	out, err := h.demos.Review(ctx, actor, demo.ReviewInput{
 		Slug:    slug,
-		Approve: body.Decision == api.Approve,
+		Approve: approve,
 		Reason:  reason,
 	})
 	if err != nil {

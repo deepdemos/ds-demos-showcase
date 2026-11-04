@@ -230,6 +230,13 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 
 	tombstone := row.DeletedAt.Valid || state == api.LifecycleStateArchived || state == api.LifecycleStateRemoved
 
+	// 墓碑只承载「这里曾经有过一个作品」，不承载内容，所以不看审核态。
+	// 但完整内容必须审过：published + rejected 这种组合当前没有端点能造出来，
+	// 可一旦有（大改后重新送审、手工修数据），它会让未过审的内容对全世界可见。
+	if !tombstone && row.ModerationState != "approved" {
+		return api.DemoDetail{}, false
+	}
+
 	detail := api.DemoDetail{
 		Slug:           row.Slug,
 		CreatedAt:      row.CreatedAt.Time,

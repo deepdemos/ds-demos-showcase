@@ -128,7 +128,9 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	published := row.LifecycleState == "published"
+	// 对外可见 = 已发布 **且** 审过。两者缺一都只有作者与审核员能看，
+	// 因为「审核通过」与「发布」是两次独立的状态跃迁（设计 §7.4）。
+	published := row.LifecycleState == "published" && row.ModerationState == "approved"
 	if !published && !p.mayPreviewDraft(ctx, r, row.AuthorSub) {
 		http.NotFound(w, r)
 		return
