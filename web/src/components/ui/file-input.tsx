@@ -63,6 +63,9 @@ export function FileInput({
       <input
         ref={ref}
         type="file"
+        // 可访问名必须挂在这一个元素上：上面那句说明是兄弟节点里的文字，
+        // 读屏软件和端到端测试都关联不到原生控件本身（它只会念 "Choose File"）。
+        aria-label={label}
         accept={accept}
         disabled={disabled}
         onChange={onChange}

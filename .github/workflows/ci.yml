@@ -129,8 +129,14 @@ jobs:
   # **刻意不做 required check**：这是全项目第一次在 CI 里同时拉起 postgres + Go API + vite
   # 三件套，链越长越容易抖；等观察一阵抖动率再决定要不要拦合并。现在红了不挡 PR，但要看。
   #
-  # 用例只读：不写库、不投稿、不登录。作品库那条依赖 `db/seeds/0001-dev-demos.sql`
-  # 灌进去的开发种子（每条作品都没有封面，卡片带「无封面」标记）。
+  # 两组用例，覆盖面不同：
+  #
+  # - `smoke.e2e.ts` 只读：不写库、不登录。作品库那条依赖 `db/seeds/0001-dev-demos.sql`
+  #   灌进去的开发种子（每条作品都没有封面，卡片带「无封面」标记）。
+  # - `closed-loop.e2e.ts` **会写库**：注册作者、上传文件、审核通过、发布。它跑在一个
+  #   一次性 postgres 容器里，不留痕迹；但本地对着开发库跑就会留下账号和作品，别在有
+  #   数据的库上跑。它需要一个管理员，由下面的「建闭环用例所需的管理员」步骤用
+  #   `cmd/admin-grant` 现建——这条路径本身也是生产上拿到第一个管理员的方式。
   e2e:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -173,6 +179,11 @@ jobs:
         run: go run ./cmd/migrate up
       - name: 灌开发种子（作品库要有作品可点）
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seeds/0001-dev-demos.sql
+      - name: 建闭环用例所需的管理员
+        working-directory: backend
+        env:
+          ADMIN_GRANT_PASSWORD: e2e-admin-password
+        run: go run ./cmd/admin-grant -email admin@e2e.local -username e2e-admin -display 测试管理员
       - name: 起 Go API
         run: |
           cd backend
@@ -201,11 +212,13 @@ jobs:
           echo "vite 没起来，日志如下："
           cat "$RUNNER_TEMP/vite.log"
           exit 1
-      - name: 跑浏览器冒烟
+      - name: 跑浏览器用例（冒烟 + 七步闭环）
         working-directory: web
         env:
           APP_URL: http://127.0.0.1:7000
           E2E_TELEMETRY_DISABLED: '1'
+          E2E_ADMIN_EMAIL: admin@e2e.local
+          E2E_ADMIN_PASSWORD: e2e-admin-password
         run: pnpm test:e2e
       - name: 留下失败现场（截图 / trace / 报告）
         if: failure()
