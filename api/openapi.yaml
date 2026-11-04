@@ -6,8 +6,12 @@ info:
   description: |
     本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
 
-    当前范围：站点可用性、作品列表与详情、身份（注册 / 登录 / 登出 / 我是谁 / 发验证码 /
-    找回密码），共 14 个端点。实现全部已接入并有集成测试覆盖。
+    当前范围：站点可用性、作品列表与详情、身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 /
+    发验证码 / 找回密码），共 16 个端点。实现全部已接入并有集成测试覆盖。
+
+    不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
+    它们的响应体是 HTML / zip 字节而不是 JSON，「所有端点返回 JSON、错误有统一 ErrorBody」
+    这条前提对它们不成立。判定逻辑在 `backend/internal/httpapi/preview.go` 与 `download.go`。
 
     这份描述会随端点增加而更新——它长期停在「三个端点」正是 `api/surface.json` 基线
     不自动成长的症状（见 `docs/已知松点.md` 第 18 条）。
@@ -249,13 +253,110 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/auth/verify-email:
+    post:
+      operationId: postAuthVerifyEmail
+      tags: [身份]
+      summary: 验证邮箱
+      description: |
+        消费验证码，把账号从 `pending` 推到 `active`，并给主邮箱盖上 `verified_at`。
+
+        **成功后不自动登录**：这一步证明的是邮箱归属，不是身份。用户拿着刚验证过的
+        邮箱再登录一次，才拿到会话——两个动作各自只做一件事。
+
+        已经验证过的账号再提交一次直接返回 204（幂等，不消费码）：用户可能刷新页面
+        重提交，回一句「验证码不对」只会让他以为码坏了。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '204':
+          description: 验证通过（或本来就已通过）
+        '400':
+          description: 邮箱格式不对或没填验证码
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 验证码不对或已过期（`code` 为 `unauthorized`）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 尝试太频繁
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/verify-email/resend:
+    post:
+      operationId: postAuthVerifyEmailResend
+      tags: [身份]
+      summary: 重发验证邮件
+      description: |
+        给还没验证的账号再发一封。与发登录验证码共用同一套 IP 配额
+        （每个 IP 每小时 20 封）——换个邮箱就是新额度的话，1000 个邮箱等于没有上限。
+
+        **一律 204**：账号不存在、已注销、或邮箱本来就验证过，都走一遍生成与限流，
+        只是不投递。响应形状与账号是否存在无关，所以这个端点探不出谁注册过。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailResendRequest'
+      responses:
+        '204':
+          description: 已受理（无论账号是否存在、是否真的投递）
+        '400':
+          description: 邮箱格式不对
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 发送太频繁
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/auth/register:
     post:
       operationId: postAuthRegister
       tags: [身份]
       summary: 注册
       description: |
-        建账号并直接给一个会话——注册完就是登录态，前端不需要再调一次登录。
+        建账号并发一封验证邮件。**注册完不是登录态**：账号落在 `pending`，要先去
+        `POST /api/v1/auth/verify-email` 证明邮箱是自己的，之后才能登录。
+
+        为什么这么设计：没有这一步时「邮箱」只是用户随手敲的字符串，抢注别人的邮箱
+        会让真正的主人在注册时撞 409，更麻烦的是找回密码——重置码寄往一个不属于
+        注册者的地址，账号直接变砖。
 
         **邮箱与用户名都不区分大小写判重**（数据库上是 `lower(...)` 唯一索引），
         所以 `Alice` 与 `alice` 会撞 409，而不是建出两个账号。
@@ -269,14 +370,15 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: 注册成功，`Set-Cookie` 下发会话
-          headers:
-            Set-Cookie:
-              schema: { type: string }
+          description: |
+            账号已建，验证邮件已发出。**不下发会话**——见上面的说明。
+
+            `verificationSent` 为 `false` 时账号也是真的建好了，只是信没发出去
+            （SMTP 抖动）。前端应提示用户去验证页点「重新发送」，而不是让他重填表单。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Me'
+                $ref: '#/components/schemas/RegisterAccepted'
         '400':
           description: 输入不合法（邮箱格式、密码长度、用户名规则）
           content:
@@ -738,7 +840,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required, payload_too_large]
+          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required, email_not_verified, payload_too_large]
           description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
         message:
           type: string
@@ -931,6 +1033,44 @@ components:
           type: string
           maxLength: 50
           description: 可为空串，展示时回退到 username
+
+    RegisterAccepted:
+      type: object
+      additionalProperties: false
+      required: [email, verificationSent]
+      properties:
+        email:
+          type: string
+          description: 回显注册用的邮箱，前端直接带到验证页
+        verificationSent:
+          type: boolean
+          description: |
+            验证信是否发出去了。`false` 表示账号建好了但 SMTP 没成功——
+            前端应提示「去验证页点重新发送」，而不是当成注册失败。
+            不要用它判断账号存不存在：账号一定存在（这个响应只在 201 出现）。
+
+    VerifyEmailRequest:
+      type: object
+      additionalProperties: false
+      required: [email, code]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+
+    VerifyEmailResendRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
 
     Me:
       type: object

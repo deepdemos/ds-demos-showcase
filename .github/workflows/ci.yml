@@ -193,6 +193,9 @@ jobs:
           export PORT=8080
           export IP_HASH_SECRET=e2e-ci
           export VERIFICATION_SECRET=e2e-ci
+          # 邮件正文写进日志：闭环用例要从里面取验证码。CI 没有 SMTP，
+          # 而库里只有 HMAC 哈希——不打开这个开关，注册那条路在 CI 里走不完。
+          export MAIL_LOG_CODES=1
           nohup "$RUNNER_TEMP/api" > "$RUNNER_TEMP/api.log" 2>&1 &
           for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8080/healthz > /dev/null; then echo "API 起来了"; exit 0; fi
@@ -216,6 +219,7 @@ jobs:
         working-directory: web
         env:
           APP_URL: http://127.0.0.1:7000
+          E2E_API_LOG: ${{ runner.temp }}/api.log
           E2E_TELEMETRY_DISABLED: '1'
           E2E_ADMIN_EMAIL: admin@e2e.local
           E2E_ADMIN_PASSWORD: e2e-admin-password

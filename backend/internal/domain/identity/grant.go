@@ -100,8 +100,19 @@ func (s *Service) promoteExisting(ctx context.Context, row store.GetAccountByEma
 	if row.Status == "banned" || row.Status == "deleted" {
 		return GrantResult{}, fmt.Errorf("%w: 账号当前是 %s，先解封再提权", ErrAccountNotActive, row.Status)
 	}
+	// 早期版本建出来的账号可能停在 `pending`（那时注册就写 active，但手工 SQL 或将来
+	// 的政策变化都可能留下 pending 的管理员）。提权的语义就是「这个人被信任了」，
+	// 顺手把它启用——否则提完权限还是登不进来，命令等于没生效。
+	activated := false
+	if row.Status == "pending" {
+		if err := s.activate(ctx, row.ID, email); err != nil {
+			return GrantResult{}, err
+		}
+		acct.Status = "active"
+		activated = true
+	}
 	if row.Role == role {
-		return GrantResult{Account: acct, Role: role}, nil
+		return GrantResult{Account: acct, Role: role, Changed: activated}, nil
 	}
 	if err := s.setRole(ctx, row.ID, role); err != nil {
 		return GrantResult{}, err
@@ -110,11 +121,16 @@ func (s *Service) promoteExisting(ctx context.Context, row store.GetAccountByEma
 	return GrantResult{Account: acct, Role: role, Changed: true}, nil
 }
 
-// createThenPromote 处理「账号还没建」的那条路：走 Register，再用同一条更新路径提权。
+// createThenPromote 处理「账号还没建」的那条路：走 Register，再提权、再激活。
 //
-// 复用 Register 而不是自己拼 INSERT：账号建在四张表上（accounts / users / profiles /
-// account_emails / password_credentials），少写一张就是一个坏账号。代价是它会顺手签发一条
-// 会话——没人拿得到这个会话 ID，它只是库里一行无主记录，不影响正确性。
+// 复用 Register 而不是自己拼 INSERT：账号建在五张表上（accounts / users / profiles /
+// account_emails / credentials），少写一张就是一个坏账号。
+//
+// **必须显式激活**：`Register` 现在写的是 `pending`（等邮箱验证），而运维命令建出来的
+// 账号没有「验证邮件」这条路——它的前提就是「人能接触到机器、拿到数据库」。
+// 不激活的话，第一个管理员建完登不进来，而这个命令存在的意义正是解决这一点。
+//
+// 顺带把邮箱标成已验证：它的所有者不是通过验证邮件证明的，而是通过能跑这条命令证明的。
 func (s *Service) createThenPromote(ctx context.Context, in GrantInput, email, role string) (GrantResult, error) {
 	if strings.TrimSpace(in.Username) == "" || in.Password == "" {
 		return GrantResult{}, fmt.Errorf("%w: 请同时提供 -username 与 -password（或用 ADMIN_GRANT_PASSWORD 传口令）", ErrMissingForCreate)
@@ -128,6 +144,10 @@ func (s *Service) createThenPromote(ctx context.Context, in GrantInput, email, r
 	if err != nil {
 		return GrantResult{}, err
 	}
+	if err := s.activate(ctx, acct.ID, email); err != nil {
+		return GrantResult{}, fmt.Errorf("identity: 账号已建好（#%d）但启用失败，重跑本命令可补上: %w", acct.ID, err)
+	}
+	acct.Status = "active"
 	if err := s.setRole(ctx, acct.ID, role); err != nil {
 		// 账号已经建好了，提权没成功。如实说清楚，别让人以为整个操作回滚了——
 		// 重跑一次这个命令就能补上提权那一步。
@@ -135,6 +155,17 @@ func (s *Service) createThenPromote(ctx context.Context, in GrantInput, email, r
 	}
 	acct.Role = role
 	return GrantResult{Account: acct, Role: role, Created: true, Changed: true}, nil
+}
+
+// promoteExisting 里也要能补激活：早期版本或手工 SQL 建出来的管理员可能是 `pending`。
+func (s *Service) activate(ctx context.Context, id int64, email string) error {
+	if err := s.q.MarkEmailVerified(ctx, store.MarkEmailVerifiedParams{AccountID: id, Email: email}); err != nil {
+		return fmt.Errorf("identity: 标记邮箱已验证失败: %w", err)
+	}
+	if err := s.q.ActivatePendingAccount(ctx, id); err != nil {
+		return fmt.Errorf("identity: 启用账号失败: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) setRole(ctx context.Context, id int64, role string) error {

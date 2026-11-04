@@ -36,6 +36,14 @@ const (
 	// 与登录挑战**共用同一套机制、不同的 purpose**：purpose 同时参与键与码的哈希，
 	// 所以登录时发的码拿去重置密码验不过，反之亦然（见 verification_test.go）。
 	PurposeResetPassword Purpose = "reset_password"
+	// PurposeVerifyEmail：注册后证明「这个邮箱是我的」，验证通过才能把账号从
+	// `pending` 转 `active`。
+	//
+	// 与 PurposeLoginChallenge 分开而不是复用：两者生效的对象不同（这条在账号还没启用时
+	// 就发，那条在账号启用后怀疑凭证被盗时发），共用配额会让「注册几个」和「登录几次」
+	// 互相吃掉额度。独立取值也意味着两条码互不通用——这一点很重要，
+	// 否则拿登录挑战的码就能激活别人刚注册的账号。
+	PurposeVerifyEmail Purpose = "verify_email"
 )
 
 // 阈值。它们是安全下限，登记在 docs/运行手册-可变常量.md §3。

@@ -32,7 +32,7 @@ func TestIntegrationSubmitSingleFilePackage(t *testing.T) {
 	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
 	h := New(pool, q, idSvc, nil, demoSvc)
 
-	acc, sid, err := idSvc.Register(context.Background(), identity.RegisterInput{
+	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
 		Email:       "it-submit-single@example.com",
 		Password:    "submittest123",
 		Username:    "it-submit-single",

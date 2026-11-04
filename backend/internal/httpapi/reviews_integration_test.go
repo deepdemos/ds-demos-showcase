@@ -31,7 +31,7 @@ func TestIntegrationReviewPermission(t *testing.T) {
 	h := New(pool, q, idSvc, nil, demoSvc)
 
 	// 普通用户：能登录，但没有 demo.review。
-	userAcc, userSID, err := idSvc.Register(context.Background(), identity.RegisterInput{
+	userAcc, userSID := registerVerified(t, pool, idSvc, identity.RegisterInput{
 		Email:       "it-rev-user@example.com",
 		Password:    "reviewtest123",
 		Username:    "it-rev-user",
@@ -46,7 +46,7 @@ func TestIntegrationReviewPermission(t *testing.T) {
 	})
 
 	// 审核员：注册之后把角色改掉。角色是 accounts 上的一列，没有别的写入路径。
-	modAcc, modSID, err := idSvc.Register(context.Background(), identity.RegisterInput{
+	modAcc, modSID := registerVerified(t, pool, idSvc, identity.RegisterInput{
 		Email:       "it-rev-mod@example.com",
 		Password:    "reviewtest123",
 		Username:    "it-rev-mod",
@@ -110,7 +110,7 @@ func TestIntegrationReviewRejectsUnknownDecision(t *testing.T) {
 	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
 	h := New(pool, q, idSvc, nil, demoSvc)
 
-	acc, sid, err := idSvc.Register(context.Background(), identity.RegisterInput{
+	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
 		Email:       "it-bad-decision@example.com",
 		Password:    "reviewtest123",
 		Username:    "it-bad-decision",
