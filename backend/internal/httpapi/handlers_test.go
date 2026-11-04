@@ -143,16 +143,17 @@ func TestListDemosRejectsOversizedPageSize(t *testing.T) {
 func detailRow(state string, title string, deleted, erased bool) store.GetDemoBySlugRow {
 	now := time.Now().UTC()
 	return store.GetDemoBySlugRow{
-		ID:             1,
-		Slug:           "demo-slug",
-		Title:          pgtype.Text{String: title, Valid: title != ""},
-		Description:    pgtype.Text{String: "desc", Valid: title != ""},
-		CoverUrl:       pgtype.Text{String: "https://example.test/c.png", Valid: title != ""},
-		LifecycleState: state,
-		CreatedAt:      ts(now),
-		UpdatedAt:      ts(now),
-		DeletedAt:      pgtype.Timestamptz{Valid: deleted},
-		ErasedAt:       pgtype.Timestamptz{Valid: erased},
+		ID:              1,
+		Slug:            "demo-slug",
+		Title:           pgtype.Text{String: title, Valid: title != ""},
+		Description:     pgtype.Text{String: "desc", Valid: title != ""},
+		CoverUrl:        pgtype.Text{String: "https://example.test/c.png", Valid: title != ""},
+		LifecycleState:  state,
+		ModerationState: "approved",
+		CreatedAt:       ts(now),
+		UpdatedAt:       ts(now),
+		DeletedAt:       pgtype.Timestamptz{Valid: deleted},
+		ErasedAt:        pgtype.Timestamptz{Valid: erased},
 	}
 }
 
@@ -161,7 +162,7 @@ func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorde
 	response := httptest.NewRecorder()
 	newTestHandler(nil, store.New(fakeDB{row: fakeRow{values: []any{
 		row.ID, row.Slug, row.Title, row.Description, row.CoverUrl,
-		row.LifecycleState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
+		row.LifecycleState, row.ModerationState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
 	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
 	return response
 }
@@ -239,4 +240,17 @@ func TestGetDemoNotFound(t *testing.T) {
 // 这样断言「204 且不发信」时行为与生产一致。
 func newTestHandler(p Pinger, q *store.Queries, id *identity.Service) *Handler {
 	return New(p, q, id, nil, nil)
+}
+
+// 已发布但没审过的作品不对任何人出内容。
+//
+// 这个组合当前没有端点能造出来（触发器 trg_demos_guard 还会拦「还有 listed 渠道时
+// 退审」），但它一旦能出现，就是「审核形同虚设」的唯一入口——所以要在纯函数层钉住。
+func TestGetDemoPublishedButNotApproved(t *testing.T) {
+	row := detailRow("published", "标题", false, false)
+	row.ModerationState = "rejected"
+	response := getDemo(t, row)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("未过审的 published：expected 404，got %d", response.Code)
+	}
 }

@@ -9,6 +9,17 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/features/auth/AuthContext';
 
+/**
+ * 裁决失败时的兜底文案。优先用后端返回的 message（它是中文、且带具体原因），
+ * 只有在响应体没有 message 时才落到这张表。
+ */
+const DECIDE_ERROR: Record<number, string> = {
+  401: '登录已过期，请重新登录',
+  403: '没有审核权限',
+  409: '这条作品的状态刚刚变过，刷新后再看一遍',
+  503: '服务暂时不可用，请稍后重试',
+};
+
 /** 裁决说明的长度上限，与后端 `reviewReasonMax = 500` 同口径。 */
 const REASON_MAX = 500;
 
@@ -39,11 +50,24 @@ export function AdminReviewPage() {
   });
 
   const decide = useMutation({
-    mutationFn: async (input: { slug: string; decision: 'approve' | 'reject' }) =>
-      reviewDemo(input.slug, {
+    // orval 生成的是 `{ data, status }` 联合类型，**非 2xx 也不 throw**——
+    // 直接 return 会让 mutationFn 永远 resolve，`decide.isError` 变成死代码，
+    // 于是 409（被别人抢先审了）/ 403（权限被撤）/ 503 全都没有任何提示。
+    // 所以这里必须自己看 status，把失败翻成异常。
+    mutationFn: async (input: { slug: string; decision: 'approve' | 'reject' }) => {
+      const res = await reviewDemo(input.slug, {
         decision: input.decision,
         reason: reasons[input.slug] || undefined,
-      }),
+      });
+      if (res.status !== 200) {
+        const message =
+          typeof res.data === 'object' && res.data && 'message' in res.data
+            ? String((res.data as { message?: unknown }).message)
+            : null;
+        throw new Error(message || DECIDE_ERROR[res.status] || `裁决失败（${res.status}）`);
+      }
+      return res;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'reviews', 'demo'] });
     },
