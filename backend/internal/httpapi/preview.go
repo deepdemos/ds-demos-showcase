@@ -179,7 +179,11 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rel = "index.html"
 	}
 
-	key := storage.FilesKey(slug, rev, rel)
+	key, err := p.resolveKey(ctx, slug, rev, rel)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	f, err := p.files.Get(ctx, key)
 	if err != nil {
 		if !errors.Is(err, storage.ErrNotFound) && !errors.Is(err, storage.ErrUnsafeKey) {
@@ -229,6 +233,38 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = io.Copy(w, f)
 	}
+}
+
+// resolveKey 决定这个请求去存储里读哪个 key。
+//
+// 两条路：
+//
+//  1. **清单优先**（迁移后的新数据）：`demo_revision_files` 里有一行
+//     `(版本, 相对路径) → 内容地址`，用它反查出 `blobs.storage_key`。
+//  2. **目录回退**（迁移前的旧数据）：那一版没有清单行，文件仍按
+//     `demos/{slug}/r{n}/{rel}` 铺在盘上。
+//
+// 为什么不在发布时就把旧数据搬进 blob 表：搬运要读全量文件、算哈希、重写，
+// 一旦中途失败还得回滚；而旧数据的**读取路径已经能工作**，搬运的收益只有磁盘。
+// 等它们自然被更新覆盖（作者下次改稿就走新路）是更便宜的选择。
+//
+// 清单命中但 blob 行缺失（数据库被手工改过）时**回退到目录**而不是直接 404：
+// 文件其实可能还在老地方，多试一次只花一次 Stat。
+func (p *Preview) resolveKey(ctx context.Context, slug string, rev int, rel string) (string, error) {
+	row, err := p.queries.GetRevisionFile(ctx, store.GetRevisionFileParams{
+		Slug:  slug,
+		RevNo: int32(rev),
+		Path:  rel,
+	})
+	switch {
+	case err == nil:
+		return row.StorageKey, nil
+	case errors.Is(err, pgx.ErrNoRows):
+		// 没有清单行：旧数据。走目录布局。
+	case err != nil:
+		slog.Error("preview: 查清单失败", "slug", slug, "rev", rev, "path", rel, "err", err)
+	}
+	return storage.FilesKey(slug, rev, rel), nil
 }
 
 // mayPreviewDraft 判断这次请求能不能看未发布的内容：作者本人，或持有审核权的角色。

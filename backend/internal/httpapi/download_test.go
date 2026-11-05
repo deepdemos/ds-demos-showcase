@@ -280,7 +280,13 @@ func (d *recordingDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	return nil, errors.New("recordingDB: Query 不该被调用")
 }
 
-func (d *recordingDB) QueryRow(context.Context, string, ...any) pgx.Row { return d.row }
+// 与 fakeDB 同一套分派规则：清单查询一律「没有清单」，其余返回注入的那一行。
+func (d *recordingDB) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+	if strings.Contains(sql, "demo_revision_files") {
+		return fakeRow{err: pgx.ErrNoRows}
+	}
+	return d.row
+}
 
 func (d *recordingDB) execContextErrors() []error {
 	d.mu.Lock()

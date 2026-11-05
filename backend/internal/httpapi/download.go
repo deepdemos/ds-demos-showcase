@@ -124,6 +124,12 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	name, key := downloadTarget(row.Slug, int(row.PublishedRevNo), row.SingleFile)
 
+	// 清单优先、目录回退，与预览同一套规则（见 preview.go 的 resolveKey）。
+	// 下载要的是「原件」：多文件作品是 source.zip，单文件作品是入口文件本身。
+	if manifestKey, ok := d.manifestKey(ctx, row.Slug, int(row.PublishedRevNo), row.SingleFile); ok {
+		key = manifestKey
+	}
+
 	f, err := d.files.Get(ctx, key)
 	if err != nil {
 		if !errors.Is(err, storage.ErrNotFound) && !errors.Is(err, storage.ErrUnsafeKey) {
@@ -171,6 +177,29 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := d.queries.BumpDownloadCount(countCtx, row.ID); err != nil {
 		slog.Error("download: 计数失败", "slug", slug, "err", err)
 	}
+}
+
+// manifestKey 查「原件」在内容寻址存储里的 key；没有清单时返回 false 让调用方走目录布局。
+//
+// 单文件作品的原件就是入口文件（`index.svg`），多文件作品是 `source.zip`——
+// 两种都是清单里的普通一行，所以这里不需要区分「源包」与「站内文件」。
+func (d *Download) manifestKey(ctx context.Context, slug string, rev int, singleFile string) (string, bool) {
+	rel := "index." + singleFile
+	if singleFile == "" {
+		rel = "source.zip"
+	}
+	row, err := d.queries.GetRevisionFile(ctx, store.GetRevisionFileParams{
+		Slug:  slug,
+		RevNo: int32(rev),
+		Path:  rel,
+	})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("download: 查清单失败", "slug", slug, "rev", rev, "path", rel, "err", err)
+		}
+		return "", false
+	}
+	return row.StorageKey, true
 }
 
 // downloadTarget 决定「下载哪个文件、叫什么名字」。

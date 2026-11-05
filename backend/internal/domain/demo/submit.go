@@ -71,8 +71,8 @@ type staged struct {
 	entryPath string
 	// singleFile 非空表示这是单文件作品（`html` / `svg`）。
 	singleFile string
-	// sourceKey/sourcePath 是原始上传包（zip 才有；单文件不额外存一份）。
-	sourceKey  string
+	// sourcePath 是原始上传包（zip 才有；单文件不额外存一份）。
+	// 它会被当成清单里的 `source.zip` 一行，与站内文件走同一条内容寻址。
 	sourcePath string
 	totalBytes int64
 	manifest   string
@@ -116,7 +116,7 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	}
 	defer cleanup()
 
-	slug, err := s.createRow(ctx, in, &st)
+	slug, revID, err := s.createRow(ctx, in, &st)
 	if err != nil {
 		return out, err
 	}
@@ -126,7 +126,7 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	out.LifecycleState = "draft"
 
 	// 从这里开始，数据库里已经有这一行了。任何失败都要把它清掉。
-	if err := s.upload(ctx, slug, st); err != nil {
+	if err := s.upload(ctx, revID, st); err != nil {
 		s.compensate(ctx, slug, st)
 		return SubmitResult{}, err
 	}
@@ -236,7 +236,7 @@ func (s *Service) collect(root string, st *staged) error {
 //
 // slug 冲突靠唯一索引 + 重试解决，不「先查再插」：先查后插有 TOCTOU 窗口，
 // 两个并发投稿能同时通过检查。这里把 23505 当成「换一个 slug 再试」的信号。
-func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, error) {
+func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, int64, error) {
 	base := slugify(in.Title)
 	// 标题里没有可用 ASCII 时 slugify 返回空（纯中文标题就是这种情况）。
 	// 这时不能用光秃秃的 "demo" 当第一版：第二个纯中文标题投稿会撞上它，
@@ -253,7 +253,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 		if attempt > 0 || needsSuffix {
 			suffix, err := randomSuffix(4)
 			if err != nil {
-				return "", fmt.Errorf("demo: 生成 slug 失败: %w", err)
+				return "", 0, fmt.Errorf("demo: 生成 slug 失败: %w", err)
 			}
 			slug = base + "-" + suffix
 		}
@@ -261,6 +261,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			slug = slug[:maxSlugLen]
 		}
 
+		var revID int64
 		err := s.inTx(ctx, func(tx pgx.Tx) error {
 			q := s.q.WithTx(tx)
 			d, err := q.CreateDemo(ctx, store.CreateDemoParams{
@@ -287,62 +288,54 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			if err != nil {
 				return err
 			}
+			revID = rev.ID
 			return q.SetCurrentRevision(ctx, store.SetCurrentRevisionParams{
 				ID:                d.ID,
 				CurrentRevisionID: int8(rev.ID),
 			})
 		})
 		if err == nil {
-			// 必须在**指针**上写：调用方要靠这个值决定要不要上传原始包。
-			if st.sourcePath != "" {
-				st.sourceKey = storage.SourceKey(slug, 1, "zip")
-			}
-			return slug, nil
+			return slug, revID, nil
 		}
 		if isForeignKeyViolation(err) {
 			// 走到这里只可能是 demo_type 不存在（其余外键都由服务端自己填）。
 			// 这是输入问题不是服务端故障，必须回 400 而不是 503。
-			return "", fmt.Errorf("%w: 作品类型不存在", ErrInvalidInput)
+			return "", 0, fmt.Errorf("%w: 作品类型不存在", ErrInvalidInput)
 		}
 		if !isUniqueViolation(err) {
-			return "", fmt.Errorf("demo: 落库失败: %w", err)
+			return "", 0, fmt.Errorf("demo: 落库失败: %w", err)
 		}
 		lastErr = err
 		s.log.Warn("slug 冲突，换一个再试", "slug", slug, "attempt", attempt+1)
 	}
-	return "", fmt.Errorf("demo: 无法生成唯一 slug: %w", lastErr)
+	return "", 0, fmt.Errorf("demo: 无法生成唯一 slug: %w", lastErr)
 }
 
-// upload 把暂存目录里的文件逐个写进存储。
-func (s *Service) upload(ctx context.Context, slug string, st staged) error {
-	if st.sourceKey != "" {
-		if err := s.putFile(ctx, st.sourceKey, st.sourcePath); err != nil {
-			return err
-		}
-	}
+// upload 把这一版的全部文件写成「内容寻址对象 + 清单行」。
+//
+// 与旧写法的区别：不再往 `demos/{slug}/r{n}/` 目录里铺文件。
+// 那个布局里「文件属于某个版本」是藏在路径里的，两个版本哪怕 99% 相同也共享零字节；
+// 现在每个文件先算 sha256，命中 `blobs` 就只加一行清单（零拷贝），
+// 没命中才落一份字节。
+//
+// 顺序：先写 blob 再写清单行。反过来的话，清单行会短暂指向不存在的字节，
+// 而这期间恰好有人打开预览就是 404——虽然窗口极窄，但修它不要钱。
+//
+// 源包也走这条路：多文件作品的 `source.zip` 在清单里是一行普通文件，
+// 单文件作品的原件就是 `index.html` / `index.svg` 本身，没有额外的包。
+func (s *Service) upload(ctx context.Context, revID int64, st staged) error {
+	entries := make(map[string]string, len(st.files)+1)
 	for _, rel := range st.files {
-		key := storage.FilesKey(slug, 1, rel)
-		if err := s.putFile(ctx, key, filepath.Join(st.contentDir, filepath.FromSlash(rel))); err != nil {
+		cleaned, err := cleanManifestPath(rel)
+		if err != nil {
 			return err
 		}
+		entries[cleaned] = filepath.Join(st.contentDir, filepath.FromSlash(rel))
 	}
-	return nil
-}
-
-func (s *Service) putFile(ctx context.Context, key, path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("demo: 打开暂存文件失败: %w", err)
+	if st.sourcePath != "" {
+		entries[manifestSourcePath] = st.sourcePath
 	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return fmt.Errorf("demo: 读暂存文件信息失败: %w", err)
-	}
-	if err := s.files.Put(ctx, key, f, info.Size(), ""); err != nil {
-		return fmt.Errorf("demo: 写入存储失败: %w", err)
-	}
-	return nil
+	return s.writeManifest(ctx, revID, entries)
 }
 
 // compensate 清掉「已落库但上传失败」的残留。
@@ -378,18 +371,13 @@ func (s *Service) compensate(ctx context.Context, slug string, st staged) {
 		return
 	}
 
-	keys := make([]string, 0, len(st.files)+1)
-	if st.sourceKey != "" {
-		keys = append(keys, st.sourceKey)
-	}
-	for _, rel := range st.files {
-		keys = append(keys, storage.FilesKey(slug, 1, rel))
-	}
-	for _, key := range keys {
-		if err := s.files.Delete(cctx, key); err != nil {
-			s.log.Error("清理孤儿对象失败", "key", key, "err", err)
-		}
-	}
+	// **不再删对象**。切到内容寻址之后，一份字节可能被多个版本引用
+	// （同一份 index.html 被两个版本、甚至两个作品共享），按 slug 删文件会把
+	// 别人的作品一起弄坏。补偿只负责把库行清干净；孤儿 blob 交给将来的 GC
+	// （按 blobs.last_ref_at 扫），这也是 docs/已知松点.md 里「没有 GC」那条
+	// 从「小瑕疵」变成「必须有」的原因。
+	s.log.Warn("补偿已删除库行；对象保留给 GC（内容寻址的对象可能被其他版本引用）",
+		"slug", slug, "files", len(st.files))
 }
 
 func (s *Service) inTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
