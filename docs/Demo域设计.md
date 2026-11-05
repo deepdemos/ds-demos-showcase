@@ -921,6 +921,14 @@ sequenceDiagram
     R-->>C: 201 {slug, revision, status}
 ```
 
+#### 落地状态（2026-11-06）——幂等键与审核态读出
+
+- **幂等键已经真的接了**：`POST /api/v1/demos` 认一个可选的 `Idempotency-Key` 头（≤128 字符）。命中已有键时**不新建、不占待审配额、连包都不解压**，直接回 **200** 与第一次那份回执（`slug` / `revNo` / 当前审核态），而不是 201——201 的语义是「又建了一条」。
+- **键在作者范围内唯一**（迁移 `0016_idempotency_per_author.sql`）。基线是 `UNIQUE (idempotency_key)`，全库一把钥匙：两个作者的脚本都用了 `"1"` 这种键时，第二个人拿到的不是重放而是别人的 slug。键是「这次调用」的标识，调用有主体，所以键空间按主体切分；改成复合唯一也让「报一个键就知道有没有人用过」不再成立。
+- **审核态对作者可见**：`DemoDetail.moderationState` 是 `pending|approved|rejected`。**作者看的是真实值**，访客恒为 `approved`——访客能看到详情的前提是「有对外版本」（`published_revision_id`），那一版的内容本来就是审过的；对他回 `pending` 只会让人以为作品没审完就上线了。字段与 `lifecycleState` 正交：一个说「审没审过」，一个说「在不在架上」。
+- **非法 UTF-8 回 400，不是 503**：标题 / 简介 / 类型 / 幂等键 / 模型标识都先过 `utf8.ValidString`。不挡的话这些字节会被送进 PG（22021），再落到 `writeDemoError` 的 default 变成「服务暂时不可用」——输入问题被说成我们这边坏了。真栈上第一次撞到它，是 Windows 的 curl 按 GBK 把中文标题发了出来。
+- **429 带 `Retry-After`**：待审配额满时回 `Retry-After: 3600`。这是**建议的复查间隔，不是承诺**（审核速度取决于人），所以文案与常量名（`PendingRetryHint`）都写着提示。
+
 ### 7.2 编辑（产生新版本）
 
 ```mermaid
