@@ -104,4 +104,17 @@ export type DemoDetail = DemoSummary & ({
      * - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
      */
   models: ModelRef[];
+  /**
+     * 当前版本的审核态。
+     *
+     * - **作者看真实值**：`pending` / `approved` / `rejected`。作者必须能知道
+     *   自己那份稿子是等着、过了还是被退回，否则「投完就失联」。
+     * - **访客恒为 `approved`**：能看到的内容必然是已通过审核的对外版本；
+     *   回一个 `pending` 只会让人以为「这条作品还没审完就上线了」。
+     *
+     * 注意它与 `lifecycleState` 是正交的两件事：审核态说的是**内容过没过**，
+     * 生命周期说的是**这条作品对外是哪种档位**。一件 `published` 的作品在
+     * 复审期间审核态是 `pending`，而对外内容仍在服务——那是版本分离的设计。
+     */
+  moderationState: 'pending' | 'approved' | 'rejected';
 });

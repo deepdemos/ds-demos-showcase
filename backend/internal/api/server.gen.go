@@ -52,7 +52,7 @@ type ServerInterface interface {
 	ListDemos(w http.ResponseWriter, r *http.Request, params ListDemosParams)
 	// 投稿（multipart，连文件一起上传）
 	// (POST /api/v1/demos)
-	SubmitDemo(w http.ResponseWriter, r *http.Request)
+	SubmitDemo(w http.ResponseWriter, r *http.Request, params SubmitDemoParams)
 	// 删除作品（软删，可恢复）
 	// (DELETE /api/v1/demos/{slug})
 	DeleteDemo(w http.ResponseWriter, r *http.Request, slug string)
@@ -169,7 +169,7 @@ func (_ Unimplemented) ListDemos(w http.ResponseWriter, r *http.Request, params 
 
 // 投稿（multipart，连文件一起上传）
 // (POST /api/v1/demos)
-func (_ Unimplemented) SubmitDemo(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) SubmitDemo(w http.ResponseWriter, r *http.Request, params SubmitDemoParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -515,14 +515,40 @@ func (siw *ServerInterfaceWrapper) ListDemos(w http.ResponseWriter, r *http.Requ
 // SubmitDemo operation middleware
 func (siw *ServerInterfaceWrapper) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
 	ctx := r.Context()
 
 	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SubmitDemoParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SubmitDemo(w, r)
+		siw.Handler.SubmitDemo(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

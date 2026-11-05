@@ -69,6 +69,10 @@
         "type": "[]ModelRef",
         "optional": false
       },
+      "moderationState": {
+        "type": "DemoDetailModerationState",
+        "optional": false
+      },
       "publishedAt": {
         "type": "time.Time",
         "optional": true
@@ -524,6 +528,12 @@
         "optional": false
       }
     },
+    "SubmitDemoParams": {
+      "Idempotency-Key": {
+        "type": "string",
+        "optional": true
+      }
+    },
     "UpdateDemoMultipartBody": {
       "demoType": {
         "type": "string",
@@ -558,6 +568,11 @@
     "DemoDetailMatchedIn": [
       "description",
       "title"
+    ],
+    "DemoDetailModerationState": [
+      "approved",
+      "pending",
+      "rejected"
     ],
     "DemoRevisionSource": [
       "rollback",
@@ -699,7 +714,7 @@
     "POST /api/v1/demos": {
       "method": "SubmitDemo",
       "pathParams": 0,
-      "params": null
+      "params": "SubmitDemoParams"
     },
     "DELETE /api/v1/demos/{slug}": {
       "method": "DeleteDemo",

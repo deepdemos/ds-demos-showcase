@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/storage"
@@ -91,7 +92,7 @@ func submitHTMLWithModels(t *testing.T, h *Handler, sid, title, body string, mod
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
 	rec := httptest.NewRecorder()
-	h.SubmitDemo(rec, req)
+	h.SubmitDemo(rec, req, api.SubmitDemoParams{})
 	return rec
 }
 

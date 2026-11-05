@@ -136,9 +136,31 @@ WHERE d.slug = $1;
 -- name: CreateDemo :one
 -- 刚提交的作品一律 moderation_state='pending' + lifecycle_state='draft'：
 -- 待审核、且对外不可见。两个状态是**正交**的两件事，不要合并成一个字段。
-INSERT INTO demos (slug, title, description, author_id, moderation_state, lifecycle_state)
-VALUES ($1, $2, $3, $4, 'pending', 'draft')
+--
+-- `idempotency_key` 是客户端给的「这次提交的编号」，可以不给（NULL）。
+-- 给了就靠 `uq_demos_idempotency_key` 保证同一个作者的同一个 key 只落一行：
+-- 脚本传 200 MiB 传到一半断了重传，不该变成两条一模一样的作品。
+INSERT INTO demos (slug, title, description, author_id, moderation_state, lifecycle_state, idempotency_key)
+VALUES ($1, $2, $3, $4, 'pending', 'draft', sqlc.narg('idempotency_key'))
 RETURNING id, slug, created_at;
+
+-- name: FindDemoByIdempotencyKey :one
+-- 重放用的查询：同一个作者的同一个 key 已经落过一行，就把**当初那条**的结果还回去。
+--
+-- 按 author_id 限定，不是因为 key 会在作者之间撞（key 由客户端生成），
+-- 而是因为不限定就等于「任何人报出别人的 key 就能读到别人作品的 slug」——
+-- 幂等查询必须自己带权限边界，不能指望调用方记得加。
+--
+-- 不看 deleted_at / erased_at：重放要回答的是「这件事我是不是已经做过」，
+-- 作品后来被删了也还是做过。真删干净（擦除）之后这一行照样在，
+-- 只是 slug 指向的东西对外不存在了——那正是事实。
+SELECT d.slug,
+       d.moderation_state,
+       d.lifecycle_state,
+       COALESCE(r.rev_no, 1)::int AS rev_no
+FROM demos d
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.author_id = $1 AND d.idempotency_key = $2;
 
 -- name: CreateRevision :one
 -- rev_no 写死 1：这是新作品的第一版。追加版本是 updateDemo 的事。

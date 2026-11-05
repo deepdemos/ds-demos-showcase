@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/storage"
@@ -144,7 +145,7 @@ func submitHTML(t *testing.T, h *Handler, sid, title, body string) string {
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
 	rec := httptest.NewRecorder()
-	h.SubmitDemo(rec, req)
+	h.SubmitDemo(rec, req, api.SubmitDemoParams{})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("投稿 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
 	}

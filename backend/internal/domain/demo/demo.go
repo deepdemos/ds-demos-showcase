@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // 领域错误。传输层据此映射状态码，错误文字只给人看。
@@ -55,6 +56,14 @@ type SubmitInput struct {
 	PackageName string
 	// PackageSize 是它的字节数（由调用方边写边数，不信客户端给的 Content-Length）。
 	PackageSize int64
+	// IdempotencyKey 是客户端给的「这次提交的编号」，可以不给。
+	//
+	// 给了就意味着：同一个作者的同一个 key 只会落一行。脚本传 200 MiB 传到一半
+	// 连接断了、它自己重传一次，不该变成两条一模一样的作品等人工去删。
+	//
+	// 长度上限 128 与 `demos.idempotency_key` 的约束一致——**在领域层先挡**，
+	// 别让它跑到库里变成一个 23514，那种错误对客户端毫无意义。
+	IdempotencyKey string
 	// ModelSlugs 是作者声明的模型（slug，不是 id）。空列表合法。
 	//
 	// 用 slug 而不是 id：id 是库内主键，前端拿到的模型清单来自
@@ -69,10 +78,44 @@ type SubmitResult struct {
 	RevisionNo      int
 	ModerationState string
 	LifecycleState  string
+	// Replayed 为真表示这次请求命中了幂等键，返回的是**当初那条**，没有新建。
+	//
+	// 传输层据此回 200 而不是 201：客户端（尤其是脚本）应当能区分
+	// 「我创建了它」与「它早就存在」——后者不该被当成一次新的上传成功。
+	Replayed bool
 }
 
 // validate 检查元数据。文件层面的检查在 stagePackage 里。
+// validateText 检查一段用户文本是不是合法 UTF-8。
+//
+// 不检查的后果是错的：非法字节会被原样送进 PG，PG 报 22021，
+// 然后这条错误一路落到 writeDemoError 的 default，回给作者 503
+// 「服务暂时不可用」——输入问题被说成了我们这边坏了（真栈复现过：
+// Windows 上的 curl 传中文会按 GBK 发出去）。
+func validateText(field, v string) error {
+	if !utf8.ValidString(v) {
+		return fmt.Errorf("%w: %s 不是合法的 UTF-8 文本", ErrInvalidInput, field)
+	}
+	return nil
+}
+
 func (in SubmitInput) validate() error {
+	for _, f := range []struct{ name, value string }{
+		{"标题", in.Title},
+		{"描述", in.Description},
+		{"作品类型", in.DemoType},
+		{"幂等键", in.IdempotencyKey},
+	} {
+		if err := validateText(f.name, f.value); err != nil {
+			return err
+		}
+	}
+	for _, slug := range in.ModelSlugs {
+		if err := validateText("模型标识", slug); err != nil {
+			return err
+		}
+	}
+
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
 		return fmt.Errorf("%w: 标题不能为空", ErrInvalidInput)

@@ -47,6 +47,20 @@
           "file": "backend/internal/httpapi/models_integration_test.go",
           "name": "TestIntegrationSubmitDeclaresModels"
         }
+      },
+      {
+        "case": "幂等键超过 128 个字符回 400，不静默截断（截断等于把两次调用并成一次）",
+        "test": {
+          "file": "backend/internal/httpapi/submit_idempotency_integration_test.go",
+          "name": "TestIntegrationSubmitRejectsLongIdempotencyKey"
+        }
+      },
+      {
+        "case": "同一个幂等键重复投稿回 200（重放），不是 201——201 等于说又建了一条",
+        "test": {
+          "file": "backend/internal/httpapi/submit_idempotency_integration_test.go",
+          "name": "TestIntegrationSubmitIsIdempotent"
+        }
       }
     ],
     "GET /api/v1/demos/{slug}": [

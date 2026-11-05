@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/storage"
@@ -79,7 +80,7 @@ func TestIntegrationSubmitSingleFilePackage(t *testing.T) {
 			req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
 
 			rec := httptest.NewRecorder()
-			h.SubmitDemo(rec, req)
+			h.SubmitDemo(rec, req, api.SubmitDemoParams{})
 
 			if rec.Code != http.StatusCreated {
 				t.Fatalf("状态码 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
@@ -128,7 +129,7 @@ func TestIntegrationSubmitRequiresLogin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/demos", &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	rec := httptest.NewRecorder()
-	h.SubmitDemo(rec, req)
+	h.SubmitDemo(rec, req, api.SubmitDemoParams{})
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("未登录投稿 = %d，想要 401；响应体：%s", rec.Code, rec.Body.String())

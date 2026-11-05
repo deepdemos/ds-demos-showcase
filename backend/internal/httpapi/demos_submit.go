@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
@@ -23,7 +24,7 @@ const maxMultipartMemory = 8 << 20
 //
 // 与其它端点不同，这里的手写成分更多：oapi-codegen 不会为 multipart 生成绑定器，
 // 表单字段与文件都得自己读。
-func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.SubmitDemoParams) {
 	if h.demos == nil {
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 		return
@@ -96,22 +97,35 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), demo.SubmitTimeout)
 	defer cancel()
 
+	var idemKey string
+	if params.IdempotencyKey != nil {
+		idemKey = *params.IdempotencyKey
+	}
+
 	res, err := h.demos.Submit(ctx, demo.SubmitInput{
-		AuthorID:    account.UserID,
-		Title:       title,
-		Description: description,
-		DemoType:    demoType,
-		PackagePath: pkgPath,
-		PackageName: header.Filename,
-		PackageSize: pkgSize,
-		ModelSlugs:  modelIDs,
+		AuthorID:       account.UserID,
+		Title:          title,
+		Description:    description,
+		DemoType:       demoType,
+		PackagePath:    pkgPath,
+		PackageName:    header.Filename,
+		PackageSize:    pkgSize,
+		ModelSlugs:     modelIDs,
+		IdempotencyKey: idemKey,
 	})
 	if err != nil {
 		h.writeDemoError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, api.SubmissionResult{
+	// 201 与 200 的回执体一模一样，区别只在「这次是不是新建的」。
+	// 脚本靠它判断要不要重新上传、要不要记一条新的提交日志——
+	// 把重放也报成 201，等于告诉调用方「我刚才又建了一条重复作品」。
+	status := http.StatusCreated
+	if res.Replayed {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, api.SubmissionResult{
 		Slug:            res.Slug,
 		RevisionNo:      res.RevisionNo,
 		ModerationState: api.SubmissionResultModerationState(res.ModerationState),
@@ -185,6 +199,12 @@ func (h *Handler) writeDemoError(w http.ResponseWriter, err error) {
 	case errors.Is(err, demo.ErrTooManyPending):
 		// 429 而不是 400：这不是「你写错了」，是「现在不行，等一会儿」。
 		// 契约里 429 已经存在（登录限流用同一个码）。
+		//
+		// Retry-After 是**建议的复查间隔，不是承诺**：真正解锁的时刻是有人审完
+		// 压着的那几条，服务端不知道那会是什么时候。没有这个头，脚本只能
+		// 「立刻重试」（打成循环）或「直接放弃」；有了它至少能退避。
+		// 登录限流（identity 里的 429）早就在带这个头，两处口径到这才一致。
+		w.Header().Set("Retry-After", strconv.Itoa(int(demo.PendingRetryHint.Seconds())))
 		writeError(w, http.StatusTooManyRequests, api.RateLimited, messageOf(err))
 	default:
 		slog.Error("submit demo failed", "err", err)
