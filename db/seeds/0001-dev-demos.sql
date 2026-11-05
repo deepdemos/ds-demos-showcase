@@ -72,6 +72,40 @@ WHERE slug = 'edge-soft-deleted' AND deleted_at IS NULL;
 UPDATE demos SET deleted_at = '2026-08-22 12:00:00+08', erased_at = '2026-08-22 12:05:00+08'
 WHERE slug = 'edge-erased' AND erased_at IS NULL;
 
+-- ===== 版本行（对外内容指向它）=====
+-- 迁移 0014 之后「能上架渠道」要求作品有对外版本指针（published_revision_id），
+-- 而原来种子只写 demos 行、版本行是测试或投稿流程才建的——于是种子数据
+-- 全部违反新的不变量，一跑就红。
+--
+-- 没有任何版本的数据是**残缺的数据**，不是「可以没有」的数据：详情页要读
+-- 对外版本的类型，预览与下载要读版本号。所以补一行 rev_no=1，
+-- 并把两个指针都指向它。磁盘上没有这些作品的文件，预览仍是 404——这一点没变，
+-- 也仍然记在 docs/开发环境.md 里。
+-- 两步：先给「一个版本都没有」的补齐 rev_no=1，再把两个指针指向 rev_no=1。
+-- 分两步而不是一条 CTE，是因为**已有 rev_no=1 行但指针是空**的作品也存在
+-- （测试夹具、早期数据），那样 `INSERT ... ON CONFLICT DO NOTHING RETURNING`
+-- 什么都返回不了，指针就永远补不上——而渠道那一步会以「没有对外版本」失败。
+INSERT INTO demo_revisions (demo_id, rev_no, demo_type, source)
+SELECT d.id, 1, 'web', 'upload'
+FROM demos d
+WHERE d.lifecycle_state = 'published'
+  AND d.moderation_state = 'approved'
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+ON CONFLICT (demo_id, rev_no) DO NOTHING;
+
+UPDATE demos d
+SET current_revision_id   = r.id,
+    published_revision_id = r.id
+FROM demo_revisions r
+WHERE r.demo_id = d.id
+  AND r.rev_no = 1
+  AND d.lifecycle_state = 'published'
+  AND d.moderation_state = 'approved'
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+  AND d.published_revision_id IS NULL;
+
 -- ===== 渠道行（列表可见性靠它）=====
 -- 列表要求「至少一条 visibility='listed' 的渠道行」，所以种子数据也必须造。
 -- 只给已发布且审过的行：归档 / 移除 / 软删 / 已擦除的本来就不该出现在作品库里。

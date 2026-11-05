@@ -1,7 +1,10 @@
 -- 作品列表与详情。
 --
--- 「公开可见」的判定口径（列表、详情、预览三处必须一致，改一处就要改其余两处）：
---   moderation_state = 'approved'   —— 审过了。没审过就展示，等于审核形同虚设
+-- 「公开可见」的判定口径（列表、详情、预览、下载四处必须一致，改一处就要改其余三处）：
+--   published_revision_id IS NOT NULL —— 有对外版本。**不再看审核态**：
+--                                     审核态描述的是「当前版本」，一件已发布作品在
+--                                     复审期间审核态是 pending，但对外内容仍在服务
+--                                     （迁移 0014 的版本分离，理由见那个文件头）
 --   lifecycle_state = 'published'   —— 已发布，见标准对象 §ST-2 的可见性档位
 --   deleted_at IS NULL              —— 没被删除
 --   erased_at IS NULL               —— 没被擦除（擦除是逻辑封存，行还在但对外不存在）
@@ -12,7 +15,7 @@
 -- name: ListPublishedDemos :many
 SELECT d.id, d.slug, d.title, d.cover_url, d.created_at
 FROM demos d
-WHERE d.moderation_state = 'approved'
+WHERE d.published_revision_id IS NOT NULL
   AND d.lifecycle_state = 'published'
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
@@ -28,7 +31,7 @@ LIMIT $1 OFFSET $2;
 -- name: CountPublishedDemos :one
 SELECT count(*)
 FROM demos d
-WHERE d.moderation_state = 'approved'
+WHERE d.published_revision_id IS NOT NULL
   AND d.lifecycle_state = 'published'
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
@@ -47,14 +50,18 @@ WHERE d.moderation_state = 'approved'
 SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        d.lifecycle_state, d.moderation_state, d.created_at, d.updated_at,
        d.deleted_at, d.erased_at,
+       -- 类型取**对外版本**的：详情页对所有人展示的是一份内容，
+       -- 作者草稿还没过审时也不该把「新版本的类型」泄露出去。
        COALESCE(r.demo_type, '')::text AS demo_type,
        COALESCE(r.single_file, '')::text AS single_file,
+       (d.published_revision_id IS NOT NULL)::bool AS has_published_revision,
+       COALESCE(r.rev_no, 0)::int AS published_rev_no,
        EXISTS (
            SELECT 1 FROM demo_channels c
            WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
        )::bool AS has_visible_channel
 FROM demos d
-LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+LEFT JOIN demo_revisions r ON r.id = d.published_revision_id
 WHERE d.slug = $1;
 
 -- ===== 投稿写入（Demo 域）=====
@@ -102,10 +109,18 @@ SELECT d.id,
        COALESCE(r.rev_no, 0)::int AS current_rev_no,
        r.deleted_at AS revision_deleted_at,
        r.erased_at  AS revision_erased_at,
+       -- 对外版本：公开访客读这一版，作者与审核员读 current 那版（迁移 0014）。
+       -- 两列都给出来，由调用方按「谁在看」选，而不是让 SQL 猜。
+       (d.published_revision_id IS NOT NULL)::bool AS has_published_revision,
+       COALESCE(pr.rev_no, 0)::int AS published_rev_no,
+       pr.deleted_at AS published_deleted_at,
+       pr.erased_at  AS published_erased_at,
        COALESCE(u.sub, '')::text AS author_sub,
        -- 渠道可见性：与 /download 同一口径（listed 或 unlisted 才算对外可见）。
        -- 之前预览完全不判这一列，导致 hidden 的作品「从列表里藏起来了，但知道直链的人
        -- 仍然能看完整内容」。下载那一轮把这个口子堵了一半（下载判了），预览没动。
+       --
+       -- 注意：对外可见的**内容来源**是 published 那个版本，不是这一列。
        EXISTS (
            SELECT 1 FROM demo_channels c
            WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
@@ -113,6 +128,7 @@ SELECT d.id,
 FROM demos d
 LEFT JOIN users u ON u.id = d.author_id
 LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+LEFT JOIN demo_revisions pr ON pr.id = d.published_revision_id
 WHERE d.slug = $1;
 
 -- name: CountPendingDemosByAuthor :one
@@ -142,7 +158,9 @@ SELECT d.id,
        d.moderation_state,
        d.deleted_at,
        d.erased_at,
-       COALESCE(r.rev_no, 0)::int AS current_rev_no,
+       -- 下载给的是**对外版本**（迁移 0014）。作者的新草稿还没过审时，
+       -- 公开访客下到的必须仍是线上那一版，否则「审核」对下载就没有约束力。
+       COALESCE(r.rev_no, 0)::int AS published_rev_no,
        COALESCE(r.single_file, '')::text AS single_file,
        COALESCE(r.demo_type, '')::text AS demo_type,
        r.deleted_at AS revision_deleted_at,
@@ -152,7 +170,7 @@ SELECT d.id,
            WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
        )::bool AS has_visible_channel
 FROM demos d
-LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+LEFT JOIN demo_revisions r ON r.id = d.published_revision_id
 WHERE d.slug = $1;
 
 -- name: BumpDownloadCount :exec

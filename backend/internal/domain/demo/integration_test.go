@@ -390,6 +390,71 @@ func TestIntegrationReviewApproveWritesBothTraces(t *testing.T) {
 	if !strings.Contains(string(after), `"approved"`) {
 		t.Fatalf("审计 after 快照应含 approved，实际 %s", after)
 	}
+
+	// 通过 = 对外版本切到当前版本（迁移 0014）。
+	// 漏了这一步的表现是「审核通过但线上还是旧的」，比报错难查得多，所以单独钉一条。
+	var cur, pub *int64
+	if err := pool.QueryRow(context.Background(),
+		`SELECT current_revision_id, published_revision_id FROM demos WHERE slug = $1`,
+		slug).Scan(&cur, &pub); err != nil {
+		t.Fatalf("读版本指针失败: %v", err)
+	}
+	if cur == nil || pub == nil {
+		t.Fatalf("通过审核后两个指针都该有值，实际 current=%v published=%v", cur, pub)
+	}
+	if *cur != *pub {
+		t.Fatalf("通过审核后 published 应等于 current：current=%d published=%d", *cur, *pub)
+	}
+}
+
+// 驳回**不动**对外版本：作者改的新版没过审，线上必须还是上一版。
+func TestIntegrationReviewRejectKeepsPublishedRevision(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	author := mkAuthor(t, pool, "rev-keep")
+	accountID, userID := mkReviewer(t, pool, "k")
+	slug := submitOne(t, s, author, "keep")
+
+	// 先过一次审，拿到对外版本。
+	if _, err := s.Review(context.Background(), ReviewActor{
+		AccountID: accountID, UserID: userID, Role: "moderator",
+	}, ReviewInput{Slug: slug, Approve: true, Reason: "初版通过"}); err != nil {
+		t.Fatalf("首次通过失败: %v", err)
+	}
+	var published int64
+	if err := pool.QueryRow(context.Background(),
+		`SELECT published_revision_id FROM demos WHERE slug = $1`, slug).Scan(&published); err != nil {
+		t.Fatalf("读对外版本失败: %v", err)
+	}
+
+	// 模拟「作者又提交了一版」：新增 rev_no=2，把 current 指过去、审核态回 pending。
+	var rev2 int64
+	if err := pool.QueryRow(context.Background(), `
+		INSERT INTO demo_revisions (demo_id, rev_no, demo_type, source, manifest_hash, file_count)
+		SELECT d.id, 2, 'web', 'upload', repeat('b', 64), 1 FROM demos d WHERE d.slug = $1
+		RETURNING id`, slug).Scan(&rev2); err != nil {
+		t.Fatalf("插入第二版失败: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE demos SET current_revision_id = $1, moderation_state = 'pending' WHERE slug = $2`,
+		rev2, slug); err != nil {
+		t.Fatalf("切换到第二版失败: %v", err)
+	}
+
+	// 驳回第二版：对外版本必须仍是第一版。
+	if _, err := s.Review(context.Background(), ReviewActor{
+		AccountID: accountID, UserID: userID, Role: "moderator",
+	}, ReviewInput{Slug: slug, Approve: false, Reason: "第二版不行"}); err != nil {
+		t.Fatalf("驳回失败: %v", err)
+	}
+	var afterReject int64
+	if err := pool.QueryRow(context.Background(),
+		`SELECT published_revision_id FROM demos WHERE slug = $1`, slug).Scan(&afterReject); err != nil {
+		t.Fatalf("读对外版本失败: %v", err)
+	}
+	if afterReject != published {
+		t.Fatalf("驳回不该改对外版本：之前 %d，之后 %d", published, afterReject)
+	}
 }
 
 func TestIntegrationReviewReject(t *testing.T) {

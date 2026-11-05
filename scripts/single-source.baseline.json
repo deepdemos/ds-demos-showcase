@@ -5,8 +5,7 @@
   "visibility-go": {
     "backend/internal/domain/demo/publish.go": 2,
     "backend/internal/httpapi/download.go": 1,
-    "backend/internal/httpapi/handlers.go": 1,
-    "backend/internal/httpapi/preview.go": 2
+    "backend/internal/httpapi/preview.go": 1
   },
   "visibility-web": {
     "web/src/routes/DemoDetailPage.tsx": 1

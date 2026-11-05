@@ -21,5 +21,6 @@
   "db/migrations/0010_channels_master.sql": "09e57db7386909cd6ee54bdccc1ab48d79b83a7eb72beb0cd6c12f9aac212084",
   "db/migrations/0011_demo_publish_permission.sql": "7d75cb733e1456dd018fb79d057c09c9794133eb2fadc2255b79746024456fd0",
   "db/migrations/0012_timeline_publish_kind.sql": "80998d6003f1c0a8748d8cfb26c2dea7288a1e82f5536cd779c10a4a78e4b664",
-  "db/migrations/0013_demo_channels_backfill.sql": "4320273bd32d60f1d3d34579085af2e67bc6a53a4859350b8414830234bff25e"
+  "db/migrations/0013_demo_channels_backfill.sql": "4320273bd32d60f1d3d34579085af2e67bc6a53a4859350b8414830234bff25e",
+  "db/migrations/0014_published_revision.sql": "04b8405909e09c2a40b324fca3c76875122f245b4b62ecfd64cc4d273998dfa9"
 }

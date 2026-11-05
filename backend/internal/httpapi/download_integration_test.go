@@ -30,6 +30,9 @@ type dlWorld struct {
 	moderation string
 	visibility string // 渠道可见性；空串表示不建渠道行
 	withSource bool   // 是否在磁盘上放 source.zip
+	// hasPublished：这行是否**有过**对外版本（迁移 0014 的 published_revision_id）。
+	// 与 visibility 是两件事，显式写出来让每条数据自己说清它代表什么状态。
+	hasPublished bool
 }
 
 func seedDownloadWorld(t *testing.T, pool *pgxpool.Pool, dir string) map[string]dlWorld {
@@ -54,11 +57,11 @@ func seedDownloadWorld(t *testing.T, pool *pgxpool.Pool, dir string) map[string]
 
 	specs := []dlWorld{
 		// 正常可见的多文件作品：能下，下的是 source.zip。
-		{slug: "dl-zip", demoType: "zip", lifecycle: "published", moderation: "approved", visibility: "listed", withSource: true},
+		{slug: "dl-zip", demoType: "zip", lifecycle: "published", moderation: "approved", visibility: "listed", withSource: true, hasPublished: true},
 		// unlisted：不上列表，但知道地址就能下（直链档位）。
-		{slug: "dl-unlisted", demoType: "zip", lifecycle: "published", moderation: "approved", visibility: "unlisted", withSource: true},
+		{slug: "dl-unlisted", demoType: "zip", lifecycle: "published", moderation: "approved", visibility: "unlisted", withSource: true, hasPublished: true},
 		// hidden：对外不可见，必须 404。
-		{slug: "dl-hidden", demoType: "zip", lifecycle: "published", moderation: "approved", visibility: "hidden", withSource: true},
+		{slug: "dl-hidden", demoType: "zip", lifecycle: "published", moderation: "approved", visibility: "hidden", withSource: true, hasPublished: true},
 		// 没发布：404。
 		//
 		// 这两条**故意不建渠道行**：触发器 `trg_demos_guard` 拒绝给未审过的作品上架渠道
@@ -69,11 +72,14 @@ func seedDownloadWorld(t *testing.T, pool *pgxpool.Pool, dir string) map[string]
 		// 发布但没审过：404（组合不可达，同理见上）。
 		{slug: "dl-rejected", demoType: "zip", lifecycle: "published", moderation: "rejected", withSource: true},
 		// 单文件作品：下的是 index.svg 而不是 source.zip。
-		{slug: "dl-single", demoType: "web", singleFile: "svg", lifecycle: "published", moderation: "approved", visibility: "listed"},
+		{slug: "dl-single", demoType: "web", singleFile: "svg", lifecycle: "published", moderation: "approved", visibility: "listed", hasPublished: true},
 		// 外链作品：400，不给假的本站包。
-		{slug: "dl-link", demoType: "link", lifecycle: "published", moderation: "approved", visibility: "listed"},
+		{slug: "dl-link", demoType: "link", lifecycle: "published", moderation: "approved", visibility: "listed", hasPublished: true},
 		// 已归档：墓碑态不提供下载。
-		{slug: "dl-archived", demoType: "zip", lifecycle: "archived", moderation: "approved", visibility: "listed", withSource: true},
+		{slug: "dl-archived", demoType: "zip", lifecycle: "archived", moderation: "approved", visibility: "listed", withSource: true, hasPublished: true},
+		// 复审中：审核态被退回 pending，但对外版本仍是上一版——作者改稿期间
+		// 线上作品必须还能下载，否则「审核」就变成了「下线」。
+		{slug: "dl-under-review", demoType: "zip", lifecycle: "published", moderation: "pending", visibility: "listed", withSource: true, hasPublished: true},
 	}
 
 	world := map[string]dlWorld{}
@@ -95,7 +101,14 @@ func seedDownloadWorld(t *testing.T, pool *pgxpool.Pool, dir string) map[string]
 			demoID, s.demoType, s.singleFile).Scan(&revID); err != nil {
 			t.Fatalf("插入 %s 的版本失败: %v", s.slug, err)
 		}
-		if _, err := pool.Exec(ctx, `UPDATE demos SET current_revision_id = $1 WHERE id = $2`, revID, demoID); err != nil {
+		// 已发布的作品要有一个对外版本指针（迁移 0014）：没它渠道上不去，
+		// 详情/预览/下载的公开读路径也拿不到内容。
+		// 草稿与「发布但没审过」的作品按真实情况留空——它们从没对外过。
+		if _, err := pool.Exec(ctx, `
+			UPDATE demos
+			SET current_revision_id = $1::bigint,
+			    published_revision_id = CASE WHEN $3 THEN $1::bigint ELSE NULL END
+			WHERE id = $2`, revID, demoID, s.hasPublished); err != nil {
 			t.Fatalf("设置 %s 的当前版本失败: %v", s.slug, err)
 		}
 		if s.visibility != "" {
@@ -184,6 +197,12 @@ func TestIntegrationDownload(t *testing.T) {
 	// 3) unlisted 可直链下载。
 	if got := doDownload(t, handler, "dl-unlisted"); got.Code != http.StatusOK {
 		t.Fatalf("dl-unlisted 期望 200，实际 %d", got.Code)
+	}
+
+	// 复审中：审核态 pending，但对外版本仍在 → 照常能下。
+	// 这条钉的是「作者改稿不该让线上作品下不了」——迁移 0014 之前它是 404。
+	if got := doDownload(t, handler, "dl-under-review"); got.Code != http.StatusOK {
+		t.Fatalf("dl-under-review 期望 200，实际 %d", got.Code)
 	}
 
 	// 4) 单文件作品下原文件。

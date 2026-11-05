@@ -31,7 +31,11 @@ LIMIT $1;
 -- name: GetDemoForReview :one
 -- 裁决前先取一次：用来区分「不存在」（404）与「已经裁决过」（409）。
 -- 这两者必须区分——前者是调用方地址写错，后者是操作顺序问题。
-SELECT id, slug, moderation_state, deleted_at, erased_at
+--
+-- 多带两列是给「通过时切换对外版本」用的（迁移 0014）：裁决的对象是**当前版本**，
+-- 通过之后对外服务的版本才跟着换；驳回则保持原样。
+SELECT id, slug, moderation_state, deleted_at, erased_at,
+       current_revision_id, published_revision_id
 FROM demos
 WHERE slug = $1;
 
@@ -46,6 +50,16 @@ WHERE slug = $1
   AND deleted_at IS NULL
   AND erased_at IS NULL
 RETURNING id, slug, moderation_state;
+
+-- name: SetPublishedRevision :exec
+-- 审核通过时把对外版本切到当前版本（迁移 0014 的版本分离）。
+-- 幂等：重复通过不会改到别的版本上（WHERE 里带 slug 而不是 id，是为了让调用方
+-- 只用 slug 就能定位；同一事务里刚刚 ReviewDemo 过，行一定存在）。
+UPDATE demos
+SET published_revision_id = current_revision_id,
+    updated_at             = now()
+WHERE slug = $1
+  AND current_revision_id IS NOT NULL;
 
 -- name: InsertDemoTimeline :exec
 -- 写给人看的经过（Demo 域 §3.11）。它不承担审计职责——审计在 audit_log。
@@ -74,8 +88,11 @@ WHERE d.slug = $1;
 -- 允许的来源状态写在 WHERE 里，`published` 不在其中 —— 重复发布返回 0 行，
 -- 调用方据此回 409，而不是让「已经是发布态」和「刚发布成功」都返回 200。
 UPDATE demos
-SET lifecycle_state = 'published',
-    updated_at = now()
+SET lifecycle_state       = 'published',
+    -- 第一次发布时把对外版本指向当前版本；已经有了就不动（复审期间发布的场景：
+    -- 对外内容仍是上一版，发布动作不该顺手把未审的新版本推上线）。
+    published_revision_id = COALESCE(published_revision_id, current_revision_id),
+    updated_at            = now()
 WHERE slug = $1
   AND lifecycle_state IN ('draft', 'archived')
   AND moderation_state = 'approved'

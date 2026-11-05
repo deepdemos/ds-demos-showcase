@@ -309,12 +309,25 @@ INDEX  (channel, visibility, featured_order)
 
 **预览与下载的可见性口径**（实现约定，不是新增字段）：
 
-| 入口 | 放行条件 | 谁能绕过 |
-| --- | --- | --- |
-| 列表 | `moderation_state=approved` + `lifecycle_state=published` + 渠道有 `listed` | 无 |
-| 详情 `/demos/{slug}` | 同列表，但渠道接受 `listed` **或** `unlisted` | 无 |
-| 预览 `/preview/{slug}` | 与详情同一条谓词 | 作者本人、持 `demo.review` 的审核员 |
-| 下载 `/download/{slug}` | 与详情同一条谓词 | **无**（草稿不该存在于任何下载路径） |
+| 入口 | 放行条件 | 读哪个版本 | 谁能绕过 |
+| --- | --- | --- | --- |
+| 列表 | `published_revision_id IS NOT NULL` + `lifecycle_state=published` + 渠道有 `listed` | 对外版本 | 无 |
+| 详情 `/demos/{slug}` | 同列表，但渠道接受 `listed` **或** `unlisted` | 对外版本 | 无 |
+| 预览 `/preview/{slug}` | 与详情同一条谓词 | 访客读对外版本，作者与审核员读当前版本 | 作者本人、持 `demo.review` 的审核员 |
+| 下载 `/download/{slug}` | 与详情同一条谓词 | 对外版本 | **无**（草稿不该存在于任何下载路径） |
+
+**「对外版本」是 `demos.published_revision_id`，不是审核态**（迁移 0014）：
+
+- 审核态描述**当前版本**（`current_revision_id`）——作者改稿就退回 `pending`；
+- 对外内容由 `published_revision_id` 决定——它只在审核通过那一刻切到当前版本。
+
+两者分开，才能做到「改稿期间线上照常服务」。合并成一个谓词（`moderation_state=approved`）会把「作者在改」变成「作品下线」：列表消失、详情 404、下载 404，而作者只是修了个错别字。
+
+三条推论，都是实现里必须守的：
+
+1. **渠道能不能上架看的是有没有对外版本**，不是审核态——`trg_demo_channel_listed_requires_approved` 因此改判 `published_revision_id IS NOT NULL`。
+2. **发布不会把未审的新版推上线**：`PublishDemo` 用 `published_revision_id = COALESCE(published_revision_id, current_revision_id)`，复审期间点发布不会顺带放行最新一版。
+3. **驳回不动对外版本**：作者改坏的第二版被驳回，线上仍是上一版（`TestIntegrationReviewRejectKeepsPublishedRevision` 钉住）。
 
 **列表与其余三处必须分开写**：`listed` 与 `unlisted` 的差别只体现在列表上（`unlisted` 的定义就是「不上列表、知道地址能看」）。把四行合成「列表 / 详情同一条件」会让 `unlisted` 要么全站不可见、要么直接出现在列表里——前者违反标准对象 §EN-1，后者等于没有这个档位。
 

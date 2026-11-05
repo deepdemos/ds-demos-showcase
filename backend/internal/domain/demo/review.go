@@ -109,6 +109,17 @@ func (s *Service) Review(ctx context.Context, actor ReviewActor, in ReviewInput)
 			return fmt.Errorf("更新审核状态失败: %w", err)
 		}
 
+		// 通过 = 把对外版本切到当前版本（迁移 0014）。
+		//
+		// 这一步是「审核」与「对外」之间的唯一连接点：审核态只描述当前版本，
+		// 对外内容由 published_revision_id 决定。漏了它，新版本审过了却永远不生效，
+		// 表现为「审核通过但作品还是旧的」——比报错难查得多。
+		if in.Approve {
+			if err := q.SetPublishedRevision(ctx, in.Slug); err != nil {
+				return fmt.Errorf("切换对外版本失败: %w", err)
+			}
+		}
+
 		if err := q.InsertDemoTimeline(ctx, store.InsertDemoTimelineParams{
 			DemoID:  row.ID,
 			Kind:    timelineKind,
