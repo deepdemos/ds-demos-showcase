@@ -60,14 +60,22 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 		// 「pending/rejected + 渠道」这个组合在库里造不出来——
 		// pv-draft 因此没有渠道行，它的判定由 lifecycle 兜住，不靠渠道。
 		visibility string
+		// hasPublished：这行是否**有过**对外版本（迁移 0014 的 published_revision_id）。
+		// 与 visibility 是两件事：hidden 的作品也曾经对外过（它只是不上列表、不给直链），
+		// 而 draft 从没对外过。写成显式字段而不是由 lifecycle 推，是为了让每个用例
+		// 自己说清「我这条数据代表什么状态」。
+		hasPublished bool
 	}
 	specs := []demoSpec{
-		{"pv-draft", "draft", false, ""},
-		{"pv-published", "published", false, "listed"},
+		{"pv-draft", "draft", false, "", false},
+		{"pv-published", "published", false, "listed", true},
 		// hidden 渠道：作品对外不存在。预览必须与下载同一口径地拒掉它。
-		{"pv-hidden", "published", false, "hidden"},
-		{"pv-archived", "archived", false, "listed"},
-		{"pv-erased", "published", true, "listed"},
+		{"pv-hidden", "published", false, "hidden", true},
+		{"pv-archived", "archived", false, "listed", true},
+		{"pv-erased", "published", true, "listed", true},
+		// 复审中：审核态被退回 pending，但对外内容仍是上一版、照常在服务。
+		// 这是版本分离之后新增的组合，也最容易被人按审核态写成 404。
+		{"pv-under-review", "published", false, "listed", true},
 	}
 
 	for _, s := range specs {
@@ -79,7 +87,10 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 		var demoID int64
 		err := pool.QueryRow(ctx, `
 			INSERT INTO demos (slug, title, description, moderation_state, lifecycle_state, author_id, deleted_at, erased_at)
-			VALUES ($1, NULLIF($2,''), NULLIF($3,''), 'approved', $4, $5,
+			VALUES ($1, NULLIF($2,''), NULLIF($3,''),
+			        -- 复审中的那条：审核态 pending 但对外内容仍在（版本分离的正常态）。
+			        CASE WHEN $1 = 'pv-under-review' THEN 'pending' ELSE 'approved' END,
+			        $4, $5,
 			        CASE WHEN $6 THEN now() ELSE NULL END,
 			        CASE WHEN $6 THEN now() ELSE NULL END)
 			RETURNING id`,
@@ -88,22 +99,32 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 			t.Fatalf("插入 %s 失败: %v", s.slug, err)
 		}
 
-		if s.visibility != "" {
-			if _, err := pool.Exec(ctx, `
-				INSERT INTO demo_channels (demo_id, channel, visibility, lang)
-				VALUES ($1, 'deep', $2, 'zh')`, demoID, s.visibility); err != nil {
-				t.Fatalf("插入 %s 的渠道失败: %v", s.slug, err)
-			}
-		}
-
 		var revID int64
 		if err := pool.QueryRow(ctx, `
 			INSERT INTO demo_revisions (demo_id, rev_no, source, manifest_hash, file_count)
 			VALUES ($1, 1, 'upload', repeat('a', 64), 1) RETURNING id`, demoID).Scan(&revID); err != nil {
 			t.Fatalf("插入 %s 的版本失败: %v", s.slug, err)
 		}
-		if _, err := pool.Exec(ctx, `UPDATE demos SET current_revision_id = $1 WHERE id = $2`, revID, demoID); err != nil {
+		// 已发布的作品要有一个对外版本指针（迁移 0014）：没它渠道上不去，
+		// 详情/预览/下载的公开读路径也拿不到内容。
+		// 草稿与「发布但没审过」的作品按真实情况留空——它们从没对外过。
+		if _, err := pool.Exec(ctx, `
+			UPDATE demos
+			SET current_revision_id = $1::bigint,
+			    published_revision_id = CASE WHEN $3 THEN $1::bigint ELSE NULL END
+			WHERE id = $2`, revID, demoID, s.hasPublished); err != nil {
 			t.Fatalf("设置 %s 的当前版本失败: %v", s.slug, err)
+		}
+
+		// 渠道行必须**排在指针之后**：触发器要求 listed 渠道对应的作品已经有对外版本
+		// （迁移 0014）。先插渠道会红在「作品 N 还没有对外版本」——这条顺序本身就是
+		// 不变量的一部分，不是种子的偶然写法。
+		if s.visibility != "" {
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO demo_channels (demo_id, channel, visibility, lang)
+				VALUES ($1, 'deep', $2, 'zh')`, demoID, s.visibility); err != nil {
+				t.Fatalf("插入 %s 的渠道失败: %v", s.slug, err)
+			}
 		}
 
 		// 内容写两份：磁盘上的真实文件，和 storage 期望的 key。
@@ -193,6 +214,9 @@ func TestIntegrationPreviewVisibility(t *testing.T) {
 		{"已发布-匿名", "/preview/pv-published/v1/index.html", "", 200, "pv-published"},
 		{"已发布-当前版本别名", "/preview/pv-published/index.html", "", 200, "pv-published"},
 		{"已发布-无尾斜杠", "/preview/pv-published", "", 200, "pv-published"},
+		// 复审中：审核态 pending，但对外版本仍在 → 匿名照常看得到。
+		// 这条钉的是「审核不影响已发布内容」——迁移 0014 之前它是 404。
+		{"复审中-匿名仍可见", "/preview/pv-under-review/v1/index.html", "", 200, "pv-under-review"},
 		// 草稿：匿名看不到（404 而不是 403——不泄露「这个 slug 存在」）。
 		{"草稿-匿名", "/preview/pv-draft/v1/index.html", "", 404, ""},
 		// 草稿：作者本人能看。

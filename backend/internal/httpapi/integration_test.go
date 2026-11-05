@@ -75,6 +75,23 @@ func seed(t *testing.T, pool *pgxpool.Pool) {
 		}
 	}
 
+	// 版本分离（迁移 0014）之后，「能上架渠道 / 详情能读到内容」的前提是有一个
+	// 对外版本指针。只造 demos 行是不够的——这是这个种子原来漏掉的一环，
+	// 以前靠「审核态 approved」蒙对了。
+	if _, err := pool.Exec(ctx, `
+		WITH rev AS (
+			INSERT INTO demo_revisions (demo_id, rev_no, demo_type, source)
+			SELECT id, 1, 'web', 'upload' FROM demos
+			WHERE slug IN ('it-published', 'it-archived')
+			ON CONFLICT (demo_id, rev_no) DO NOTHING
+			RETURNING id, demo_id
+		)
+		UPDATE demos d
+		SET current_revision_id = rev.id, published_revision_id = rev.id
+		FROM rev WHERE d.id = rev.demo_id`); err != nil {
+		t.Fatalf("给已发布作品造对外版本失败: %v", err)
+	}
+
 	// 列表的可见性谓词要求至少一条 visibility='listed' 的渠道行（迁移 0013 会把
 	// 存量数据补齐，但测试自己造的行没有渠道）。只给真正该出现在列表里的那一条。
 	if _, err := pool.Exec(ctx, `

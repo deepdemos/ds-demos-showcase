@@ -156,13 +156,16 @@ func detailRow(state string, title string, deleted, erased bool) store.GetDemoBy
 		ModerationState: "approved",
 		DemoType:        "web",
 		SingleFile:      "",
-		// detailRow 默认给「渠道对外可见」，因为绝大多数用例要的是「正常可见的作品」。
-		// 需要 hidden 渠道的用例自己改这一列。
-		HasVisibleChannel: true,
-		CreatedAt:         ts(now),
-		UpdatedAt:         ts(now),
-		DeletedAt:         pgtype.Timestamptz{Valid: deleted},
-		ErasedAt:          pgtype.Timestamptz{Valid: erased},
+		// detailRow 默认给「渠道对外可见」+「有对外版本」，因为绝大多数用例要的是
+		// 「正常可见的作品」。需要 hidden 渠道或用例要造「没有对外版本」的，
+		// 自己改这两列。
+		HasVisibleChannel:    true,
+		HasPublishedRevision: true,
+		PublishedRevNo:       1,
+		CreatedAt:            ts(now),
+		UpdatedAt:            ts(now),
+		DeletedAt:            pgtype.Timestamptz{Valid: deleted},
+		ErasedAt:             pgtype.Timestamptz{Valid: erased},
 	}
 }
 
@@ -172,7 +175,7 @@ func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorde
 	newTestHandler(nil, store.New(fakeDB{row: fakeRow{values: []any{
 		row.ID, row.Slug, row.Title, row.Description, row.CoverUrl,
 		row.LifecycleState, row.ModerationState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
-		row.DemoType, row.SingleFile, row.HasVisibleChannel,
+		row.DemoType, row.SingleFile, row.HasPublishedRevision, row.PublishedRevNo, row.HasVisibleChannel,
 	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
 	return response
 }
@@ -269,11 +272,28 @@ func TestGetDemoHiddenChannelIs404(t *testing.T) {
 	}
 }
 
-func TestGetDemoPublishedButNotApproved(t *testing.T) {
+// 没有对外版本 = 从没审过、也没发布过，对外不存在。
+//
+// 这条用例原来的写法是「published + rejected → 404」，**语义已经过期**（迁移 0014）：
+// 审核态现在描述「当前版本」，作者改稿后它就是 rejected/pending，而对外内容
+// 仍是上一版。继续按审核态判会让作者一提交更新，作品就从作品库消失。
+func TestGetDemoWithoutPublishedRevision(t *testing.T) {
+	row := detailRow("published", "标题", false, false)
+	row.HasPublishedRevision = false
+	row.PublishedRevNo = 0
+	response := getDemo(t, row)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("没有对外版本：expected 404，got %d（body=%s）", response.Code, response.Body.String())
+	}
+}
+
+// 反过来钉一条：**审核态是 rejected 但有对外版本时，详情仍然 200**。
+// 这是版本分离之后唯一新增的可见性组合，也是「作者改稿→复审中」这个真实状态。
+func TestGetDemoRejectedButHasPublishedRevision(t *testing.T) {
 	row := detailRow("published", "标题", false, false)
 	row.ModerationState = "rejected"
 	response := getDemo(t, row)
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("未过审的 published：expected 404，got %d", response.Code)
+	if response.Code != http.StatusOK {
+		t.Fatalf("rejected 但有对外版本：expected 200，got %d（body=%s）", response.Code, response.Body.String())
 	}
 }

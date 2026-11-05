@@ -95,6 +95,7 @@ func TestDownloadVisibilityJudge(t *testing.T) {
 		moderation  string
 		demoType    string // 空串按 zip 算
 		hidden      bool   // 渠道不可见
+		noPublished bool   // 没有对外版本
 		revErased   bool
 		demoErased  bool
 		demoDeleted bool
@@ -102,7 +103,11 @@ func TestDownloadVisibilityJudge(t *testing.T) {
 	}{
 		{name: "正常可见", lifecycle: "published", moderation: "approved", wantCode: http.StatusOK},
 		{name: "没发布", lifecycle: "draft", moderation: "approved", wantCode: http.StatusNotFound},
-		{name: "发布但没审过", lifecycle: "published", moderation: "rejected", wantCode: http.StatusNotFound},
+		// 没有对外版本（从没审过）：404。
+		{name: "没有对外版本", lifecycle: "published", moderation: "rejected", noPublished: true, wantCode: http.StatusNotFound},
+		// 反过来：审核态是 rejected 但有对外版本（作者改稿、复审中）→ 照常给。
+		// 这是迁移 0014 之后唯一新增的可见组合，也是最容易被写成 404 的一处。
+		{name: "复审中仍有对外版本", lifecycle: "published", moderation: "rejected", wantCode: http.StatusOK},
 		{name: "渠道不可见", lifecycle: "published", moderation: "approved", hidden: true, wantCode: http.StatusNotFound},
 		{name: "作品被擦除", lifecycle: "published", moderation: "approved", demoErased: true, wantCode: http.StatusNotFound},
 		{name: "作品被软删", lifecycle: "published", moderation: "approved", demoDeleted: true, wantCode: http.StatusNotFound},
@@ -114,6 +119,9 @@ func TestDownloadVisibilityJudge(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			row := downloadRow(c.lifecycle, c.moderation, c.demoType, c.hidden, c.revErased, c.demoErased, c.demoDeleted)
+			if c.noPublished {
+				row.PublishedRevNo = 0
+			}
 			response := httptest.NewRecorder()
 			serveWithRow(t, row, response)
 			if response.Code != c.wantCode {
@@ -134,7 +142,7 @@ func downloadRow(lifecycle, moderation, demoType string, hidden, revErased, demo
 		Slug:              "demo-slug",
 		LifecycleState:    lifecycle,
 		ModerationState:   moderation,
-		CurrentRevNo:      1,
+		PublishedRevNo:    1,
 		DemoType:          demoType,
 		HasVisibleChannel: !hidden,
 		RevisionErasedAt:  nullableTS(revErased),
@@ -167,7 +175,7 @@ func (memStore) Get(context.Context, string) (io.ReadCloser, error) {
 func downloadValues(row store.GetDemoForDownloadRow) []any {
 	return []any{
 		row.ID, row.Slug, row.LifecycleState, row.ModerationState,
-		row.DeletedAt, row.ErasedAt, row.CurrentRevNo,
+		row.DeletedAt, row.ErasedAt, row.PublishedRevNo,
 		row.SingleFile, row.DemoType,
 		row.RevisionDeletedAt, row.RevisionErasedAt, row.HasVisibleChannel,
 	}

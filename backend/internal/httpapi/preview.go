@@ -119,10 +119,16 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// 版本级的擦除：当前版本与对外版本各自的行状态都能从作品行上读出来，
+	// 所以这两种都要拦；更早的历史版本查不到行状态，磁盘上的 r{n} 目录仍在。
 	if rev > 0 && int32(rev) == row.CurrentRevNo {
-		// 只有当前版本能从作品行上看出来；历史版本的行状态这里查不到，
-		// 所以只拦「当前版本已被单独擦除」这一种。
 		if row.RevisionErasedAt.Valid || row.RevisionDeletedAt.Valid {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	if rev > 0 && int32(rev) == row.PublishedRevNo {
+		if row.PublishedErasedAt.Valid || row.PublishedDeletedAt.Valid {
 			http.NotFound(w, r)
 			return
 		}
@@ -138,8 +144,14 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 判定放在 `published` 里而不是加一道独立的 404：缓存头
 	// （`cacheControlOf(published, versioned)`）与它共用同一个布尔，
 	// 分开写会出现「按不可见处理但给了 immutable 长缓存」这种自相矛盾的组合。
+	// 对外可见 = 已发布 **且有对外版本** **且** 渠道不是 hidden。
+	//
+	// 中间那一条原来是「审核态必须是 approved」（迁移 0014）。换掉的理由与前几处
+	// 读路径相同：审核态从此描述**当前版本**，作者改稿后它是 pending，
+	// 而对外的内容仍是上一版、照常在服务。继续判审核态会让作者一提交更新，
+	// 线上作品的预览与下载同时消失。
 	published := row.LifecycleState == "published" &&
-		row.ModerationState == "approved" &&
+		row.HasPublishedRevision &&
 		row.HasVisibleChannel
 	if !published && !p.mayPreviewDraft(ctx, r, row.AuthorSub) {
 		// 作者视图不受渠道影响：作者要能在发布到 hidden 之后仍然检查自己的作品，
@@ -148,8 +160,16 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 没指定版本时按「谁在看」选：作者与审核员看当前版本（含未过审的改动），
+	// 其他人看对外版本。**顺序不能反**——先判作者再判对外，
+	// 否则作者改完稿打开自己的作品看到的还是旧版。
+	authorView := p.mayPreviewDraft(ctx, r, row.AuthorSub)
 	if rev == 0 {
-		rev = int(row.CurrentRevNo)
+		if authorView && row.CurrentRevNo > 0 {
+			rev = int(row.CurrentRevNo)
+		} else {
+			rev = int(row.PublishedRevNo)
+		}
 	}
 	if rev <= 0 {
 		http.NotFound(w, r)

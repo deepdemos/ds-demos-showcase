@@ -97,14 +97,19 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 对外可见 = 已发布 且 审过 且 渠道不是 hidden。
+	// 对外可见 = 已发布 且 有对外版本 且 渠道不是 hidden。
+	//
+	// **不判审核态**（迁移 0014）：审核态描述的是「当前版本」，复审期间它是 pending，
+	// 但对外内容仍是上一版、照常在服务。判审核态会让「作者改了一版」直接把线上作品
+	// 从下载路径上摘掉。
+	//
 	// 下载不区分「作者本人」——草稿不该出现在任何下载路径上，
 	// 作者要看自己的作品走 /preview（那里有作者视图）。
-	if row.LifecycleState != "published" || row.ModerationState != "approved" || !row.HasVisibleChannel {
+	if row.LifecycleState != "published" || !row.HasVisibleChannel {
 		http.NotFound(w, r)
 		return
 	}
-	if row.CurrentRevNo <= 0 {
+	if row.PublishedRevNo <= 0 {
 		http.NotFound(w, r)
 		return
 	}
@@ -117,7 +122,7 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, key := downloadTarget(row.Slug, int(row.CurrentRevNo), row.SingleFile)
+	name, key := downloadTarget(row.Slug, int(row.PublishedRevNo), row.SingleFile)
 
 	f, err := d.files.Get(ctx, key)
 	if err != nil {

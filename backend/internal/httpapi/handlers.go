@@ -231,9 +231,12 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 	tombstone := row.DeletedAt.Valid || state == api.LifecycleStateArchived || state == api.LifecycleStateRemoved
 
 	// 墓碑只承载「这里曾经有过一个作品」，不承载内容，所以不看审核态。
-	// 但完整内容必须审过：published + rejected 这种组合当前没有端点能造出来，
-	// 可一旦有（大改后重新送审、手工修数据），它会让未过审的内容对全世界可见。
-	if !tombstone && row.ModerationState != "approved" {
+	//
+	// 完整内容必须有**对外版本**（迁移 0014）——原来是「审核态必须是 approved」。
+	// 换成指针判定的理由：审核态从此描述「当前版本」，作者改稿后它是 pending，
+	// 而对外的内容仍是上一版、照常可见。继续判审核态会让作者一提交更新，
+	// 自己的作品就从作品库里消失。
+	if !tombstone && !row.HasPublishedRevision {
 		return api.DemoDetail{}, false
 	}
 	// 渠道对外可见：`hidden` 的作品对外不存在。
@@ -265,7 +268,7 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 	// 有文件可给（不是 link）+ 渠道对外可见（listed 或 unlisted）。
 	// 这里不判存储里文件是否存在——那要多一次 Stat 往返，
 	// 而「文件被外力删掉」属于事故，不该由详情页替它兜底（下载会明确 404）。
-	detail.Downloadable = row.DemoType != "" && row.DemoType != "link" && row.HasVisibleChannel
+	detail.Downloadable = row.DemoType != "" && row.DemoType != "link" && row.HasVisibleChannel && row.HasPublishedRevision
 	return detail, true
 }
 

@@ -305,11 +305,20 @@ await rejects('不变量 10：未审核作品上架渠道被拒',
 await accepts('不变量 10：非 listed 渠道不受限',
   "INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'deep','unlisted')");
 await db.exec("DELETE FROM demo_channels WHERE demo_id=" + did2 + " AND channel='deep'");
-await accepts('不变量 10：审核通过后可以上架',
-  "UPDATE demos SET moderation_state='approved' WHERE id=" + did2 + "; INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'deep','listed');");
-await rejects('不变量 10 反向：已有上架渠道时退回审核状态被拒',
-  "UPDATE demos SET moderation_state='pending' WHERE id=" + did2,
-  '上架中的渠道');
+// 迁移 0014 之后，「能上架」的判据从「审核态 approved」变成「有对外版本」。
+// 这两条原来钉的是审核态，必须跟着改口径——否则它们会替旧语义站岗，
+// 让「作者改稿后线上作品消失」重新变成合法状态。
+const rev2 = "(SELECT id FROM demo_revisions WHERE demo_id=" + did2 + " AND rev_no=1)";
+await accepts('不变量 10：有对外版本后可以上架',
+  "UPDATE demos SET moderation_state='approved', current_revision_id=" + rev2 + " WHERE id=" + did2 + ";" +
+  " UPDATE demos SET published_revision_id=" + rev2 + " WHERE id=" + did2 + ";" +
+  " INSERT INTO demo_channels (demo_id, channel, visibility) VALUES (" + did2 + ",'deep','listed');");
+// 这条拦的是「把对外版本清空」——错误文案来自 trg_demos_guard（还有一个上架渠道），
+// 不是渠道守卫那条「还没有对外版本」。两者都会拒，但拒绝的时机不同，
+// 断言盯错文案就会以为门禁没生效。
+await rejects('不变量 10 反向：上架中不能清掉对外版本',
+  "UPDATE demos SET published_revision_id=NULL WHERE id=" + did2,
+  '不能把对外版本清空');
 
 // 擦除那条分支过去是无条件放行任何列，等于给「擦除」留了一扇任意改写的后门。
 // 现在只允许清空内容列，身份列（demo_id / rev_no / created_at / source …）必须不动。

@@ -45,21 +45,27 @@ func (q *Queries) GetDemoForPublish(ctx context.Context, slug string) (GetDemoFo
 }
 
 const getDemoForReview = `-- name: GetDemoForReview :one
-SELECT id, slug, moderation_state, deleted_at, erased_at
+SELECT id, slug, moderation_state, deleted_at, erased_at,
+       current_revision_id, published_revision_id
 FROM demos
 WHERE slug = $1
 `
 
 type GetDemoForReviewRow struct {
-	ID              int64
-	Slug            string
-	ModerationState string
-	DeletedAt       pgtype.Timestamptz
-	ErasedAt        pgtype.Timestamptz
+	ID                  int64
+	Slug                string
+	ModerationState     string
+	DeletedAt           pgtype.Timestamptz
+	ErasedAt            pgtype.Timestamptz
+	CurrentRevisionID   pgtype.Int8
+	PublishedRevisionID pgtype.Int8
 }
 
 // 裁决前先取一次：用来区分「不存在」（404）与「已经裁决过」（409）。
 // 这两者必须区分——前者是调用方地址写错，后者是操作顺序问题。
+//
+// 多带两列是给「通过时切换对外版本」用的（迁移 0014）：裁决的对象是**当前版本**，
+// 通过之后对外服务的版本才跟着换；驳回则保持原样。
 func (q *Queries) GetDemoForReview(ctx context.Context, slug string) (GetDemoForReviewRow, error) {
 	row := q.db.QueryRow(ctx, getDemoForReview, slug)
 	var i GetDemoForReviewRow
@@ -69,6 +75,8 @@ func (q *Queries) GetDemoForReview(ctx context.Context, slug string) (GetDemoFor
 		&i.ModerationState,
 		&i.DeletedAt,
 		&i.ErasedAt,
+		&i.CurrentRevisionID,
+		&i.PublishedRevisionID,
 	)
 	return i, err
 }
@@ -199,8 +207,11 @@ func (q *Queries) ListPendingDemoReviews(ctx context.Context, limit int32) ([]Li
 
 const publishDemo = `-- name: PublishDemo :execrows
 UPDATE demos
-SET lifecycle_state = 'published',
-    updated_at = now()
+SET lifecycle_state       = 'published',
+    -- 第一次发布时把对外版本指向当前版本；已经有了就不动（复审期间发布的场景：
+    -- 对外内容仍是上一版，发布动作不该顺手把未审的新版本推上线）。
+    published_revision_id = COALESCE(published_revision_id, current_revision_id),
+    updated_at            = now()
 WHERE slug = $1
   AND lifecycle_state IN ('draft', 'archived')
   AND moderation_state = 'approved'
@@ -248,6 +259,22 @@ func (q *Queries) ReviewDemo(ctx context.Context, arg ReviewDemoParams) (ReviewD
 	var i ReviewDemoRow
 	err := row.Scan(&i.ID, &i.Slug, &i.ModerationState)
 	return i, err
+}
+
+const setPublishedRevision = `-- name: SetPublishedRevision :exec
+UPDATE demos
+SET published_revision_id = current_revision_id,
+    updated_at             = now()
+WHERE slug = $1
+  AND current_revision_id IS NOT NULL
+`
+
+// 审核通过时把对外版本切到当前版本（迁移 0014 的版本分离）。
+// 幂等：重复通过不会改到别的版本上（WHERE 里带 slug 而不是 id，是为了让调用方
+// 只用 slug 就能定位；同一事务里刚刚 ReviewDemo 过，行一定存在）。
+func (q *Queries) SetPublishedRevision(ctx context.Context, slug string) error {
+	_, err := q.db.Exec(ctx, setPublishedRevision, slug)
+	return err
 }
 
 const upsertDemoChannel = `-- name: UpsertDemoChannel :exec
