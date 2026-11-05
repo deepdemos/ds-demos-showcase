@@ -179,6 +179,11 @@ jobs:
         run: go run ./cmd/migrate up
       - name: 灌开发种子（作品库要有作品可点）
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seeds/0001-dev-demos.sql
+      # 模型目录也是种子：投稿表单的模型多选要读 `GET /api/v1/models`，
+      # 不灌的话目录恒为空，e2e 里那一步只能验证「空目录也能投稿」，
+      # 验证不到「选了模型能提交并显示出来」。
+      - name: 灌模型目录种子（投稿页的模型多选要能选到东西）
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seeds/0002-dev-models.sql
       - name: 建闭环用例所需的管理员
         working-directory: backend
         env:
