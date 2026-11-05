@@ -42,4 +42,6 @@ export const ErrorCode = {
   verification_required: 'verification_required',
   email_not_verified: 'email_not_verified',
   payload_too_large: 'payload_too_large',
+  restore_window_closed: 'restore_window_closed',
+  derivative_purged: 'derivative_purged',
 } as const;

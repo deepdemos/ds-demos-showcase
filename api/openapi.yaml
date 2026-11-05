@@ -366,6 +366,224 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+    delete:
+      operationId: deleteDemo
+      tags: [作品]
+      summary: 删除作品（软删，可恢复）
+      description: |
+        写 `deleted_at` 并把作品目录入 GC 队列。**不改可见性层**：下架时删的，
+        恢复后还是下架。
+
+        删除后作品**对外不存在**（详情也是 404，不给墓碑——墓碑等于承认这里有过东西），
+        只有作者本人能看到「已删除 · 可恢复」。
+
+        恢复窗口在删除这一刻定型：响应里的 `purgeAfter` 就是最晚可恢复时刻，
+        之后恢复一律 409（`restore_window_closed`）。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoDeleteRequest'
+      responses:
+        '200':
+          description: 已删除，带最晚可恢复时刻
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoDeleteResult'
+        '400':
+          description: 请求体不是合法 JSON，或理由过长
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或者不是你的
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 已经删过了 / 已被平台移除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/archive:
+    post:
+      operationId: archiveDemo
+      tags: [作品]
+      summary: 下架作品（作者本人）
+      description: |
+        `published → archived`。下架后：作品库不再出现、详情返回墓碑页（200，只有标题与
+        「作者已下架」）、预览与下载 404。**渠道行不动**——下架不是删渠道，重新上架后
+        渠道仍在原来的可见性上。
+
+        这是作者自己的动作，见不到别人的作品（非作者一律 404，不返回 403：403 会承认
+        这个 slug 存在过）。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      responses:
+        '200':
+          description: 已下架
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoLifecycleResult'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或者不是你的
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 当前状态不允许下架（不是已发布、已被平台移除）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/unarchive:
+    post:
+      operationId: unarchiveDemo
+      tags: [作品]
+      summary: 重新上架（作者本人）
+      description: |
+        `archived → published`。不发通知、不改渠道、不动对外版本——上架只改变可见性。
+
+        「被平台移除」（`removed`）的作品不能自己上架，那是治理域的处置。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      responses:
+        '200':
+          description: 已重新上架
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoLifecycleResult'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或者不是你的
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 当前状态不允许（不是已下架、已被平台移除）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/restore:
+    post:
+      operationId: restoreDemo
+      tags: [作品]
+      summary: 恢复已删除的作品（作者本人）
+      description: |
+        清空 `deleted_at`，作品回到删除前的档位（下架时删的，恢复后还是下架）。
+        不返回 403：**恢复窗口过期**与**文件已被回收**都是 409，但错误码不同——
+        前者是「你来晚了」，后者是「系统提前清掉了」。
+
+        路径与 `POST /demos/{slug}/revisions/{revNo}/restore` 分开：那个恢复的是
+        **内容版本**，这个恢复的是**被删掉的作品**。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      responses:
+        '200':
+          description: 已恢复
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoLifecycleResult'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在、不是你的、或已被擦除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 没被删过 / 恢复窗口已过（`restore_window_closed`）/ 文件已被回收（`derivative_purged`）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/demos/{slug}/revisions:
     get:
       operationId: listDemoRevisions
@@ -1075,7 +1293,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required, email_not_verified, payload_too_large]
+          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required, email_not_verified, payload_too_large, restore_window_closed, derivative_purged]
           description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
         message:
           type: string
@@ -1183,7 +1401,7 @@ components:
         - $ref: '#/components/schemas/DemoSummary'
         - type: object
           additionalProperties: false
-          required: [description, updatedAt, demoType, downloadable, canEdit]
+          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions]
           properties:
             description:
               type: string
@@ -1221,6 +1439,73 @@ components:
 
                 前端据此决定出不出「下载作品」，**不要自己按 `demoType` 猜**——
                 猜出来的按钮会点出 404。
+            lifecycleActions:
+              $ref: '#/components/schemas/DemoLifecycleActions'
+
+    DemoLifecycleActions:
+      type: object
+      additionalProperties: false
+      required: [archive, unarchive, delete, restore]
+      description: |
+        当前调用者此刻能对这个作品做哪些生命周期动作。四个布尔全给，
+        前端不需要再按 `lifecycleState` 自己推——推错的后果是「按钮点了 409」。
+
+        判定放在服务端，因为它取决于三个变量的组合：是不是作者、有没有被删、
+        是不是被平台移除。这三件事前端凑不齐（`deletedAt` 并不出现在响应里）。
+      properties:
+        archive:
+          type: boolean
+          description: 能下架（已发布、未删除、非平台移除）
+        unarchive:
+          type: boolean
+          description: 能重新上架（已下架、未删除）
+        delete:
+          type: boolean
+          description: 能删除（未删除、非平台移除）
+        restore:
+          type: boolean
+          description: |
+            能恢复（已删除、非平台移除）。
+
+            这里**不**判定恢复窗口是否过期：那要查 GC 队列，而详情页每次请求都多一次
+            队列查询不划算。窗口过期的正确表现是点「恢复」时收到 409
+            `restore_window_closed`，页面上如实显示——比在详情页猜一个可能过期的数好。
+
+    DemoLifecycleResult:
+      type: object
+      additionalProperties: false
+      required: [slug, lifecycleState]
+      properties:
+        slug:
+          type: string
+        lifecycleState:
+          $ref: '#/components/schemas/LifecycleState'
+
+    DemoDeleteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 200
+          description: 删除理由，进 `demos.delete_reason`，只给自己留个记录
+
+    DemoDeleteResult:
+      type: object
+      additionalProperties: false
+      required: [slug, lifecycleState, purgeAfter]
+      properties:
+        slug:
+          type: string
+        lifecycleState:
+          $ref: '#/components/schemas/LifecycleState'
+        purgeAfter:
+          type: string
+          format: date-time
+          description: |
+            最晚可恢复时刻。**在删除那一刻定型**（删除时刻 + 当时配置的
+            `lifecycle.restore_window_days`），之后调整窗口参数不会改它——
+            否则系统会承诺一件它在原定日期做不到的事。
 
     DemoList:
       type: object

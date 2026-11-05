@@ -24,6 +24,14 @@ func (s *stub) ListDemos(_ http.ResponseWriter, _ *http.Request, _ api.ListDemos
 
 func (s *stub) UpdateDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
 
+func (s *stub) ArchiveDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
+
+func (s *stub) UnarchiveDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
+
+func (s *stub) DeleteDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
+
+func (s *stub) RestoreDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
+
 func (s *stub) ListDemoRevisions(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "revisions:"+slug)
 }

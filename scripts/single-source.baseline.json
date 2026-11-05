@@ -11,6 +11,7 @@
     "web/src/routes/DemoDetailPage.tsx": 1
   },
   "state-write": {
+    "backend/db/queries/demos.sql": 1,
     "backend/db/queries/review.sql": 2
   },
   "audit-write": {

@@ -24,6 +24,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DemoLifecycleActions } from './demoLifecycleActions';
 import type { DemoSummary } from './demoSummary';
 
 export type DemoDetail = DemoSummary & ({
@@ -62,4 +63,5 @@ export type DemoDetail = DemoSummary & ({
      * 猜出来的按钮会点出 404。
      */
   downloadable: boolean;
+  lifecycleActions: DemoLifecycleActions;
 });

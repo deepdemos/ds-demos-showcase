@@ -220,6 +220,70 @@
           "name": "TestIntegrationRestoreRevisionHTTP"
         }
       }
+    ],
+    "POST /api/v1/demos/{slug}/archive": [
+      {
+        "case": "非作者不能下架别人的作品（连存在性都不透露）",
+        "test": {
+          "file": "backend/internal/httpapi/lifecycle_integration_test.go",
+          "name": "TestIntegrationLifecycleRejectsStrangers"
+        }
+      },
+      {
+        "case": "未登录不能下架，返回 401 而不是悄悄成功",
+        "test": {
+          "file": "backend/internal/httpapi/lifecycle_integration_test.go",
+          "name": "TestIntegrationLifecycleRejectsStrangers"
+        }
+      }
+    ],
+    "POST /api/v1/demos/{slug}/unarchive": [
+      {
+        "case": "只对已下架的作品有效，已发布的再上架是冲突",
+        "test": {
+          "file": "backend/internal/domain/demo/lifecycle_integration_test.go",
+          "name": "TestIntegrationArchiveAndUnarchive"
+        }
+      },
+      {
+        "case": "未登录不能重新上架",
+        "test": {
+          "file": "backend/internal/httpapi/lifecycle_integration_test.go",
+          "name": "TestIntegrationLifecycleRejectsStrangers"
+        }
+      }
+    ],
+    "POST /api/v1/demos/{slug}/restore": [
+      {
+        "case": "恢复窗口一过就不能恢复",
+        "test": {
+          "file": "backend/internal/domain/demo/lifecycle_integration_test.go",
+          "name": "TestIntegrationRestoreWindowClosed"
+        }
+      },
+      {
+        "case": "没被删过的作品不能恢复",
+        "test": {
+          "file": "backend/internal/domain/demo/lifecycle_integration_test.go",
+          "name": "TestIntegrationDeleteRejectsTwice"
+        }
+      }
+    ],
+    "DELETE /api/v1/demos/{slug}": [
+      {
+        "case": "重复删除是冲突，不是幂等成功",
+        "test": {
+          "file": "backend/internal/domain/demo/lifecycle_integration_test.go",
+          "name": "TestIntegrationDeleteRejectsTwice"
+        }
+      },
+      {
+        "case": "被平台移除的作品作者不能自己删",
+        "test": {
+          "file": "backend/internal/domain/demo/lifecycle_integration_test.go",
+          "name": "TestIntegrationSoftDeleteRejectsRemoved"
+        }
+      }
     ]
   },
   "outsideContract": {

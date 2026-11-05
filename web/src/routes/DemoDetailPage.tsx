@@ -1,7 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
-import { getDemo, type DemoDetail } from '@/api';
+import {
+  archiveDemo,
+  deleteDemo,
+  getDemo,
+  restoreDemo,
+  unarchiveDemo,
+  type DemoDetail,
+} from '@/api';
 
 type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
 
@@ -65,7 +73,10 @@ export function DemoDetailPage() {
       )}
 
       {data?.kind === 'ok' && data.demo.title === null && (
-        <EmptyState {...tombstoneText(data.demo)} />
+        <>
+          <EmptyState {...tombstoneText(data.demo)} />
+          <LifecycleBar slug={slug} demo={data.demo} />
+        </>
       )}
 
       {data?.kind === 'ok' && data.demo.title !== null && (
@@ -94,6 +105,8 @@ export function DemoDetailPage() {
           <p className="mt-4 whitespace-pre-line text-base leading-7 text-gray-700 dark:text-gray-300">
             {data.demo.description ?? '作者没有填写简介。'}
           </p>
+
+          <LifecycleBar slug={slug} demo={data.demo} />
 
           <div className="mt-4 flex items-center gap-3">
             {data.demo.canEdit ? (
@@ -179,5 +192,146 @@ export function DemoDownload({ slug }: { slug: string }) {
         原始上传包（单文件作品为原文件）
       </span>
     </p>
+  );
+}
+
+/**
+ * 作者的生命周期操作区：下架 / 重新上架 / 删除 / 恢复。
+ *
+ * # 为什么按钮由服务端给
+ *
+ * 「此刻能做什么」取决于三个变量的组合：是不是作者、有没有被删、是不是被平台移除。
+ * 前端凑不齐这三件事（响应里根本没有 `deletedAt`），自己推就是第二份事实源，
+ * 推错的表现是「按钮点了 409」。所以服务端直接给四个布尔（`lifecycleActions`），
+ * 这里只负责把它们变成按钮。
+ *
+ * # 删除为什么要两步
+ *
+ * 删除对外就是不存在（访客立刻 404），恢复只在窗口内有效。这一步用浏览器原生
+ * `confirm` 也行，但那会把「30 天内可恢复」这层信息压成一个干巴巴的问句；
+ * 就地展开一行确认，能顺带把这句话说清楚。
+ */
+export function LifecycleBar({ slug, demo }: { slug: string; demo: DemoDetail }) {
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const actions = demo.lifecycleActions;
+
+  // 四个动作共用一个 mutation：它们的后续处理完全一样——
+  // 刷新详情（按钮位会变）、刷新列表（可见性会变）、清掉错误。
+  const run = useMutation({
+    mutationFn: async (action: 'archive' | 'unarchive' | 'delete' | 'restore') => {
+      const response =
+        action === 'archive'
+          ? await archiveDemo(slug)
+          : action === 'unarchive'
+            ? await unarchiveDemo(slug)
+            : action === 'delete'
+              ? await deleteDemo(slug)
+              : await restoreDemo(slug);
+      // orval 对非 2xx 也 resolve，必须自己看状态码，否则失败会被当成成功。
+      if (response.status !== 200) {
+        const message = (response.data as { message?: string } | undefined)?.message;
+        throw new Error(message ?? `操作失败（HTTP ${response.status}）`);
+      }
+      return response;
+    },
+    onSuccess: async () => {
+      setConfirming(false);
+      setError(null);
+      await queryClient.invalidateQueries({ queryKey: ['demo', slug] });
+      await queryClient.invalidateQueries({ queryKey: ['demos'] });
+    },
+    onError: (err: unknown) => {
+      setConfirming(false);
+      setError(err instanceof Error ? err.message : '操作失败');
+    },
+  });
+
+  const buttonClass =
+    'inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800';
+  const dangerClass =
+    'inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950';
+
+  const nothingToDo = !actions.archive && !actions.unarchive && !actions.delete && !actions.restore;
+  if (nothingToDo && !error) return null;
+
+  return (
+    <section className="mt-4" aria-label="作品管理">
+      <div className="flex flex-wrap items-center gap-2">
+        {actions.archive ? (
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={run.isPending}
+            onClick={() => run.mutate('archive')}
+          >
+            下架作品
+          </button>
+        ) : null}
+        {actions.unarchive ? (
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={run.isPending}
+            onClick={() => run.mutate('unarchive')}
+          >
+            重新上架
+          </button>
+        ) : null}
+        {actions.restore ? (
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={run.isPending}
+            onClick={() => run.mutate('restore')}
+          >
+            恢复作品
+          </button>
+        ) : null}
+        {actions.delete && !confirming ? (
+          <button
+            type="button"
+            className={dangerClass}
+            disabled={run.isPending}
+            onClick={() => setConfirming(true)}
+          >
+            删除作品
+          </button>
+        ) : null}
+      </div>
+
+      {confirming ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950">
+          <p className="text-red-800 dark:text-red-200">
+            删除后这件作品对外立刻不可见。删除前设定的恢复期内可以恢复，过期就再也找不回来了。
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              className={dangerClass}
+              disabled={run.isPending}
+              onClick={() => run.mutate('delete')}
+            >
+              {run.isPending ? '删除中…' : '确认删除'}
+            </button>
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={run.isPending}
+              onClick={() => setConfirming(false)}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      ) : null}
+    </section>
   );
 }

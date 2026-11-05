@@ -245,7 +245,19 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 		}
 	}
 
-	tombstone := row.DeletedAt.Valid || state == api.LifecycleStateArchived || state == api.LifecycleStateRemoved
+	// 软删对外不存在——**连墓碑也不给**。
+	//
+	// 生命周期 §4.1 把这条定死了：`deleted` / `erased` 对外就是不存在，
+	// 给墓碑等于承认「这里曾经有过东西」，而这条档位恰恰是最需要「当作没发生」的。
+	// 墓碑只属于 `archived` / `removed` 这两种「曾经公开过」的档位。
+	//
+	// 作者本人仍然看得到（否则他恢复不了自己刚删的东西），但看到的是
+	// 「已删除 · 可恢复」，不是墓碑文案。
+	if row.DeletedAt.Valid && !viewerIsAuthor {
+		return api.DemoDetail{}, false
+	}
+
+	tombstone := state == api.LifecycleStateArchived || state == api.LifecycleStateRemoved
 
 	// 墓碑只承载「这里曾经有过一个作品」，不承载内容，所以不看审核态。
 	//
@@ -277,6 +289,13 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	if tombstone {
 		// 墓碑态：标题与简介置空，保留 slug / 时间 / 状态，让页面能说「这里曾经有过一个作品」。
 		// demoType 留空、downloadable 为 false——墓碑不承载内容，也没有可下载的文件。
+		detail.LifecycleActions = lifecycleActionsOf(row, viewerIsAuthor)
+		return detail, true
+	}
+	if row.DeletedAt.Valid {
+		// 作者看自己删掉的作品：内容也不给，只给「还能不能恢复」。
+		// 给内容会让「删除」变成「隐藏」，而这件作品对外确实已经不存在了。
+		detail.LifecycleActions = lifecycleActionsOf(row, viewerIsAuthor)
 		return detail, true
 	}
 	// 作者看**当前版本**的文字，访客看**对外版本**的。
@@ -307,7 +326,29 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	// 这里不判存储里文件是否存在——那要多一次 Stat 往返，
 	// 而「文件被外力删掉」属于事故，不该由详情页替它兜底（下载会明确 404）。
 	detail.Downloadable = row.DemoType != "" && row.DemoType != "link" && row.HasVisibleChannel && row.HasPublishedRevision
+	detail.LifecycleActions = lifecycleActionsOf(row, viewerIsAuthor)
 	return detail, true
+}
+
+// lifecycleActionsOf 算出「这个观众此刻能对作品做哪些生命周期动作」。
+//
+// 放在服务端算，不让前端按 lifecycleState 自己推：能做什么取决于三个变量的组合
+// （是不是作者、有没有被删、是不是被平台移除），推到前端就是第二份事实源，
+// 而推错的表现是「按钮点了 409」。四个布尔全给，前端不需要再判任何状态。
+func lifecycleActionsOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) api.DemoLifecycleActions {
+	if !viewerIsAuthor || row.ErasedAt.Valid {
+		return api.DemoLifecycleActions{}
+	}
+	removed := row.LifecycleState == string(api.LifecycleStateRemoved)
+	if row.DeletedAt.Valid {
+		// 删除后作者只能恢复；平台移除的作品连恢复都不给。
+		return api.DemoLifecycleActions{Restore: !removed, Delete: false}
+	}
+	return api.DemoLifecycleActions{
+		Archive:   row.LifecycleState == string(api.LifecycleStatePublished),
+		Unarchive: row.LifecycleState == string(api.LifecycleStateArchived),
+		Delete:    !removed,
+	}
 }
 
 // preferString：有值就用它，空串退回备用值。
