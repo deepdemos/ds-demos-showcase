@@ -22,11 +22,23 @@ const (
 	AccountStatusSuspended AccountStatus = "suspended"
 )
 
+// Defines values for DemoDetailMatchedIn.
+const (
+	DemoDetailMatchedInDescription DemoDetailMatchedIn = "description"
+	DemoDetailMatchedInTitle       DemoDetailMatchedIn = "title"
+)
+
 // Defines values for DemoRevisionSource.
 const (
 	Rollback  DemoRevisionSource = "rollback"
 	Upload    DemoRevisionSource = "upload"
 	UrlImport DemoRevisionSource = "url_import"
+)
+
+// Defines values for DemoSummaryMatchedIn.
+const (
+	DemoSummaryMatchedInDescription DemoSummaryMatchedIn = "description"
+	DemoSummaryMatchedInTitle       DemoSummaryMatchedIn = "title"
 )
 
 // Defines values for ErrorCode.
@@ -191,7 +203,13 @@ type DemoDetail struct {
 	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
 	// `archived` / `removed` 可见但为墓碑态。
 	LifecycleState LifecycleState `json:"lifecycleState"`
-	Slug           string         `json:"slug"`
+
+	// MatchedIn 这条结果是因为**标题**命中搜索词，还是只有**简介**命中。
+	//
+	// 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
+	// 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
+	MatchedIn DemoDetailMatchedIn `json:"matchedIn"`
+	Slug      string              `json:"slug"`
 
 	// Title 墓碑态为 null
 	Title     *string   `json:"title"`
@@ -202,6 +220,12 @@ type DemoDetail struct {
 	// 墓碑态与未发布的作品恒为 0——它们根本没有被计数的机会。
 	ViewCount int64 `json:"viewCount"`
 }
+
+// DemoDetailMatchedIn 这条结果是因为**标题**命中搜索词，还是只有**简介**命中。
+//
+// 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
+// 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
+type DemoDetailMatchedIn string
 
 // DemoLifecycleActions 当前调用者此刻能对这个作品做哪些生命周期动作。四个布尔全给，
 // 前端不需要再按 `lifecycleState` 自己推——推错的后果是「按钮点了 409」。
@@ -275,11 +299,23 @@ type DemoSummary struct {
 	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
 	// `archived` / `removed` 可见但为墓碑态。
 	LifecycleState LifecycleState `json:"lifecycleState"`
-	Slug           string         `json:"slug"`
+
+	// MatchedIn 这条结果是因为**标题**命中搜索词，还是只有**简介**命中。
+	//
+	// 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
+	// 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
+	MatchedIn DemoSummaryMatchedIn `json:"matchedIn"`
+	Slug      string               `json:"slug"`
 
 	// Title 墓碑态为 null
 	Title *string `json:"title"`
 }
+
+// DemoSummaryMatchedIn 这条结果是因为**标题**命中搜索词，还是只有**简介**命中。
+//
+// 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
+// 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
+type DemoSummaryMatchedIn string
 
 // EmailCodeRequest defines model for EmailCodeRequest.
 type EmailCodeRequest struct {
@@ -505,7 +541,9 @@ type ListDemoReviewQueueParams struct {
 
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
-	// Q 关键词，匹配标题与描述
+	// Q 关键词，匹配标题或简介（子串匹配，不区分大小写）。
+	//
+	// 空串与全空格等同没传；超过 100 个字返回 400，不静默截断。
 	Q *string `form:"q,omitempty" json:"q,omitempty"`
 
 	// Page 页码，从 1 开始

@@ -17,6 +17,20 @@
           "file": "backend/internal/httpapi/handlers_test.go",
           "name": "TestListDemosRejectsOversizedPageSize"
         }
+      },
+      {
+        "case": "搜索词超过 100 个字回 400，不静默截断",
+        "test": {
+          "file": "backend/internal/httpapi/search_integration_test.go",
+          "name": "TestIntegrationSearchDemos"
+        }
+      },
+      {
+        "case": "搜不到时返回空列表而不是全部作品",
+        "test": {
+          "file": "backend/internal/httpapi/search_integration_test.go",
+          "name": "TestIntegrationSearchDemos"
+        }
       }
     ],
     "POST /api/v1/demos": [
