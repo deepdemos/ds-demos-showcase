@@ -402,7 +402,7 @@ demo_skills           = demos ⋈ demo_revisions(current) ⋈ demo_revision_skil
 |---|---|---|
 | `id` | bigint PK | |
 | `demo_id` | bigint FK | CASCADE |
-| `kind` | text | `create` / `approve` / `reject` / `publish` / `archive` / `restore` / `slug_change` / `merge`（≤16 字符） |
+| `kind` | text | `create` / `approve` / `reject` / `publish` / `edit` / `rollback` / `archive` / `restore` / `slug_change` / `merge`（≤16 字符） |
 | `message` | text | （≤500 字符） |
 | `actor_id` | bigint FK→users | 可空 = 系统 |
 | `created_at` | timestamptz | |
@@ -443,7 +443,7 @@ UNIQUE (provider, host, topic_id)
 |---|---|---|---|
 | `id` | bigint PK | 否 | |
 | `demo_id` | bigint FK→demos | 否 | CASCADE |
-| `kind` | text | 否 | `create` / `approve` / `reject` / `archive` / `restore` / `slug_change` / `merge` |
+| `kind` | text | 否 | `create` / `approve` / `reject` / `publish` / `edit` / `rollback` / `archive` / `restore` / `slug_change` / `merge` |
 | `message` | text | 是 | 一句话说明（≤500 字符） |
 | `actor_id` | bigint FK→users | 是 | 触发者；系统行为为 NULL |
 | `created_at` | timestamptz | 否 | |
@@ -453,6 +453,14 @@ UNIQUE (provider, host, topic_id)
 - **不是事实源**：删掉它不影响任何判定。
 - **只记录对外可见的动作**：审核通过与驳回、归档与恢复、改名、合并。内部字段级改动不进时间线。
 - **`actor_id` 可空**：系统自动行为（如到期归档）没有操作人。
+
+**值域里现在有写入点的只有七个**：`approve` / `reject` / `publish` / `edit` / `rollback` / `archive` / `restore`。
+其余三个是**预留值**——`ck_timeline_kind` 里留着，代码里没有写入点：
+
+- `create`：投稿落的是 `pending`，按上面「只记录对外可见的动作」不进时间线。将来只有「管理员直接发布」这类通道才用得上。
+- `slug_change` / `merge`：这两个动作本身还没实现，值先占位，免得实现时再改一次 CHECK（0014 就是这么把 `publish` / `edit` / `rollback` 补进来的）。
+
+值域的事实源是 `db/migrations/0014_published_revision.sql` 的 `ck_timeline_kind`；这张表和上面 §3.8 的字段说明都只是它的副本。
 
 ## 4. 全景类图
 
