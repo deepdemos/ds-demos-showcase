@@ -166,6 +166,14 @@ paths:
         确认丢失），每个都要额外清理孤儿对象；本期没有带宽压力，中转把失败点收敛成一个。
         等带宽成为瓶颈时再换，契约形状不用改——客户端仍然是「一次提交」。
 
+        **可选的 `Idempotency-Key` 请求头**：给了就保证「同一个作者的同一个 key
+        只会落一行作品」。脚本传一个大包传到一半断线、自己重传一次时，
+        第二次拿到的是**第一次那条**（`200`），不会变成两条一模一样的作品。
+
+        没给就完全不幂等——这与「给了才发现不支持」有本质区别：后者会让调用方
+        以为自己有保护。重放返回的审核态与生命周期是**当下的值**，
+        不是当初回执的快照（那条作品可能已经通过或被驳回）。
+
         `package` 支持两种形态：
         - 一个 zip 包，**包根必须有 `index.html`**
         - 单个 `.html` / `.svg` 文件
@@ -174,6 +182,23 @@ paths:
         成员数、压缩比四道，任一不过即 422。
       security:
         - sessionCookie: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: |
+            调用方自己生成的幂等键（建议 UUID），最长 128 字符，超出回 400。
+
+            命中已有键时**不新建**、不重新上传、不占用待审配额，直接返回
+            `200` 与当初那条作品；第一次提交返回 `201`。两者回执形状相同，
+            客户端用状态码区分「我创建了它」与「它早就存在」。
+
+            同一作者用同一个键提交两次不同内容，返回的是**第一次**的结果
+            （后一次的内容被丢弃）——幂等键的语义是「这件事做过了」，不是
+            「这两次的内容一样」。
+          schema:
+            type: string
+            maxLength: 128
       requestBody:
         required: true
         content:
@@ -220,6 +245,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SubmissionResult'
+        '200':
+          description: |
+            命中了 `Idempotency-Key`：这条作品早就提交过，**没有新建**。
+            返回的 slug / 版本号 / 审核态都是那条作品当下的值。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
         '400':
           description: 参数非法（缺字段、标题过长、类型未知）
           content:
@@ -251,7 +284,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: 待审作品太多（`UPLOAD_MAX_PENDING`），等审核消化一些再来
+          description: |
+            待审作品太多（`UPLOAD_MAX_PENDING`），等审核消化一些再来。
+
+            带 `Retry-After`：它是**建议的复查间隔，不是承诺**——真正的解锁时刻
+            是有人审完你压着的那几条，服务端不知道那会是什么时候。
+            给一个数是为了让调用方能退避重试，而不是立刻重打或直接放弃。
+          headers:
+            Retry-After:
+              description: 建议等待的秒数（当前实现为 3600）
+              schema:
+                type: integer
+                minimum: 1
           content:
             application/json:
               schema:
@@ -1549,7 +1593,7 @@ components:
         - $ref: '#/components/schemas/DemoSummary'
         - type: object
           additionalProperties: false
-          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions, viewCount, downloadCount, author, publishedAt, models]
+          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions, viewCount, downloadCount, author, publishedAt, models, moderationState]
           properties:
             description:
               type: string
@@ -1629,6 +1673,20 @@ components:
                 - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
               items:
                 $ref: '#/components/schemas/ModelRef'
+            moderationState:
+              type: string
+              enum: [pending, approved, rejected]
+              description: |
+                当前版本的审核态。
+
+                - **作者看真实值**：`pending` / `approved` / `rejected`。作者必须能知道
+                  自己那份稿子是等着、过了还是被退回，否则「投完就失联」。
+                - **访客恒为 `approved`**：能看到的内容必然是已通过审核的对外版本；
+                  回一个 `pending` 只会让人以为「这条作品还没审完就上线了」。
+
+                注意它与 `lifecycleState` 是正交的两件事：审核态说的是**内容过没过**，
+                生命周期说的是**这条作品对外是哪种档位**。一件 `published` 的作品在
+                复审期间审核态是 `pending`，而对外内容仍在服务——那是版本分离的设计。
 
     DemoLifecycleActions:
       type: object

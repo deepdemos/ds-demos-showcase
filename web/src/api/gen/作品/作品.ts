@@ -167,6 +167,11 @@ export const listDemos = async (params?: ListDemosParams, options?: RequestInit)
 }
 
 
+export type submitDemoResponse200 = {
+  data: SubmissionResult
+  status: 200
+}
+
 export type submitDemoResponse201 = {
   data: SubmissionResult
   status: 201
@@ -207,7 +212,7 @@ export type submitDemoResponse503 = {
   status: 503
 }
 
-export type submitDemoResponseSuccess = (submitDemoResponse201) & {
+export type submitDemoResponseSuccess = (submitDemoResponse200 | submitDemoResponse201) & {
   headers: Headers;
 };
 export type submitDemoResponseError = (submitDemoResponse400 | submitDemoResponse401 | submitDemoResponse413 | submitDemoResponse415 | submitDemoResponse422 | submitDemoResponse429 | submitDemoResponse503) & {
@@ -230,6 +235,14 @@ export const getSubmitDemoUrl = () => {
  * **为什么是后端中转而不是预签名直传**：直传有三个失败点（签名过期、传一半断、
  * 确认丢失），每个都要额外清理孤儿对象；本期没有带宽压力，中转把失败点收敛成一个。
  * 等带宽成为瓶颈时再换，契约形状不用改——客户端仍然是「一次提交」。
+ *
+ * **可选的 `Idempotency-Key` 请求头**：给了就保证「同一个作者的同一个 key
+ * 只会落一行作品」。脚本传一个大包传到一半断线、自己重传一次时，
+ * 第二次拿到的是**第一次那条**（`200`），不会变成两条一模一样的作品。
+ *
+ * 没给就完全不幂等——这与「给了才发现不支持」有本质区别：后者会让调用方
+ * 以为自己有保护。重放返回的审核态与生命周期是**当下的值**，
+ * 不是当初回执的快照（那条作品可能已经通过或被驳回）。
  *
  * `package` 支持两种形态：
  * - 一个 zip 包，**包根必须有 `index.html`**

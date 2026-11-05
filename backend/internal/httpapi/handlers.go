@@ -338,11 +338,22 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 		return api.DemoDetail{}, false
 	}
 
+	// 审核态：作者看真实值，访客恒为 approved。
+	//
+	// 访客能看到这条详情，凭据是「有对外版本」——那版内容本来就是审过的。
+	// 回一个 pending 只会让人以为「这东西还没审完就上线了」，而那恰恰是
+	// 版本分离想让大家都别误会的事（复审期间审核态是 pending，对外内容不变）。
+	moderationState := api.DemoDetailModerationStateApproved
+	if viewerIsAuthor {
+		moderationState = api.DemoDetailModerationState(row.ModerationState)
+	}
+
 	detail := api.DemoDetail{
-		Slug:           row.Slug,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-		LifecycleState: state,
+		Slug:            row.Slug,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		LifecycleState:  state,
+		ModerationState: moderationState,
 		Author: api.ModelAuthor{
 			Username:    row.AuthorUsername,
 			DisplayName: row.AuthorDisplayName,
