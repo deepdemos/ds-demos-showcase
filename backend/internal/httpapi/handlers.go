@@ -287,8 +287,13 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 		LifecycleState: state,
 	}
 	if tombstone {
-		// 墓碑态：标题与简介置空，保留 slug / 时间 / 状态，让页面能说「这里曾经有过一个作品」。
-		// demoType 留空、downloadable 为 false——墓碑不承载内容，也没有可下载的文件。
+		// 墓碑态：**只留标题**，简介 / 封面 / 类型 / 可下载一律不给。
+		//
+		// 标题要留的理由（`docs/实体域数据结构设计.md` §5.0 的墓碑行明确列了「slug / 标题 /
+		// 下架时间 / 说明」）：分享链接落到这里时，用户得看得出来「哪个作品没了」。
+		// 一个只有「作者已下架」四个字的页面，等于让人怀疑自己点错了链接。
+		// 反过来，简介与封面是内容，墓碑不承载内容——所以它们才是空的那部分。
+		detail.Title = textPtr(row.Title)
 		detail.LifecycleActions = lifecycleActionsOf(row, viewerIsAuthor)
 		return detail, true
 	}

@@ -79,8 +79,17 @@ func TestIntegrationLifecycleHTTP(t *testing.T) {
 		t.Fatalf("访客看已下架作品 = %d，想要 200 墓碑", guest.Code)
 	}
 	guestBody := decode(t, guest.Body.Bytes())
-	if guestBody["title"] != nil {
-		t.Fatalf("墓碑不该有标题：%v", guestBody["title"])
+	// 墓碑**保留标题**（`docs/实体域数据结构设计.md` §5.0 的墓碑行列了「slug / 标题 /
+	// 下架时间 / 说明」）：分享链接落到这里时，用户得看得出来是哪个作品没了。
+	if guestBody["title"] == nil || guestBody["title"] == "" {
+		t.Fatalf("墓碑该保留标题，实际 %v", guestBody["title"])
+	}
+	// 但简介与封面是内容，墓碑不给。
+	if guestBody["description"] != nil {
+		t.Fatalf("墓碑不该有简介：%v", guestBody["description"])
+	}
+	if guestBody["downloadable"] != false {
+		t.Fatalf("墓碑不该可下载，实际 %v", guestBody["downloadable"])
 	}
 	if got := actionsOf(t, guestBody); got != [4]bool{} {
 		t.Fatalf("访客不该有任何生命周期动作，实际 %v", got)
