@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from 'react-router';
 import { Button, ErrorState, FileInput, Input, Select, Skeleton } from '@/components/ui';
 import { getDemo, updateDemo, type DemoDetail, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
+import { RevisionHistory } from '@/features/demo/revision-history';
 
 const MAX_PACKAGE_BYTES = 200 * 1024 * 1024;
 
@@ -255,6 +256,8 @@ export function EditDemoPage() {
           {busy ? '保存中…（大文件需要一点时间）' : '保存并提交复审'}
         </Button>
       </form>
+
+      <RevisionHistory slug={slug} />
     </section>
   );
 }
