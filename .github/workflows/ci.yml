@@ -254,6 +254,10 @@ jobs:
         run: node scripts/check-single-source.mjs
       - name: 反例矩阵门禁（每个端点至少一条「必须拒绝什么」）
         run: node scripts/check-negative-cases.mjs
+      - name: 松点台账门禁（编号连续 / 日期行只在变更记录 / 日期不倒序）
+        run: node scripts/check-loose-points.mjs
+      - name: 契约描述门禁（描述里的端点数目与契约一致）
+        run: node scripts/check-api-doc.mjs
       - name: 失败处理指引
         if: failure()
         run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行 / 标准对象取值域出现重复或走样 / 单一出处出现新副本 / 端点缺反例 / 门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
