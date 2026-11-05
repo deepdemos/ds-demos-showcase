@@ -83,6 +83,9 @@ type ServerInterface interface {
 	// 当前登录者
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// 模型主数据（给投稿表单的模型选择用）
+	// (GET /api/v1/models)
+	ListModels(w http.ResponseWriter, r *http.Request)
 	// 站点可用性
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -227,6 +230,12 @@ func (_ Unimplemented) PostDemoView(w http.ResponseWriter, r *http.Request, slug
 // 当前登录者
 // (GET /api/v1/me)
 func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 模型主数据（给投稿表单的模型选择用）
+// (GET /api/v1/models)
+func (_ Unimplemented) ListModels(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -795,6 +804,20 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// ListModels operation middleware
+func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListModels(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealthz operation middleware
 func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Request) {
 
@@ -990,6 +1013,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/models", wrapper.ListModels)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.GetHealthz)

@@ -21,6 +21,10 @@
       }
     },
     "DemoDetail": {
+      "author": {
+        "type": "ModelAuthor",
+        "optional": false
+      },
       "canEdit": {
         "type": "bool",
         "optional": false
@@ -60,6 +64,14 @@
       "matchedIn": {
         "type": "DemoDetailMatchedIn",
         "optional": false
+      },
+      "models": {
+        "type": "[]ModelRef",
+        "optional": false
+      },
+      "publishedAt": {
+        "type": "time.Time",
+        "optional": true
       },
       "slug": {
         "type": "string",
@@ -262,6 +274,36 @@
         "optional": false
       },
       "username": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "ModelAuthor": {
+      "displayName": {
+        "type": "string",
+        "optional": false
+      },
+      "username": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "ModelList": {
+      "items": {
+        "type": "[]Model",
+        "optional": false
+      }
+    },
+    "ModelRef": {
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "vendor": {
         "type": "string",
         "optional": false
       }
@@ -469,6 +511,10 @@
         "type": "string",
         "optional": true
       },
+      "modelIds": {
+        "type": "[]string",
+        "optional": true
+      },
       "package": {
         "type": "openapi_types.File",
         "optional": false
@@ -485,6 +531,10 @@
       },
       "description": {
         "type": "string",
+        "optional": true
+      },
+      "modelIds": {
+        "type": "[]string",
         "optional": true
       },
       "package": {
@@ -698,6 +748,11 @@
     },
     "GET /api/v1/me": {
       "method": "GetMe",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/models": {
+      "method": "ListModels",
       "pathParams": 0,
       "params": null
     },

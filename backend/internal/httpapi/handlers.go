@@ -219,6 +219,9 @@ func (h *Handler) GetDemo(w http.ResponseWriter, r *http.Request, slug string) {
 		writeError(w, http.StatusNotFound, api.NotFound, "作品不存在")
 		return
 	}
+	// 模型声明按「版本」取：访客看对外版本，作者看当前版本——与标题、简介同一口径。
+	// 墓碑态与已删除态 detailOf 已经把内容清空了，这里也不需要再取。
+	detail.Models = h.modelsOf(ctx, row, viewerIsAuthor, detail)
 	writeJSON(w, http.StatusOK, detail)
 }
 
@@ -244,6 +247,46 @@ func summaryOf(row store.ListPublishedDemosRow) api.DemoSummary {
 //
 // viewerIsAuthor 改变三件事：能不能看到未公开的稿件、看到哪一版的文字、
 // 以及 canEdit。它不改「墓碑」与「渠道可见性」的判定——作者也看不见被移除的内容。
+// modelsOf 取这一版声明的模型。
+//
+// 三种情况返回空数组而不是省略字段：
+//   - 墓碑态 / 已删除态：那两种状态没有内容，也就没有「用了什么模型」
+//   - 没有版本可读（异常数据）：空数组比 500 更诚实
+//
+// 查询失败不把整个详情打成 503：模型声明是**附加信息**，缺了它详情页仍然可用。
+// 这是刻意的取舍——为了一块可选的展示，让整个页面挂掉不划算。
+func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, viewerIsAuthor bool, detail api.DemoDetail) []api.ModelRef {
+	out := []api.ModelRef{}
+	// 墓碑态：detailOf 只填了标题与 lifecycleActions，类型是空串。
+	// 用「有没有类型」判不可靠（异常数据也可能没有），所以直接看重放出来的字段。
+	if detail.LifecycleState == api.LifecycleStateArchived || detail.LifecycleState == api.LifecycleStateRemoved {
+		return out
+	}
+	if row.DeletedAt.Valid {
+		return out
+	}
+
+	revID := row.PublishedRevisionID
+	if viewerIsAuthor && row.CurrentRevisionID.Valid {
+		revID = row.CurrentRevisionID
+	}
+	if !revID.Valid || revID.Int64 <= 0 {
+		return out
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	rows, err := h.queries.ListRevisionModels(ctx, revID.Int64)
+	if err != nil {
+		slog.Error("读模型声明失败", "slug", row.Slug, "err", err)
+		return out
+	}
+	for _, m := range rows {
+		out = append(out, api.ModelRef{Slug: m.Slug, Name: m.Name, Vendor: m.Vendor})
+	}
+	return out
+}
+
 func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, bool) {
 	state := api.LifecycleState(row.LifecycleState)
 
@@ -300,6 +343,17 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
 		LifecycleState: state,
+		Author: api.ModelAuthor{
+			Username:    row.AuthorUsername,
+			DisplayName: row.AuthorDisplayName,
+		},
+		Models: []api.ModelRef{},
+	}
+	// 发布时间：没有对外可见渠道时为 null（草稿、从未发布过）。
+	// 墓碑与已删除的作品仍然给——「它曾经公开过」这个事实不该被抹掉。
+	if row.PublishedAt.Valid {
+		t := row.PublishedAt.Time
+		detail.PublishedAt = &t
 	}
 	if tombstone {
 		// 墓碑态：**只留标题**，简介 / 封面 / 类型 / 可下载一律不给。
@@ -386,6 +440,31 @@ func preferString(primary string, fallback pgtype.Text) *string {
 		return textPtr(pgtype.Text{String: primary, Valid: true})
 	}
 	return textPtr(fallback)
+}
+
+// formValues 读一个可以重复出现的 multipart 字段。
+//
+// 为什么不用 `r.FormValue`：它只返回第一个值。「选了 deepseek-chat 与
+// deepseek-reasoner 两个模型」在表单里就是两个同名字段，只用 FormValue 会把
+// 第二个悄悄丢掉——作者以为声明了两个，详情页只显示一个。
+//
+// 空值（全空格）在这里就过滤掉：调用方传空串进来没有意义，
+// 而 `[]string{""}` 会让下游的「解析 slug」多跑一次无用查询。
+func formValues(r *http.Request, key string) []string {
+	if r.MultipartForm == nil {
+		return nil
+	}
+	raw := r.MultipartForm.Value[key]
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func textPtr(t pgtype.Text) *string {

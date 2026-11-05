@@ -158,6 +158,8 @@ type DemoDeleteResult struct {
 
 // DemoDetail defines model for DemoDetail.
 type DemoDetail struct {
+	Author ModelAuthor `json:"author"`
+
 	// CanEdit 当前调用者能不能编辑这个作品（只有作者本人在非墓碑态下为 `true`）。
 	//
 	// 作者视图与公开视图的差别不止这一列：
@@ -209,7 +211,26 @@ type DemoDetail struct {
 	// 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
 	// 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
 	MatchedIn DemoDetailMatchedIn `json:"matchedIn"`
-	Slug      string              `json:"slug"`
+
+	// Models 这一版声明的模型（`demo_revision_models`），按名字排序。
+	//
+	// - 访客看**对外版本**的声明，作者看**当前版本**的——与标题、简介同一口径
+	// - 空数组是正常状态：作品可以不声明模型（展示件未必用了模型）
+	// - 墓碑态恒为空数组：墓碑不承载内容，也就不承载「用了什么模型」
+	// - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
+	Models []ModelRef `json:"models"`
+
+	// PublishedAt 第一次对外发布的时间，取该作品全部对外可见渠道里最早的一次
+	// `demo_channels.published_at`。
+	//
+	// 没有对外可见的渠道时为 null（草稿、待审、以及从未发布过的作品）。
+	// 它与 `createdAt` 是两件事：`createdAt` 是投稿那一刻，
+	// `publishedAt` 是「它第一次被人看到」——作者写完稿压一个月再发，
+	// 这两个时间会差很远。
+	//
+	// 墓碑态与已删除的作品也给：它曾经公开过，这个事实不该被抹掉。
+	PublishedAt *time.Time `json:"publishedAt"`
+	Slug        string     `json:"slug"`
 
 	// Title 墓碑态为 null
 	Title     *string   `json:"title"`
@@ -379,6 +400,36 @@ type Me struct {
 	// Sub 对外不可变 ID（base32(128 bit)，26 字符），不暴露自增主键
 	Sub      string `json:"sub"`
 	Username string `json:"username"`
+}
+
+// Model defines model for Model.
+type Model = ModelRef
+
+// ModelAuthor defines model for ModelAuthor.
+type ModelAuthor struct {
+	// DisplayName 昵称；作者没设昵称时为空串，界面应当回退显示 `username`
+	DisplayName string `json:"displayName"`
+
+	// Username 用户名（不可变的标识）。作者注销后为空串——那时作品本身还留着，
+	// 只是「谁写的」这个信息不再存在。
+	Username string `json:"username"`
+}
+
+// ModelList defines model for ModelList.
+type ModelList struct {
+	Items []Model `json:"items"`
+}
+
+// ModelRef defines model for ModelRef.
+type ModelRef struct {
+	// Name 给人看的模型名
+	Name string `json:"name"`
+
+	// Slug 稳定可引用的模型标识（`models.slug`）
+	Slug string `json:"slug"`
+
+	// Vendor 厂商名；未知时为空串
+	Vendor string `json:"vendor"`
 }
 
 // PasswordResetCodeRequest defines model for PasswordResetCodeRequest.
@@ -567,6 +618,15 @@ type SubmitDemoMultipartBody struct {
 	DemoType    string  `json:"demoType"`
 	Description *string `json:"description,omitempty"`
 
+	// ModelIds 这一版用到的模型，取值为 `models.slug`（来自 `GET /api/v1/models`）。
+	//
+	// 不传或空数组都合法——作品可以不声明模型。传了不存在的 slug、
+	// 或者不是 `active` 的 slug 一律 400，不静默丢弃：
+	// 作者以为声明了两个、库里只落了一个，他永远发现不了。
+	//
+	// 没有条数上限：多少由作品的事实决定；重复的 slug 会被去重。
+	ModelIds *[]string `json:"modelIds,omitempty"`
+
 	// Package 作品文件（zip 或单个 html/svg）
 	Package openapi_types.File `json:"package"`
 	Title   string             `json:"title"`
@@ -577,6 +637,13 @@ type UpdateDemoMultipartBody struct {
 	// DemoType 作品类型。**只有同时上传 `package` 时才能改**。
 	DemoType    *string `json:"demoType,omitempty"`
 	Description *string `json:"description,omitempty"`
+
+	// ModelIds 这一版声明的模型（`models.slug`），语义是**整体替换**。
+	//
+	// 不传等价于空数组，也就是「这一版不声明任何模型」——不做
+	// 「没传就沿用上一版」：multipart 里「没传」与「传空」在浏览器侧
+	// 无法区分（空选择不产生字段），沿用会让作者永远删不掉一个声明。
+	ModelIds *[]string `json:"modelIds,omitempty"`
 
 	// Package 新的作品文件；不传表示只改文字
 	Package *openapi_types.File `json:"package,omitempty"`
