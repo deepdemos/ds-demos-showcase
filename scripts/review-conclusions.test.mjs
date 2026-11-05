@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { checkConclusions } from './review-conclusions.mjs';
+import { checkConclusions, isTestFile } from './review-conclusions.mjs';
 
 /**
  * 结论落地门禁的自测。
@@ -119,4 +119,14 @@ test('遇到下一个二级标题就停止（段落边界）', () => {
   const { problems, landed } = checkConclusions(text, opts);
   assert.deepEqual(problems, []);
   assert.equal(landed, 1);
+});
+
+test('e2e 用例文件算测试文件：标题可以当结论的落点', () => {
+  // 少认这一类，门禁就会把「这条能力有 e2e 钉着」判成「测试不存在」。
+  assert.equal(isTestFile('lifecycle.e2e.ts'), true);
+});
+
+test('普通源码文件不算测试文件：随便一个函数名糊不过去', () => {
+  assert.equal(isTestFile('lifecycle.ts'), false);
+  assert.equal(isTestFile('handlers.go'), false);
 });

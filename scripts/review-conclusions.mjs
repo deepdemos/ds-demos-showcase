@@ -39,11 +39,32 @@ export const HEADING = /^##\s*结论落地\s*$/m;
 const COUNT_LINE = /共\s*(\d+)\s*条/;
 const ITEM = /^\s*[-*]\s*(?:F|P|R)?\s*(\d+)[.、:：]?\s*(.+?)\s*(?:→|->)\s*(test|gate|loose|wontfix)\s*[:：]\s*(.+?)\s*$/;
 
+/**
+ * 这个文件名算不算「装着测试的文件」。
+ *
+ * 认三种：Go 的 `_test.go`、前端的 `.test.` / `.spec.`、以及 `web/e2e/*.e2e.ts`。
+ * e2e 用例标题也是一种「有东西钉着」的证据，早先漏掉它，门禁就把这类证据
+ * 判成「测试不存在」。
+ */
+export function isTestFile(name) {
+  return (
+    /\.(test|spec)\.(_test\.)?(go|ts|tsx)$/.test(name) ||
+    name.endsWith('_test.go') ||
+    name.endsWith('.e2e.ts')
+  );
+}
+
 function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** 在整个后端与前端测试里找这个测试名（Go 函数或前端用例名）。 */
+/**
+ * 在整个后端与前端测试里找这个测试名（Go 函数、前端用例名、e2e 用例标题）。
+ *
+ * e2e 也是测试：`web/e2e/*.e2e.ts` 里的 `test('…')` 标题同样可以作为结论的落点。
+ * 早先的文件过滤只认 `.test.` / `.spec.` / `_test.go`，于是「这条能力有 e2e 钉着」
+ * 反而过不了门禁——门禁本身把一类证据排除在外了。
+ */
 function findTest(name) {
   const roots = [join(ROOT, 'backend'), join(ROOT, 'web', 'src'), join(ROOT, 'web', 'e2e')];
   const goPattern = new RegExp(`^func\\s+${escapeRe(name)}\\s*\\(`, 'm');
@@ -61,7 +82,7 @@ function findTest(name) {
         continue;
       }
       if (!/\.(go|ts|tsx)$/.test(entry)) continue;
-      if (!/\.(test|spec)\.(_test\.)?(go|ts|tsx)$/.test(entry) && !entry.endsWith('_test.go')) continue;
+      if (!isTestFile(entry)) continue;
       const source = readFileSync(abs, 'utf8');
       if (goPattern.test(source) || tsPattern.test(source)) return true;
     }
