@@ -65,6 +65,10 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 	title := strings.TrimSpace(r.FormValue("title"))
 	description := strings.TrimSpace(r.FormValue("description"))
 	demoType := strings.TrimSpace(r.FormValue("demoType"))
+	// modelIds 是重复字段（多选），且**可以不出现**——空选择在浏览器侧不产生字段。
+	// 用 MultipartForm.Value 而不是 FormValue：后者只返回第一个值，
+	// 会把「选了三个模型」悄悄变成「只声明了一个」。
+	modelIDs := formValues(r, "modelIds")
 
 	file, header, err := r.FormFile("package")
 	if err != nil {
@@ -100,6 +104,7 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request) {
 		PackagePath: pkgPath,
 		PackageName: header.Filename,
 		PackageSize: pkgSize,
+		ModelSlugs:  modelIDs,
 	})
 	if err != nil {
 		h.writeDemoError(w, err)

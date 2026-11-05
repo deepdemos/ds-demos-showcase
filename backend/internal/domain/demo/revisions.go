@@ -167,6 +167,16 @@ func (s *Service) Restore(ctx context.Context, slug string, revNo int, actorUser
 			return fmt.Errorf("复制清单失败: %w", err)
 		}
 
+		// 模型声明也跟着走。回滚是「内容回到那一版」，而模型声明是那一版内容的一部分：
+		// 不复制的话，一次回滚会顺手抹掉「这个作品用了哪些模型」，
+		// 详情页的模型区块就空了——与「回到那一版」的语义自相矛盾。
+		if err := q.CopyRevisionModels(ctx, store.CopyRevisionModelsParams{
+			TargetRevisionID: rev.ID,
+			SourceRevisionID: row.RevisionID,
+		}); err != nil {
+			return fmt.Errorf("复制模型声明失败: %w", err)
+		}
+
 		if err := q.SetCurrentRevisionForEdit(ctx, store.SetCurrentRevisionForEditParams{
 			ID:                row.DemoID,
 			CurrentRevisionID: pgtype.Int8{Int64: rev.ID, Valid: true},

@@ -40,6 +40,13 @@
           "file": "backend/internal/httpapi/demos_submit_integration_test.go",
           "name": "TestIntegrationSubmitRequiresLogin"
         }
+      },
+      {
+        "case": "声明的模型不存在或未启用 → 400，且文案点出是哪个（不静默丢掉）",
+        "test": {
+          "file": "backend/internal/httpapi/models_integration_test.go",
+          "name": "TestIntegrationSubmitDeclaresModels"
+        }
       }
     ],
     "GET /api/v1/demos/{slug}": [
@@ -319,6 +326,22 @@
         "test": {
           "file": "backend/internal/domain/demo/view_integration_test.go",
           "name": "TestIntegrationRecordViewDedupesPerDay"
+        }
+      }
+    ],
+    "GET /api/v1/models": [
+      {
+        "case": "候选模型不出现在模型目录里（目录是投稿表单的选项来源）",
+        "test": {
+          "file": "backend/internal/httpapi/models_integration_test.go",
+          "name": "TestIntegrationListActiveModels"
+        }
+      },
+      {
+        "case": "目录为空时 items 是 [] 而不是 null，前端不必特判",
+        "test": {
+          "file": "backend/internal/httpapi/models_integration_test.go",
+          "name": "TestIntegrationListActiveModels"
         }
       }
     ]
