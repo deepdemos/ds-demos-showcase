@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -24,12 +25,16 @@ import (
 // 恢复也只清 `deleted_at`——作品自动回到删除前的档位，不需要「原状态」列
 // （生命周期 §4.3 把这条写成了专门的警告：不要往 lifecycle_state 里加 deleted）。
 //
-// # 为什么不写时间线
+// # 两处留痕，两个口径
 //
-// 时间线记的是「这个作品对外发生过什么」（Demo 域 §3.11）。下架后对外是墓碑、
-// 软删后对外根本不存在。把这两件事写进时间线只有两种下场：读者以为它们对外可见，
-// 或者为了自洽给墓碑开一个「曾经被删过」的漏口。所以下架与删除都不进时间线，
-// 它们的痕迹在 `updated_at` 与治理域的 `audit_log` 里。
+// 下架与重新上架**既写时间线也写审计**：下架后作品对外是墓碑页（200，只有标题），
+// 它仍然是「对外发生过什么」，而设计 §3.11 点名要记归档与恢复。
+//
+// 软删与恢复删除**只写审计、不写时间线**：软删后作品对外根本不存在，把它写进时间线
+// 要么让读者以为它曾经对外可见，要么得给墓碑开一个「曾经被删过」的漏口。
+//
+// 审计（`audit_log`）四个动作都写——删的人不落在 `demos` 的列上，只能从审计行的
+// `actor_id` 看（治理域 §9.1）；两处留痕都与业务变更在同一个事务里（§5.2 规则 1）。
 //
 // # 恢复窗口为什么读队列行
 //
@@ -53,11 +58,12 @@ const restoreWindowSettingKey = "lifecycle.restore_window_days"
 
 // LifecycleInput 是一次上下架 / 删除请求。
 //
-// ActorID 是 users.id（与 demos.author_id 同一口径）。管理员代操作也走这条路：
-// 传的是管理员的 id，权限判定在 HTTP 层做（与编辑、回滚同一分成）。
+// Actor 是「谁在操作」：UserID 是 users.id（与 demos.author_id 同一口径），
+// AccountID 与 Role 只用于写审计（accounts.id 与当时的角色快照）。
+// 管理员代操作也走这条路：权限判定在 HTTP 层做（与编辑、回滚同一分成）。
 type LifecycleInput struct {
-	ActorID int64
-	Slug    string
+	Actor Actor
+	Slug  string
 	// Reason 只在软删时使用，进 `demos.delete_reason`。
 	Reason string
 }
@@ -76,14 +82,14 @@ type LifecycleResult struct {
 // 预览与下载 404。**渠道行一个字节不动**——下架不是「删渠道」，
 // 重新上架时渠道还在原来的可见性上。
 func (s *Service) Archive(ctx context.Context, in LifecycleInput) (LifecycleResult, error) {
-	return s.transition(ctx, in, "published", "archived", "只有已发布的作品能下架")
+	return s.transition(ctx, in, "published", "archived", "archive", "下架", "只有已发布的作品能下架")
 }
 
 // Unarchive 把作品重新上架（archived → published）。
 //
 // 不留「上架通知」这类动作：上架只改变可见性，对外内容还是原来那一版。
 func (s *Service) Unarchive(ctx context.Context, in LifecycleInput) (LifecycleResult, error) {
-	return s.transition(ctx, in, "archived", "published", "只有已下架的作品能重新上架")
+	return s.transition(ctx, in, "archived", "published", "restore", "重新上架", "只有已下架的作品能重新上架")
 }
 
 // transition 是所有生命周期跃迁的唯一实现：从 from 到 to，别的什么都不做。
@@ -91,23 +97,39 @@ func (s *Service) Unarchive(ctx context.Context, in LifecycleInput) (LifecycleRe
 // 「跃迁合不合法」不在这里判——它由 SQL 的 WHERE lifecycle_state = @from_state 表达，
 // 0 行受影响就是不合法的跃迁。这样做的理由：把合法跃迁表写进 Go 的 if 里，
 // 就是同一张状态机在 SQL 与 Go 各存一份，加一种状态时两边要同时改。
+//
+// 留痕（时间线 + 审计）与状态跃迁在同一个事务里：任何一处写失败，整体回滚
+// （治理域 §5.2 规则 1）。kind 是时间线的动作名，message 是写给人看的那一句。
 func (s *Service) transition(
-	ctx context.Context, in LifecycleInput, from, to, conflict string,
+	ctx context.Context, in LifecycleInput, from, to, kind, message, conflict string,
 ) (LifecycleResult, error) {
 	row, err := s.lifecycleRow(ctx, in)
 	if err != nil {
 		return LifecycleResult{}, err
 	}
-	affected, err := s.q.TransitionDemoLifecycle(ctx, store.TransitionDemoLifecycleParams{
-		DemoID:    row.ID,
-		FromState: from,
-		ToState:   to,
+	err = s.inTx(ctx, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		affected, err := q.TransitionDemoLifecycle(ctx, store.TransitionDemoLifecycleParams{
+			DemoID:    row.ID,
+			FromState: from,
+			ToState:   to,
+		})
+		if err != nil {
+			return fmt.Errorf("生命周期跃迁失败: %w", err)
+		}
+		if affected == 0 {
+			return fmt.Errorf("%w: %s，当前是 %s", ErrLifecycleConflict, conflict, row.LifecycleState)
+		}
+		return recordTrail(ctx, q, row.ID, in.Actor, trail{
+			kind:    kind,
+			message: message,
+			action:  "status_set",
+			before:  map[string]any{"lifecycle_state": row.LifecycleState},
+			after:   map[string]any{"lifecycle_state": to},
+		})
 	})
 	if err != nil {
-		return LifecycleResult{}, fmt.Errorf("demo: 生命周期跃迁失败: %w", err)
-	}
-	if affected == 0 {
-		return LifecycleResult{}, fmt.Errorf("%w: %s，当前是 %s", ErrLifecycleConflict, conflict, row.LifecycleState)
+		return LifecycleResult{}, err
 	}
 	return LifecycleResult{Slug: row.Slug, LifecycleState: to}, nil
 }
@@ -144,10 +166,20 @@ func (s *Service) SoftDelete(ctx context.Context, in LifecycleInput) (LifecycleR
 		if err := q.SoftDeleteDemo(ctx, store.SoftDeleteDemoParams{ID: row.ID, DeleteReason: reason}); err != nil {
 			return fmt.Errorf("写删除标记失败: %w", err)
 		}
-		return q.EnqueueDemoGc(ctx, store.EnqueueDemoGcParams{
+		if err := q.EnqueueDemoGc(ctx, store.EnqueueDemoGcParams{
 			ObjectKey:  demoDirKey(row.Slug),
 			EntityID:   row.ID,
 			PurgeAfter: pgTimestamptz(purgeAfter),
+		}); err != nil {
+			return fmt.Errorf("写回收队列失败: %w", err)
+		}
+		// 软删不进时间线（见文件头¶两处留痕），但必须进审计：
+		// 谁删的只存在 audit_log.actor_id 里，demos 上没有这一列。
+		return recordTrail(ctx, q, row.ID, in.Actor, trail{
+			action: "delete",
+			before: map[string]any{"deleted": false},
+			after:  map[string]any{"deleted": true},
+			reason: reason,
 		})
 	})
 	if err != nil {
@@ -191,12 +223,74 @@ func (s *Service) RestoreDeleted(ctx context.Context, in LifecycleInput) (Lifecy
 		if err := q.RestoreDeletedDemo(ctx, row.ID); err != nil {
 			return fmt.Errorf("清删除标记失败: %w", err)
 		}
-		return q.DeleteDemoGcRow(ctx, demoDirKey(row.Slug))
+		if err := q.DeleteDemoGcRow(ctx, demoDirKey(row.Slug)); err != nil {
+			return fmt.Errorf("清回收队列失败: %w", err)
+		}
+		return recordTrail(ctx, q, row.ID, in.Actor, trail{
+			action: "restore",
+			before: map[string]any{"deleted": true},
+			after:  map[string]any{"deleted": false},
+		})
 	})
 	if err != nil {
 		return LifecycleResult{}, fmt.Errorf("demo: 恢复失败: %w", err)
 	}
 	return LifecycleResult{Slug: row.Slug, LifecycleState: row.LifecycleState}, nil
+}
+
+// trail 是一次操作的留痕内容。
+//
+// kind 为空表示这次操作不进时间线（软删与恢复删除，理由见文件头）。
+// before / after 只存关键字段：状态与布尔，不存标题、简介、文件名——
+// 内容一旦进审计，「擦除」就变成假删除（治理域 §5.2 规则 2）。
+type trail struct {
+	kind    string
+	message string
+	action  string
+	before  map[string]any
+	after   map[string]any
+	reason  string
+}
+
+// recordTrail 写一次操作的两处留痕：时间线（写给人看）与审计（谁改了什么）。
+//
+// 两处都在调用方的事务里，所以这里不自己开事务。actor 的三个值都来自会话：
+// actor_role 是当时的角色快照，不是现在的角色（角色会变，布尔会失真）。
+func recordTrail(ctx context.Context, q *store.Queries, demoID int64, actor Actor, t trail) error {
+	if actor.Role == "" {
+		// 宁可整个操作失败，也不要写一行「谁改的不知道」的审计。
+		return errors.New("写审计失败: 缺少操作人角色")
+	}
+	if t.kind != "" {
+		if err := q.InsertDemoTimeline(ctx, store.InsertDemoTimelineParams{
+			DemoID:  demoID,
+			Kind:    t.kind,
+			Column3: t.message,
+			ActorID: int8(actor.UserID),
+		}); err != nil {
+			return fmt.Errorf("写时间线失败: %w", err)
+		}
+	}
+	before, err := json.Marshal(t.before)
+	if err != nil {
+		return fmt.Errorf("序列化留痕前态失败: %w", err)
+	}
+	after, err := json.Marshal(t.after)
+	if err != nil {
+		return fmt.Errorf("序列化留痕后态失败: %w", err)
+	}
+	if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
+		ActorID:   int8(actor.AccountID),
+		ActorRole: actor.Role,
+		Action:    t.action,
+		EntityID:  demoID,
+		Before:    before,
+		After:     after,
+		Reason:    t.reason,
+	}); err != nil {
+		return fmt.Errorf("写审计失败: %w", err)
+	}
+	return nil
 }
 
 // lifecycleRow 读现状并做归属与墓碑判定。
@@ -215,7 +309,7 @@ func (s *Service) lifecycleRow(ctx context.Context, in LifecycleInput) (store.Ge
 	if row.ErasedAt.Valid {
 		return store.GetDemoForLifecycleRow{}, fmt.Errorf("%w: 作品不存在", ErrNotFound)
 	}
-	if !row.AuthorID.Valid || row.AuthorID.Int64 != in.ActorID {
+	if !row.AuthorID.Valid || row.AuthorID.Int64 != in.Actor.UserID {
 		return store.GetDemoForLifecycleRow{}, fmt.Errorf("%w: 作品不存在", ErrNotFound)
 	}
 	if row.LifecycleState == "removed" {
