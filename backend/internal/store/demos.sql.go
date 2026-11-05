@@ -125,20 +125,6 @@ func (q *Queries) BumpDownloadCount(ctx context.Context, demoID int64) error {
 	return err
 }
 
-const bumpViewCount = `-- name: BumpViewCount :exec
-INSERT INTO demo_stats (demo_id, view_count)
-VALUES ($1, 1)
-ON CONFLICT (demo_id) DO UPDATE
-SET view_count = demo_stats.view_count + 1,
-    updated_at = now()
-`
-
-// 与 BumpDownloadCount 同一形状：UPSERT 保证「原子 +1」，不是读改写。
-func (q *Queries) BumpViewCount(ctx context.Context, demoID int64) error {
-	_, err := q.db.Exec(ctx, bumpViewCount, demoID)
-	return err
-}
-
 const copyRevisionFiles = `-- name: CopyRevisionFiles :exec
 INSERT INTO demo_revision_files (revision_id, path, blob_hash, size, mime)
 SELECT $1, f.path, f.blob_hash, f.size, f.mime
@@ -482,8 +468,8 @@ type GetDemoForDownloadRow struct {
 // 下载要一次拿到「该不该给、给哪个文件」两件事，所以与预览分开查：
 // 预览按相对路径取任意文件，下载只认原件（单文件作品是它自己，多文件作品是 source.zip）。
 //
-// **单独判渠道可见性**：预览现在不看渠道（已知不一致，另开 issue），
-// 下载必须看——否则 hidden 的作品会变成「藏起来了但谁都能下」。
+// **单独判渠道可见性**：与预览同一个口径（`GetDemoForPreview` 里的 EXISTS），
+// 两处不能一个判一个不判——否则 hidden 的作品会变成「藏起来了但谁都能下」。
 func (q *Queries) GetDemoForDownload(ctx context.Context, slug string) (GetDemoForDownloadRow, error) {
 	row := q.db.QueryRow(ctx, getDemoForDownload, slug)
 	var i GetDemoForDownloadRow
@@ -598,9 +584,12 @@ type GetDemoForLifecycleRow struct {
 // 可见性层（lifecycle_state）与删除标记层（deleted_at）。两层是笛卡尔积，
 // 所以软删不改 lifecycle_state，恢复只清 deleted_at（生命周期 §4.3）。
 //
-// 这里刻意不写 demo_timeline：时间线记的是「对外发生过什么」（Demo 域 §3.11），
-// 而下架后的作品对外是墓碑、软删后的作品对外根本不存在。把这两件事写进时间线，
-// 要么读者以为它们对外可见，要么得给墓碑加一个「曾经被删过」的漏口。
+// 留痕由 domain 层在同一个事务里写两条：
+//
+//	下架 / 重新上架 -> demo_timeline(kind='archive'/'restore') + audit_log(action='status_set')
+//	软删 / 恢复删除 -> 只有 audit_log(action='delete'/'restore')，不进时间线（对外不存在）
+//
+// 判据与理由见 backend/internal/domain/demo/lifecycle.go 文件头。
 // 一次拿齐「能不能动」需要的全部状态。判定放在领域层，SQL 只负责取。
 func (q *Queries) GetDemoForLifecycle(ctx context.Context, slug string) (GetDemoForLifecycleRow, error) {
 	row := q.db.QueryRow(ctx, getDemoForLifecycle, slug)
@@ -986,15 +975,23 @@ func (q *Queries) NextRevisionNo(ctx context.Context, demoID int64) (int32, erro
 
 const recordDemoView = `-- name: RecordDemoView :one
 
-INSERT INTO demo_views (demo_id, viewer_key, viewed_on)
-SELECT d.id, $1::text, current_date
-FROM demos d
-WHERE d.slug = $2::text
-  AND d.lifecycle_state = 'published'
-  AND d.published_revision_id IS NOT NULL
-  AND d.deleted_at IS NULL
-  AND d.erased_at IS NULL
-ON CONFLICT (demo_id, viewer_key, viewed_on) DO NOTHING
+WITH ins AS (
+    INSERT INTO demo_views (demo_id, viewer_key, viewed_on)
+    SELECT d.id, $1::text, current_date
+    FROM demos d
+    WHERE d.slug = $2::text
+      AND d.lifecycle_state = 'published'
+      AND d.published_revision_id IS NOT NULL
+      AND d.deleted_at IS NULL
+      AND d.erased_at IS NULL
+    ON CONFLICT (demo_id, viewer_key, viewed_on) DO NOTHING
+    RETURNING demo_id
+)
+INSERT INTO demo_stats (demo_id, view_count)
+SELECT demo_id, 1 FROM ins
+ON CONFLICT (demo_id) DO UPDATE
+SET view_count = demo_stats.view_count + 1,
+    updated_at  = now()
 RETURNING demo_id
 `
 
@@ -1006,15 +1003,17 @@ type RecordDemoViewParams struct {
 // ===== 浏览计数（DEMO-041）=====
 // 一次浏览能不能算，全在这一条里判完：
 //  1. 作品得是对外可读的（有对外版本、已发布、未删未擦）——草稿不该有浏览量；
-//  2. 同一个人同一个自然日只算一次（主键冲突就不插入，返回 0 行）。
+//  2. 同一个人同一个自然日只算一次（主键冲突就不插入，也就不会走到 +1）；
+//  3. 去重行与计数必须在**同一条语句**里：分两条的话，第一步成功、第二步失败，
+//     这个人今天就再也加不上了（去重行在，永远是冲突）——那次浏览永久丢失。
 //
 // **故意不判渠道visible性**：浏览计的是「有人来看了」，不是「它出现在哪里」。
 // 渠道是 hidden 的作品，访客的详情请求本来就会被详情端点挡成 404，
 // 到不了这里；而能拿到 slug 的人直接 POST 也只是给自己的记录加一行，一天一次封顶。
 //
-// 只返回被插入那一行的 demo_id：冲突（今天已经看过）时没有行，
-// 调用方据此决定要不要 +1。用 :one + ErrNoRows 而不是 :execrows，
-// 是因为 +1 还要拿 demo_id，再查一次 slug 换 id 就多一次往返。
+// 外层 INSERT ... SELECT FROM ins 读的是 CTE 的 RETURNING，不是表——
+// 「数据修改型 CTE 之间看不见彼此的写入」说的是读表，读 CTE 的返回值是允许的。
+// 返回 0 行 = 今天已经看过（或作品不可见），调用方据此判断这次算不算。
 func (q *Queries) RecordDemoView(ctx context.Context, arg RecordDemoViewParams) (int64, error) {
 	row := q.db.QueryRow(ctx, recordDemoView, arg.ViewerKey, arg.Slug)
 	var demo_id int64

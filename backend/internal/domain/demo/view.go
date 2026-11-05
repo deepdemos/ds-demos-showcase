@@ -20,8 +20,9 @@ import (
 // # 一次浏览的定义
 //
 // 同一个人（登录用户按账号，匿名按 IP 哈希）对同一作品，同一个自然日只算一次。
-// 判定与 +1 分两步，中间靠「去重行真的插进去了」保护：只有插进去才 +1。
-// 反过来（先 +1 再插）会把计数刷高，那正是这条功能要防的事。
+// 去重行与 +1 在**同一条 SQL** 里（`RecordDemoView` 的 CTE）：
+// 只有去重行真的插进去了，外层才会执行 +1，两步之间没有可以失败的间隙。
+// 分成两条语句时，第二步失败会让这个人当天的这次浏览永久丢失——去重行已经在了。
 
 // RecordView 记一次浏览。返回 true 表示这一次真的算数。
 //
@@ -33,19 +34,15 @@ func (s *Service) RecordView(ctx context.Context, slug, viewerKey string) (bool,
 		return false, nil
 	}
 
-	demoID, err := s.q.RecordDemoView(ctx, store.RecordDemoViewParams{Slug: slug, ViewerKey: viewerKey})
+	_, err := s.q.RecordDemoView(ctx, store.RecordDemoViewParams{Slug: slug, ViewerKey: viewerKey})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// 作品不可见，或者今天已经看过 —— 查询是 `ON CONFLICT DO NOTHING RETURNING`，
 			// 两种「没有插入」都表现为没有返回行。
-			// 这两种都不该 +1，也不该报错：这是本功能的正常路径，不是异常。
+			// 两种都不该报错：这是本功能的正常路径，不是异常。
 			return false, nil
 		}
-		return false, fmt.Errorf("demo: 记浏览去重行失败: %w", err)
-	}
-
-	if err := s.q.BumpViewCount(ctx, demoID); err != nil {
-		return false, fmt.Errorf("demo: 浏览计数 +1 失败: %w", err)
+		return false, fmt.Errorf("demo: 记浏览失败: %w", err)
 	}
 	return true, nil
 }
