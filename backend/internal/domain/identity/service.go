@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,6 +39,24 @@ func (s *Service) hashIP(ip string) string {
 	mac := hmac.New(sha256.New, s.ipSecret)
 	mac.Write([]byte(ip))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// ViewerKey 把一个请求折成「去重用的标识」。
+//
+// 登录用户按账号（`user:<id>`），匿名按 IP 哈希（`anon:<hmac>`）。
+// 两种状态用不同前缀是**有意的**：同一个人登录前看过、登录后又看，
+// 不该因为「后来知道他是谁」就把匿名那次并进账号的记录里。
+//
+// 这套口径与 `demo_ratings.rater_key` 一致，两处「谁算一次」不会打架。
+// IP 为空时返回空串——调用方据此跳过计数，而不是造一个把所有人并成一次的键。
+func (s *Service) ViewerKey(accountID int64, ip string) string {
+	if accountID > 0 {
+		return "user:" + strconv.FormatInt(accountID, 10)
+	}
+	if ip == "" {
+		return ""
+	}
+	return "anon:" + s.hashIP(ip)
 }
 
 // Me 用会话 ID 换回当前账号。查不到就是没登录——「不存在 / 过期 / 已吊销」

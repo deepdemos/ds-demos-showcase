@@ -41,6 +41,10 @@
         "type": "string",
         "optional": true
       },
+      "downloadCount": {
+        "type": "int64",
+        "optional": false
+      },
       "downloadable": {
         "type": "bool",
         "optional": false
@@ -63,6 +67,10 @@
       },
       "updatedAt": {
         "type": "time.Time",
+        "optional": false
+      },
+      "viewCount": {
+        "type": "int64",
         "optional": false
       }
     },
@@ -664,6 +672,11 @@
     },
     "POST /api/v1/demos/{slug}/unarchive": {
       "method": "UnarchiveDemo",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/demos/{slug}/view": {
+      "method": "PostDemoView",
       "pathParams": 1,
       "params": null
     },

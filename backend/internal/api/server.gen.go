@@ -77,6 +77,9 @@ type ServerInterface interface {
 	// 重新上架（作者本人）
 	// (POST /api/v1/demos/{slug}/unarchive)
 	UnarchiveDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 记一次浏览
+	// (POST /api/v1/demos/{slug}/view)
+	PostDemoView(w http.ResponseWriter, r *http.Request, slug string)
 	// 当前登录者
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -212,6 +215,12 @@ func (_ Unimplemented) RestoreDemoRevision(w http.ResponseWriter, r *http.Reques
 // 重新上架（作者本人）
 // (POST /api/v1/demos/{slug}/unarchive)
 func (_ Unimplemented) UnarchiveDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 记一次浏览
+// (POST /api/v1/demos/{slug}/view)
+func (_ Unimplemented) PostDemoView(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -741,6 +750,31 @@ func (siw *ServerInterfaceWrapper) UnarchiveDemo(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// PostDemoView operation middleware
+func (siw *ServerInterfaceWrapper) PostDemoView(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostDemoView(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
@@ -950,6 +984,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/demos/{slug}/unarchive", wrapper.UnarchiveDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/demos/{slug}/view", wrapper.PostDemoView)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)

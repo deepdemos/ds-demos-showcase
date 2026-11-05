@@ -40,6 +40,10 @@ func (s *stub) RestoreDemoRevision(_ http.ResponseWriter, _ *http.Request, slug 
 	s.hits = append(s.hits, "restore:"+slug+":"+strconv.Itoa(revNo))
 }
 
+func (s *stub) PostDemoView(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "view:"+slug)
+}
+
 func (s *stub) GetDemo(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "detail:"+slug)
 }

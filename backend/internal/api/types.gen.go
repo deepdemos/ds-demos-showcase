@@ -164,6 +164,9 @@ type DemoDetail struct {
 	// Description 墓碑态为 null
 	Description *string `json:"description"`
 
+	// DownloadCount 下载数。一次成功写出的下载 +1；被 404 挡下或传输中断不计。
+	DownloadCount int64 `json:"downloadCount"`
+
 	// Downloadable 这个作品现在能不能下载。
 	//
 	// `false` 的原因是**作品本身不该有下载**：墓碑态、外链作品（`link` 只给外链
@@ -193,6 +196,11 @@ type DemoDetail struct {
 	// Title 墓碑态为 null
 	Title     *string   `json:"title"`
 	UpdatedAt time.Time `json:"updatedAt"`
+
+	// ViewCount 浏览数。同一个人（登录按账号、匿名按 IP 哈希）对同一作品
+	// 同一个自然日在去重表里只留一行，所以刷新页面不会把它刷高。
+	// 墓碑态与未发布的作品恒为 0——它们根本没有被计数的机会。
+	ViewCount int64 `json:"viewCount"`
 }
 
 // DemoLifecycleActions 当前调用者此刻能对这个作品做哪些生命周期动作。四个布尔全给，
