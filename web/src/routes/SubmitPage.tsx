@@ -56,7 +56,10 @@ export function SubmitPage() {
         ...(modelSlugs.length > 0 ? { modelIds: modelSlugs } : {}),
         package: file,
       });
-      if (response.status === 201) {
+      // 201 = 新建；200 = 重放（同一个 Idempotency-Key 已经建过）。
+      // 浏览器这一侧目前不发这个头，但重放一旦能发生，它就该被当成成功——
+      // 否则用户会看到一条空的报错（后端对 200 的 body 是完整回执）。
+      if (response.status === 201 || response.status === 200) {
         setDone({ slug: response.data.slug });
         return;
       }

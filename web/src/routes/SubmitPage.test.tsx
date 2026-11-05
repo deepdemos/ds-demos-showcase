@@ -102,6 +102,27 @@ describe('SubmitPage', () => {
     expect(body.modelIds).toEqual(['deepseek-reasoner']);
   });
 
+  /**
+   * 200 是重放（同一个 Idempotency-Key 已经建过），对用户来说是同一件事：
+   * 作品在里面了。只认 201 的话，用户会看到一条空的报错。
+   */
+  test('重放（200）也当成提交成功', async () => {
+    auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+    auth.isLoading = false;
+    vi.mocked(submitDemo).mockResolvedValue({
+      status: 200,
+      data: { slug: 'demo-a', lifecycleState: 'draft', moderationState: 'pending' },
+    } as never);
+
+    renderAt('/submit');
+
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '我的作品' } });
+    pickFile();
+    fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
+
+    await waitFor(() => expect(screen.getByText('投稿已提交')).toBeInTheDocument());
+  });
+
   // 一个都没勾时不要塞一个空数组：契约里 modelIds 可省略，空数组和不传语义相同，
   // 但少一个字段能让请求体与日志都干净些。
   test('一个模型都没勾时不传 modelIds', async () => {

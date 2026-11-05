@@ -28,6 +28,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   demoType: 'web',
   downloadable: false,
   canEdit: false,
+  moderationState: 'approved',
   viewCount: 0,
   downloadCount: 0,
   lifecycleActions: { edit: false, archive: false, restore: false, delete: false },
@@ -163,4 +164,37 @@ test('没有模型声明时不渲染那一行', async () => {
   renderPage();
   await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
   expect(screen.queryByText(/模型声明：/)).toBeNull();
+});
+
+/**
+ * 作者看自己还没过审的作品时，页面必须说出「审核中」。
+ *
+ * 不说的话，作者看到的是一个正常的详情页（标题、简介、统计全在），
+ * 会以为作品已经上线，然后到作品库里找不到自己。
+ */
+test('作者看待审作品时看到审核中', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ canEdit: true, moderationState: 'pending', lifecycleState: 'draft' }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText(/审核中/)).toBeInTheDocument());
+});
+
+/**
+ * 已通过的作品不显示这条——否则每个作者打开自己的作品都会看到一句「审核中」。
+ */
+test('已通过的作品不显示审核提示', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ canEdit: true, moderationState: 'approved' }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  expect(screen.queryByText(/审核中/)).toBeNull();
+  expect(screen.queryByText(/审核未通过/)).toBeNull();
 });

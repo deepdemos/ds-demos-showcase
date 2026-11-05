@@ -183,6 +183,16 @@ export function DemoDetailPage() {
             </p>
           ) : null}
 
+          {/* 审核态只对作者有意义：访客看到的详情一定来自已通过的那一版，
+              服务端对他们恒回 approved（见 handlers.go 的 detailOf）。 */}
+          {data.demo.canEdit && data.demo.moderationState !== 'approved' ? (
+            <p className="mt-4 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
+              {data.demo.moderationState === 'pending'
+                ? '审核中：通过之前，这条不会出现在作品库里，也不能发布。'
+                : '审核未通过：改好之后重新提交，会再次进入待审队列。'}
+            </p>
+          ) : null}
+
           <LifecycleBar slug={slug} demo={data.demo} />
 
           <div className="mt-4 flex items-center gap-3">
