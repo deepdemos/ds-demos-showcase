@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import {
   archiveDemo,
   deleteDemo,
   getDemo,
+  postDemoView,
   restoreDemo,
   unarchiveDemo,
   type DemoDetail,
@@ -70,6 +71,20 @@ export function DemoDetailPage() {
     enabled: slug.length > 0,
   });
 
+  // 记一次浏览。
+  //
+  // 放在这里而不是详情查询里，是因为详情是 GET：给它加副作用，等于让爬虫、
+  // 预取、curl 验证全都算一次浏览。这个 effect 只在「作品真的渲染出来」之后跑。
+  //
+  // 依赖里只放 slug：切到另一件作品才算新的一次；同一件作品重新挂载（比如从编辑页
+  // 返回）不该再加一次——去重表那边同一天也只认一次，但少发一次请求总归更好。
+  useEffect(() => {
+    if (!slug) return;
+    void postDemoView(slug).catch(() => {
+      // 计数失败与用户无关，页面不该因此报错。
+    });
+  }, [slug]);
+
   return (
     <section className="mx-auto w-full max-w-3xl px-4 py-8">
       <p className="mb-4">
@@ -115,6 +130,15 @@ export function DemoDetailPage() {
             {data.demo.updatedAt !== data.demo.createdAt &&
               ` · 更新 ${new Date(data.demo.updatedAt).toLocaleDateString('zh-CN')}`}
           </p>
+
+          {/* 业务统计：服务端只在「已发布且有对外版本」时给这两个数，
+              墓碑与未发布一律为 0，所以这里不用再判状态。 */}
+          {data.demo.viewCount > 0 || data.demo.downloadCount > 0 ? (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              浏览 {data.demo.viewCount.toLocaleString('zh-CN')} 次 · 下载{' '}
+              {data.demo.downloadCount.toLocaleString('zh-CN')} 次
+            </p>
+          ) : null}
 
           {data.demo.coverUrl ? (
             <img
