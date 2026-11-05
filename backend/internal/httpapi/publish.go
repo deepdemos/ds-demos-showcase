@@ -25,25 +25,25 @@ import (
 // 400 会让调用方去翻自己的请求体，而真正该做的事是刷新一下看当前状态。
 
 // publisher 是发布链路上唯一的鉴权点。
-func (h *Handler) publisher(ctx context.Context, r *http.Request) (demo.ReviewActor, error) {
+func (h *Handler) publisher(ctx context.Context, r *http.Request) (demo.Actor, error) {
 	if h.identity == nil || h.queries == nil {
-		return demo.ReviewActor{}, errNotWired
+		return demo.Actor{}, errNotWired
 	}
 	account, err := h.identity.Me(ctx, readSessionCookie(r))
 	if err != nil {
-		return demo.ReviewActor{}, err
+		return demo.Actor{}, err
 	}
 	ok, err := h.queries.HasPermission(ctx, store.HasPermissionParams{
 		Sub:           account.Sub,
 		PermissionKey: "demo.publish",
 	})
 	if err != nil {
-		return demo.ReviewActor{}, err
+		return demo.Actor{}, err
 	}
 	if !ok {
-		return demo.ReviewActor{}, errForbidden
+		return demo.Actor{}, errForbidden
 	}
-	return demo.ReviewActor{
+	return demo.Actor{
 		AccountID: account.ID,
 		UserID:    account.UserID,
 		Role:      account.Role,

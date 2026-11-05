@@ -25,25 +25,25 @@ import (
 // 401 是「你还没说你是谁」，403 是「我知道你是谁，但你不行」。
 // 混成一个值会让前端的处理逻辑变成猜谜：401 该跳登录页，403 该提示无权，
 // 而跳登录页之后仍然没权限，用户会在两个页面之间来回弹。
-func (h *Handler) reviewer(ctx context.Context, r *http.Request) (demo.ReviewActor, error) {
+func (h *Handler) reviewer(ctx context.Context, r *http.Request) (demo.Actor, error) {
 	if h.identity == nil || h.queries == nil {
-		return demo.ReviewActor{}, errNotWired
+		return demo.Actor{}, errNotWired
 	}
 	account, err := h.identity.Me(ctx, readSessionCookie(r))
 	if err != nil {
-		return demo.ReviewActor{}, err
+		return demo.Actor{}, err
 	}
 	ok, err := h.queries.HasPermission(ctx, store.HasPermissionParams{
 		Sub:           account.Sub,
 		PermissionKey: "demo.review",
 	})
 	if err != nil {
-		return demo.ReviewActor{}, err
+		return demo.Actor{}, err
 	}
 	if !ok {
-		return demo.ReviewActor{}, errForbidden
+		return demo.Actor{}, errForbidden
 	}
-	return demo.ReviewActor{
+	return demo.Actor{
 		AccountID: account.ID,
 		UserID:    account.UserID,
 		Role:      account.Role,
