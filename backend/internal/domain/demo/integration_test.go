@@ -160,15 +160,14 @@ func TestIntegrationSubmitZip(t *testing.T) {
 		t.Fatalf("状态应为 pending/draft，实际 %s/%s", res.ModerationState, res.LifecycleState)
 	}
 
-	// 文件真的落盘了：入口 + 资源 + 原始包。
-	for _, key := range []string{
-		storage.FilesKey(res.Slug, 1, "index.html"),
-		storage.FilesKey(res.Slug, 1, "assets/app.js"),
-		storage.SourceKey(res.Slug, 1, "zip"),
-	} {
-		if _, err := s.files.Stat(context.Background(), key); err != nil {
-			t.Fatalf("文件 %s 未落盘: %v", key, err)
-		}
+	// 内容进了存储，而且走的是**清单 + blob**：没有 `demos/{slug}/r1/` 目录了。
+	//
+	// 三个路径：解析出的两个文件 + 原始包（多文件作品的原件是 source.zip）。
+	assertManifest(t, pool, s, res.Slug, 1, []string{"index.html", "assets/app.js", "source.zip"})
+
+	// 老目录不该再被写：切到内容寻址之后，同一份字节存两遍是白占磁盘。
+	if _, err := s.files.Stat(context.Background(), storage.FilesKey(res.Slug, 1, "index.html")); err == nil {
+		t.Fatal("内容寻址之后不该再写 demos/{slug}/r{n}/ 目录")
 	}
 
 	// 库里这一行对外不可见：列表查询查不到。
@@ -201,12 +200,8 @@ func TestIntegrationSubmitSingleFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("投稿失败: %v", err)
 	}
-	if _, err := s.files.Stat(context.Background(), storage.FilesKey(res.Slug, 1, "index.html")); err != nil {
-		t.Fatalf("单文件未落盘: %v", err)
-	}
-	if _, err := s.files.Stat(context.Background(), storage.SourceKey(res.Slug, 1, "zip")); err == nil {
-		t.Fatal("单文件投稿不该额外存原始包")
-	}
+	// 单文件作品的原件就是它自己：清单里只有一行，没有额外的 source.zip。
+	assertManifest(t, pool, s, res.Slug, 1, []string{"index.html"})
 }
 
 // 坏包必须 422 且**不留行**：解压失败发生在落库之前，所以库里什么都不该有。
@@ -553,5 +548,110 @@ func TestIntegrationListPendingReviews(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("队列里没找到刚投稿的 %s", slug)
+	}
+}
+
+// assertManifest 断言「这一版的清单里正好这些路径」，并逐个确认字节真在存储里。
+func assertManifest(t *testing.T, pool *pgxpool.Pool, s *Service, slug string, revNo int, wantPaths []string) {
+	t.Helper()
+	ctx := context.Background()
+
+	rows, err := pool.Query(ctx, `
+		SELECT f.path, b.storage_key
+		FROM demo_revision_files f
+		JOIN demo_revisions r ON r.id = f.revision_id
+		JOIN demos d          ON d.id = r.demo_id
+		JOIN blobs b          ON b.sha256 = f.blob_hash
+		WHERE d.slug = $1 AND r.rev_no = $2
+		ORDER BY f.path`, slug, revNo)
+	if err != nil {
+		t.Fatalf("查清单失败: %v", err)
+	}
+	defer rows.Close()
+
+	got := map[string]string{}
+	for rows.Next() {
+		var p, key string
+		if err := rows.Scan(&p, &key); err != nil {
+			t.Fatalf("读清单行失败: %v", err)
+		}
+		got[p] = key
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("读清单失败: %v", err)
+	}
+
+	if len(got) != len(wantPaths) {
+		t.Fatalf("清单路径数 = %d（%v），want %d（%v）", len(got), keysOf(got), len(wantPaths), wantPaths)
+	}
+	for _, p := range wantPaths {
+		key, ok := got[p]
+		if !ok {
+			t.Fatalf("清单缺少路径 %s（实际 %v）", p, keysOf(got))
+		}
+		if _, err := s.files.Stat(ctx, key); err != nil {
+			t.Fatalf("清单指向的 blob 不在存储里（%s → %s）: %v", p, key, err)
+		}
+	}
+}
+
+func keysOf(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// 零拷贝的收益点：同样的字节只占一份。
+//
+// 两个作者交同一个 index.html（内容完全一致），blobs 表里只该有一行。
+// 这条用例如果写错（比如给每个文件都生成随机 key），磁盘会按人数线性增长，
+// 而功能上完全看不出来——所以要直接查库。
+func TestIntegrationBlobDedupeSharesContent(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	authorA := mkAuthor(t, pool, "dedupe-a")
+	authorB := mkAuthor(t, pool, "dedupe-b")
+
+	body := "<html>完全一样的内容</html>"
+	pkgA, nameA := writeUpload(t, "index.html", body)
+	pkgB, nameB := writeUpload(t, "index.html", body)
+
+	for _, c := range []struct {
+		author int64
+		pkg    string
+		name   string
+	}{{authorA, pkgA, nameA}, {authorB, pkgB, nameB}} {
+		if _, err := s.Submit(context.Background(), SubmitInput{
+			AuthorID:    c.author,
+			Title:       "同一份内容",
+			DemoType:    "web",
+			PackagePath: c.pkg,
+			PackageName: c.name,
+			PackageSize: fileSize(t, c.pkg),
+		}); err != nil {
+			t.Fatalf("投稿失败: %v", err)
+		}
+	}
+
+	// 同一段字节只该有一个 blob 行。
+	var blobs int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM blobs WHERE size = $1`, int64(len(body))).Scan(&blobs); err != nil {
+		t.Fatalf("查 blob 数失败: %v", err)
+	}
+	if blobs != 1 {
+		t.Fatalf("相同的字节落了 %d 份，零拷贝没生效", blobs)
+	}
+
+	// 但两个作品各自都要有清单行（内容一样，引用两次）。
+	var files int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM demo_revision_files WHERE size = $1`, int64(len(body))).Scan(&files); err != nil {
+		t.Fatalf("查清单行数失败: %v", err)
+	}
+	if files != 2 {
+		t.Fatalf("两个作品该有 2 行清单，实际 %d", files)
 	}
 }

@@ -61,7 +61,19 @@ func (fakeDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	return nil, errors.New("fakeDB: Query 不该被调用")
 }
 
-func (f fakeDB) QueryRow(context.Context, string, ...any) pgx.Row { return f.row }
+// QueryRow 按 SQL 文本分派。
+//
+// 为什么要分派：`fakeDB` 只有一行数据，而一个请求可能先后查两张表
+// （例如下载先查作品、再查清单）。用同一行糊弄所有查询会让 Scan 类型对不上，
+// 症状是一句莫名其妙的 `interface conversion: interface {} is int64, not string`。
+// 清单那张表在这里一律返回「没有清单」——绝大多数用例要的是目录回退那条路，
+// 需要清单的场景用真库（manifest_integration_test.go）。
+func (f fakeDB) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+	if strings.Contains(sql, "demo_revision_files") {
+		return fakeRow{err: pgx.ErrNoRows}
+	}
+	return f.row
+}
 
 type failingPinger struct{ msg string }
 
