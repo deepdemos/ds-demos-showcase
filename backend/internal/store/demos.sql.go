@@ -191,10 +191,17 @@ WHERE d.published_revision_id IS NOT NULL
       SELECT 1 FROM demo_channels c
       WHERE c.demo_id = d.id AND c.visibility = 'listed'
   )
+  AND (
+      $1::text = ''
+      OR d.title ILIKE '%' || $1::text || '%'
+      OR COALESCE(d.description, '') ILIKE '%' || $1::text || '%'
+  )
 `
 
-func (q *Queries) CountPublishedDemos(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countPublishedDemos)
+// 与 ListPublishedDemos 的 WHERE 必须逐字一致（含 q 的两个分支），
+// 否则「共 N 个作品」与列表条数会对不上，分页也会算错页数。
+func (q *Queries) CountPublishedDemos(ctx context.Context, q_ string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishedDemos, q_)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -871,7 +878,12 @@ func (q *Queries) ListDemoRevisions(ctx context.Context, slug string) ([]ListDem
 
 const listPublishedDemos = `-- name: ListPublishedDemos :many
 
-SELECT d.id, d.slug, d.title, d.cover_url, d.created_at
+SELECT d.id, d.slug, d.title, d.cover_url, d.created_at,
+       CASE
+           WHEN $3::text = '' THEN 'title'
+           WHEN d.title ILIKE '%' || $3::text || '%' THEN 'title'
+           ELSE 'description'
+       END::text AS matched_in
 FROM demos d
 WHERE d.published_revision_id IS NOT NULL
   AND d.lifecycle_state = 'published'
@@ -883,6 +895,11 @@ WHERE d.published_revision_id IS NOT NULL
       SELECT 1 FROM demo_channels c
       WHERE c.demo_id = d.id AND c.visibility = 'listed'
   )
+  AND (
+      $3::text = ''
+      OR d.title ILIKE '%' || $3::text || '%'
+      OR COALESCE(d.description, '') ILIKE '%' || $3::text || '%'
+  )
 ORDER BY d.created_at DESC, d.id DESC
 LIMIT $1 OFFSET $2
 `
@@ -890,6 +907,7 @@ LIMIT $1 OFFSET $2
 type ListPublishedDemosParams struct {
 	Limit  int32
 	Offset int32
+	Q      string
 }
 
 type ListPublishedDemosRow struct {
@@ -898,6 +916,7 @@ type ListPublishedDemosRow struct {
 	Title     pgtype.Text
 	CoverUrl  pgtype.Text
 	CreatedAt pgtype.Timestamptz
+	MatchedIn string
 }
 
 // 作品列表与详情。
@@ -915,8 +934,16 @@ type ListPublishedDemosRow struct {
 //
 // 已经归档（archived）或移除（removed）的作品**不在列表里**，但详情页仍可访问（墓碑），
 // 所以这里查询条件与 GetDemoBySlug 故意不同——这不是漏写。
+// `q` 是关键词：空串表示不过滤。匹配标题或简介（契约写的就是这两处）。
+//
+// 用 ILIKE 而不是全文检索，是刻意的：中文没有空格，pg_trgm 把两字的词
+// （「探针」「回滚」）切不出完整三元组，索引用不上，最后还是回退成扫描。
+// 那不如直接子串匹配——它至少**搜得到**。「搜得快」等数据量真的需要时再谈。
+//
+// `matched_in` 告诉前端这条是因为标题命中还是简介命中：只匹配简介时，
+// 结果列表上看到的标题里没有关键词，不标出来就像「搜了但不相关」。
 func (q *Queries) ListPublishedDemos(ctx context.Context, arg ListPublishedDemosParams) ([]ListPublishedDemosRow, error) {
-	rows, err := q.db.Query(ctx, listPublishedDemos, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listPublishedDemos, arg.Limit, arg.Offset, arg.Q)
 	if err != nil {
 		return nil, err
 	}
@@ -930,6 +957,7 @@ func (q *Queries) ListPublishedDemos(ctx context.Context, arg ListPublishedDemos
 			&i.Title,
 			&i.CoverUrl,
 			&i.CreatedAt,
+			&i.MatchedIn,
 		); err != nil {
 			return nil, err
 		}

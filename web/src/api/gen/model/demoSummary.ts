@@ -24,6 +24,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DemoSummaryMatchedIn } from './demoSummaryMatchedIn';
 import type { LifecycleState } from './lifecycleState';
 
 export interface DemoSummary {
@@ -42,4 +43,11 @@ export interface DemoSummary {
   coverUrl: string | null;
   createdAt: string;
   lifecycleState: LifecycleState;
+  /**
+     * 这条结果是因为**标题**命中搜索词，还是只有**简介**命中。
+     *
+     * 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
+     * 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
+     */
+  matchedIn: DemoSummaryMatchedIn;
 }

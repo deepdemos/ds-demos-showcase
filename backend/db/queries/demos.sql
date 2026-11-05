@@ -13,7 +13,20 @@
 -- 所以这里查询条件与 GetDemoBySlug 故意不同——这不是漏写。
 
 -- name: ListPublishedDemos :many
-SELECT d.id, d.slug, d.title, d.cover_url, d.created_at
+-- `q` 是关键词：空串表示不过滤。匹配标题或简介（契约写的就是这两处）。
+--
+-- 用 ILIKE 而不是全文检索，是刻意的：中文没有空格，pg_trgm 把两字的词
+-- （「探针」「回滚」）切不出完整三元组，索引用不上，最后还是回退成扫描。
+-- 那不如直接子串匹配——它至少**搜得到**。「搜得快」等数据量真的需要时再谈。
+--
+-- `matched_in` 告诉前端这条是因为标题命中还是简介命中：只匹配简介时，
+-- 结果列表上看到的标题里没有关键词，不标出来就像「搜了但不相关」。
+SELECT d.id, d.slug, d.title, d.cover_url, d.created_at,
+       CASE
+           WHEN @q::text = '' THEN 'title'
+           WHEN d.title ILIKE '%' || @q::text || '%' THEN 'title'
+           ELSE 'description'
+       END::text AS matched_in
 FROM demos d
 WHERE d.published_revision_id IS NOT NULL
   AND d.lifecycle_state = 'published'
@@ -25,10 +38,17 @@ WHERE d.published_revision_id IS NOT NULL
       SELECT 1 FROM demo_channels c
       WHERE c.demo_id = d.id AND c.visibility = 'listed'
   )
+  AND (
+      @q::text = ''
+      OR d.title ILIKE '%' || @q::text || '%'
+      OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%'
+  )
 ORDER BY d.created_at DESC, d.id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountPublishedDemos :one
+-- 与 ListPublishedDemos 的 WHERE 必须逐字一致（含 q 的两个分支），
+-- 否则「共 N 个作品」与列表条数会对不上，分页也会算错页数。
 SELECT count(*)
 FROM demos d
 WHERE d.published_revision_id IS NOT NULL
@@ -38,6 +58,11 @@ WHERE d.published_revision_id IS NOT NULL
   AND EXISTS (
       SELECT 1 FROM demo_channels c
       WHERE c.demo_id = d.id AND c.visibility = 'listed'
+  )
+  AND (
+      @q::text = ''
+      OR d.title ILIKE '%' || @q::text || '%'
+      OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%'
   );
 
 -- name: GetDemoBySlug :one

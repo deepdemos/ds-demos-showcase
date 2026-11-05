@@ -35,6 +35,7 @@ export * from './demoList';
 export * from './demoRevision';
 export * from './demoRevisionSource';
 export * from './demoSummary';
+export * from './demoSummaryMatchedIn';
 export * from './emailCodeRequest';
 export * from './error';
 export * from './errorCode';

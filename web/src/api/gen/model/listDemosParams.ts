@@ -28,7 +28,9 @@ import type { ListDemosSort } from './listDemosSort';
 
 export type ListDemosParams = {
   /**
-   * 关键词，匹配标题与描述
+   * 关键词，匹配标题或简介（子串匹配，不区分大小写）。
+   *
+   * 空串与全空格等同没传；超过 100 个字返回 400，不静默截断。
    * @maxLength 100
    */
   q?: string;

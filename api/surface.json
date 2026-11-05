@@ -57,6 +57,10 @@
         "type": "LifecycleState",
         "optional": false
       },
+      "matchedIn": {
+        "type": "DemoDetailMatchedIn",
+        "optional": false
+      },
       "slug": {
         "type": "string",
         "optional": false
@@ -177,6 +181,10 @@
       },
       "lifecycleState": {
         "type": "LifecycleState",
+        "optional": false
+      },
+      "matchedIn": {
+        "type": "DemoSummaryMatchedIn",
         "optional": false
       },
       "slug": {
@@ -497,10 +505,18 @@
       "pending",
       "suspended"
     ],
+    "DemoDetailMatchedIn": [
+      "description",
+      "title"
+    ],
     "DemoRevisionSource": [
       "rollback",
       "upload",
       "url_import"
+    ],
+    "DemoSummaryMatchedIn": [
+      "description",
+      "title"
     ],
     "ErrorCode": [
       "conflict",

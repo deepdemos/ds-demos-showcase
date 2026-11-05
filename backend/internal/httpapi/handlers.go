@@ -34,6 +34,8 @@ const (
 	registerTimeout = 15 * time.Second
 
 	// 分页口径与治理域 §P5 一致：默认 50，上限 200。
+	// maxSearchLen 与契约里 q 的 maxLength 保持一致。
+	maxSearchLen    = 100
 	defaultPageSize = 50
 	maxPageSize     = 200
 )
@@ -137,14 +139,24 @@ func (h *Handler) ListDemos(w http.ResponseWriter, r *http.Request, params api.L
 		writeError(w, http.StatusBadRequest, api.InvalidParam, "分页参数超出允许范围")
 		return
 	}
-	// q 与 sort 目前只有一个合法值，暂时不参与过滤：
-	// q 需要全文检索（pg_trgm 已装，但检索口径没定），sort 只有 latest。
-	// 这里不假装支持——传了也只按默认行为返回，等口径定了再实现。
+	// 关键词：空与全空格等同没传（用户清空搜索框时不该得到 400）；
+	// 超过契约声明的 100 字报 400，而不是静默截断——静默截断会让用户
+	// 以为搜的是全部，搜不到时还会怀疑「明明有这几个字」。
+	q := strings.TrimSpace("")
+	if params.Q != nil {
+		q = strings.TrimSpace(*params.Q)
+	}
+	if len([]rune(q)) > maxSearchLen {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "搜索词太长，最多 100 个字")
+		return
+	}
+	// sort 目前只有 latest 一个合法值，传别的也按 latest 处理：契约里是枚举，
+	// 生成物已经替我们挡掉了非法值，这里不需要再判。
 
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 
-	total, err := h.queries.CountPublishedDemos(ctx)
+	total, err := h.queries.CountPublishedDemos(ctx, q)
 	if err != nil {
 		unavailable(w, err)
 		return
@@ -153,6 +165,7 @@ func (h *Handler) ListDemos(w http.ResponseWriter, r *http.Request, params api.L
 	rows, err := h.queries.ListPublishedDemos(ctx, store.ListPublishedDemosParams{
 		Limit:  int32(pageSize),
 		Offset: int32((page - 1) * pageSize),
+		Q:      q,
 	})
 	if err != nil {
 		unavailable(w, err)
@@ -220,6 +233,8 @@ func summaryOf(row store.ListPublishedDemosRow) api.DemoSummary {
 		CoverUrl:       textPtr(row.CoverUrl),
 		CreatedAt:      row.CreatedAt.Time,
 		LifecycleState: api.LifecycleStatePublished,
+		// 只在有搜索词时有意义；没搜索词时 SQL 给的也是 title（见 demos.sql 的注释）。
+		MatchedIn: api.DemoSummaryMatchedIn(row.MatchedIn),
 	}
 }
 
