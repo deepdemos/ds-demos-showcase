@@ -9,4 +9,5 @@ export { Input, type InputProps } from './input';
 export { Pagination, type PaginationProps } from './pagination';
 export { Select, type SelectOption, type SelectProps } from './select';
 export { Skeleton, type SkeletonProps } from './skeleton';
+export { Textarea, type TextareaProps } from './textarea';
 export { ThemeToggle, type Theme, type ThemeToggleProps } from './theme-toggle';
