@@ -73,7 +73,7 @@ type PublishResult struct {
 }
 
 // Publish 把作品推到 published 并落渠道行。
-func (s *Service) Publish(ctx context.Context, actor ReviewActor, in PublishInput) (PublishResult, error) {
+func (s *Service) Publish(ctx context.Context, actor Actor, in PublishInput) (PublishResult, error) {
 	var out PublishResult
 
 	if in.Channel == "" {

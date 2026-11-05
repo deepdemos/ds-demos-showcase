@@ -15,7 +15,7 @@ func approvedOne(t *testing.T, s *Service, pool *pgxpool.Pool, tag string) strin
 	author := mkAuthor(t, pool, tag)
 	accountID, userID := mkReviewer(t, pool, tag+"-rev")
 	slug := submitOne(t, s, author, tag)
-	if _, err := s.Review(context.Background(), ReviewActor{
+	if _, err := s.Review(context.Background(), Actor{
 		AccountID: accountID, UserID: userID, Role: "moderator",
 	}, ReviewInput{Slug: slug, Approve: true, Reason: "内容正常"}); err != nil {
 		t.Fatalf("裁决失败: %v", err)
@@ -23,14 +23,14 @@ func approvedOne(t *testing.T, s *Service, pool *pgxpool.Pool, tag string) strin
 	return slug
 }
 
-func publisher(t *testing.T, pool *pgxpool.Pool, tag string) ReviewActor {
+func publisher(t *testing.T, pool *pgxpool.Pool, tag string) Actor {
 	t.Helper()
 	accountID, userID := mkReviewer(t, pool, tag+"-pub")
 	if _, err := pool.Exec(context.Background(),
 		`UPDATE accounts SET role = 'admin' WHERE id = $1`, accountID); err != nil {
 		t.Fatalf("提权失败: %v", err)
 	}
-	return ReviewActor{AccountID: accountID, UserID: userID, Role: "admin"}
+	return Actor{AccountID: accountID, UserID: userID, Role: "admin"}
 }
 
 func TestIntegrationPublishHappyPath(t *testing.T) {

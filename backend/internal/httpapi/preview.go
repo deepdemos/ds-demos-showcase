@@ -163,9 +163,13 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 没指定版本时按「谁在看」选：作者与审核员看当前版本（含未过审的改动），
 	// 其他人看对外版本。**顺序不能反**——先判作者再判对外，
 	// 否则作者改完稿打开自己的作品看到的还是旧版。
-	authorView := p.mayPreviewDraft(ctx, r, row.AuthorSub)
+	//
+	// 变量叫 privilegedView 而不是 privilegedView：mayPreviewDraft 对**作者与持
+	// demo.review 的审核员**都返回 true。按作者命名会让下面那句
+	// `if rev > 0 && !privilegedView` 读起来像「审核员被挡」，实际不是。
+	privilegedView := p.mayPreviewDraft(ctx, r, row.AuthorSub)
 	if rev == 0 {
-		if authorView && row.CurrentRevNo > 0 {
+		if privilegedView && row.CurrentRevNo > 0 {
 			rev = int(row.CurrentRevNo)
 		} else {
 			rev = int(row.PublishedRevNo)
@@ -178,10 +182,10 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 明确指定版本号时，非作者**只能看对外版本**。
 	//
 	// 不加这道判定的话，作者改稿期间任何人都能拿 `/preview/{slug}/v{当前版本}/`
-	// 看到还没过审的内容——上面那个 `authorView` 只决定「rev==0 时选哪一版」，
+	// 看到还没过审的内容——上面那个 `privilegedView` 只决定「rev==0 时选哪一版」，
 	// 而路径里的版本号是调用方自己填的。作者的「预览新版」按钮走的正是显式版本，
 	// 所以不能一刀切禁掉，只能对非作者收紧。
-	if rev > 0 && !authorView && int32(rev) != row.PublishedRevNo {
+	if rev > 0 && !privilegedView && int32(rev) != row.PublishedRevNo {
 		http.NotFound(w, r)
 		return
 	}

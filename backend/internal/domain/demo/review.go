@@ -38,11 +38,14 @@ var (
 	ErrNotPending = errors.New("demo: 作品不处于待审状态")
 )
 
-// ReviewActor 是「谁在裁决」。两处留痕的主键不同，所以两个都要：
+// Actor 是「谁在操作」。两处留痕的主键不同，所以两个都要：
 // audit_log.actor_id 指 accounts.id，demo_timeline.actor_id 指 users.id。
 //
 // 只由传输层从会话构造，不接受请求体自报——否则审计可以伪造（治理域 §5.2）。
-type ReviewActor struct {
+//
+// 它原来叫 ReviewActor，只服务审核裁决；生命周期的四个动作也要写审计之后，
+// 这个名字就成了错的（下架不是「裁决」），所以按用途改成 Actor。
+type Actor struct {
 	AccountID int64
 	UserID    int64
 	Role      string
@@ -62,7 +65,7 @@ type ReviewResult struct {
 }
 
 // Review 把作品从 pending 推到 approved / rejected，并写两处留痕。
-func (s *Service) Review(ctx context.Context, actor ReviewActor, in ReviewInput) (ReviewResult, error) {
+func (s *Service) Review(ctx context.Context, actor Actor, in ReviewInput) (ReviewResult, error) {
 	if len(in.Reason) > reviewReasonMax {
 		return ReviewResult{}, fmt.Errorf("%w: 说明最多 %d 个字符", ErrInvalidInput, reviewReasonMax)
 	}

@@ -80,6 +80,23 @@ func mkAuthor(t *testing.T, pool *pgxpool.Pool, tag string) int64 {
 	return userID
 }
 
+// actorOf 把 users.id 补成完整的 Actor。
+//
+// 审计要 accounts.id、时间线要 users.id，而 mkAuthor 建的是同一 sub 的两行，
+// 所以按 sub 就能把两套主键对上——不需要让每个测试自己记两个 id。
+func actorOf(t *testing.T, pool *pgxpool.Pool, userID int64) Actor {
+	t.Helper()
+	var accountID int64
+	var role string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT a.id, a.role FROM accounts a JOIN users u ON u.sub = a.sub WHERE u.id = $1`,
+		userID,
+	).Scan(&accountID, &role); err != nil {
+		t.Fatalf("查作者账号失败: %v", err)
+	}
+	return Actor{AccountID: accountID, UserID: userID, Role: role}
+}
+
 // buildZip 造一个最小可用的作品包。
 func buildZip(t *testing.T, files map[string]string) string {
 	t.Helper()
@@ -303,7 +320,7 @@ func fileSize(t *testing.T, path string) int64 {
 }
 
 // mkReviewer 建一个审核员：accounts（role=moderator）+ 对应的 users 投影行。
-// 返回 ReviewActor 需要的两个 id——audit_log 记 accounts.id，demo_timeline 记 users.id。
+// 返回 Actor 需要的两个 id——audit_log 记 accounts.id，demo_timeline 记 users.id。
 func mkReviewer(t *testing.T, pool *pgxpool.Pool, tag string) (int64, int64) {
 	t.Helper()
 	sub := fmt.Sprintf("it-mod-%s", tag)
@@ -354,7 +371,7 @@ func TestIntegrationReviewApproveWritesBothTraces(t *testing.T) {
 	accountID, userID := mkReviewer(t, pool, "a")
 	slug := submitOne(t, s, author, "a")
 
-	got, err := s.Review(context.Background(), ReviewActor{
+	got, err := s.Review(context.Background(), Actor{
 		AccountID: accountID, UserID: userID, Role: "moderator",
 	}, ReviewInput{Slug: slug, Approve: true, Reason: "内容正常"})
 	if err != nil {
@@ -419,7 +436,7 @@ func TestIntegrationReviewRejectKeepsPublishedRevision(t *testing.T) {
 	slug := submitOne(t, s, author, "keep")
 
 	// 先过一次审，拿到对外版本。
-	if _, err := s.Review(context.Background(), ReviewActor{
+	if _, err := s.Review(context.Background(), Actor{
 		AccountID: accountID, UserID: userID, Role: "moderator",
 	}, ReviewInput{Slug: slug, Approve: true, Reason: "初版通过"}); err != nil {
 		t.Fatalf("首次通过失败: %v", err)
@@ -445,7 +462,7 @@ func TestIntegrationReviewRejectKeepsPublishedRevision(t *testing.T) {
 	}
 
 	// 驳回第二版：对外版本必须仍是第一版。
-	if _, err := s.Review(context.Background(), ReviewActor{
+	if _, err := s.Review(context.Background(), Actor{
 		AccountID: accountID, UserID: userID, Role: "moderator",
 	}, ReviewInput{Slug: slug, Approve: false, Reason: "第二版不行"}); err != nil {
 		t.Fatalf("驳回失败: %v", err)
@@ -467,7 +484,7 @@ func TestIntegrationReviewReject(t *testing.T) {
 	accountID, userID := mkReviewer(t, pool, "r")
 	slug := submitOne(t, s, author, "r")
 
-	got, err := s.Review(context.Background(), ReviewActor{
+	got, err := s.Review(context.Background(), Actor{
 		AccountID: accountID, UserID: userID, Role: "moderator",
 	}, ReviewInput{Slug: slug, Approve: false, Reason: "缺少说明"})
 	if err != nil {
@@ -485,7 +502,7 @@ func TestIntegrationReviewNotPending(t *testing.T) {
 	accountID, userID := mkReviewer(t, pool, "n")
 	slug := submitOne(t, s, author, "n")
 
-	actor := ReviewActor{AccountID: accountID, UserID: userID, Role: "moderator"}
+	actor := Actor{AccountID: accountID, UserID: userID, Role: "moderator"}
 	if _, err := s.Review(context.Background(), actor, ReviewInput{Slug: slug, Approve: true}); err != nil {
 		t.Fatalf("首次裁决应成功: %v", err)
 	}
@@ -500,7 +517,7 @@ func TestIntegrationReviewNotFound(t *testing.T) {
 	s := testService(t, pool)
 	accountID, userID := mkReviewer(t, pool, "x")
 
-	_, err := s.Review(context.Background(), ReviewActor{
+	_, err := s.Review(context.Background(), Actor{
 		AccountID: accountID, UserID: userID, Role: "moderator",
 	}, ReviewInput{Slug: "does-not-exist", Approve: true})
 	if !errors.Is(err, ErrNotFound) {
@@ -515,7 +532,7 @@ func TestIntegrationReviewReasonTooLong(t *testing.T) {
 	accountID, userID := mkReviewer(t, pool, "l")
 	slug := submitOne(t, s, author, "l")
 
-	_, err := s.Review(context.Background(), ReviewActor{
+	_, err := s.Review(context.Background(), Actor{
 		AccountID: accountID, UserID: userID, Role: "moderator",
 	}, ReviewInput{Slug: slug, Approve: false, Reason: strings.Repeat("字", reviewReasonMax+1)})
 	if !errors.Is(err, ErrInvalidInput) {

@@ -91,7 +91,22 @@ func main() {
 			httpapi.NewPreview(queries, files, identitySvc),
 			httpapi.NewDownload(queries, files),
 		),
+		// 头部读完就该有下文：慢读客户端拿着半截请求不吃不喝，
+		// 一个连接就是一个 goroutine 加一个文件句柄。
 		ReadHeaderTimeout: 5 * time.Second,
+
+		// 读体的上限给 5 分钟而不是 30 秒：`POST /demos` 是 multipart，
+		// 契约允许 200 MiB。30 秒会把「网慢一点的大包投稿」直接掐死，
+		// 而那正是投稿功能存在的意义。头部仍然只有 5 秒。
+		ReadTimeout: 5 * time.Minute,
+
+		// keep-alive 连接的空闲回收。不设的话连接永不释放。
+		IdleTimeout: 120 * time.Second,
+
+		// WriteTimeout 刻意不设：它是「整个响应写完」的上限，
+		// 而 `/download/{slug}` 可以传几百 MB——慢网下几分钟很正常，
+		// 设一个数就等于给下载功能加了个随机的失败点。
+		// 代价是「读响应很慢」的客户端能占住一个连接；已知松点 41 记了这件事。
 	}
 
 	go func() {

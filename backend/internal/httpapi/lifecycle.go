@@ -102,7 +102,8 @@ func (h *Handler) RestoreDemo(w http.ResponseWriter, r *http.Request, slug strin
 
 // lifecycleInput 认人并组装入参。返回 false 表示已经写过响应。
 //
-// 四个端点共用：认人、服务未接线的判定、ActorID 的口径（users.id）只写一次。
+// 四个端点共用：认人、服务未接线的判定、Actor 的口径（users.id 供业务、
+// accounts.id 与角色供审计）只写一次。
 func (h *Handler) lifecycleInput(w http.ResponseWriter, r *http.Request, slug string) (demo.LifecycleInput, bool) {
 	if h.demos == nil || h.identity == nil {
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
@@ -113,5 +114,12 @@ func (h *Handler) lifecycleInput(w http.ResponseWriter, r *http.Request, slug st
 		h.writeIdentityError(w, err)
 		return demo.LifecycleInput{}, false
 	}
-	return demo.LifecycleInput{ActorID: account.UserID, Slug: slug}, true
+	return demo.LifecycleInput{
+		Actor: demo.Actor{
+			AccountID: account.ID,
+			UserID:    account.UserID,
+			Role:      account.Role,
+		},
+		Slug: slug,
+	}, true
 }

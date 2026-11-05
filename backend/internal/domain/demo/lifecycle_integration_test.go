@@ -26,7 +26,7 @@ func TestIntegrationArchiveAndUnarchive(t *testing.T) {
 	setChannelVisibility(t, pool, slug, "listed")
 
 	ctx := context.Background()
-	result, err := s.Archive(ctx, LifecycleInput{ActorID: author, Slug: slug})
+	result, err := s.Archive(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug})
 	if err != nil {
 		t.Fatalf("下架失败: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestIntegrationArchiveAndUnarchive(t *testing.T) {
 		t.Fatalf("下架把渠道改了：%q", got)
 	}
 
-	result, err = s.Unarchive(ctx, LifecycleInput{ActorID: author, Slug: slug})
+	result, err = s.Unarchive(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug})
 	if err != nil {
 		t.Fatalf("重新上架失败: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestIntegrationArchiveRejectsNonAuthor(t *testing.T) {
 	slug := submitForUpdate(t, pool, s, author, "别人的作品")
 	approveAndPublish(t, pool, slug)
 
-	_, err := s.Archive(context.Background(), LifecycleInput{ActorID: other, Slug: slug})
+	_, err := s.Archive(context.Background(), LifecycleInput{Actor: actorOf(t, pool, other), Slug: slug})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("期望 ErrNotFound，实际 %v", err)
 	}
@@ -78,7 +78,7 @@ func TestIntegrationSoftDeleteAndRestore(t *testing.T) {
 
 	ctx := context.Background()
 	before := time.Now()
-	result, err := s.SoftDelete(ctx, LifecycleInput{ActorID: author, Slug: slug, Reason: "写错了"})
+	result, err := s.SoftDelete(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug, Reason: "写错了"})
 	if err != nil {
 		t.Fatalf("删除失败: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestIntegrationSoftDeleteAndRestore(t *testing.T) {
 		t.Fatalf("软删动了可见性层：%q", got)
 	}
 
-	if _, err := s.RestoreDeleted(ctx, LifecycleInput{ActorID: author, Slug: slug}); err != nil {
+	if _, err := s.RestoreDeleted(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug}); err != nil {
 		t.Fatalf("恢复失败: %v", err)
 	}
 	if got := deletedReasonOf(t, pool, slug); got != "" {
@@ -122,7 +122,7 @@ func TestIntegrationRestoreWindowClosed(t *testing.T) {
 	approveAndPublish(t, pool, slug)
 
 	ctx := context.Background()
-	if _, err := s.SoftDelete(ctx, LifecycleInput{ActorID: author, Slug: slug}); err != nil {
+	if _, err := s.SoftDelete(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug}); err != nil {
 		t.Fatalf("删除失败: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
@@ -131,7 +131,7 @@ func TestIntegrationRestoreWindowClosed(t *testing.T) {
 		t.Fatalf("拨窗口失败: %v", err)
 	}
 
-	_, err := s.RestoreDeleted(ctx, LifecycleInput{ActorID: author, Slug: slug})
+	_, err := s.RestoreDeleted(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug})
 	if !errors.Is(err, ErrRestoreWindowClosed) {
 		t.Fatalf("期望 ErrRestoreWindowClosed，实际 %v", err)
 	}
@@ -162,7 +162,7 @@ func TestIntegrationRestoreWindowFollowsSetting(t *testing.T) {
 	})
 
 	before := time.Now()
-	result, err := s.SoftDelete(ctx, LifecycleInput{ActorID: author, Slug: slug})
+	result, err := s.SoftDelete(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug})
 	if err != nil {
 		t.Fatalf("删除失败: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestIntegrationSoftDeleteRejectsRemoved(t *testing.T) {
 		`UPDATE demos SET lifecycle_state = 'removed' WHERE slug = $1`, slug); err != nil {
 		t.Fatalf("造移除态失败: %v", err)
 	}
-	_, err := s.SoftDelete(context.Background(), LifecycleInput{ActorID: author, Slug: slug})
+	_, err := s.SoftDelete(context.Background(), LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug})
 	if !errors.Is(err, ErrNotEditable) {
 		t.Fatalf("期望 ErrNotEditable，实际 %v", err)
 	}
@@ -201,10 +201,10 @@ func TestIntegrationDeleteRejectsTwice(t *testing.T) {
 	approveAndPublish(t, pool, slug)
 
 	ctx := context.Background()
-	if _, err := s.SoftDelete(ctx, LifecycleInput{ActorID: author, Slug: slug}); err != nil {
+	if _, err := s.SoftDelete(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug}); err != nil {
 		t.Fatalf("第一次删除失败: %v", err)
 	}
-	_, err := s.SoftDelete(ctx, LifecycleInput{ActorID: author, Slug: slug})
+	_, err := s.SoftDelete(ctx, LifecycleInput{Actor: actorOf(t, pool, author), Slug: slug})
 	if !errors.Is(err, ErrLifecycleConflict) {
 		t.Fatalf("第二次删除期望 ErrLifecycleConflict，实际 %v", err)
 	}
