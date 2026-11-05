@@ -1141,6 +1141,25 @@ sequenceDiagram
 
 **与论坛外置的衔接（G12）**：Demo 域**不新建** `external_events`（webhook 收件箱 → 论坛外置）与 `external_identities`（身份映射 → 身份域）。`DemoExternalThread` 与标签域 `external_threads` 是**同一张表的两份定义**——G5 已定以标签域为准，Demo 域侧如何收敛见 **B1（待拍板）**。
 
+**落地状态（2026-11-05）——模型声明 / 作者 / 发布时间**
+
+详情页要求的九项里，这三项此前是「有值没人读」或「空表」，现在补上了：
+
+| 项 | 来源 | 谁看得见 |
+|---|---|---|
+| 模型声明 | `demo_revision_models` → `models`（`slug` / `name` / `vendor`） | 访客看**已发布版本**的声明；作者看**当前版本**的声明 |
+| 作者 | `demos.author_id` → `users` → `accounts` → `profiles`（`display_name` 优先，空则 `username`） | 所有人 |
+| 发布时间 | `min(demo_channels.published_at)`，只算 `listed` / `unlisted` 渠道 | 所有人；未发布为 `null` |
+
+三条都是**只读派生**，没有新增写入路径：
+
+1. **目录端点** `GET /api/v1/models` 只返回 `status = 'active'` 的模型，按名字排序。为什么必须有这个端点：投稿表单要让作者挑模型，而模型是主数据——前端写死一份列表，新增一个模型就得发一次前端版本，写死的那份迟早与库里不一致。候选 / 未验证 / 已退役的模型不出现在里面（它们不该被作者当事实声明）。
+2. **声明进版本，不进 demo**：投稿与更新都接收重复的 `modelIds` 表单字段，解析成 id 写进**这一版**的 `demo_revision_models`，与建版本同一个事务（声明写失败 = 这次投稿失败，不允许「作品建好了、声明丢了」）。任何一个 slug 不存在或未启用都回 400 并点出是哪个——**不能静默丢掉**，否则作者以为声明了两个、库里只有一个而他不知道。没有条数上限：多少由主数据与作品事实决定。
+3. **改稿不动线上**：`modelsOf` 按版本读——访客用 `published_revision_id`，作者用 `current_revision_id`。这正是 §3.2.1 版本分离在详情上的体现：作者把模型换掉、作品在审核中，线上仍是旧声明。回滚会 `CopyRevisionModels` 把声明一起带回那一版，否则「回到上一版」会顺手抹掉「这个作品用了哪些模型」。
+4. **墓碑与已删除不披露**：模型声明和标题一样属于内容，`archived` / `removed` 的墓碑页不给；`deleted` 对外本来就是 404。
+
+主数据来源与它的边界：`db/seeds/0002-dev-models.sql` 提供 6 个 DeepSeek 模型（全 `status='active'`、`resolution='exact'`），`cmd/migrate -mode seed` 与 CI 各跑一次。**`models` 是外部目录表，它的权威不在本仓库**——生产正式导入与日常维护还没有工具，见《已知松点》第 44 条。
+
 ## 11. 迁移路线（expand → contract）（= **M12**，建议待确认）
 
 现状与目标差距较大，但**可以分五步，每步独立可发布**。

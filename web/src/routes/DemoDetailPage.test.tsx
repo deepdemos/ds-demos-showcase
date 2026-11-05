@@ -1,7 +1,53 @@
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
-import { expect, test } from 'vitest';
-import { DemoDownload, DemoPreview, tombstoneText } from './DemoDetailPage';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { expect, test, vi } from 'vitest';
+import { getDemo } from '@/api';
+import { DemoDetailPage, DemoDownload, DemoPreview, tombstoneText } from './DemoDetailPage';
+
+vi.mock('@/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api')>();
+  return {
+    ...actual,
+    getDemo: vi.fn(),
+    // 记浏览是 fire-and-forget：不 mock 就会去打真 fetch，落进 catch 里静默失败，
+    // 测试仍是绿的但控制台会有一串噪音。
+    postDemoView: () => Promise.resolve({ status: 204 }),
+  };
+});
+
+const detail = (over: Record<string, unknown> = {}) => ({
+  slug: 'demo-a',
+  title: '钢琴卷帘',
+  description: '把 MIDI 画成瀑布的样子。',
+  coverUrl: null,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  publishedAt: '2026-02-03T00:00:00Z',
+  lifecycleState: 'published',
+  demoType: 'web',
+  downloadable: false,
+  canEdit: false,
+  viewCount: 0,
+  downloadCount: 0,
+  lifecycleActions: { edit: false, archive: false, restore: false, delete: false },
+  author: { username: 'alice', displayName: 'Alice' },
+  models: [],
+  ...over,
+});
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/demos/demo-a']}>
+        <Routes>
+          <Route path="/demos/:slug" element={<DemoDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 
 /**
  * 墓碑文案按「怎么消失的」分三种。标准对象 §ST-2 要求 archived 与 removed 的墓碑内容
@@ -80,4 +126,41 @@ test('下载入口指向该作品的下载路径', () => {
     'href',
     '/download/demo-abc',
   );
+});
+
+/**
+ * 作者、发布时间、模型声明这三项是 DEMO-042 九项里最容易被漏掉的三项——
+ * 它们在库里一直有值，只是没人读出来过。
+ *
+ * 发布时间断言的是「渠道发布时间」而不是 `createdAt`：两个日期故意给成不同的月份，
+ * 取错了断言会红。
+ */
+test('详情显示作者、发布时间与模型声明', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({
+      models: [{ slug: 'deepseek-chat', name: 'DeepSeek Chat', vendor: 'DeepSeek' }],
+    }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  // createdAt 是 1 月、publishedAt 是 2 月：页面必须显示后者。
+  expect(screen.getByText(/发布 2026\/2\/3/)).toBeInTheDocument();
+  expect(screen.getByText(/模型声明：DeepSeek Chat/)).toBeInTheDocument();
+  expect(screen.getByText(/作者自述，未经核验/)).toBeInTheDocument();
+});
+
+/**
+ * 没有声明时不出现「模型声明：」这一行。
+ *
+ * 空数组还渲染的话，页面会出现一行「模型声明：」后面什么都没有——
+ * 读者会以为加载失败。
+ */
+test('没有模型声明时不渲染那一行', async () => {
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  renderPage();
+  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  expect(screen.queryByText(/模型声明：/)).toBeNull();
 });

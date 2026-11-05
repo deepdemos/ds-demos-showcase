@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, FileInput, Input, Select, Textarea } from '@/components/ui';
+import { ModelPicker } from '@/components/model-picker';
 import { submitDemo, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -24,6 +25,7 @@ export function SubmitPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [demoType, setDemoType] = useState('web');
+  const [modelSlugs, setModelSlugs] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -49,6 +51,9 @@ export function SubmitPage() {
         title,
         description: description === '' ? undefined : description,
         demoType,
+        // 不传空数组：契约里 modelIds 可省略，空数组和不传在服务端是同一个语义
+        // （整体替换），但省略能让请求体少一个字段、日志少一行噪音。
+        ...(modelSlugs.length > 0 ? { modelIds: modelSlugs } : {}),
         package: file,
       });
       if (response.status === 201) {
@@ -132,6 +137,8 @@ export function SubmitPage() {
             ariaLabel="作品类型"
           />
         </label>
+
+        <ModelPicker value={modelSlugs} onChange={setModelSlugs} disabled={busy} />
 
         <FileInput
           label="选择作品文件（zip，或单个 html/svg）"

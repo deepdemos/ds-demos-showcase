@@ -139,6 +139,14 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
   await app.open('/submit');
   await screen.getByLabel('标题').fill(title);
   await screen.getByLabel(/简介/).fill('闭环端到端用例创建，跑完可删。');
+
+  // 声明一个模型（DEMO-042 的「模型声明」那一项）。
+  //
+  // 模型目录是主数据，来自 `db/seeds/0002-dev-models.sql`——这条用例因此
+  // **依赖那份种子已灌进库**（CI 里是显式的 psql 步骤）。灌不进去的话这里
+  // 会超时，而不是静默通过：选了模型却没人记录，才是更坏的通过。
+  await screen.getByLabel('DeepSeek Chat（DeepSeek）').click();
+
   await screen.getByLabel(/选择作品文件/).setInputFiles(packagePath);
   await screen.getByRole('button', { name: '提交投稿' }).click();
   await expect(screen.getByRole('heading', { name: '投稿已提交' })).toBeVisible();
@@ -189,6 +197,12 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
   // 用 fetch 直接读响应头而不是真点链接：`<a download>` 的落盘行为没法在
   // 页面上下文里断言，而「响应头对不对」才是我们真正能控制的那部分。
   await screen.getByText(title).click();
+
+  // 模型声明跟着版本走：投稿时声明的那一个，发布后匿名访问者也看得到。
+  // 这一条串起了「表单 → 表单字段 → 版本级声明 → 详情接口 → 页面」整条链，
+  // 是全套里唯一一处真的从界面点出来、再从界面读回去的地方。
+  await expect(screen.getByText(/模型声明：DeepSeek Chat/)).toBeVisible();
+
   const downloadLink = screen.getByRole('link', { name: '下载作品' });
   await expect(downloadLink).toBeVisible();
 

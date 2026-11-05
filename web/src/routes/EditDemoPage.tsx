@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { Button, ErrorState, FileInput, Input, Select, Skeleton, Textarea } from '@/components/ui';
+import { ModelPicker } from '@/components/model-picker';
 import { getDemo, updateDemo, type DemoDetail, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 import { RevisionHistory } from '@/features/demo/revision-history';
@@ -60,6 +61,7 @@ export function EditDemoPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [demoType, setDemoType] = useState('web');
+  const [modelSlugs, setModelSlugs] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -78,6 +80,8 @@ export function EditDemoPage() {
           setTitle(next.demo.title ?? '');
           setDescription(next.demo.description ?? '');
           setDemoType(next.demo.demoType === '' ? 'web' : next.demo.demoType);
+          // 预填当前的声明：编辑表单提交的是「这次声明了哪些」，不预填就等于默认清空。
+          setModelSlugs(next.demo.models.map((m) => m.slug));
         }
       } catch (e) {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : '读取作品失败');
@@ -153,6 +157,9 @@ export function EditDemoPage() {
         description: description === '' ? undefined : description,
         // 不给文件就不传 demoType：服务端只允许「换包时顺带换类型」。
         demoType: file ? demoType : undefined,
+        // 声明是整体替换语义：这里**总是**把当前勾选交上去，不勾就是清空。
+        // 想保留原来的声明，就得让它们继续保持勾选——预填负责这件事。
+        modelIds: modelSlugs,
         package: file ?? undefined,
       });
       if (response.status === 200) {
@@ -233,6 +240,13 @@ export function EditDemoPage() {
             ariaLabel="作品类型"
           />
         </label>
+
+        <ModelPicker
+          value={modelSlugs}
+          onChange={setModelSlugs}
+          disabled={busy}
+          extra={state.kind === 'ok' ? state.demo.models.map((m) => m.slug) : []}
+        />
 
         <FileInput
           label="选择新版本文件（不选就只改文字）"

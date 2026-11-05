@@ -126,7 +126,17 @@ export function DemoDetailPage() {
             {data.demo.title}
           </h1>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            发布 {new Date(data.demo.createdAt).toLocaleDateString('zh-CN')}
+            作者 {data.demo.author.displayName || data.demo.author.username}
+          </p>
+          {/*
+            发布时间取渠道最早的那一次（publishedAt），不是 demos.created_at：
+            「什么时候投的稿」和「什么时候对外能看」是两件事，读者关心后者。
+            未发布的作品 publishedAt 为 null，退回 created_at——这种情况下页面
+            本来也不对访客开放，只有作者看得到。
+          */}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            发布{' '}
+            {new Date(data.demo.publishedAt ?? data.demo.createdAt).toLocaleDateString('zh-CN')}
             {data.demo.updatedAt !== data.demo.createdAt &&
               ` · 更新 ${new Date(data.demo.updatedAt).toLocaleDateString('zh-CN')}`}
           </p>
@@ -161,6 +171,17 @@ export function DemoDetailPage() {
           <p className="mt-4 whitespace-pre-line text-base leading-7 text-gray-700 dark:text-gray-300">
             {data.demo.description ?? '作者没有填写简介。'}
           </p>
+
+          {/* 模型声明是作者自述，不是平台核验过的结论——文案里说清楚，
+              否则读者会把它当成「这个作品确实跑在这些模型上」的保证。 */}
+          {data.demo.models.length > 0 ? (
+            <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+              模型声明：{data.demo.models.map((m) => m.name).join('、')}
+              <span className="ml-2 text-xs text-gray-500 dark:text-gray-500">
+                （作者自述，未经核验）
+              </span>
+            </p>
+          ) : null}
 
           <LifecycleBar slug={slug} demo={data.demo} />
 
