@@ -199,8 +199,15 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Error("download: 写响应失败", "slug", slug, "err", err)
 			return
 		}
-		// 分段下载不计数：一次「下载」是拿到完整文件，续传的每一段都算的话，
-		// 一个断过三次的包会被记成四次。
+		// 只有覆盖到文件末尾的那一段才算一次下载。
+		//
+		// 三个错法都试过：每段都记 → 断过三次的包记成四次；一段都不记（上一版）→
+		// 一次完整续传记成零次，而大包几乎必然走续传，于是「越大的包下载数越低」；
+		// 按 Content-Length 反推 → 不知道总长时做不到。判据取「这一段是否到了 EOF」：
+		// 完整取回才记，半路放弃不记，正常客户端也不重复。
+		if span.end == size-1 {
+			d.countDownload(r, slug, row.ID)
+		}
 		return
 	}
 
@@ -214,18 +221,23 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 计数放在字节真正写完之后：半路断掉的传输不该算一次下载。
-	//
-	// **必须换一个 context**：上面那个 ctx 是给「查库 + 打开文件」用的 30 秒预算，
-	// 而它从进函数起就在走表——传一个 300 MB 的包要几分钟，等 io.Copy 回来它早过期了，
-	// 于是每一次慢下载都会在「最后一步」失败，计数器永远停在原地。
-	// 客户端断开时 r.Context() 会被取消，但「文件已经传完」这件事仍然成立，
-	// 所以这里用 WithoutCancel 接着 r.Context() 的取消语义之外的部分。
-	countCtx, cancelCount := context.WithTimeout(context.WithoutCancel(r.Context()), countTimeout)
-	defer cancelCount()
+	d.countDownload(r, slug, row.ID)
+}
 
-	// 失败只记日志——用户已经拿到文件了，不该因为计数失败给他一个错误页。
-	if err := d.queries.BumpDownloadCount(countCtx, row.ID); err != nil {
+// countDownload 记一次成功的下载：只在字节已经完整写出去之后调用
+// （整份 200、或者覆盖到 EOF 的 206）。
+//
+// **必须换一个 context**：上面那个 ctx 是给「查库 + 打开文件」用的 30 秒预算，
+// 而它从进函数起就在走表——传一个 300 MB 的包要几分钟，等 io.Copy 回来它早过期了，
+// 于是每一次慢下载都会在「最后一步」失败，计数器永远停在原地。
+// 客户端断开时 r.Context() 会被取消，但「文件已经传完」这件事仍然成立，
+// 所以这里用 WithoutCancel 接着 r.Context() 的取消语义之外的部分。
+//
+// 失败只记日志——用户已经拿到文件了，不该因为计数失败给他一个错误页。
+func (d *Download) countDownload(r *http.Request, slug string, demoID int64) {
+	countCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), countTimeout)
+	defer cancel()
+	if err := d.queries.BumpDownloadCount(countCtx, demoID); err != nil {
 		slog.Error("download: 计数失败", "slug", slug, "err", err)
 	}
 }

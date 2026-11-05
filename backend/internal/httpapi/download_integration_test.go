@@ -268,6 +268,69 @@ func TestIntegrationRangeRequestDoesNotCount(t *testing.T) {
 	}
 }
 
+// TestIntegrationDownloadCountsOnlyCompletedTransfers 计数只在「这一次真的把文件取全」时 +1。
+//
+// 三种走法各钉一条：
+//
+//	整份 200        -> +1
+//	半路的分段 206  -> 不 +1（只取了几KB，不该算一次下载）
+//	到 EOF 的分段 206 -> +1（浏览器续传的最后一段，文件确实拿全了）
+//
+// 上一版是「所有 206 都不计数」，于是**一次完整续传等于零次**——而大包几乎必然续传，
+// 越大的包下载数越低，统计出来的正好是反的。
+func TestIntegrationDownloadCountsOnlyCompletedTransfers(t *testing.T) {
+	pool := integrationPool(t)
+	dir := t.TempDir()
+	seedDownloadWorld(t, pool, dir)
+	handler := newDownload(t, pool, dir)
+
+	countOf := func() int64 {
+		t.Helper()
+		var downloads int64
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COALESCE(download_count, 0) FROM demo_stats s
+			   JOIN demos d ON d.id = s.demo_id WHERE d.slug = 'dl-zip'`).Scan(&downloads); err != nil {
+			t.Fatalf("读下载数失败: %v", err)
+		}
+		return downloads
+	}
+
+	rangeOf := func(header string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/download/dl-zip", nil)
+		req.Header.Set("Range", header)
+		rec := httptest.NewRecorder()
+		NewRouter(&stub{}, nil, handler).ServeHTTP(rec, req)
+		if rec.Code != http.StatusPartialContent {
+			t.Fatalf("Range %s 期望 206，实际 %d", header, rec.Code)
+		}
+		return rec
+	}
+
+	// 整份下载：+1。
+	if response := doDownload(t, handler, "dl-zip"); response.Code != http.StatusOK {
+		t.Fatalf("整份下载期望 200，实际 %d", response.Code)
+	}
+	if got := countOf(); got != 1 {
+		t.Fatalf("整份下载后 download_count = %d，想要 1", got)
+	}
+
+	// 半路分段（0-3，文件是 20 字节）：不 +1。
+	rangeOf("bytes=0-3")
+	if got := countOf(); got != 1 {
+		t.Fatalf("半路分段不该计数，实际 download_count = %d", got)
+	}
+
+	// 到 EOF 的分段（10-，最后一段）：+1。
+	tail := rangeOf("bytes=10-")
+	if got := tail.Body.Len(); got != 10 {
+		t.Fatalf("尾段字节数 = %d，想要 10", got)
+	}
+	if got := countOf(); got != 2 {
+		t.Fatalf("尾段下载后 download_count = %d，想要 2", got)
+	}
+}
+
 // TestIntegrationDownloadMissingFile 覆盖「行说要给、盘上没有」：
 // DEMO-040 要求明确失败，而不是回一个空文件。
 func TestIntegrationDownloadMissingFile(t *testing.T) {
