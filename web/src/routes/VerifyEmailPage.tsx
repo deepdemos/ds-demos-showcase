@@ -127,14 +127,14 @@ export function VerifyEmailPage() {
       </form>
 
       <div className="mt-4 flex items-center justify-between text-sm">
-        <button
+        <Button
           type="button"
-          className="text-blue-600 disabled:text-gray-400 dark:text-blue-400"
+          inline
           onClick={() => void onResend()}
           disabled={resending || email === ''}
         >
           {resending ? '发送中…' : '重新发送验证码'}
-        </button>
+        </Button>
         <Link to="/login" className="text-gray-500 dark:text-gray-400">
           去登录
         </Link>

@@ -71,6 +71,26 @@ test('两次密码不一致时本地就挡住，不发请求', async () => {
   expect(reset).not.toHaveBeenCalled();
 });
 
+test('密码太短时本地就挡住，不发请求', async () => {
+  resetCode.mockResolvedValueOnce({ status: 204, data: undefined });
+  renderPage();
+
+  fill(/邮箱/, 'someone@example.com');
+  screen.getByRole('button', { name: '获取验证码' }).click();
+  await waitFor(() => expect(screen.getByLabelText(/验证码/)).toBeTruthy());
+
+  // 同上一条：原生 required 会先挡住空验证码，先填上才测得到长度守卫。
+  fill(/验证码/, '123456');
+  fill(/^新密码/, 'short');
+  fill(/再输一次/, 'short');
+  screen.getByRole('button', { name: '重设密码' }).click();
+
+  await waitFor(() => {
+    expect(screen.getByRole('alert').textContent).toContain('密码至少 10 位');
+  });
+  expect(reset).not.toHaveBeenCalled();
+});
+
 test('重设被拒时显示后端原话', async () => {
   resetCode.mockResolvedValueOnce({ status: 204, data: undefined });
   reset.mockResolvedValueOnce({

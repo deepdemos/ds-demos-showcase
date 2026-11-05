@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { PublishCard } from '@/features/admin/publish-card';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -236,8 +237,8 @@ function ReviewCard({
 
       <label className="mt-3 block text-sm">
         <span className="text-neutral-500 dark:text-neutral-400">说明（可选，驳回时建议写）</span>
-        <textarea
-          className="mt-1 w-full rounded border border-neutral-300 bg-transparent p-2 text-sm dark:border-neutral-700"
+        <Textarea
+          className="mt-1"
           rows={2}
           maxLength={REASON_MAX}
           value={reason}

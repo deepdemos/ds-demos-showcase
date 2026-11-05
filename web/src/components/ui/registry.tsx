@@ -29,6 +29,7 @@ import {
 } from './select.demo';
 import { SkeletonDefaultDemo, SkeletonCardDemo } from './skeleton.demo';
 import { ThemeToggleDemo } from './theme-toggle.demo';
+import { TextareaDefaultDemo, TextareaDisabledDemo, TextareaErrorDemo } from './textarea.demo';
 
 export const controlCategories = [
   { id: 'action', name: '操作' },
@@ -116,6 +117,33 @@ export const controls: ControlSpec[] = [
     category: 'input',
     description: '不可编辑状态。',
     Demo: InputDisabledDemo,
+  },
+
+  {
+    id: 'textarea/default',
+    component: 'Textarea',
+    name: '多行文本输入',
+    category: 'input',
+    description: '作品简介、审核说明这类可以换行的长文本。',
+    Demo: TextareaDefaultDemo,
+  },
+
+  {
+    id: 'textarea/error',
+    component: 'Textarea',
+    name: '错误态多行输入',
+    category: 'input',
+    description: '校验失败时的错误态：红边框 + aria-invalid + 可被读屏关联的提示。',
+    Demo: TextareaErrorDemo,
+  },
+
+  {
+    id: 'textarea/disabled',
+    component: 'Textarea',
+    name: '禁用的多行输入',
+    category: 'input',
+    description: '不可编辑状态。',
+    Demo: TextareaDisabledDemo,
   },
 
   {

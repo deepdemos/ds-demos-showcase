@@ -2,11 +2,11 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button, Input } from '@/components/ui';
 import { postAuthRegister, type Error as ApiError } from '@/api';
+import { PASSWORD_MIN, passwordLengthError } from '@/lib/password';
 
 // 与后端同口径的最小校验。前端校验只为省一次往返，真正的判定在服务端——
 // 这里放过的值服务端还会再拒一次，所以不必追求完备。
 const USERNAME_RE = /^[A-Za-z0-9_-]{3,20}$/;
-const PASSWORD_MIN = 10;
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -22,8 +22,7 @@ export function RegisterPage() {
     username !== '' && !USERNAME_RE.test(username)
       ? '用户名需 3–20 位，只能用字母、数字、下划线和连字符'
       : undefined;
-  const passwordError =
-    password !== '' && password.length < PASSWORD_MIN ? `密码至少 ${PASSWORD_MIN} 位` : undefined;
+  const passwordError = passwordLengthError(password);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();

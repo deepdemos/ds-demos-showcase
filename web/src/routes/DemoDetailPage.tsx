@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import {
   archiveDemo,
   deleteDemo,
@@ -304,11 +304,6 @@ export function LifecycleBar({ slug, demo }: { slug: string; demo: DemoDetail })
     },
   });
 
-  const buttonClass =
-    'inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800';
-  const dangerClass =
-    'inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950';
-
   const nothingToDo = !actions.archive && !actions.unarchive && !actions.delete && !actions.restore;
   if (nothingToDo && !error) return null;
 
@@ -316,44 +311,24 @@ export function LifecycleBar({ slug, demo }: { slug: string; demo: DemoDetail })
     <section className="mt-4" aria-label="作品管理">
       <div className="flex flex-wrap items-center gap-2">
         {actions.archive ? (
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={run.isPending}
-            onClick={() => run.mutate('archive')}
-          >
+          <Button type="button" disabled={run.isPending} onClick={() => run.mutate('archive')}>
             下架作品
-          </button>
+          </Button>
         ) : null}
         {actions.unarchive ? (
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={run.isPending}
-            onClick={() => run.mutate('unarchive')}
-          >
+          <Button type="button" disabled={run.isPending} onClick={() => run.mutate('unarchive')}>
             重新上架
-          </button>
+          </Button>
         ) : null}
         {actions.restore ? (
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={run.isPending}
-            onClick={() => run.mutate('restore')}
-          >
+          <Button type="button" disabled={run.isPending} onClick={() => run.mutate('restore')}>
             恢复作品
-          </button>
+          </Button>
         ) : null}
         {actions.delete && !confirming ? (
-          <button
-            type="button"
-            className={dangerClass}
-            disabled={run.isPending}
-            onClick={() => setConfirming(true)}
-          >
+          <Button type="button" danger disabled={run.isPending} onClick={() => setConfirming(true)}>
             删除作品
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -363,22 +338,17 @@ export function LifecycleBar({ slug, demo }: { slug: string; demo: DemoDetail })
             删除后这件作品对外立刻不可见。删除前设定的恢复期内可以恢复，过期就再也找不回来了。
           </p>
           <div className="mt-2 flex gap-2">
-            <button
+            <Button
               type="button"
-              className={dangerClass}
+              danger
               disabled={run.isPending}
               onClick={() => run.mutate('delete')}
             >
               {run.isPending ? '删除中…' : '确认删除'}
-            </button>
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={run.isPending}
-              onClick={() => setConfirming(false)}
-            >
+            </Button>
+            <Button type="button" disabled={run.isPending} onClick={() => setConfirming(false)}>
               取消
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

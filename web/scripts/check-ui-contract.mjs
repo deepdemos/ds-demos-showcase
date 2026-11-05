@@ -280,6 +280,36 @@ for (const file of sourceFiles) {
   checkJsx(sf);
 }
 
+// 5) 页面里不许出现原生交互控件。
+//
+// AGENTS 写的是「页面只能从控件库导入控件」，而第 4 条只查「从控件库导入的控件有没有接线」：
+// 原生 `<button>` / `<textarea>` 一个都不导入，于是整条规则对它们完全隐形。三处裸
+// `<textarea>` 与七处裸 `<button>` 就是这么长出来的——门禁全绿，页面里却各有各的边框色。
+//
+// 扫描范围是 `src/routes`（页面层）。控件库自己要用原生元素，它住在 uiRoot 里天然豁免；
+// Dev Room 是演示场，也不该被这条约束。
+const nativeControls = new Set(['button', 'textarea', 'input', 'select']);
+const routesRoot = path.join(srcRoot, 'routes');
+for (const file of sourceFiles) {
+  if (!isInside(file, routesRoot)) continue;
+  // 测试里的合成触发器不是页面控件（例如「用 useNavigate 的按钮」验证 URL 变化后输入框跟随），
+  // 它不出现在用户看到的界面上，套控件库只会让测试依赖一件与它无关的东西。
+  if (/\.test\.(ts|tsx)$/.test(file)) continue;
+  const sf = parse(file);
+  const checkNative = (node) => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tag = node.tagName;
+      if (ts.isIdentifier(tag) && nativeControls.has(tag.text)) {
+        errors.push(
+          `${rel(file)}:${lineOf(sf, node)} 用了原生 <${tag.text}>，请改用控件库里的对应控件（见 AGENTS「控件库」）`,
+        );
+      }
+    }
+    ts.forEachChild(node, checkNative);
+  };
+  checkNative(sf);
+}
+
 if (errors.length > 0) {
   console.error(`ui-contract failed (${errors.length}):`);
   for (const error of errors) console.error(`  - ${error}`);
