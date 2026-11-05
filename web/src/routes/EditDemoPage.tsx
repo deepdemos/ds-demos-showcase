@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
-import { Button, ErrorState, FileInput, Input, Select, Skeleton } from '@/components/ui';
+import { Button, ErrorState, FileInput, Input, Select, Skeleton, Textarea } from '@/components/ui';
 import { getDemo, updateDemo, type DemoDetail, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 import { RevisionHistory } from '@/features/demo/revision-history';
@@ -216,12 +216,11 @@ export function EditDemoPage() {
 
         <label className="flex flex-col gap-1 text-sm">
           简介（可留空）
-          <textarea
+          <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={5000}
             rows={4}
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           />
         </label>
 

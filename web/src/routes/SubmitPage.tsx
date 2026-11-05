@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router';
-import { Button, FileInput, Input, Select } from '@/components/ui';
+import { Button, FileInput, Input, Select, Textarea } from '@/components/ui';
 import { submitDemo, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -115,12 +115,11 @@ export function SubmitPage() {
 
         <label className="flex flex-col gap-1 text-sm">
           简介（可留空）
-          <textarea
+          <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={5000}
             rows={4}
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           />
         </label>
 
