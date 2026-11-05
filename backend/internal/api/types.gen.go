@@ -28,6 +28,13 @@ const (
 	DemoDetailMatchedInTitle       DemoDetailMatchedIn = "title"
 )
 
+// Defines values for DemoDetailModerationState.
+const (
+	DemoDetailModerationStateApproved DemoDetailModerationState = "approved"
+	DemoDetailModerationStatePending  DemoDetailModerationState = "pending"
+	DemoDetailModerationStateRejected DemoDetailModerationState = "rejected"
+)
+
 // Defines values for DemoRevisionSource.
 const (
 	Rollback  DemoRevisionSource = "rollback"
@@ -87,7 +94,7 @@ const (
 
 // Defines values for PublishResultLifecycleState.
 const (
-	Published PublishResultLifecycleState = "published"
+	PublishResultLifecycleStatePublished PublishResultLifecycleState = "published"
 )
 
 // Defines values for PublishResultVisibility.
@@ -220,6 +227,18 @@ type DemoDetail struct {
 	// - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
 	Models []ModelRef `json:"models"`
 
+	// ModerationState 当前版本的审核态。
+	//
+	// - **作者看真实值**：`pending` / `approved` / `rejected`。作者必须能知道
+	//   自己那份稿子是等着、过了还是被退回，否则「投完就失联」。
+	// - **访客恒为 `approved`**：能看到的内容必然是已通过审核的对外版本；
+	//   回一个 `pending` 只会让人以为「这条作品还没审完就上线了」。
+	//
+	// 注意它与 `lifecycleState` 是正交的两件事：审核态说的是**内容过没过**，
+	// 生命周期说的是**这条作品对外是哪种档位**。一件 `published` 的作品在
+	// 复审期间审核态是 `pending`，而对外内容仍在服务——那是版本分离的设计。
+	ModerationState DemoDetailModerationState `json:"moderationState"`
+
 	// PublishedAt 第一次对外发布的时间，取该作品全部对外可见渠道里最早的一次
 	// `demo_channels.published_at`。
 	//
@@ -247,6 +266,18 @@ type DemoDetail struct {
 // 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
 // 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
 type DemoDetailMatchedIn string
+
+// DemoDetailModerationState 当前版本的审核态。
+//
+//   - **作者看真实值**：`pending` / `approved` / `rejected`。作者必须能知道
+//     自己那份稿子是等着、过了还是被退回，否则「投完就失联」。
+//   - **访客恒为 `approved`**：能看到的内容必然是已通过审核的对外版本；
+//     回一个 `pending` 只会让人以为「这条作品还没审完就上线了」。
+//
+// 注意它与 `lifecycleState` 是正交的两件事：审核态说的是**内容过没过**，
+// 生命周期说的是**这条作品对外是哪种档位**。一件 `published` 的作品在
+// 复审期间审核态是 `pending`，而对外内容仍在服务——那是版本分离的设计。
+type DemoDetailModerationState string
 
 // DemoLifecycleActions 当前调用者此刻能对这个作品做哪些生命周期动作。四个布尔全给，
 // 前端不需要再按 `lifecycleState` 自己推——推错的后果是「按钮点了 409」。
@@ -630,6 +661,20 @@ type SubmitDemoMultipartBody struct {
 	// Package 作品文件（zip 或单个 html/svg）
 	Package openapi_types.File `json:"package"`
 	Title   string             `json:"title"`
+}
+
+// SubmitDemoParams defines parameters for SubmitDemo.
+type SubmitDemoParams struct {
+	// IdempotencyKey 调用方自己生成的幂等键（建议 UUID），最长 128 字符，超出回 400。
+	//
+	// 命中已有键时**不新建**、不重新上传、不占用待审配额，直接返回
+	// `200` 与当初那条作品；第一次提交返回 `201`。两者回执形状相同，
+	// 客户端用状态码区分「我创建了它」与「它早就存在」。
+	//
+	// 同一作者用同一个键提交两次不同内容，返回的是**第一次**的结果
+	// （后一次的内容被丢弃）——幂等键的语义是「这件事做过了」，不是
+	// 「这两次的内容一样」。
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
 }
 
 // UpdateDemoMultipartBody defines parameters for UpdateDemo.

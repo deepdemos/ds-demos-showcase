@@ -195,16 +195,17 @@ func (q *Queries) CountPublishedDemos(ctx context.Context, q_ string) (int64, er
 
 const createDemo = `-- name: CreateDemo :one
 
-INSERT INTO demos (slug, title, description, author_id, moderation_state, lifecycle_state)
-VALUES ($1, $2, $3, $4, 'pending', 'draft')
+INSERT INTO demos (slug, title, description, author_id, moderation_state, lifecycle_state, idempotency_key)
+VALUES ($1, $2, $3, $4, 'pending', 'draft', $5)
 RETURNING id, slug, created_at
 `
 
 type CreateDemoParams struct {
-	Slug        string
-	Title       pgtype.Text
-	Description pgtype.Text
-	AuthorID    pgtype.Int8
+	Slug           string
+	Title          pgtype.Text
+	Description    pgtype.Text
+	AuthorID       pgtype.Int8
+	IdempotencyKey pgtype.Text
 }
 
 type CreateDemoRow struct {
@@ -218,12 +219,17 @@ type CreateDemoRow struct {
 // 都是后续端点的事，不在这里提前写。
 // 刚提交的作品一律 moderation_state='pending' + lifecycle_state='draft'：
 // 待审核、且对外不可见。两个状态是**正交**的两件事，不要合并成一个字段。
+//
+// `idempotency_key` 是客户端给的「这次提交的编号」，可以不给（NULL）。
+// 给了就靠 `uq_demos_idempotency_key` 保证同一个作者的同一个 key 只落一行：
+// 脚本传 200 MiB 传到一半断了重传，不该变成两条一模一样的作品。
 func (q *Queries) CreateDemo(ctx context.Context, arg CreateDemoParams) (CreateDemoRow, error) {
 	row := q.db.QueryRow(ctx, createDemo,
 		arg.Slug,
 		arg.Title,
 		arg.Description,
 		arg.AuthorID,
+		arg.IdempotencyKey,
 	)
 	var i CreateDemoRow
 	err := row.Scan(&i.ID, &i.Slug, &i.CreatedAt)
@@ -324,6 +330,49 @@ type EnqueueDemoGcParams struct {
 func (q *Queries) EnqueueDemoGc(ctx context.Context, arg EnqueueDemoGcParams) error {
 	_, err := q.db.Exec(ctx, enqueueDemoGc, arg.ObjectKey, arg.EntityID, arg.PurgeAfter)
 	return err
+}
+
+const findDemoByIdempotencyKey = `-- name: FindDemoByIdempotencyKey :one
+SELECT d.slug,
+       d.moderation_state,
+       d.lifecycle_state,
+       COALESCE(r.rev_no, 1)::int AS rev_no
+FROM demos d
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.author_id = $1 AND d.idempotency_key = $2
+`
+
+type FindDemoByIdempotencyKeyParams struct {
+	AuthorID       pgtype.Int8
+	IdempotencyKey pgtype.Text
+}
+
+type FindDemoByIdempotencyKeyRow struct {
+	Slug            string
+	ModerationState string
+	LifecycleState  string
+	RevNo           int32
+}
+
+// 重放用的查询：同一个作者的同一个 key 已经落过一行，就把**当初那条**的结果还回去。
+//
+// 按 author_id 限定，不是因为 key 会在作者之间撞（key 由客户端生成），
+// 而是因为不限定就等于「任何人报出别人的 key 就能读到别人作品的 slug」——
+// 幂等查询必须自己带权限边界，不能指望调用方记得加。
+//
+// 不看 deleted_at / erased_at：重放要回答的是「这件事我是不是已经做过」，
+// 作品后来被删了也还是做过。真删干净（擦除）之后这一行照样在，
+// 只是 slug 指向的东西对外不存在了——那正是事实。
+func (q *Queries) FindDemoByIdempotencyKey(ctx context.Context, arg FindDemoByIdempotencyKeyParams) (FindDemoByIdempotencyKeyRow, error) {
+	row := q.db.QueryRow(ctx, findDemoByIdempotencyKey, arg.AuthorID, arg.IdempotencyKey)
+	var i FindDemoByIdempotencyKeyRow
+	err := row.Scan(
+		&i.Slug,
+		&i.ModerationState,
+		&i.LifecycleState,
+		&i.RevNo,
+	)
+	return i, err
 }
 
 const getDemoBySlug = `-- name: GetDemoBySlug :one

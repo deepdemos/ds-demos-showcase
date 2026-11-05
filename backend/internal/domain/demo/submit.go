@@ -33,6 +33,21 @@ const submitTimeout = SubmitTimeout
 // 用同一个值——两处各写一个 5 分钟，改一处另一处不会跟着变。
 const SubmitTimeout = 5 * time.Minute
 
+// PendingRetryHint 是「待审配额满了」时给客户端的 Retry-After 值。
+//
+// 它是**建议的复查间隔，不是承诺**：真正的解锁时刻是有人审完你压着的那几条，
+// 这个服务不知道那会是什么时候。给一个数是为了让脚本能退避重试——没有它，
+// 调用方只能两条路：立刻重试（打成循环）或永远放弃。
+//
+// 取 1 小时：审核是人工的，比这更密的轮询没有意义。
+const PendingRetryHint = time.Hour
+
+// maxIdempotencyKeyLen 与 `demos.idempotency_key` 的长度约束一致。
+//
+// 在领域层先挡，是因为越界到库里只会变成一个 23514——那个错误对客户端毫无意义，
+// 而这里可以说清楚「你的幂等键太长了」。
+const maxIdempotencyKeyLen = 128
+
 // Service 是作品域的服务。
 type Service struct {
 	pool  *pgxpool.Pool
@@ -95,6 +110,26 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	if s.maxPackageBytes > 0 && in.PackageSize > s.maxPackageBytes {
 		return out, fmt.Errorf("%w（%d > %d 字节）", ErrPackageTooLarge, in.PackageSize, s.maxPackageBytes)
 	}
+
+	// 幂等键：空串与「没给」是一回事（都表示这次调用不要求幂等）。
+	in.IdempotencyKey = strings.TrimSpace(in.IdempotencyKey)
+	if len([]rune(in.IdempotencyKey)) > maxIdempotencyKeyLen {
+		return out, fmt.Errorf("%w：幂等键最长 %d 个字符", ErrInvalidInput, maxIdempotencyKeyLen)
+	}
+	// 先查重放，且查在解压与配额之前：重放请求不该付出任何一次解压成本，
+	// 也不该因为「待审满了」被拒——它本来就不会新建任何东西。
+	if in.IdempotencyKey != "" {
+		row, err := s.q.FindDemoByIdempotencyKey(ctx, store.FindDemoByIdempotencyKeyParams{
+			AuthorID:       int8(in.AuthorID),
+			IdempotencyKey: text(in.IdempotencyKey),
+		})
+		if err == nil {
+			return replayOf(row), nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return out, fmt.Errorf("demo: 查幂等键失败: %w", err)
+		}
+	}
 	// 配额判在解压之前：解压是全站最贵的一步（最多 500 MiB），
 	// 等解完再拒等于先付出成本再告诉对方不行。
 	if s.maxPending > 0 {
@@ -116,9 +151,14 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	}
 	defer cleanup()
 
-	slug, revID, err := s.createRow(ctx, in, &st)
+	slug, revID, replay, err := s.createRow(ctx, in, &st)
 	if err != nil {
 		return out, err
+	}
+	if replay != nil {
+		// 并发的另一个请求刚刚用同一个 key 落了行：把它那条还回去，
+		// 本次不新建、也不上传。
+		return *replay, nil
 	}
 	out.Slug = slug
 	out.RevisionNo = 1
@@ -236,7 +276,10 @@ func (s *Service) collect(root string, st *staged) error {
 //
 // slug 冲突靠唯一索引 + 重试解决，不「先查再插」：先查后插有 TOCTOU 窗口，
 // 两个并发投稿能同时通过检查。这里把 23505 当成「换一个 slug 再试」的信号。
-func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, int64, error) {
+//
+// 返回值第三项非 nil 表示：幂等键撞上了另一个并发请求刚落下的行，
+// 调用方应当把它直接当成这次提交的结果（200，而不是 201）。
+func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, int64, *SubmitResult, error) {
 	base := slugify(in.Title)
 	// 标题里没有可用 ASCII 时 slugify 返回空（纯中文标题就是这种情况）。
 	// 这时不能用光秃秃的 "demo" 当第一版：第二个纯中文标题投稿会撞上它，
@@ -253,7 +296,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 		if attempt > 0 || needsSuffix {
 			suffix, err := randomSuffix(4)
 			if err != nil {
-				return "", 0, fmt.Errorf("demo: 生成 slug 失败: %w", err)
+				return "", 0, nil, fmt.Errorf("demo: 生成 slug 失败: %w", err)
 			}
 			slug = base + "-" + suffix
 		}
@@ -269,6 +312,10 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 				Title:       text(strings.TrimSpace(in.Title)),
 				Description: text(strings.TrimSpace(in.Description)),
 				AuthorID:    int8(in.AuthorID),
+				// 没给 key 时是 NULL：`uq_demos_idempotency_key` 是部分索引
+				// （WHERE idempotency_key IS NOT NULL），不给 key 的投稿之间
+				// 永远不会互相冲突。
+				IdempotencyKey: nullableText(in.IdempotencyKey),
 			})
 			if err != nil {
 				return err
@@ -306,25 +353,66 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			})
 		})
 		if err == nil {
-			return slug, revID, nil
+			return slug, revID, nil, nil
 		}
 		// 输入问题原样往上抛：模型声明不合格（resolveModelSlugs）也是在这一层
 		// 返回的，若继续往下走会被包成「落库失败: …」，作者会以为是我们这边坏了。
 		if errors.Is(err, ErrInvalidInput) {
-			return "", 0, err
+			return "", 0, nil, err
 		}
 		if isForeignKeyViolation(err) {
 			// 走到这里只可能是 demo_type 不存在（其余外键都由服务端自己填）。
 			// 这是输入问题不是服务端故障，必须回 400 而不是 503。
-			return "", 0, fmt.Errorf("%w: 作品类型不存在", ErrInvalidInput)
+			return "", 0, nil, fmt.Errorf("%w: 作品类型不存在", ErrInvalidInput)
+		}
+		// 幂等键冲突要先于 slug 冲突判定：两者都是 23505，但处理完全相反——
+		// slug 冲突是「换个名字再来一次」，幂等键冲突是「这件事已经做过了，
+		// 换名字再来一次只会造出第二条重复的作品」。
+		if isUniqueViolation(err) && constraintNameOf(err) == "uq_demos_idempotency_key" {
+			row, findErr := s.q.FindDemoByIdempotencyKey(ctx, store.FindDemoByIdempotencyKeyParams{
+				AuthorID:       int8(in.AuthorID),
+				IdempotencyKey: text(in.IdempotencyKey),
+			})
+			if findErr != nil {
+				return "", 0, nil, fmt.Errorf("demo: 幂等键冲突后回查失败: %w", findErr)
+			}
+			out := replayOf(row)
+			return "", 0, &out, nil
 		}
 		if !isUniqueViolation(err) {
-			return "", 0, fmt.Errorf("demo: 落库失败: %w", err)
+			return "", 0, nil, fmt.Errorf("demo: 落库失败: %w", err)
 		}
 		lastErr = err
 		s.log.Warn("slug 冲突，换一个再试", "slug", slug, "attempt", attempt+1)
 	}
-	return "", 0, fmt.Errorf("demo: 无法生成唯一 slug: %w", lastErr)
+	return "", 0, nil, fmt.Errorf("demo: 无法生成唯一 slug: %w", lastErr)
+}
+
+// replayOf 把「查到的已有行」翻译成一次提交的结果。
+//
+// 审核态与生命周期**取当下的值**，不缓存当初回执里的值：重放回答的是
+// 「你那次提交对应的是哪条作品」，而那条作品后来可能已经通过、被驳回、被下架。
+// 给一个过期快照，客户端会以为「还在待审」。
+func replayOf(row store.FindDemoByIdempotencyKeyRow) SubmitResult {
+	return SubmitResult{
+		Slug:            row.Slug,
+		RevisionNo:      int(row.RevNo),
+		ModerationState: row.ModerationState,
+		LifecycleState:  row.LifecycleState,
+		Replayed:        true,
+	}
+}
+
+// constraintNameOf 取出唯一/外键冲突的约束名。
+//
+// 幂等键冲突与 slug 冲突都是 23505，只能靠约束名分辨——不看约束名的话，
+// 重传同一个 key 会被当成「slug 撞了，换个名字再试」，于是造出第二条作品。
+func constraintNameOf(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.ConstraintName
+	}
+	return ""
 }
 
 // upload 把这一版的全部文件写成「内容寻址对象 + 清单行」。
@@ -468,4 +556,14 @@ func text(s string) pgtype.Text {
 
 func int8(v int64) pgtype.Int8 {
 	return pgtype.Int8{Int64: v, Valid: true}
+}
+
+// nullableText 与 text 的区别只在语义上：这里空串**就是 NULL**，
+// 而且调用方明确知道「空的」是一个合法取值（没给幂等键），
+// 不是「内容列的默认空」。
+func nullableText(s string) pgtype.Text {
+	if s == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: s, Valid: true}
 }
