@@ -15,9 +15,13 @@ import { EditDemoPage } from './EditDemoPage';
 const getDemo = vi.fn();
 const updateDemo = vi.fn();
 
+// 编辑页现在嵌了版本历史组件，它会调 listDemoRevisions。
+// 不在这里补一个的话，测试全绿但 vitest 会报两条 unhandled rejection——
+// 「绿了但报错」比红更危险，因为没人会去看。
 vi.mock('@/api', () => ({
   getDemo: (...args: unknown[]) => getDemo(...args),
   updateDemo: (...args: unknown[]) => updateDemo(...args),
+  listDemoRevisions: () => Promise.resolve({ status: 200, data: { items: [] } }),
 }));
 
 // 必须返回**同一个对象**：编辑页的加载 effect 依赖 `me`，每次渲染给新对象
