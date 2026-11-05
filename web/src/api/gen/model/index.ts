@@ -60,5 +60,6 @@ export * from './reviewResultModerationState';
 export * from './submissionResult';
 export * from './submissionResultModerationState';
 export * from './submitDemoBody';
+export * from './updateDemoBody';
 export * from './verifyEmailRequest';
 export * from './verifyEmailResendRequest';

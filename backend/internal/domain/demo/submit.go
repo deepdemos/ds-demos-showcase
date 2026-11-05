@@ -324,16 +324,9 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 // 源包也走这条路：多文件作品的 `source.zip` 在清单里是一行普通文件，
 // 单文件作品的原件就是 `index.html` / `index.svg` 本身，没有额外的包。
 func (s *Service) upload(ctx context.Context, revID int64, st staged) error {
-	entries := make(map[string]string, len(st.files)+1)
-	for _, rel := range st.files {
-		cleaned, err := cleanManifestPath(rel)
-		if err != nil {
-			return err
-		}
-		entries[cleaned] = filepath.Join(st.contentDir, filepath.FromSlash(rel))
-	}
-	if st.sourcePath != "" {
-		entries[manifestSourcePath] = st.sourcePath
+	entries, err := manifestEntries(st)
+	if err != nil {
+		return err
 	}
 	return s.writeManifest(ctx, revID, entries)
 }

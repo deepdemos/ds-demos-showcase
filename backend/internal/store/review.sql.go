@@ -262,16 +262,24 @@ func (q *Queries) ReviewDemo(ctx context.Context, arg ReviewDemoParams) (ReviewD
 }
 
 const setPublishedRevision = `-- name: SetPublishedRevision :exec
-UPDATE demos
-SET published_revision_id = current_revision_id,
-    updated_at             = now()
-WHERE slug = $1
-  AND current_revision_id IS NOT NULL
+UPDATE demos d
+SET published_revision_id = d.current_revision_id,
+    title                 = COALESCE(r.title, d.title),
+    description           = COALESCE(r.description, d.description),
+    updated_at            = now()
+FROM demo_revisions r
+WHERE d.slug = $1
+  AND d.current_revision_id IS NOT NULL
+  AND r.id = d.current_revision_id
 `
 
 // 审核通过时把对外版本切到当前版本（迁移 0014 的版本分离）。
 // 幂等：重复通过不会改到别的版本上（WHERE 里带 slug 而不是 id，是为了让调用方
 // 只用 slug 就能定位；同一事务里刚刚 ReviewDemo 过，行一定存在）。
+// 顺带把 demos.title / description 改成这一版的内容：列表查的是 demos 上的这两列
+// （`ListPublishedDemos` 读 d.title），而版本的标题存在 demo_revisions 上。
+// 不同步的话，「改了标题 → 审过了 → 列表里还是老标题」，而详情页读的是新的。
+// 只在审核通过那一刻同步：pending 期间列表必须继续显示老标题（对外那一版）。
 func (q *Queries) SetPublishedRevision(ctx context.Context, slug string) error {
 	_, err := q.db.Exec(ctx, setPublishedRevision, slug)
 	return err

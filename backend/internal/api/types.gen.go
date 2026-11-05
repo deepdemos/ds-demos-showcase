@@ -110,6 +110,14 @@ type AccountStatus string
 
 // DemoDetail defines model for DemoDetail.
 type DemoDetail struct {
+	// CanEdit 当前调用者能不能编辑这个作品（只有作者本人在非墓碑态下为 `true`）。
+	//
+	// 作者视图与公开视图的差别不止这一列：
+	//
+	// - 作者看得到自己还没过审的稿件（公开视图对 `draft`/`pending`/`rejected` 一律 404）
+	// - 作者看到的 `title` / `description` / `demoType` 是**当前版本**的，
+	//   访客看到的是**对外版本**的——改稿期间两边内容不同是正常的
+	CanEdit   bool      `json:"canEdit"`
 	CoverUrl  *string   `json:"coverUrl"`
 	CreatedAt time.Time `json:"createdAt"`
 
@@ -402,6 +410,17 @@ type SubmitDemoMultipartBody struct {
 	Title   string             `json:"title"`
 }
 
+// UpdateDemoMultipartBody defines parameters for UpdateDemo.
+type UpdateDemoMultipartBody struct {
+	// DemoType 作品类型。**只有同时上传 `package` 时才能改**。
+	DemoType    *string `json:"demoType,omitempty"`
+	Description *string `json:"description,omitempty"`
+
+	// Package 新的作品文件；不传表示只改文字
+	Package *openapi_types.File `json:"package,omitempty"`
+	Title   string              `json:"title"`
+}
+
 // PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
 type PublishDemoJSONRequestBody = PublishRequest
 
@@ -431,3 +450,6 @@ type PostAuthVerifyEmailResendJSONRequestBody = VerifyEmailResendRequest
 
 // SubmitDemoMultipartRequestBody defines body for SubmitDemo for multipart/form-data ContentType.
 type SubmitDemoMultipartRequestBody SubmitDemoMultipartBody
+
+// UpdateDemoMultipartRequestBody defines body for UpdateDemo for multipart/form-data ContentType.
+type UpdateDemoMultipartRequestBody UpdateDemoMultipartBody

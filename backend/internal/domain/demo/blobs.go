@@ -153,6 +153,29 @@ const manifestSourcePath = "source.zip"
 // entries 是「清单路径 → 本地暂存文件」，源包单独传：它的 path 固定，
 // 但本地文件名是暂存的 source.zip。
 func (s *Service) writeManifest(ctx context.Context, revID int64, entries map[string]string) error {
+	files, err := s.uploadBlobs(ctx, entries)
+	if err != nil {
+		return err
+	}
+	return s.writeManifestRows(ctx, s.q, revID, files)
+}
+
+// blobFile 是一条「清单行」在写库之前的样子。
+//
+// 分成「先传字节、再写行」两段是为了让**更新**能用：
+// 更新要知道新版本号才能插清单行，而版本号在事务里由数据库算；
+// 字节先落地（内容寻址，重复写是幂等的），事务里只做几行 INSERT。
+// 代价是事务失败时会留下一批孤儿 blob——那是 GC 的事（松点 33），
+// 比「事务里传 200 MiB」安全得多：长事务会占住连接、阻塞 vacuum。
+type blobFile struct {
+	Path   string
+	SHA256 string
+	Size   int64
+	MIME   string
+}
+
+// uploadBlobs 把暂存文件逐个写成内容寻址对象，返回清单所需的元数据。
+func (s *Service) uploadBlobs(ctx context.Context, entries map[string]string) ([]blobFile, error) {
 	// 路径排序只为日志稳定，不影响结果。
 	paths := make([]string, 0, len(entries))
 	for p := range entries {
@@ -160,23 +183,49 @@ func (s *Service) writeManifest(ctx context.Context, revID int64, entries map[st
 	}
 	sortStrings(paths)
 
+	out := make([]blobFile, 0, len(paths))
 	for _, p := range paths {
-		local := entries[p]
-		b, err := s.storeBlob(ctx, local)
+		b, err := s.storeBlob(ctx, entries[p])
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := s.q.InsertRevisionFile(ctx, store.InsertRevisionFileParams{
+		out = append(out, blobFile{Path: p, SHA256: b.sha256, Size: b.size, MIME: b.mime})
+	}
+	return out, nil
+}
+
+// writeManifestRows 把清单行写进库。q 可以是事务内的 Queries——更新走这条路。
+func (s *Service) writeManifestRows(ctx context.Context, q *store.Queries, revID int64, files []blobFile) error {
+	for _, f := range files {
+		if err := q.InsertRevisionFile(ctx, store.InsertRevisionFileParams{
 			RevisionID: revID,
-			Path:       p,
-			BlobHash:   b.sha256,
-			Size:       b.size,
-			Mime:       b.mime,
+			Path:       f.Path,
+			BlobHash:   f.SHA256,
+			Size:       f.Size,
+			Mime:       f.MIME,
 		}); err != nil {
-			return fmt.Errorf("demo: 写清单失败（%s）: %w", p, err)
+			return fmt.Errorf("demo: 写清单失败（%s）: %w", f.Path, err)
 		}
 	}
 	return nil
+}
+
+// manifestEntries 把暂存结果摊成「路径 → 本地文件」。
+//
+// 投稿与更新共用：两处都得把 contentDir 里的文件与源包拼成同一张表。
+func manifestEntries(st staged) (map[string]string, error) {
+	entries := make(map[string]string, len(st.files)+1)
+	for _, rel := range st.files {
+		cleaned, err := cleanManifestPath(rel)
+		if err != nil {
+			return nil, err
+		}
+		entries[cleaned] = filepath.Join(st.contentDir, filepath.FromSlash(rel))
+	}
+	if st.sourcePath != "" {
+		entries[manifestSourcePath] = st.sourcePath
+	}
+	return entries, nil
 }
 
 // sortStrings 是最朴素的插入排序：这里最多几百个路径，引入 sort 包不值得

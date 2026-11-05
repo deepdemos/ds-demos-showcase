@@ -56,12 +56,23 @@ SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        COALESCE(r.single_file, '')::text AS single_file,
        (d.published_revision_id IS NOT NULL)::bool AS has_published_revision,
        COALESCE(r.rev_no, 0)::int AS published_rev_no,
+       -- 作者视图要用的三列（迁移 0014 之后「当前版本」与「对外版本」是两条时间轴）：
+       -- 作者在自己的详情页里看到的应当是**他刚提交的那一版**，不是对外那一版。
+       -- author_sub 用 COALESCE 取空串：作者注销后 author_id 被 SET NULL，
+       -- 此时作者视图就该消失，而不是让整条详情 500。
+       COALESCE(u.sub, '')::text AS author_sub,
+       COALESCE(cr.title, '')::text AS current_title,
+       COALESCE(cr.description, '')::text AS current_description,
+       COALESCE(cr.demo_type, '')::text AS current_demo_type,
+       COALESCE(cr.rev_no, 0)::int AS current_rev_no,
        EXISTS (
            SELECT 1 FROM demo_channels c
            WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
        )::bool AS has_visible_channel
 FROM demos d
+LEFT JOIN users u ON u.id = d.author_id
 LEFT JOIN demo_revisions r ON r.id = d.published_revision_id
+LEFT JOIN demo_revisions cr ON cr.id = d.current_revision_id
 WHERE d.slug = $1;
 
 -- ===== 投稿写入（Demo 域）=====
@@ -85,6 +96,67 @@ RETURNING id, rev_no;
 
 -- name: SetCurrentRevision :exec
 UPDATE demos SET current_revision_id = $2, updated_at = now() WHERE id = $1;
+
+-- ===== 更新作品（追加版本）=====
+
+-- name: GetDemoForEdit :one
+-- 更新时要把「现在这一版是什么样」一次读全：类型、入口、清单统计。
+-- 只换文字不换文件时，新版本直接继承这几项，不必再读一遍清单。
+SELECT d.id,
+       d.slug,
+       d.author_id,
+       d.lifecycle_state,
+       d.moderation_state,
+       d.deleted_at,
+       d.erased_at,
+       d.published_revision_id IS NOT NULL AS has_published_revision,
+       d.current_revision_id,
+       COALESCE(r.rev_no, 0)::int AS current_rev_no,
+       COALESCE(r.demo_type, '')::text AS demo_type,
+       COALESCE(r.single_file, '')::text AS single_file,
+       COALESCE(r.entry_path, '')::text AS entry_path,
+       COALESCE(r.manifest_hash, '')::text AS manifest_hash,
+       COALESCE(r.file_count, 0)::bigint AS file_count,
+       COALESCE(r.total_bytes, 0)::bigint AS total_bytes
+FROM demos d
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.slug = $1;
+
+-- name: NextRevisionNo :one
+-- 版本号由数据库算，不由应用层「读最大值再加一」：并发的两次更新会读到同一个最大值，
+-- 然后一个撞唯一索引、另一个成功——撞的那个白做了一次上传。
+SELECT (COALESCE(MAX(rev_no), 0) + 1)::int AS rev_no
+FROM demo_revisions
+WHERE demo_id = $1;
+
+-- name: AppendRevision :one
+-- 与 CreateRevision 的差别只有 rev_no：那一版写死 1（新作品的第一版），
+-- 这一版由 NextRevisionNo 给出。source 仍是 'upload'——CHECK 里没有 'edit'，
+-- 而「这是编辑」这件事由 demo_timeline.kind='edit' 记，不靠这一列区分。
+INSERT INTO demo_revisions (
+    demo_id, rev_no, title, description, demo_type,
+    entry_path, single_file, manifest_hash, file_count, total_bytes, source, created_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'upload', $11)
+RETURNING id, rev_no;
+
+-- name: CopyRevisionFiles :exec
+-- 「只改文字不换文件」时把上一版的清单整表复制过去（同一批 blob，零拷贝）。
+-- ON CONFLICT 是防御性的：新版本号不该有行，但复制语义下宁可重复执行无害。
+INSERT INTO demo_revision_files (revision_id, path, blob_hash, size, mime)
+SELECT sqlc.arg(target_revision_id), f.path, f.blob_hash, f.size, f.mime
+FROM demo_revision_files f
+WHERE f.revision_id = sqlc.arg(source_revision_id)
+ON CONFLICT ON CONSTRAINT uq_manifest_path DO NOTHING;
+
+-- name: SetCurrentRevisionForEdit :exec
+-- 追加版本后：当前版本指向新版，审核态回到 pending（复审），**对外版本不动**。
+-- 这是「改稿期间线上作品照常服务」的全部实现——没有它，作者一提交更新，
+-- 自己作品的新内容就绕过审核直接对外了。
+UPDATE demos
+SET current_revision_id = $2,
+    moderation_state    = 'pending',
+    updated_at          = now()
+WHERE id = $1;
 
 -- name: DeleteDemoForCleanup :exec
 -- 仅用于「投稿中途失败」的补偿：这一行是刚刚在同一请求里建的、从未对外可见。

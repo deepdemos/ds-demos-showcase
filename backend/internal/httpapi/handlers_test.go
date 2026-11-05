@@ -174,10 +174,17 @@ func detailRow(state string, title string, deleted, erased bool) store.GetDemoBy
 		HasVisibleChannel:    true,
 		HasPublishedRevision: true,
 		PublishedRevNo:       1,
-		CreatedAt:            ts(now),
-		UpdatedAt:            ts(now),
-		DeletedAt:            pgtype.Timestamptz{Valid: deleted},
-		ErasedAt:             pgtype.Timestamptz{Valid: erased},
+		// 默认按「访客在看」造：没有作者 sub，当前版本与对外版本同源。
+		// 要验作者视图的用例自己把 AuthorSub 填上。
+		AuthorSub:          "",
+		CurrentTitle:       title,
+		CurrentDescription: "desc",
+		CurrentDemoType:    "web",
+		CurrentRevNo:       1,
+		CreatedAt:          ts(now),
+		UpdatedAt:          ts(now),
+		DeletedAt:          pgtype.Timestamptz{Valid: deleted},
+		ErasedAt:           pgtype.Timestamptz{Valid: erased},
 	}
 }
 
@@ -187,7 +194,9 @@ func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorde
 	newTestHandler(nil, store.New(fakeDB{row: fakeRow{values: []any{
 		row.ID, row.Slug, row.Title, row.Description, row.CoverUrl,
 		row.LifecycleState, row.ModerationState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
-		row.DemoType, row.SingleFile, row.HasPublishedRevision, row.PublishedRevNo, row.HasVisibleChannel,
+		row.DemoType, row.SingleFile, row.HasPublishedRevision, row.PublishedRevNo,
+		row.AuthorSub, row.CurrentTitle, row.CurrentDescription, row.CurrentDemoType, row.CurrentRevNo,
+		row.HasVisibleChannel,
 	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
 	return response
 }

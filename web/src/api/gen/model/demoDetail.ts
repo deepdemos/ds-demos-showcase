@@ -39,6 +39,16 @@ export type DemoDetail = DemoSummary & ({
      */
   demoType: string;
   /**
+     * 当前调用者能不能编辑这个作品（只有作者本人在非墓碑态下为 `true`）。
+     *
+     * 作者视图与公开视图的差别不止这一列：
+     *
+     * - 作者看得到自己还没过审的稿件（公开视图对 `draft`/`pending`/`rejected` 一律 404）
+     * - 作者看到的 `title` / `description` / `demoType` 是**当前版本**的，
+     *   访客看到的是**对外版本**的——改稿期间两边内容不同是正常的
+     */
+  canEdit: boolean;
+  /**
      * 这个作品现在能不能下载。
      *
      * `false` 的原因是**作品本身不该有下载**：墓碑态、外链作品（`link` 只给外链

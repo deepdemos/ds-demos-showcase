@@ -157,6 +157,13 @@ func (h *Handler) writeDemoError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnsupportedMediaType, api.InvalidParam, messageOf(err))
 	case errors.Is(err, demo.ErrBadPackage):
 		writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, messageOf(err))
+	case errors.Is(err, demo.ErrNotFound):
+		writeError(w, http.StatusNotFound, api.NotFound, messageOf(err))
+	case errors.Is(err, demo.ErrNotEditable):
+		// 409 而不是 403：作品的归属没问题，是**状态**不允许改。
+		// 「被平台移除后作者不能自行改回」是一条只有管理员能走的边，
+		// 说清是状态问题，作者才知道该去申诉而不是重试。
+		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
 	case errors.Is(err, demo.ErrTooManyPending):
 		// 429 而不是 400：这不是「你写错了」，是「现在不行，等一会儿」。
 		// 契约里 429 已经存在（登录限流用同一个码）。

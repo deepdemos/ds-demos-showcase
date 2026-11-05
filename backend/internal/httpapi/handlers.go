@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -191,7 +192,16 @@ func (h *Handler) GetDemo(w http.ResponseWriter, r *http.Request, slug string) {
 		return
 	}
 
-	detail, ok := detailOf(row)
+	// 作者视图：作者要能看到自己还没过审的稿件，否则「投稿完就再也打不开自己的作品」。
+	// 认人失败一律按访客处理——这里不是鉴权点，不该因为没登录就报错。
+	viewerIsAuthor := false
+	if h.identity != nil && row.AuthorSub != "" {
+		if account, err := h.identity.Me(ctx, readSessionCookie(r)); err == nil && account.Sub == row.AuthorSub {
+			viewerIsAuthor = true
+		}
+	}
+
+	detail, ok := detailOf(row, viewerIsAuthor)
 	if !ok {
 		writeError(w, http.StatusNotFound, api.NotFound, "作品不存在")
 		return
@@ -214,18 +224,25 @@ func summaryOf(row store.ListPublishedDemosRow) api.DemoSummary {
 }
 
 // detailOf 决定「对外可见吗」与「是不是墓碑」，false 表示 404：
-// 已擦除 / 草稿待审驳回 → 404；归档、移除、软删 → 墓碑；published → 完整内容。
-func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
+// 已擦除 / 草稿待审驳回 → 404（**作者本人除外**）；归档、移除、软删 → 墓碑；
+// published → 完整内容。
+//
+// viewerIsAuthor 改变三件事：能不能看到未公开的稿件、看到哪一版的文字、
+// 以及 canEdit。它不改「墓碑」与「渠道可见性」的判定——作者也看不见被移除的内容。
+func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, bool) {
 	state := api.LifecycleState(row.LifecycleState)
 
 	// 已擦除：行还在（逻辑封存），但对外不存在。
 	if row.ErasedAt.Valid {
 		return api.DemoDetail{}, false
 	}
-	// 从未公开过。
+	// 从未公开过。作者本人要看得见——否则他投完稿就再也打不开自己的作品，
+	// 「更新作品」也就无从谈起（更新页要先把当前内容读出来）。
 	switch state {
 	case api.LifecycleStateDraft, api.LifecycleStatePending, api.LifecycleStateRejected:
-		return api.DemoDetail{}, false
+		if !viewerIsAuthor {
+			return api.DemoDetail{}, false
+		}
 	}
 
 	tombstone := row.DeletedAt.Valid || state == api.LifecycleStateArchived || state == api.LifecycleStateRemoved
@@ -236,7 +253,8 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 	// 换成指针判定的理由：审核态从此描述「当前版本」，作者改稿后它是 pending，
 	// 而对外的内容仍是上一版、照常可见。继续判审核态会让作者一提交更新，
 	// 自己的作品就从作品库里消失。
-	if !tombstone && !row.HasPublishedRevision {
+	// 作者能看自己的草稿（它本来就没有对外版本），访客不行。
+	if !tombstone && !row.HasPublishedRevision && !viewerIsAuthor {
 		return api.DemoDetail{}, false
 	}
 	// 渠道对外可见：`hidden` 的作品对外不存在。
@@ -245,7 +263,8 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 	// hidden 之后，知道 slug 的人仍然能读到标题、简介、封面，而 iframe 预览已经 404，
 	// 页面变成「有正文、无内容」的半截状态。三处入口（列表 / 详情 / 预览 / 下载）
 	// 必须同一口径：列表 `listed`（unlisted 不上列表）；其余三处 `listed|unlisted`。
-	if !tombstone && !row.HasVisibleChannel {
+	// 作者能看自己还没上架的作品（刚投稿就属于这种），访客不行。
+	if !tombstone && !row.HasVisibleChannel && !viewerIsAuthor {
 		return api.DemoDetail{}, false
 	}
 
@@ -260,16 +279,46 @@ func detailOf(row store.GetDemoBySlugRow) (api.DemoDetail, bool) {
 		// demoType 留空、downloadable 为 false——墓碑不承载内容，也没有可下载的文件。
 		return detail, true
 	}
-	detail.Title = textPtr(row.Title)
-	detail.Description = textPtr(row.Description)
-	detail.CoverUrl = textPtr(row.CoverUrl)
-	detail.DemoType = row.DemoType
+	// 作者看**当前版本**的文字，访客看**对外版本**的。
+	// 改稿期间这两个本来就不同：作者要看自己刚写的那版，才能接着改；
+	// 访客要看你审过的那版，否则「新版本还在复审」等于攻略给出了未审内容。
+	//
+	// current_* 是 COALESCE 出来的空串——没有当前版本时（异常数据）
+	// 退回 demos 上的列，不要给作者一个空标题。
+	if viewerIsAuthor {
+		detail.Title = preferString(row.CurrentTitle, row.Title)
+		detail.Description = preferString(row.CurrentDescription, row.Description)
+		detail.CoverUrl = textPtr(row.CoverUrl)
+		if row.CurrentDemoType != "" {
+			detail.DemoType = row.CurrentDemoType
+		} else {
+			detail.DemoType = row.DemoType
+		}
+	} else {
+		detail.Title = textPtr(row.Title)
+		detail.Description = textPtr(row.Description)
+		detail.CoverUrl = textPtr(row.CoverUrl)
+		detail.DemoType = row.DemoType
+	}
+	// 作者能不能接着改：作者本人 + 非墓碑 + 没被平台移除。
+	detail.CanEdit = viewerIsAuthor && !tombstone && state != api.LifecycleStateRemoved
 	// downloadable 的口径与 httpapi/download.go 必须一致，否则按钮点了 404：
 	// 有文件可给（不是 link）+ 渠道对外可见（listed 或 unlisted）。
 	// 这里不判存储里文件是否存在——那要多一次 Stat 往返，
 	// 而「文件被外力删掉」属于事故，不该由详情页替它兜底（下载会明确 404）。
 	detail.Downloadable = row.DemoType != "" && row.DemoType != "link" && row.HasVisibleChannel && row.HasPublishedRevision
 	return detail, true
+}
+
+// preferString：有值就用它，空串退回备用值。
+//
+// 单独写一个而不是 `if x != ""`：详情页有四处这类取舍，散着写迟早漏掉一处，
+// 而漏掉的表现是「作者看到空标题」这种不像 bug 的显示问题。
+func preferString(primary string, fallback pgtype.Text) *string {
+	if strings.TrimSpace(primary) != "" {
+		return textPtr(pgtype.Text{String: primary, Valid: true})
+	}
+	return textPtr(fallback)
 }
 
 func textPtr(t pgtype.Text) *string {

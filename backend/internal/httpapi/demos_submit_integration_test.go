@@ -41,13 +41,7 @@ func TestIntegrationSubmitSingleFilePackage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("注册失败: %v", err)
 	}
-	t.Cleanup(func() {
-		ctx := context.Background()
-		// 顺序受外键约束：作品先删，账号后删。
-		_, _ = pool.Exec(ctx, `DELETE FROM demos WHERE author_sub = $1`, acc.Sub)
-		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE sub = $1`, acc.Sub)
-		_, _ = pool.Exec(ctx, `DELETE FROM accounts WHERE sub = $1`, acc.Sub)
-	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, acc.Sub) })
 
 	cases := []struct {
 		name     string

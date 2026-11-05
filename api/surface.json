@@ -1,6 +1,10 @@
 {
   "models": {
     "DemoDetail": {
+      "canEdit": {
+        "type": "bool",
+        "optional": false
+      },
       "coverUrl": {
         "type": "string",
         "optional": true
@@ -335,6 +339,24 @@
         "type": "string",
         "optional": false
       }
+    },
+    "UpdateDemoMultipartBody": {
+      "demoType": {
+        "type": "string",
+        "optional": true
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "package": {
+        "type": "openapi_types.File",
+        "optional": true
+      },
+      "title": {
+        "type": "string",
+        "optional": false
+      }
     }
   },
   "enums": {
@@ -473,6 +495,11 @@
     },
     "GET /api/v1/demos/{slug}": {
       "method": "GetDemo",
+      "pathParams": 1,
+      "params": null
+    },
+    "PUT /api/v1/demos/{slug}": {
+      "method": "UpdateDemo",
       "pathParams": 1,
       "params": null
     },

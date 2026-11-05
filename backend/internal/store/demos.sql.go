@@ -11,6 +11,55 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const appendRevision = `-- name: AppendRevision :one
+INSERT INTO demo_revisions (
+    demo_id, rev_no, title, description, demo_type,
+    entry_path, single_file, manifest_hash, file_count, total_bytes, source, created_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'upload', $11)
+RETURNING id, rev_no
+`
+
+type AppendRevisionParams struct {
+	DemoID       int64
+	RevNo        int32
+	Title        pgtype.Text
+	Description  pgtype.Text
+	DemoType     string
+	EntryPath    pgtype.Text
+	SingleFile   pgtype.Text
+	ManifestHash pgtype.Text
+	FileCount    pgtype.Int8
+	TotalBytes   pgtype.Int8
+	CreatedBy    pgtype.Int8
+}
+
+type AppendRevisionRow struct {
+	ID    int64
+	RevNo int32
+}
+
+// 与 CreateRevision 的差别只有 rev_no：那一版写死 1（新作品的第一版），
+// 这一版由 NextRevisionNo 给出。source 仍是 'upload'——CHECK 里没有 'edit'，
+// 而「这是编辑」这件事由 demo_timeline.kind='edit' 记，不靠这一列区分。
+func (q *Queries) AppendRevision(ctx context.Context, arg AppendRevisionParams) (AppendRevisionRow, error) {
+	row := q.db.QueryRow(ctx, appendRevision,
+		arg.DemoID,
+		arg.RevNo,
+		arg.Title,
+		arg.Description,
+		arg.DemoType,
+		arg.EntryPath,
+		arg.SingleFile,
+		arg.ManifestHash,
+		arg.FileCount,
+		arg.TotalBytes,
+		arg.CreatedBy,
+	)
+	var i AppendRevisionRow
+	err := row.Scan(&i.ID, &i.RevNo)
+	return i, err
+}
+
 const bumpDownloadCount = `-- name: BumpDownloadCount :exec
 INSERT INTO demo_stats (demo_id, download_count)
 VALUES ($1, 1)
@@ -24,6 +73,26 @@ SET download_count = demo_stats.download_count + 1,
 // 而这里要的是「原子 +1」，不是「读改写」。
 func (q *Queries) BumpDownloadCount(ctx context.Context, demoID int64) error {
 	_, err := q.db.Exec(ctx, bumpDownloadCount, demoID)
+	return err
+}
+
+const copyRevisionFiles = `-- name: CopyRevisionFiles :exec
+INSERT INTO demo_revision_files (revision_id, path, blob_hash, size, mime)
+SELECT $1, f.path, f.blob_hash, f.size, f.mime
+FROM demo_revision_files f
+WHERE f.revision_id = $2
+ON CONFLICT ON CONSTRAINT uq_manifest_path DO NOTHING
+`
+
+type CopyRevisionFilesParams struct {
+	TargetRevisionID int64
+	SourceRevisionID int64
+}
+
+// 「只改文字不换文件」时把上一版的清单整表复制过去（同一批 blob，零拷贝）。
+// ON CONFLICT 是防御性的：新版本号不该有行，但复制语义下宁可重复执行无害。
+func (q *Queries) CopyRevisionFiles(ctx context.Context, arg CopyRevisionFilesParams) error {
+	_, err := q.db.Exec(ctx, copyRevisionFiles, arg.TargetRevisionID, arg.SourceRevisionID)
 	return err
 }
 
@@ -175,12 +244,23 @@ SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        COALESCE(r.single_file, '')::text AS single_file,
        (d.published_revision_id IS NOT NULL)::bool AS has_published_revision,
        COALESCE(r.rev_no, 0)::int AS published_rev_no,
+       -- 作者视图要用的三列（迁移 0014 之后「当前版本」与「对外版本」是两条时间轴）：
+       -- 作者在自己的详情页里看到的应当是**他刚提交的那一版**，不是对外那一版。
+       -- author_sub 用 COALESCE 取空串：作者注销后 author_id 被 SET NULL，
+       -- 此时作者视图就该消失，而不是让整条详情 500。
+       COALESCE(u.sub, '')::text AS author_sub,
+       COALESCE(cr.title, '')::text AS current_title,
+       COALESCE(cr.description, '')::text AS current_description,
+       COALESCE(cr.demo_type, '')::text AS current_demo_type,
+       COALESCE(cr.rev_no, 0)::int AS current_rev_no,
        EXISTS (
            SELECT 1 FROM demo_channels c
            WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
        )::bool AS has_visible_channel
 FROM demos d
+LEFT JOIN users u ON u.id = d.author_id
 LEFT JOIN demo_revisions r ON r.id = d.published_revision_id
+LEFT JOIN demo_revisions cr ON cr.id = d.current_revision_id
 WHERE d.slug = $1
 `
 
@@ -200,6 +280,11 @@ type GetDemoBySlugRow struct {
 	SingleFile           string
 	HasPublishedRevision bool
 	PublishedRevNo       int32
+	AuthorSub            string
+	CurrentTitle         string
+	CurrentDescription   string
+	CurrentDemoType      string
+	CurrentRevNo         int32
 	HasVisibleChannel    bool
 }
 
@@ -228,6 +313,11 @@ func (q *Queries) GetDemoBySlug(ctx context.Context, slug string) (GetDemoBySlug
 		&i.SingleFile,
 		&i.HasPublishedRevision,
 		&i.PublishedRevNo,
+		&i.AuthorSub,
+		&i.CurrentTitle,
+		&i.CurrentDescription,
+		&i.CurrentDemoType,
+		&i.CurrentRevNo,
 		&i.HasVisibleChannel,
 	)
 	return i, err
@@ -294,6 +384,75 @@ func (q *Queries) GetDemoForDownload(ctx context.Context, slug string) (GetDemoF
 		&i.RevisionDeletedAt,
 		&i.RevisionErasedAt,
 		&i.HasVisibleChannel,
+	)
+	return i, err
+}
+
+const getDemoForEdit = `-- name: GetDemoForEdit :one
+
+SELECT d.id,
+       d.slug,
+       d.author_id,
+       d.lifecycle_state,
+       d.moderation_state,
+       d.deleted_at,
+       d.erased_at,
+       d.published_revision_id IS NOT NULL AS has_published_revision,
+       d.current_revision_id,
+       COALESCE(r.rev_no, 0)::int AS current_rev_no,
+       COALESCE(r.demo_type, '')::text AS demo_type,
+       COALESCE(r.single_file, '')::text AS single_file,
+       COALESCE(r.entry_path, '')::text AS entry_path,
+       COALESCE(r.manifest_hash, '')::text AS manifest_hash,
+       COALESCE(r.file_count, 0)::bigint AS file_count,
+       COALESCE(r.total_bytes, 0)::bigint AS total_bytes
+FROM demos d
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.slug = $1
+`
+
+type GetDemoForEditRow struct {
+	ID                   int64
+	Slug                 string
+	AuthorID             pgtype.Int8
+	LifecycleState       string
+	ModerationState      string
+	DeletedAt            pgtype.Timestamptz
+	ErasedAt             pgtype.Timestamptz
+	HasPublishedRevision interface{}
+	CurrentRevisionID    pgtype.Int8
+	CurrentRevNo         int32
+	DemoType             string
+	SingleFile           string
+	EntryPath            string
+	ManifestHash         string
+	FileCount            int64
+	TotalBytes           int64
+}
+
+// ===== 更新作品（追加版本）=====
+// 更新时要把「现在这一版是什么样」一次读全：类型、入口、清单统计。
+// 只换文字不换文件时，新版本直接继承这几项，不必再读一遍清单。
+func (q *Queries) GetDemoForEdit(ctx context.Context, slug string) (GetDemoForEditRow, error) {
+	row := q.db.QueryRow(ctx, getDemoForEdit, slug)
+	var i GetDemoForEditRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.AuthorID,
+		&i.LifecycleState,
+		&i.ModerationState,
+		&i.DeletedAt,
+		&i.ErasedAt,
+		&i.HasPublishedRevision,
+		&i.CurrentRevisionID,
+		&i.CurrentRevNo,
+		&i.DemoType,
+		&i.SingleFile,
+		&i.EntryPath,
+		&i.ManifestHash,
+		&i.FileCount,
+		&i.TotalBytes,
 	)
 	return i, err
 }
@@ -448,6 +607,21 @@ func (q *Queries) ListPublishedDemos(ctx context.Context, arg ListPublishedDemos
 	return items, nil
 }
 
+const nextRevisionNo = `-- name: NextRevisionNo :one
+SELECT (COALESCE(MAX(rev_no), 0) + 1)::int AS rev_no
+FROM demo_revisions
+WHERE demo_id = $1
+`
+
+// 版本号由数据库算，不由应用层「读最大值再加一」：并发的两次更新会读到同一个最大值，
+// 然后一个撞唯一索引、另一个成功——撞的那个白做了一次上传。
+func (q *Queries) NextRevisionNo(ctx context.Context, demoID int64) (int32, error) {
+	row := q.db.QueryRow(ctx, nextRevisionNo, demoID)
+	var rev_no int32
+	err := row.Scan(&rev_no)
+	return rev_no, err
+}
+
 const setCurrentRevision = `-- name: SetCurrentRevision :exec
 UPDATE demos SET current_revision_id = $2, updated_at = now() WHERE id = $1
 `
@@ -459,5 +633,26 @@ type SetCurrentRevisionParams struct {
 
 func (q *Queries) SetCurrentRevision(ctx context.Context, arg SetCurrentRevisionParams) error {
 	_, err := q.db.Exec(ctx, setCurrentRevision, arg.ID, arg.CurrentRevisionID)
+	return err
+}
+
+const setCurrentRevisionForEdit = `-- name: SetCurrentRevisionForEdit :exec
+UPDATE demos
+SET current_revision_id = $2,
+    moderation_state    = 'pending',
+    updated_at          = now()
+WHERE id = $1
+`
+
+type SetCurrentRevisionForEditParams struct {
+	ID                int64
+	CurrentRevisionID pgtype.Int8
+}
+
+// 追加版本后：当前版本指向新版，审核态回到 pending（复审），**对外版本不动**。
+// 这是「改稿期间线上作品照常服务」的全部实现——没有它，作者一提交更新，
+// 自己作品的新内容就绕过审核直接对外了。
+func (q *Queries) SetCurrentRevisionForEdit(ctx context.Context, arg SetCurrentRevisionForEditParams) error {
+	_, err := q.db.Exec(ctx, setCurrentRevisionForEdit, arg.ID, arg.CurrentRevisionID)
 	return err
 }
