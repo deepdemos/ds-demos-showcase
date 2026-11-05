@@ -60,6 +60,52 @@
         "optional": false
       }
     },
+    "DemoRevision": {
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "deleted": {
+        "type": "bool",
+        "optional": false
+      },
+      "demoType": {
+        "type": "string",
+        "optional": false
+      },
+      "erased": {
+        "type": "bool",
+        "optional": false
+      },
+      "fileCount": {
+        "type": "int",
+        "optional": false
+      },
+      "isCurrent": {
+        "type": "bool",
+        "optional": false
+      },
+      "isPublished": {
+        "type": "bool",
+        "optional": false
+      },
+      "revNo": {
+        "type": "int",
+        "optional": false
+      },
+      "source": {
+        "type": "DemoRevisionSource",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": false
+      },
+      "totalBytes": {
+        "type": "int64",
+        "optional": false
+      }
+    },
     "DemoSummary": {
       "coverUrl": {
         "type": "string",
@@ -232,6 +278,24 @@
         "optional": false
       }
     },
+    "RestoreResult": {
+      "moderationState": {
+        "type": "RestoreResultModerationState",
+        "optional": false
+      },
+      "restoredFromRevNo": {
+        "type": "int",
+        "optional": false
+      },
+      "revisionNo": {
+        "type": "int",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "ReviewDecision": {
       "decision": {
         "type": "ReviewDecisionDecision",
@@ -285,6 +349,12 @@
       },
       "slug": {
         "type": "string",
+        "optional": false
+      }
+    },
+    "RevisionList": {
+      "items": {
+        "type": "[]DemoRevision",
         "optional": false
       }
     },
@@ -367,6 +437,11 @@
       "pending",
       "suspended"
     ],
+    "DemoRevisionSource": [
+      "rollback",
+      "upload",
+      "url_import"
+    ],
     "ErrorCode": [
       "conflict",
       "email_not_verified",
@@ -406,6 +481,11 @@
       "hidden",
       "listed",
       "unlisted"
+    ],
+    "RestoreResultModerationState": [
+      "approved",
+      "pending",
+      "rejected"
     ],
     "ReviewDecisionDecision": [
       "approve",
@@ -501,6 +581,16 @@
     "PUT /api/v1/demos/{slug}": {
       "method": "UpdateDemo",
       "pathParams": 1,
+      "params": null
+    },
+    "GET /api/v1/demos/{slug}/revisions": {
+      "method": "ListDemoRevisions",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/demos/{slug}/revisions/{revNo}/restore": {
+      "method": "RestoreDemoRevision",
+      "pathParams": 2,
       "params": null
     },
     "GET /api/v1/me": {

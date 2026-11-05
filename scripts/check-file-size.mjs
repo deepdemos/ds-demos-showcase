@@ -1,10 +1,18 @@
 #!/usr/bin/env node
 // 文件行数门禁：>500 行警告（不红），>800 行失败。
-// 统计对象 = git 跟踪的源码文件物理行数，排除 .d.ts 声明文件。
+// 统计对象 = git 跟踪的源码文件物理行数，排除 .d.ts 声明文件与**生成目录**。
+//
+// 为什么排除生成目录：这道门禁防的是「手写的东西耦合了、该拆」，而
+// `backend/internal/store/*.sql.go`、`backend/internal/api/*.gen.go`、`web/src/api/gen/`
+// 三处整目录都是机器产物——它们没法「拆」，只能改上游（SQL 查询文件 / 契约）。
+// 上游文件本身仍受这道门禁约束，所以「查询写得太长」这类问题不会被放过去。
+// 这条口径与 `check-pr.mjs` 的 GENERATED_PREFIXES 共用同一个常量，不各写一份。
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { isGeneratedFile } from './check-pr.mjs';
 
 export const WARN_LINES = 500;
 export const FAIL_LINES = 800;
@@ -20,7 +28,8 @@ export function listSourceFiles(cwd = process.cwd()) {
     .split('\0')
     .filter(Boolean)
     .filter((file) => EXTENSIONS.has(path.extname(file).toLowerCase()))
-    .filter((file) => !IGNORED.some((pattern) => pattern.test(file)));
+    .filter((file) => !IGNORED.some((pattern) => pattern.test(file)))
+    .filter((file) => !isGeneratedFile(file));
 }
 
 export function countTextLines(content) {

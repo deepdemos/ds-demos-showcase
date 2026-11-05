@@ -175,6 +175,16 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// 明确指定版本号时，非作者**只能看对外版本**。
+	//
+	// 不加这道判定的话，作者改稿期间任何人都能拿 `/preview/{slug}/v{当前版本}/`
+	// 看到还没过审的内容——上面那个 `authorView` 只决定「rev==0 时选哪一版」，
+	// 而路径里的版本号是调用方自己填的。作者的「预览新版」按钮走的正是显式版本，
+	// 所以不能一刀切禁掉，只能对非作者收紧。
+	if rev > 0 && !authorView && int32(rev) != row.PublishedRevNo {
+		http.NotFound(w, r)
+		return
+	}
 	if rel == "" {
 		rel = "index.html"
 	}

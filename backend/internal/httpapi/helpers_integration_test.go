@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,37 @@ import (
 func registerVerified(t *testing.T, pool *pgxpool.Pool, svc *identity.Service, in identity.RegisterInput) (identity.Account, string) {
 	t.Helper()
 	ctx := context.Background()
+
+	// 先清掉同名/同邮箱的残留。
+	//
+	// 上一轮如果在中途崩了（`t.Fatalf` 之后 Cleanup 仍会跑，但 `go test -run` 中途被杀就不会），
+	// 残留账号会让这一轮红在「用户名已被使用」——看起来像注册坏了，实际是测试没打扫干净。
+	for _, q := range []string{
+		`SELECT sub FROM accounts WHERE id IN (SELECT account_id FROM profiles WHERE username = $1)`,
+		`SELECT sub FROM accounts WHERE id IN (SELECT account_id FROM account_emails WHERE lower(email) = lower($1))`,
+	} {
+		arg := in.Username
+		if strings.Contains(q, "account_emails") {
+			arg = in.Email
+		}
+		rows, err := pool.Query(ctx, q, arg)
+		if err != nil {
+			t.Fatalf("查残留账号失败: %v", err)
+		}
+		var subs []string
+		for rows.Next() {
+			var sub string
+			if err := rows.Scan(&sub); err != nil {
+				rows.Close()
+				t.Fatalf("读残留账号失败: %v", err)
+			}
+			subs = append(subs, sub)
+		}
+		rows.Close()
+		for _, sub := range subs {
+			cleanupAuthor(t, pool, sub)
+		}
+	}
 
 	// 把该邮箱的验证码限流窗口清零。
 	//
@@ -44,7 +76,10 @@ func registerVerified(t *testing.T, pool *pgxpool.Pool, svc *identity.Service, i
 	sessionID := "it-session-" + in.Username
 	if _, err := pool.Exec(ctx, `
 INSERT INTO web_sessions (id, account_sub, username, display_name, role, status, verified_at)
-VALUES ($1, $2, $3, $4, 'user', 'active', now())`,
+VALUES ($1, $2, $3, $4, 'user', 'active', now())
+ON CONFLICT (id) DO UPDATE SET account_sub = EXCLUDED.account_sub,
+                               username = EXCLUDED.username,
+                               display_name = EXCLUDED.display_name`,
 		sessionID, acc.Sub, acc.Username, acc.DisplayName); err != nil {
 		t.Fatalf("建会话失败: %v", err)
 	}

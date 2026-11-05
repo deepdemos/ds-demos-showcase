@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
@@ -22,6 +23,14 @@ func (s *stub) ListDemos(_ http.ResponseWriter, _ *http.Request, _ api.ListDemos
 }
 
 func (s *stub) UpdateDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
+
+func (s *stub) ListDemoRevisions(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "revisions:"+slug)
+}
+
+func (s *stub) RestoreDemoRevision(_ http.ResponseWriter, _ *http.Request, slug string, revNo int) {
+	s.hits = append(s.hits, "restore:"+slug+":"+strconv.Itoa(revNo))
+}
 
 func (s *stub) GetDemo(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "detail:"+slug)
