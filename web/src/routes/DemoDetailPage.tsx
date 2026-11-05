@@ -95,6 +95,17 @@ export function DemoDetailPage() {
             {data.demo.description ?? '作者没有填写简介。'}
           </p>
 
+          <div className="mt-4 flex items-center gap-3">
+            {data.demo.canEdit ? (
+              <Link
+                to={`/demos/${encodeURIComponent(slug)}/edit`}
+                className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                编辑作品
+              </Link>
+            ) : null}
+          </div>
+
           {data.demo.downloadable ? <DemoDownload slug={slug} /> : null}
 
           {data.demo.lifecycleState === 'published' ? <DemoPreview slug={slug} /> : null}

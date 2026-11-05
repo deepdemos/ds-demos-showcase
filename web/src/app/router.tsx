@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router';
 import { DevRoomPage } from '@/dev-room/DevRoomPage';
 import { DemoDetailPage } from '@/routes/DemoDetailPage';
+import { EditDemoPage } from '@/routes/EditDemoPage';
 import { DemosPage } from '@/routes/DemosPage';
 import { HomePage } from '@/routes/HomePage';
 import { LoginPage } from '@/routes/LoginPage';
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'demos', element: <DemosPage /> },
       { path: 'demos/:slug', element: <DemoDetailPage /> },
+      { path: 'demos/:slug/edit', element: <EditDemoPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       { path: 'verify-email', element: <VerifyEmailPage /> },
