@@ -147,8 +147,12 @@ func TestIntegrationListAndDetail(t *testing.T) {
 		if tc.slug == "it-archived" {
 			var body map[string]any
 			_ = json.Unmarshal(rec.Body.Bytes(), &body)
-			if body["title"] != nil {
-				t.Fatalf("墓碑态 title 必须为 null，实际 %v", body["title"])
+			// 墓碑保留标题、不给内容：分享链接落到这里要能看出是哪个作品没了。
+			if body["title"] == nil || body["title"] == "" {
+				t.Fatalf("墓碑态 title 应保留，实际 %v", body["title"])
+			}
+			if body["description"] != nil {
+				t.Fatalf("墓碑态 description 必须为 null，实际 %v", body["description"])
 			}
 		}
 	}

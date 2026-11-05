@@ -213,14 +213,15 @@ func TestGetDemoPublished(t *testing.T) {
 }
 
 func TestGetDemoArchivedIsTombstone(t *testing.T) {
-	// 归档的作品仍然可见，但标题与简介为 null——「这里曾经有过一个作品」。
+	// 归档的作品仍然可见，但只有标题——「哪个作品不见了」要看得出来，
+	// 简介与封面是内容，墓碑不给（`docs/实体域数据结构设计.md` §5.0 的墓碑行）。
 	response := getDemo(t, detailRow("archived", "标题", false, false))
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", response.Code)
 	}
 	body := decode(t, response.Body.Bytes())
-	if body["title"] != nil {
-		t.Fatalf("墓碑态 title 必须为 null，实际 %v", body["title"])
+	if body["title"] != "标题" {
+		t.Fatalf("墓碑态 title 应保留，实际 %v", body["title"])
 	}
 	if body["description"] != nil {
 		t.Fatalf("墓碑态 description 必须为 null，实际 %v", body["description"])

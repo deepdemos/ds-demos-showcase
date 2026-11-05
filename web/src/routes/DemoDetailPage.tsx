@@ -21,23 +21,44 @@ async function fetchDemo(slug: string): Promise<Loaded> {
 }
 
 /**
- * 墓碑文案按「这个作品是怎么消失的」分三种。
+ * 墓碑文案按「这个作品是怎么消失的」分两种。
  *
  * 标准对象 §ST-2 要求 archived 与 removed 的墓碑内容**必须不同**：一个是作者自己下架的，
  * 一个是平台移除的，混成一句「作品不存在」会让作者以为是被删了。
- * 还有第三种：作者删除（deleted_at 有值但生命周期仍是 published），它同样是 200 墓碑。
+ *
+ * **软删不在其中**：`deleted_at` 非空对外一律 404（生命周期 §4.1「对外就是不存在」），
+ * 墓碑只属于「曾经公开过」的两种档位。函数末尾那支兜底文案正常情况下走不到——
+ * 走到它说明服务端给的 `lifecycleState` 与这里的假设不一致，宁可显示一句含糊的，
+ * 也不要让页面白屏。
  */
-export function tombstoneText(demo: Pick<DemoDetail, 'lifecycleState'>): {
+export function tombstoneText(demo: Pick<DemoDetail, 'lifecycleState'> & { updatedAt?: string }): {
   title: string;
   description: string;
 } {
+  const when = demo.updatedAt ? new Date(demo.updatedAt).toLocaleDateString('zh-CN') : '';
+  const suffix = when ? `（${when}）` : '';
   if (demo.lifecycleState === 'archived') {
-    return { title: '作者已下架这个作品', description: '作品不再公开展示。' };
+    return { title: '作者已下架这个作品', description: `作品不再公开展示。${suffix}` };
   }
   if (demo.lifecycleState === 'removed') {
-    return { title: '这个作品已被移除', description: '因违反社区规则，作品已从站内移除。' };
+    return {
+      title: '这个作品已被移除',
+      description: `因违反社区规则，作品已从站内移除。${suffix}`,
+    };
   }
-  return { title: '作者已删除这个作品', description: '作品已被作者删除，不再公开展示。' };
+  return { title: '这个作品已不可见', description: `它当前不再公开展示。${suffix}` };
+}
+
+/**
+ * 墓碑判定看**状态**，不看标题是否为空。
+ *
+ * 曾经的写法是「标题为 null 就是墓碑」，那是把「服务端留空某个字段」当成了协议的一部分。
+ * 现在墓碑保留标题（`docs/实体域数据结构设计.md` §5.0 的墓碑行列了「slug / 标题 /
+ * 下架时间 / 说明」），所以必须按状态判——否则下架的作品会被当成正常作品渲染，
+ * 页面里会出现「有标题、无内容」的半截状态。
+ */
+export function isTombstone(demo: Pick<DemoDetail, 'lifecycleState'>): boolean {
+  return demo.lifecycleState === 'archived' || demo.lifecycleState === 'removed';
 }
 
 export function DemoDetailPage() {
@@ -72,14 +93,19 @@ export function DemoDetailPage() {
         <EmptyState title="作品不存在" description="它可能从未公开发布，或者已经被擦除。" />
       )}
 
-      {data?.kind === 'ok' && data.demo.title === null && (
+      {data?.kind === 'ok' && isTombstone(data.demo) && (
         <>
+          {data.demo.title ? (
+            <h1 className="mb-4 text-center text-xl font-semibold text-gray-900 dark:text-gray-100">
+              {data.demo.title}
+            </h1>
+          ) : null}
           <EmptyState {...tombstoneText(data.demo)} />
           <LifecycleBar slug={slug} demo={data.demo} />
         </>
       )}
 
-      {data?.kind === 'ok' && data.demo.title !== null && (
+      {data?.kind === 'ok' && !isTombstone(data.demo) && (
         <article>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
             {data.demo.title}
@@ -101,6 +127,12 @@ export function DemoDetailPage() {
               这个作品没有封面
             </div>
           )}
+
+          {data.demo.lifecycleActions.restore ? (
+            <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              这件作品已删除，恢复期内可以恢复。过了恢复期，就只有你自己能打开这个页面了。
+            </p>
+          ) : null}
 
           <p className="mt-4 whitespace-pre-line text-base leading-7 text-gray-700 dark:text-gray-300">
             {data.demo.description ?? '作者没有填写简介。'}

@@ -21,9 +21,20 @@ test('移除：文案说的是平台移除，不能与归档同句', () => {
   expect(removed.description).not.toBe(archived.description);
 });
 
-test('已删除但生命周期仍是 published：走第三种文案', () => {
-  const text = tombstoneText({ lifecycleState: 'published' });
-  expect(text.title).toContain('作者已删除');
+/**
+ * 软删不再是墓碑。
+ *
+ * 旧断言写「已删除但 lifecycle 仍是 published 时走三种文案之一」，那是把
+ * `deleted_at` 当成了墓碑的一种。生命周期 §4.1 相反：删了就是不存在（对访客 404），
+ * 墓碑只属于 `archived` / `removed`。所以这里改为钉「非墓碑状态给兜底文案」，
+ * 并确保兜底文案**不与 archived/removed 混同**——真走到它说明前后端假设不一致。
+ */
+test('非墓碑状态走兜底文案，且不与下架/移除混同', () => {
+  const fallback = tombstoneText({ lifecycleState: 'published' });
+  const archived = tombstoneText({ lifecycleState: 'archived' });
+  const removed = tombstoneText({ lifecycleState: 'removed' });
+  expect(fallback.title).not.toBe(archived.title);
+  expect(fallback.title).not.toBe(removed.title);
 });
 
 /**
