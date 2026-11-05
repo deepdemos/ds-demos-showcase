@@ -5,7 +5,7 @@
  * 本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
  *
  * 当前范围：站点可用性、作品列表与详情、身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 /
- * 发验证码 / 找回密码），共 16 个端点。实现全部已接入并有集成测试覆盖。
+ * 发验证码 / 找回密码），共 18 个端点。实现全部已接入并有集成测试覆盖。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
  * 它们的响应体是 HTML / zip 字节而不是 JSON，「所有端点返回 JSON、错误有统一 ErrorBody」
@@ -28,6 +28,8 @@
 export * from './accountStatus';
 export * from './demoDetail';
 export * from './demoList';
+export * from './demoRevision';
+export * from './demoRevisionSource';
 export * from './demoSummary';
 export * from './emailCodeRequest';
 export * from './error';
@@ -50,6 +52,8 @@ export * from './publishResultLifecycleState';
 export * from './publishResultVisibility';
 export * from './registerAccepted';
 export * from './registerRequest';
+export * from './restoreResult';
+export * from './restoreResultModerationState';
 export * from './reviewDecision';
 export * from './reviewDecisionDecision';
 export * from './reviewQueue';
@@ -57,6 +61,7 @@ export * from './reviewQueueItem';
 export * from './reviewQueueItemModerationState';
 export * from './reviewResult';
 export * from './reviewResultModerationState';
+export * from './revisionList';
 export * from './submissionResult';
 export * from './submissionResultModerationState';
 export * from './submitDemoBody';

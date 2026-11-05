@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { classifyLines, countTextLines, listSourceFiles } from './check-file-size.mjs';
+import { classifyLines, collectOversizedFiles, countTextLines, listSourceFiles } from './check-file-size.mjs';
 import {
   handwrittenFiles,
   isDocsOnly,
@@ -200,6 +200,31 @@ test('isGeneratedFile：只认三个已知生成目录', () => {
   assert.equal(isGeneratedFile('backend/internal/httpapi/identity.go'), false);
   assert.equal(isGeneratedFile('web/src/api/genx/a.ts'), false);
   assert.equal(isGeneratedFile(undefined), false);
+});
+
+// 行数门禁与 PR 门禁共用同一份生成目录名单：两边各写一份的话，
+// 加一个新生成目录时总会漏掉一处，而漏掉的那处会开始拦合法的生成物。
+test('file-size 跳过生成目录，但仍管上游手写文件', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-size-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    // 用 String.fromCharCode(10) 而不是 '\n'：这段是嵌在生成脚本里的字符串，
+    // 转义层级一多就会被吞成真换行，把整个测试文件变成语法错误。
+    const big = Array.from({ length: 900 }, (_, i) => `// 第 ${i} 行`).join(String.fromCharCode(10));
+    fs.mkdirSync(path.join(dir, 'backend/internal/store'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'backend/internal/domain/demo'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'backend/internal/store/demos.sql.go'), big);
+    // 上游用一个手写 .go 文件（门禁只数源码扩展名，.sql 本来就不在统计范围里）。
+    fs.writeFileSync(path.join(dir, 'backend/internal/domain/demo/huge.go'), big);
+    execFileSync('git', ['add', '-A'], { cwd: dir });
+
+    const rows = collectOversizedFiles(dir);
+    const files = rows.map((row) => row.file);
+    assert.ok(!files.includes('backend/internal/store/demos.sql.go'), '生成物不该被计入');
+    assert.ok(files.includes('backend/internal/domain/demo/huge.go'), '上游手写文件仍要被计入');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('parseChangedFiles：清单带不带行数都接受', () => {

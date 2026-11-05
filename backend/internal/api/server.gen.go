@@ -59,6 +59,12 @@ type ServerInterface interface {
 	// 更新作品（追加新版本，等复审）
 	// (PUT /api/v1/demos/{slug})
 	UpdateDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 版本历史
+	// (GET /api/v1/demos/{slug}/revisions)
+	ListDemoRevisions(w http.ResponseWriter, r *http.Request, slug string)
+	// 回滚到某一版
+	// (POST /api/v1/demos/{slug}/revisions/{revNo}/restore)
+	RestoreDemoRevision(w http.ResponseWriter, r *http.Request, slug string, revNo int)
 	// 当前登录者
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -158,6 +164,18 @@ func (_ Unimplemented) GetDemo(w http.ResponseWriter, r *http.Request, slug stri
 // 更新作品（追加新版本，等复审）
 // (PUT /api/v1/demos/{slug})
 func (_ Unimplemented) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 版本历史
+// (GET /api/v1/demos/{slug}/revisions)
+func (_ Unimplemented) ListDemoRevisions(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 回滚到某一版
+// (POST /api/v1/demos/{slug}/revisions/{revNo}/restore)
+func (_ Unimplemented) RestoreDemoRevision(w http.ResponseWriter, r *http.Request, slug string, revNo int) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -516,6 +534,77 @@ func (siw *ServerInterfaceWrapper) UpdateDemo(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// ListDemoRevisions operation middleware
+func (siw *ServerInterfaceWrapper) ListDemoRevisions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDemoRevisions(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestoreDemoRevision operation middleware
+func (siw *ServerInterfaceWrapper) RestoreDemoRevision(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "revNo" -------------
+	var revNo int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "revNo", chi.URLParam(r, "revNo"), &revNo, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revNo", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestoreDemoRevision(w, r, slug, revNo)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
@@ -707,6 +796,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/demos/{slug}", wrapper.UpdateDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/demos/{slug}/revisions", wrapper.ListDemoRevisions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/demos/{slug}/revisions/{revNo}/restore", wrapper.RestoreDemoRevision)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)

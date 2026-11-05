@@ -955,6 +955,17 @@ sequenceDiagram
     R-->>A: 200 {new_rev_no}
 ```
 
+**落地状态（2026-11-05）**
+
+- `POST /api/v1/demos/{slug}/revisions/{revNo}/restore` 与 `GET /api/v1/demos/{slug}/revisions` 已实现，端点在契约里。
+- **回滚是「追加」不是「撤销」**：新版本 `source='rollback'`，清单整表复制目标版本（同一批 blob，零字节写入），版本号 = 当前最大值 + 1。历史一行不删，所以它失败安全——新版本没建出来的话，原来的对外版本一个字节都没动。
+- **回滚不等于上线**：`current_revision_id` 指到新版本、`moderation_state` 打回 `pending`，**对外内容仍是 `published_revision_id` 那一版**。回滚不会让作品重新上线，也不会让线上内容立刻变回旧版。
+- 拒绝的四种情况：作品不存在/不是作者/已删已擦（404）、被平台移除（409）、目标版本被擦除或删除（404）、目标版本就是当前版本（400）。
+- 版本列表按 `rev_no` 倒序，`isCurrent` / `isPublished` 由两个指针直接比出来（`COALESCE(r.id = d.current_revision_id, false)`——`r.id = NULL` 的结果是 NULL 而不是 false，直接扫进 Go 的 `bool` 会报 `cannot scan NULL into *bool`）。
+- 列表与回滚都只对作者与持 `demo.review` 的审核员开放；**对外可见的内容永远由 `published_revision_id` 决定**，访客不需要版本列表。
+
+**顺带修掉的一条漏洞**：预览端点原先只看「有没有对外版本」，不看请求里的版本号——作者改稿期间，匿名访客猜 `/preview/{slug}/v{当前版本}/` 就能看到还没过审的内容。现在显式版本号只对作者与审核员放行，非作者只能读对外版本。
+
 ### 7.4 渠道发布（含 astra 策展）
 
 ```mermaid

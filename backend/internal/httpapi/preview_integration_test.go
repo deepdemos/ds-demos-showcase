@@ -76,6 +76,10 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 		// 复审中：审核态被退回 pending，但对外内容仍是上一版、照常在服务。
 		// 这是版本分离之后新增的组合，也最容易被人按审核态写成 404。
 		{"pv-under-review", "published", false, "listed", true},
+		// 作者已经交了一版未过审的新版：对外版本仍是 r1，当前版本是 r2。
+		// 这条钉的是「路径里的版本号不能绕过审核」——作者改稿期间
+		// 匿名访客不许靠猜 `/v2/` 看到还没审的内容。
+		{"pv-unapproved-new", "published", false, "listed", true},
 	}
 
 	for _, s := range specs {
@@ -124,6 +128,30 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 				INSERT INTO demo_channels (demo_id, channel, visibility, lang)
 				VALUES ($1, 'deep', $2, 'zh')`, demoID, s.visibility); err != nil {
 				t.Fatalf("插入 %s 的渠道失败: %v", s.slug, err)
+			}
+		}
+
+		// 给「作者交了一版未过审的新版」那条造第二个版本：当前版本指过去，
+		// 对外版本留在 r1。
+		if s.slug == "pv-unapproved-new" {
+			var rev2 int64
+			if err := pool.QueryRow(ctx, `
+				INSERT INTO demo_revisions (demo_id, rev_no, source, manifest_hash, file_count)
+				VALUES ($1, 2, 'upload', repeat('b', 64), 1) RETURNING id`, demoID).Scan(&rev2); err != nil {
+				t.Fatalf("插入 %s 的 r2 失败: %v", s.slug, err)
+			}
+			if _, err := pool.Exec(ctx,
+				`UPDATE demos SET current_revision_id = $1 WHERE id = $2`, rev2, demoID); err != nil {
+				t.Fatalf("设置 %s 的 r2 失败: %v", s.slug, err)
+			}
+			root2 := filepath.Join(dir, "demos", s.slug, "r2")
+			if err := os.MkdirAll(root2, 0o755); err != nil {
+				t.Fatalf("建 %s 的 r2 目录失败: %v", s.slug, err)
+			}
+			if err := os.WriteFile(filepath.Join(root2, "index.html"),
+				[]byte("<!doctype html><html><head><title>unapproved-r2</title></head><body>未过审</body></html>"),
+				0o644); err != nil {
+				t.Fatalf("写 %s 的 r2 内容失败: %v", s.slug, err)
 			}
 		}
 
@@ -217,6 +245,13 @@ func TestIntegrationPreviewVisibility(t *testing.T) {
 		// 复审中：审核态 pending，但对外版本仍在 → 匿名照常看得到。
 		// 这条钉的是「审核不影响已发布内容」——迁移 0014 之前它是 404。
 		{"复审中-匿名仍可见", "/preview/pv-under-review/v1/index.html", "", 200, "pv-under-review"},
+		// 未过审的新版本：路径里写 `/v2/` 也不行。这条是「作者改稿期间匿名不许看新版」。
+		{"未过审新版-匿名", "/preview/pv-unapproved-new/v2/index.html", "", 404, ""},
+		// 但作者自己要能看——他的「预览新版」按钮点下去就是这个地址。
+		{"未过审新版-作者", "/preview/pv-unapproved-new/v2/index.html", pvAuthorSID, 200, "unapproved-r2"},
+		// 对外版本仍然匿名可看，且不带版本号时默认取对外版本。
+		{"对外版本-匿名", "/preview/pv-unapproved-new/v1/index.html", "", 200, "pv-unapproved-new"},
+		{"对外版本-默认", "/preview/pv-unapproved-new/index.html", "", 200, "pv-unapproved-new"},
 		// 草稿：匿名看不到（404 而不是 403——不泄露「这个 slug 存在」）。
 		{"草稿-匿名", "/preview/pv-draft/v1/index.html", "", 404, ""},
 		// 草稿：作者本人能看。

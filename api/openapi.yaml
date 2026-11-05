@@ -7,7 +7,7 @@ info:
     本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
 
     当前范围：站点可用性、作品列表与详情、身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 /
-    发验证码 / 找回密码），共 16 个端点。实现全部已接入并有集成测试覆盖。
+    发验证码 / 找回密码），共 18 个端点。实现全部已接入并有集成测试覆盖。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
     它们的响应体是 HTML / zip 字节而不是 JSON，「所有端点返回 JSON、错误有统一 ErrorBody」
@@ -361,6 +361,128 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: 存储或数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/revisions:
+    get:
+      operationId: listDemoRevisions
+      tags: [作品]
+      summary: 版本历史
+      description: |
+        需要登录。作者看自己的，审核员看任意作品的（`demo.review`）；其他人一律 404。
+
+        **为什么不做成公开端点**：列表里有「哪一版还没过审」这类只有作者与审核员该知道的信息。
+        访客看到的内容永远由 `published_revision_id` 决定，不需要版本列表。
+
+        新的在前。`isCurrent` / `isPublished` 由两个指针直接比出来，不是在应用层推的。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$'
+            minLength: 1
+            maxLength: 128
+      responses:
+        '200':
+          description: 版本列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionList'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或调用者既不是作者也没有审核权
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/revisions/{revNo}/restore:
+    post:
+      operationId: restoreDemoRevision
+      tags: [作品]
+      summary: 回滚到某一版
+      description: |
+        需要登录且是作者本人（不是作者一律 404）。
+
+        **回滚是「追加」不是「撤销」**：新版本 `source=rollback`、清单整表复制目标版本
+        （同一批 blob，零字节写入），版本号是当前最大值 + 1。历史一行不删——
+        所以它失败安全：新版本没建出来的话，原来的对外版本一个字节都没动。
+
+        回滚产生的新版本同样要过审：`current_revision_id` 指过去、审核态打回 `pending`，
+        对外内容仍是 `published_revision_id` 那一版。**回滚不会让作品重新上线**，
+        也不会让线上内容立刻变回旧版。
+
+        拒绝的情况：作品不存在/不是作者/已删已擦（404）、被平台移除（409）、
+        目标版本被擦除或删除（404）、目标版本就是当前版本（400）。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$'
+            minLength: 1
+            maxLength: 128
+        - name: revNo
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: 新版本已追加，进入待审核
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreResult'
+        '400':
+          description: 版本号非法，或目标版本就是当前版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品或版本不存在，或不是当前调用者的作品
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 作品已被平台移除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
           content:
             application/json:
               schema:
@@ -990,6 +1112,71 @@ components:
           format: date-time
         lifecycleState:
           $ref: '#/components/schemas/LifecycleState'
+
+    DemoRevision:
+      type: object
+      additionalProperties: false
+      required: [revNo, title, demoType, source, fileCount, totalBytes, createdAt, deleted, erased, isCurrent, isPublished]
+      description: |
+        版本列表里的一行。
+
+        `isCurrent` 是作者正在改的那一版（可以是未过审的），`isPublished` 是访客正在看的那一版。
+        两者在复审期间不同——这正是「改稿不等于下线」的实现方式。
+      properties:
+        revNo:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        demoType:
+          type: string
+        source:
+          type: string
+          enum: [upload, url_import, rollback]
+        fileCount:
+          type: integer
+        totalBytes:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        deleted:
+          type: boolean
+        erased:
+          type: boolean
+        isCurrent:
+          type: boolean
+        isPublished:
+          type: boolean
+
+    RevisionList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DemoRevision'
+
+    RestoreResult:
+      type: object
+      additionalProperties: false
+      required: [slug, restoredFromRevNo, revisionNo, moderationState]
+      description: 回滚的回执。回滚不是「撤销」，它追加了一个新版本，所以回执里同时有新版本号与来源版本号。
+      properties:
+        slug:
+          type: string
+        restoredFromRevNo:
+          type: integer
+          description: 内容取自哪一版
+        revisionNo:
+          type: integer
+          description: 回滚产生的新版本号
+        moderationState:
+          type: string
+          enum: [pending, approved, rejected]
 
     DemoDetail:
       allOf:

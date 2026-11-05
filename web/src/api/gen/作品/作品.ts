@@ -5,7 +5,7 @@
  * 本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
  *
  * 当前范围：站点可用性、作品列表与详情、身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 /
- * 发验证码 / 找回密码），共 16 个端点。实现全部已接入并有集成测试覆盖。
+ * 发验证码 / 找回密码），共 18 个端点。实现全部已接入并有集成测试覆盖。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
  * 它们的响应体是 HTML / zip 字节而不是 JSON，「所有端点返回 JSON、错误有统一 ErrorBody」
@@ -29,6 +29,8 @@ import type {
   DemoList,
   Error,
   ListDemosParams,
+  RestoreResult,
+  RevisionList,
   SubmissionResult,
   SubmitDemoBody,
   UpdateDemoBody
@@ -364,6 +366,154 @@ if(updateDemoBody.package !== undefined) {
 
   const data: updateDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as updateDemoResponse
+}
+
+
+export type listDemoRevisionsResponse200 = {
+  data: RevisionList
+  status: 200
+}
+
+export type listDemoRevisionsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listDemoRevisionsResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDemoRevisionsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listDemoRevisionsResponseSuccess = (listDemoRevisionsResponse200) & {
+  headers: Headers;
+};
+export type listDemoRevisionsResponseError = (listDemoRevisionsResponse401 | listDemoRevisionsResponse404 | listDemoRevisionsResponse503) & {
+  headers: Headers;
+};
+
+export type listDemoRevisionsResponse = (listDemoRevisionsResponseSuccess | listDemoRevisionsResponseError)
+
+export const getListDemoRevisionsUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/revisions`
+}
+
+/**
+ * 需要登录。作者看自己的，审核员看任意作品的（`demo.review`）；其他人一律 404。
+ *
+ * **为什么不做成公开端点**：列表里有「哪一版还没过审」这类只有作者与审核员该知道的信息。
+ * 访客看到的内容永远由 `published_revision_id` 决定，不需要版本列表。
+ *
+ * 新的在前。`isCurrent` / `isPublished` 由两个指针直接比出来，不是在应用层推的。
+ * @summary 版本历史
+ */
+export const listDemoRevisions = async (slug: string, options?: RequestInit): Promise<listDemoRevisionsResponse> => {
+
+  const res = await fetch(getListDemoRevisionsUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listDemoRevisionsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listDemoRevisionsResponse
+}
+
+
+export type restoreDemoRevisionResponse200 = {
+  data: RestoreResult
+  status: 200
+}
+
+export type restoreDemoRevisionResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type restoreDemoRevisionResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type restoreDemoRevisionResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type restoreDemoRevisionResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type restoreDemoRevisionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type restoreDemoRevisionResponseSuccess = (restoreDemoRevisionResponse200) & {
+  headers: Headers;
+};
+export type restoreDemoRevisionResponseError = (restoreDemoRevisionResponse400 | restoreDemoRevisionResponse401 | restoreDemoRevisionResponse404 | restoreDemoRevisionResponse409 | restoreDemoRevisionResponse503) & {
+  headers: Headers;
+};
+
+export type restoreDemoRevisionResponse = (restoreDemoRevisionResponseSuccess | restoreDemoRevisionResponseError)
+
+export const getRestoreDemoRevisionUrl = (slug: string,
+    revNo: number,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/revisions/${revNo}/restore`
+}
+
+/**
+ * 需要登录且是作者本人（不是作者一律 404）。
+ *
+ * **回滚是「追加」不是「撤销」**：新版本 `source=rollback`、清单整表复制目标版本
+ * （同一批 blob，零字节写入），版本号是当前最大值 + 1。历史一行不删——
+ * 所以它失败安全：新版本没建出来的话，原来的对外版本一个字节都没动。
+ *
+ * 回滚产生的新版本同样要过审：`current_revision_id` 指过去、审核态打回 `pending`，
+ * 对外内容仍是 `published_revision_id` 那一版。**回滚不会让作品重新上线**，
+ * 也不会让线上内容立刻变回旧版。
+ *
+ * 拒绝的情况：作品不存在/不是作者/已删已擦（404）、被平台移除（409）、
+ * 目标版本被擦除或删除（404）、目标版本就是当前版本（400）。
+ * @summary 回滚到某一版
+ */
+export const restoreDemoRevision = async (slug: string,
+    revNo: number, options?: RequestInit): Promise<restoreDemoRevisionResponse> => {
+
+  const res = await fetch(getRestoreDemoRevisionUrl(slug,revNo),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: restoreDemoRevisionResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as restoreDemoRevisionResponse
 }
 
 

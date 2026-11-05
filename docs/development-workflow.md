@@ -71,7 +71,7 @@ PostgreSQL 18 跑断言。唯一依赖是 `@electric-sql/pglite`（WASM 版 PG�
 
 ### 单文件行数
 
-file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css），排除 .d.ts；门禁脚本用 node --test 自检：
+file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css），排除 .d.ts 与三个生成目录（`backend/internal/api/`、`backend/internal/store/`、`web/src/api/gen/`，名单与 `check-pr.mjs` 共用）；门禁脚本用 node --test 自检：
 
 - 单文件 >500 行：过耦合风险警告（不红），review 必须关注，能拆则拆。
 - 单文件 >800 行：直接失败，必须拆分。

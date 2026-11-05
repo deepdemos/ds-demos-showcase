@@ -22,6 +22,13 @@ const (
 	AccountStatusSuspended AccountStatus = "suspended"
 )
 
+// Defines values for DemoRevisionSource.
+const (
+	Rollback  DemoRevisionSource = "rollback"
+	Upload    DemoRevisionSource = "upload"
+	UrlImport DemoRevisionSource = "url_import"
+)
+
 // Defines values for ErrorCode.
 const (
 	Conflict             ErrorCode = "conflict"
@@ -76,6 +83,13 @@ const (
 	PublishResultVisibilityUnlisted PublishResultVisibility = "unlisted"
 )
 
+// Defines values for RestoreResultModerationState.
+const (
+	RestoreResultModerationStateApproved RestoreResultModerationState = "approved"
+	RestoreResultModerationStatePending  RestoreResultModerationState = "pending"
+	RestoreResultModerationStateRejected RestoreResultModerationState = "rejected"
+)
+
 // Defines values for ReviewDecisionDecision.
 const (
 	Approve ReviewDecisionDecision = "approve"
@@ -89,8 +103,8 @@ const (
 
 // Defines values for ReviewResultModerationState.
 const (
-	Approved ReviewResultModerationState = "approved"
-	Rejected ReviewResultModerationState = "rejected"
+	ReviewResultModerationStateApproved ReviewResultModerationState = "approved"
+	ReviewResultModerationStateRejected ReviewResultModerationState = "rejected"
 )
 
 // Defines values for SubmissionResultModerationState.
@@ -161,6 +175,27 @@ type DemoList struct {
 	// Total 满足条件的总条数（不是当前页条数）
 	Total int `json:"total"`
 }
+
+// DemoRevision 版本列表里的一行。
+//
+// `isCurrent` 是作者正在改的那一版（可以是未过审的），`isPublished` 是访客正在看的那一版。
+// 两者在复审期间不同——这正是「改稿不等于下线」的实现方式。
+type DemoRevision struct {
+	CreatedAt   time.Time          `json:"createdAt"`
+	Deleted     bool               `json:"deleted"`
+	DemoType    string             `json:"demoType"`
+	Erased      bool               `json:"erased"`
+	FileCount   int                `json:"fileCount"`
+	IsCurrent   bool               `json:"isCurrent"`
+	IsPublished bool               `json:"isPublished"`
+	RevNo       int                `json:"revNo"`
+	Source      DemoRevisionSource `json:"source"`
+	Title       string             `json:"title"`
+	TotalBytes  int64              `json:"totalBytes"`
+}
+
+// DemoRevisionSource defines model for DemoRevision.Source.
+type DemoRevisionSource string
 
 // DemoSummary defines model for DemoSummary.
 type DemoSummary struct {
@@ -305,6 +340,21 @@ type RegisterRequest struct {
 	Username string `json:"username"`
 }
 
+// RestoreResult 回滚的回执。回滚不是「撤销」，它追加了一个新版本，所以回执里同时有新版本号与来源版本号。
+type RestoreResult struct {
+	ModerationState RestoreResultModerationState `json:"moderationState"`
+
+	// RestoredFromRevNo 内容取自哪一版
+	RestoredFromRevNo int `json:"restoredFromRevNo"`
+
+	// RevisionNo 回滚产生的新版本号
+	RevisionNo int    `json:"revisionNo"`
+	Slug       string `json:"slug"`
+}
+
+// RestoreResultModerationState defines model for RestoreResult.ModerationState.
+type RestoreResultModerationState string
+
 // ReviewDecision defines model for ReviewDecision.
 type ReviewDecision struct {
 	Decision ReviewDecisionDecision `json:"decision"`
@@ -346,6 +396,11 @@ type ReviewResult struct {
 
 // ReviewResultModerationState defines model for ReviewResult.ModerationState.
 type ReviewResultModerationState string
+
+// RevisionList defines model for RevisionList.
+type RevisionList struct {
+	Items []DemoRevision `json:"items"`
+}
 
 // SubmissionResult defines model for SubmissionResult.
 type SubmissionResult struct {

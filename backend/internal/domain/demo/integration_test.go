@@ -51,9 +51,13 @@ func mkAuthor(t *testing.T, pool *pgxpool.Pool, tag string) int64 {
 	t.Helper()
 	sub := fmt.Sprintf("it-demo-%s", tag)
 	var id int64
+	// ON CONFLICT 让它幂等：上一轮如果中途崩了没走到 Cleanup，残留的账号会让
+	// 后面每一轮都红在「建作者失败: duplicate key」，看起来像产品 bug。
 	err := pool.QueryRow(context.Background(),
 		`INSERT INTO accounts (sub, status, role, level)
-		 VALUES ($1, 'active', 'user', 0) RETURNING id`, sub,
+		 VALUES ($1, 'active', 'user', 0)
+		 ON CONFLICT (sub) DO UPDATE SET sub = EXCLUDED.sub
+		 RETURNING id`, sub,
 	).Scan(&id)
 	if err != nil {
 		t.Fatalf("建作者失败: %v", err)
@@ -61,7 +65,9 @@ func mkAuthor(t *testing.T, pool *pgxpool.Pool, tag string) int64 {
 	// demos.author_id 指向 users（demo 站投影表），不是 accounts。
 	var userID int64
 	if err := pool.QueryRow(context.Background(),
-		`INSERT INTO users (sub) VALUES ($1) RETURNING id`, sub,
+		`INSERT INTO users (sub) VALUES ($1)
+		 ON CONFLICT (sub) DO UPDATE SET sub = EXCLUDED.sub
+		 RETURNING id`, sub,
 	).Scan(&userID); err != nil {
 		t.Fatalf("建用户投影失败: %v", err)
 	}
@@ -310,7 +316,9 @@ func mkReviewer(t *testing.T, pool *pgxpool.Pool, tag string) (int64, int64) {
 	}
 	var userID int64
 	if err := pool.QueryRow(context.Background(),
-		`INSERT INTO users (sub) VALUES ($1) RETURNING id`, sub,
+		`INSERT INTO users (sub) VALUES ($1)
+		 ON CONFLICT (sub) DO UPDATE SET sub = EXCLUDED.sub
+		 RETURNING id`, sub,
 	).Scan(&userID); err != nil {
 		t.Fatalf("建审核员投影失败: %v", err)
 	}

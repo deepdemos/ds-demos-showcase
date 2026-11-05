@@ -164,6 +164,10 @@ func (h *Handler) writeDemoError(w http.ResponseWriter, err error) {
 		// 「被平台移除后作者不能自行改回」是一条只有管理员能走的边，
 		// 说清是状态问题，作者才知道该去申诉而不是重试。
 		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
+	case errors.Is(err, demo.ErrRevisionNotFound):
+		// 404：这个作品没有这个版本号，或者那一版已经擦掉了。
+		// 不区分两者——擦除过的版本对外就是不存在，区分会透出「这里曾经有过一版」。
+		writeError(w, http.StatusNotFound, api.NotFound, messageOf(err))
 	case errors.Is(err, demo.ErrTooManyPending):
 		// 429 而不是 400：这不是「你写错了」，是「现在不行，等一会儿」。
 		// 契约里 429 已经存在（登录限流用同一个码）。

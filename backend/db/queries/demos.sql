@@ -254,3 +254,66 @@ VALUES ($1, 1)
 ON CONFLICT (demo_id) DO UPDATE
 SET download_count = demo_stats.download_count + 1,
     updated_at     = now();
+
+-- ===== 版本历史与回滚（设计 §7.3）=====
+
+-- name: ListDemoRevisions :many
+-- 作者看自己的、审核员看任意作品。授权不在 SQL 里做（数据库不知道该是谁在调用），
+-- 这里只负责「按作品把所有版本列出来」。
+--
+-- `is_current` / `is_published` 用两个指针直接比，不在应用层再推一遍：
+-- 这两个布尔就是「作者在改哪一版」「访客在看哪一版」的唯一事实源。
+SELECT r.rev_no,
+       COALESCE(r.title, '')::text        AS title,
+       r.demo_type,
+       r.source,
+       COALESCE(r.file_count, 0)::bigint  AS file_count,
+       COALESCE(r.total_bytes, 0)::bigint AS total_bytes,
+       r.created_at,
+       (r.deleted_at IS NOT NULL)::bool   AS deleted,
+       (r.erased_at IS NOT NULL)::bool    AS erased,
+       -- 必须包 COALESCE：`r.id = NULL` 的结果是 NULL 而不是 false，
+       -- 扫进 Go 的 bool 会直接报 `cannot scan NULL into *bool`。
+       COALESCE(r.id = d.current_revision_id, false)::bool   AS is_current,
+       COALESCE(r.id = d.published_revision_id, false)::bool AS is_published
+FROM demo_revisions r
+JOIN demos d ON d.id = r.demo_id
+WHERE d.slug = $1
+ORDER BY r.rev_no DESC;
+
+-- name: GetDemoForRestore :one
+-- 回滚要一次拿到三件事：目标版本的内容元数据、作品的归属与生命周期、目标版本本身还能不能用。
+-- 擦除过的版本不能作为回滚目标——它的内容列已经清空了，回滚过去等于产出一个空版本。
+SELECT d.id AS demo_id,
+       d.slug,
+       d.author_id,
+       d.lifecycle_state,
+       d.moderation_state,
+       d.deleted_at,
+       d.erased_at,
+       d.current_revision_id,
+       r.id  AS revision_id,
+       r.rev_no,
+       COALESCE(r.title, '')::text       AS title,
+       COALESCE(r.description, '')::text AS description,
+       r.demo_type,
+       r.entry_path,
+       r.single_file,
+       r.manifest_hash,
+       COALESCE(r.file_count, 0)::bigint  AS file_count,
+       COALESCE(r.total_bytes, 0)::bigint AS total_bytes,
+       r.deleted_at AS revision_deleted_at,
+       r.erased_at  AS revision_erased_at
+FROM demos d
+JOIN demo_revisions r ON r.demo_id = d.id
+WHERE d.slug = $1 AND r.rev_no = $2;
+
+-- name: AppendRollbackRevision :one
+-- 与 AppendRevision 的唯一差别是 source 写 'rollback'（CHECK 允许 upload / url_import / rollback）。
+-- 「回滚 = 追加一个新版本指向旧清单」——历史一行不删，这也是它能失败安全的原因：
+-- 只要新版本没建出来，原来的对外版本一个字节都没动。
+INSERT INTO demo_revisions (
+    demo_id, rev_no, title, description, demo_type,
+    entry_path, single_file, manifest_hash, file_count, total_bytes, source, created_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'rollback', $11)
+RETURNING id, rev_no;
