@@ -253,6 +253,119 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+    put:
+      operationId: updateDemo
+      tags: [作品]
+      summary: 更新作品（追加新版本，等复审）
+      description: |
+        需要登录，且只有作者本人能调用（不是作者一律 404——403 会说「这个 slug 存在」）。
+
+        **更新不是就地改，是追加一个版本**：`demo_revisions` 有不可变触发器，
+        审核过的内容必须能原样追溯。新版本的 `revNo` 是当前最大版本号 + 1。
+
+        **旧版本继续对外服务**：新版本落在 `demos.current_revision_id` 并把审核态打回
+        `pending`，而对外内容由 `published_revision_id` 决定——要等管理员通过才切换。
+        所以作者改稿期间，作品在作品库、详情页、预览、下载里都还是上一版。
+        这是「审核」与「下线」的区别：改稿不该让线上作品消失。
+
+        `package` 可以不传，表示**只改标题与简介**：新版本的清单是上一版的整表复制，
+        每个文件指向同一份 blob，磁盘零新增。
+
+        传了 `package` 才能改 `demoType`——类型是内容决定的；只改文字却把 web 改成 zip，
+        会让下载与预览指着不同的事实（400）。被平台移除（`removed`）的作品不允许
+        作者自行改回（409）。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$'
+            minLength: 1
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                description:
+                  type: string
+                  maxLength: 5000
+                demoType:
+                  type: string
+                  maxLength: 32
+                  description: |
+                    作品类型。**只有同时上传 `package` 时才能改**。
+                package:
+                  type: string
+                  format: binary
+                  description: 新的作品文件；不传表示只改文字
+      responses:
+        '200':
+          description: 新版本已追加，进入待审核（对外仍是上一版）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+        '400':
+          description: 参数非法（缺标题、只改类型没传包、作品没有版本）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或不是当前调用者的作品
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 作品已被平台移除，作者不能再改
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: 包体积超过上限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: 文件类型不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 包内容不合格
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 存储或数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/auth/verify-email:
     post:
       operationId: postAuthVerifyEmail
@@ -883,7 +996,7 @@ components:
         - $ref: '#/components/schemas/DemoSummary'
         - type: object
           additionalProperties: false
-          required: [description, updatedAt, demoType, downloadable]
+          required: [description, updatedAt, demoType, downloadable, canEdit]
           properties:
             description:
               type: string
@@ -897,6 +1010,16 @@ components:
               description: |
                 作品类型，取自 `demo_types` 主数据（`web` / `zip` / `link` / `image`）。
                 墓碑态为空串——墓碑不承载内容，也就没有类型可言。
+            canEdit:
+              type: boolean
+              description: |
+                当前调用者能不能编辑这个作品（只有作者本人在非墓碑态下为 `true`）。
+
+                作者视图与公开视图的差别不止这一列：
+
+                - 作者看得到自己还没过审的稿件（公开视图对 `draft`/`pending`/`rejected` 一律 404）
+                - 作者看到的 `title` / `description` / `demoType` 是**当前版本**的，
+                  访客看到的是**对外版本**的——改稿期间两边内容不同是正常的
             downloadable:
               type: boolean
               description: |

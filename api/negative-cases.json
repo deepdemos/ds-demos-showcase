@@ -4,97 +4,175 @@
     "GET /healthz": [
       {
         "case": "数据库连不上时响应体不能泄露连接串或内部错误文本",
-        "test": { "file": "backend/internal/httpapi/handlers_test.go", "name": "TestHealthzDatabaseDownDoesNotLeak" }
+        "test": {
+          "file": "backend/internal/httpapi/handlers_test.go",
+          "name": "TestHealthzDatabaseDownDoesNotLeak"
+        }
       }
     ],
     "GET /api/v1/demos": [
       {
         "case": "pageSize 超过上限返回 400，不静默截断成上限值",
-        "test": { "file": "backend/internal/httpapi/handlers_test.go", "name": "TestListDemosRejectsOversizedPageSize" }
+        "test": {
+          "file": "backend/internal/httpapi/handlers_test.go",
+          "name": "TestListDemosRejectsOversizedPageSize"
+        }
       }
     ],
     "POST /api/v1/demos": [
       {
         "case": "未登录投稿返回 401，且不建出任何作品行",
-        "test": { "file": "backend/internal/httpapi/demos_submit_integration_test.go", "name": "TestIntegrationSubmitRequiresLogin" }
+        "test": {
+          "file": "backend/internal/httpapi/demos_submit_integration_test.go",
+          "name": "TestIntegrationSubmitRequiresLogin"
+        }
       }
     ],
     "GET /api/v1/demos/{slug}": [
       {
         "case": "渠道为 hidden 的作品对匿名访问者 404（列表之外也不能直链读到）",
-        "test": { "file": "backend/internal/httpapi/handlers_test.go", "name": "TestGetDemoHiddenChannelIs404" }
+        "test": {
+          "file": "backend/internal/httpapi/handlers_test.go",
+          "name": "TestGetDemoHiddenChannelIs404"
+        }
       }
     ],
     "POST /api/v1/auth/register": [
       {
         "case": "邮箱已存在返回 409，不建出第二个账号",
-        "test": { "file": "backend/internal/httpapi/integration_test.go", "name": "TestIntegrationRegister" }
+        "test": {
+          "file": "backend/internal/httpapi/integration_test.go",
+          "name": "TestIntegrationRegister"
+        }
       }
     ],
     "POST /api/v1/auth/login": [
       {
         "case": "连续失败到阈值后要求邮箱验证码，而不是继续允许猜口令",
-        "test": { "file": "backend/internal/httpapi/integration_test.go", "name": "TestIntegrationLoginRateLimit" }
+        "test": {
+          "file": "backend/internal/httpapi/integration_test.go",
+          "name": "TestIntegrationLoginRateLimit"
+        }
       }
     ],
     "POST /api/v1/auth/email-code": [
       {
         "case": "同一 IP 每小时配额用完后拒绝发码",
-        "test": { "file": "backend/internal/domain/identity/integration_test.go", "name": "TestIntegrationEmailCodeIPQuota" }
+        "test": {
+          "file": "backend/internal/domain/identity/integration_test.go",
+          "name": "TestIntegrationEmailCodeIPQuota"
+        }
       }
     ],
     "POST /api/v1/auth/password-reset/code": [
       {
         "case": "不存在的账号也回 204，不泄露账号是否存在",
-        "test": { "file": "backend/internal/domain/identity/integration_test.go", "name": "TestIntegration不存在的账号也发码但不下发" }
+        "test": {
+          "file": "backend/internal/domain/identity/integration_test.go",
+          "name": "TestIntegration不存在的账号也发码但不下发"
+        }
       }
     ],
     "POST /api/v1/auth/password-reset": [
       {
         "case": "验证码不对时不改密码，旧口令仍然可用",
-        "test": { "file": "backend/internal/domain/identity/integration_test.go", "name": "TestIntegrationPasswordReset" }
+        "test": {
+          "file": "backend/internal/domain/identity/integration_test.go",
+          "name": "TestIntegrationPasswordReset"
+        }
       }
     ],
     "POST /api/v1/auth/logout": [
       {
         "case": "登出后旧 cookie 立刻失效，重复登出仍然 204",
-        "test": { "file": "backend/internal/httpapi/integration_test.go", "name": "TestIntegrationLoginLogout" }
+        "test": {
+          "file": "backend/internal/httpapi/integration_test.go",
+          "name": "TestIntegrationLoginLogout"
+        }
       }
     ],
     "GET /api/v1/me": [
       {
         "case": "没有会话 cookie 时 401，不返回空身份当成功",
-        "test": { "file": "backend/internal/httpapi/integration_test.go", "name": "TestIntegrationGetMe" }
+        "test": {
+          "file": "backend/internal/httpapi/integration_test.go",
+          "name": "TestIntegrationGetMe"
+        }
       }
     ],
     "POST /api/v1/auth/verify-email": [
       {
         "case": "验证码不对时报错，且账号仍是 pending（不能靠猜码激活）",
-        "test": { "file": "backend/internal/domain/identity/integration_test.go", "name": "TestIntegrationVerifyEmailRejectsBadCode" }
+        "test": {
+          "file": "backend/internal/domain/identity/integration_test.go",
+          "name": "TestIntegrationVerifyEmailRejectsBadCode"
+        }
       }
     ],
     "POST /api/v1/auth/verify-email/resend": [
       {
         "case": "已验证或不存在的邮箱也回 204，重发不泄露账号状态",
-        "test": { "file": "backend/internal/httpapi/verifyemail_integration_test.go", "name": "TestIntegrationVerifyResendAlwaysNoContent" }
+        "test": {
+          "file": "backend/internal/httpapi/verifyemail_integration_test.go",
+          "name": "TestIntegrationVerifyResendAlwaysNoContent"
+        }
       }
     ],
     "GET /api/v1/admin/reviews/demo": [
       {
         "case": "没有 demo.review 权限的用户 403，不返回待审列表",
-        "test": { "file": "backend/internal/httpapi/reviews_integration_test.go", "name": "TestIntegrationReviewPermission" }
+        "test": {
+          "file": "backend/internal/httpapi/reviews_integration_test.go",
+          "name": "TestIntegrationReviewPermission"
+        }
       }
     ],
     "POST /api/v1/admin/reviews/demo/{slug}": [
       {
         "case": "decision 不在 approve/reject 枚举里返回 400，不能落成驳回",
-        "test": { "file": "backend/internal/httpapi/reviews_integration_test.go", "name": "TestIntegrationReviewRejectsUnknownDecision" }
+        "test": {
+          "file": "backend/internal/httpapi/reviews_integration_test.go",
+          "name": "TestIntegrationReviewRejectsUnknownDecision"
+        }
       }
     ],
     "POST /api/v1/admin/demos/{slug}/publish": [
       {
         "case": "没有发布权限的用户 403",
-        "test": { "file": "backend/internal/httpapi/publish_integration_test.go", "name": "TestIntegrationPublishPermission" }
+        "test": {
+          "file": "backend/internal/httpapi/publish_integration_test.go",
+          "name": "TestIntegrationPublishPermission"
+        }
+      }
+    ],
+    "PUT /api/v1/demos/{slug}": [
+      {
+        "case": "未登录更新作品返回 401，且不改任何版本",
+        "test": {
+          "file": "backend/internal/httpapi/update_integration_test.go",
+          "name": "TestIntegrationUpdateDemo"
+        }
+      },
+      {
+        "case": "别人的作品返回 404（不区分「不存在」与「不是你的」，避免泄露 slug）",
+        "test": {
+          "file": "backend/internal/httpapi/update_integration_test.go",
+          "name": "TestIntegrationUpdateDemo"
+        }
+      },
+      {
+        "case": "不带新包却改作品类型返回 400",
+        "test": {
+          "file": "backend/internal/httpapi/update_integration_test.go",
+          "name": "TestIntegrationUpdateDemo"
+        }
+      },
+      {
+        "case": "路由必须挂在 PUT 上，写成 POST 会让生成的客户端调不通",
+        "test": {
+          "file": "backend/internal/httpapi/update_integration_test.go",
+          "name": "TestIntegrationUpdateDemoRouteUsesPUT"
+        }
       }
     ]
   },
@@ -102,13 +180,19 @@
     "GET /preview/{slug}/*": [
       {
         "case": "渠道为 hidden 的作品对匿名访问者 404（未发布/未审过同样拒绝）",
-        "test": { "file": "backend/internal/httpapi/preview_integration_test.go", "name": "TestIntegrationPreviewVisibility" }
+        "test": {
+          "file": "backend/internal/httpapi/preview_integration_test.go",
+          "name": "TestIntegrationPreviewVisibility"
+        }
       }
     ],
     "GET /download/{slug}": [
       {
         "case": "渠道为 hidden 的作品 404，且不给外链作品造假的包",
-        "test": { "file": "backend/internal/httpapi/download_integration_test.go", "name": "TestIntegrationDownload" }
+        "test": {
+          "file": "backend/internal/httpapi/download_integration_test.go",
+          "name": "TestIntegrationDownload"
+        }
       }
     ]
   }

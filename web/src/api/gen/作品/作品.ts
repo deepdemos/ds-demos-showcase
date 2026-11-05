@@ -30,7 +30,8 @@ import type {
   Error,
   ListDemosParams,
   SubmissionResult,
-  SubmitDemoBody
+  SubmitDemoBody,
+  UpdateDemoBody
 } from '../model';
 
 
@@ -251,6 +252,118 @@ export const getDemo = async (slug: string, options?: RequestInit): Promise<getD
 
   const data: getDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getDemoResponse
+}
+
+
+export type updateDemoResponse200 = {
+  data: SubmissionResult
+  status: 200
+}
+
+export type updateDemoResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateDemoResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type updateDemoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type updateDemoResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type updateDemoResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type updateDemoResponse415 = {
+  data: Error
+  status: 415
+}
+
+export type updateDemoResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type updateDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type updateDemoResponseSuccess = (updateDemoResponse200) & {
+  headers: Headers;
+};
+export type updateDemoResponseError = (updateDemoResponse400 | updateDemoResponse401 | updateDemoResponse404 | updateDemoResponse409 | updateDemoResponse413 | updateDemoResponse415 | updateDemoResponse422 | updateDemoResponse503) & {
+  headers: Headers;
+};
+
+export type updateDemoResponse = (updateDemoResponseSuccess | updateDemoResponseError)
+
+export const getUpdateDemoUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}`
+}
+
+/**
+ * 需要登录，且只有作者本人能调用（不是作者一律 404——403 会说「这个 slug 存在」）。
+ *
+ * **更新不是就地改，是追加一个版本**：`demo_revisions` 有不可变触发器，
+ * 审核过的内容必须能原样追溯。新版本的 `revNo` 是当前最大版本号 + 1。
+ *
+ * **旧版本继续对外服务**：新版本落在 `demos.current_revision_id` 并把审核态打回
+ * `pending`，而对外内容由 `published_revision_id` 决定——要等管理员通过才切换。
+ * 所以作者改稿期间，作品在作品库、详情页、预览、下载里都还是上一版。
+ * 这是「审核」与「下线」的区别：改稿不该让线上作品消失。
+ *
+ * `package` 可以不传，表示**只改标题与简介**：新版本的清单是上一版的整表复制，
+ * 每个文件指向同一份 blob，磁盘零新增。
+ *
+ * 传了 `package` 才能改 `demoType`——类型是内容决定的；只改文字却把 web 改成 zip，
+ * 会让下载与预览指着不同的事实（400）。被平台移除（`removed`）的作品不允许
+ * 作者自行改回（409）。
+ * @summary 更新作品（追加新版本，等复审）
+ */
+export const updateDemo = async (slug: string,
+    updateDemoBody: UpdateDemoBody, options?: RequestInit): Promise<updateDemoResponse> => {
+    const formData = new FormData();
+formData.append(`title`, updateDemoBody.title);
+if(updateDemoBody.description !== undefined) {
+ formData.append(`description`, updateDemoBody.description);
+ }
+if(updateDemoBody.demoType !== undefined) {
+ formData.append(`demoType`, updateDemoBody.demoType);
+ }
+if(updateDemoBody.package !== undefined) {
+ formData.append(`package`, updateDemoBody.package);
+ }
+
+  const res = await fetch(getUpdateDemoUrl(slug),
+  {
+    ...options,
+    method: 'PUT'
+    ,
+    body: formData
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateDemoResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateDemoResponse
 }
 
 

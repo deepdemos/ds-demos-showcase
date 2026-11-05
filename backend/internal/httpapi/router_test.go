@@ -21,6 +21,8 @@ func (s *stub) ListDemos(_ http.ResponseWriter, _ *http.Request, _ api.ListDemos
 	s.hits = append(s.hits, "list")
 }
 
+func (s *stub) UpdateDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
+
 func (s *stub) GetDemo(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "detail:"+slug)
 }

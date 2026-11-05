@@ -926,6 +926,17 @@ sequenceDiagram
 
 **读路径两条**：清单优先（`demo_revision_files` → `blobs.storage_key`），没有清单行的旧版本回退到 `demos/{slug}/r{n}/{rel}`。迁移不搬历史数据——搬运要读全量文件、算哈希、失败还得回滚，而旧数据的读路径本来就能工作；等作者下次改稿就自然落到新路上。
 
+**更新流程的落地状态（`PUT /api/v1/demos/{slug}`）**：
+
+- 版本号用 `NextRevisionNo`（`MAX(rev_no)+1`）在事务里取，不是应用层「读最大值再加一」——两个并发更新会拿到同一个号，撞 `uq_revision_rev_no` 变成 500
+- 只改文字（不带 `package`）时清单**整表复制**（`CopyRevisionFiles`），所有 `blob_hash` 不变，一个新字节也不写
+- 换文件时新包的条目走和投稿同一条 `uploadBlobs`，旧文件那些 `blob_hash` 仍然被旧版本引用，跨版本去重成立
+- `current_revision_id` 指向新版、`moderation_state` 回到 `pending`，但 **`published_revision_id` 不动**——复审期间线上仍然是上一个通过的版本，这就是「审核不等于下线」
+- 换类型必须同时换包（不带包改 `demoType` → 400）：一个 zip 不可能变成单个 HTML，允许它只会产生一条自相矛盾的版本
+- `removed` 的作品不可更新（409），作者自己 `archived` 的可以——他要重新上架走的就是这条路
+- 非作者一律 **404**（不是 403）：403 会承认「这个 slug 存在」
+- 审核通过时 `SetPublishedRevision` 除了切指针，还把 `demos.title` / `demos.description` 同步成该版本的值——列表读的是 `demos` 上的这两列，不同步就会出现「改了标题、审也过了、列表里还是老标题」
+
 
 ### 7.3 回滚
 
