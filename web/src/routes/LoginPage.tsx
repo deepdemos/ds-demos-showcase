@@ -126,6 +126,12 @@ export function LoginPage() {
           注册
         </Link>
       </p>
+
+      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+        <Link to="/password-reset" className="text-blue-600 dark:text-blue-400">
+          忘记密码
+        </Link>
+      </p>
     </section>
   );
 }

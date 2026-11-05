@@ -6,6 +6,7 @@ import { DemosPage } from '@/routes/DemosPage';
 import { HomePage } from '@/routes/HomePage';
 import { LoginPage } from '@/routes/LoginPage';
 import { RegisterPage } from '@/routes/RegisterPage';
+import { PasswordResetPage } from '@/routes/PasswordResetPage';
 import { VerifyEmailPage } from '@/routes/VerifyEmailPage';
 import { SubmitPage } from '@/routes/SubmitPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       { path: 'verify-email', element: <VerifyEmailPage /> },
+      { path: 'password-reset', element: <PasswordResetPage /> },
       { path: 'submit', element: <SubmitPage /> },
       { path: 'admin/reviews', element: <AdminReviewPage /> },
       { path: '*', element: <NotFoundPage /> },
