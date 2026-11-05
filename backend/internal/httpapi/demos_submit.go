@@ -164,6 +164,15 @@ func (h *Handler) writeDemoError(w http.ResponseWriter, err error) {
 		// 「被平台移除后作者不能自行改回」是一条只有管理员能走的边，
 		// 说清是状态问题，作者才知道该去申诉而不是重试。
 		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
+	case errors.Is(err, demo.ErrLifecycleConflict):
+		// 409：归属没问题，是作品当前状态不接受这个动作（已经下架、本来没删……）。
+		writeError(w, http.StatusConflict, api.Conflict, messageOf(err))
+	case errors.Is(err, demo.ErrRestoreWindowClosed):
+		// 409 + 专用码：用户需要知道「不是权限问题，是来晚了」。
+		writeError(w, http.StatusConflict, api.RestoreWindowClosed, messageOf(err))
+	case errors.Is(err, demo.ErrDerivativePurged):
+		// 与「窗口过了」分开：这是系统提前清掉了文件，用户无过错。
+		writeError(w, http.StatusConflict, api.DerivativePurged, messageOf(err))
 	case errors.Is(err, demo.ErrRevisionNotFound):
 		// 404：这个作品没有这个版本号，或者那一版已经擦掉了。
 		// 不区分两者——擦除过的版本对外就是不存在，区分会透出「这里曾经有过一版」。

@@ -283,6 +283,42 @@ func (q *Queries) DeleteDemoForCleanup(ctx context.Context, id int64) error {
 	return err
 }
 
+const deleteDemoGcRow = `-- name: DeleteDemoGcRow :exec
+DELETE FROM gc_queue
+WHERE kind = 'demo_dir' AND object_key = $1::text
+`
+
+// 恢复时把队列行删掉：行在，就代表「这个前缀还要被清掉」。
+// 设计里写明「恢复会删掉本行，故『删 → 恢复 → 再删』走 INSERT 不走 upsert」。
+func (q *Queries) DeleteDemoGcRow(ctx context.Context, objectKey string) error {
+	_, err := q.db.Exec(ctx, deleteDemoGcRow, objectKey)
+	return err
+}
+
+const enqueueDemoGc = `-- name: EnqueueDemoGc :exec
+INSERT INTO gc_queue (kind, object_key, entity_type, entity_id, reason, purge_after)
+VALUES ('demo_dir', $1::text, 'demo', $2::bigint, 'delete', $3::timestamptz)
+ON CONFLICT (kind, object_key) DO UPDATE
+SET purge_after = EXCLUDED.purge_after,
+    entity_id   = EXCLUDED.entity_id,
+    purged_at   = NULL,
+    abandoned_at = NULL
+`
+
+type EnqueueDemoGcParams struct {
+	ObjectKey  string
+	EntityID   int64
+	PurgeAfter pgtype.Timestamptz
+}
+
+// kind 只能是 demo_dir（gc_kinds 三选一里唯一与作品目录对应的）。
+// object_key 用作品目录前缀而不是 slug：GC 要删的是一整个前缀，
+// 而 slug 本身在旧数据里也常作目录名，两者拼起来才无歧义。
+func (q *Queries) EnqueueDemoGc(ctx context.Context, arg EnqueueDemoGcParams) error {
+	_, err := q.db.Exec(ctx, enqueueDemoGc, arg.ObjectKey, arg.EntityID, arg.PurgeAfter)
+	return err
+}
+
 const getDemoBySlug = `-- name: GetDemoBySlug :one
 SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        d.lifecycle_state, d.moderation_state, d.created_at, d.updated_at,
@@ -506,6 +542,51 @@ func (q *Queries) GetDemoForEdit(ctx context.Context, slug string) (GetDemoForEd
 	return i, err
 }
 
+const getDemoForLifecycle = `-- name: GetDemoForLifecycle :one
+
+SELECT d.id, d.slug, d.author_id, d.lifecycle_state, d.moderation_state,
+       d.published_revision_id, d.deleted_at, d.erased_at
+FROM demos d
+WHERE d.slug = $1
+`
+
+type GetDemoForLifecycleRow struct {
+	ID                  int64
+	Slug                string
+	AuthorID            pgtype.Int8
+	LifecycleState      string
+	ModerationState     string
+	PublishedRevisionID pgtype.Int8
+	DeletedAt           pgtype.Timestamptz
+	ErasedAt            pgtype.Timestamptz
+}
+
+// ===== 作品生命周期（上下架 / 软删 / 恢复）=====
+//
+// 与「改稿」「回滚」共用同一张 demos 行，但动的是**另两层**：
+// 可见性层（lifecycle_state）与删除标记层（deleted_at）。两层是笛卡尔积，
+// 所以软删不改 lifecycle_state，恢复只清 deleted_at（生命周期 §4.3）。
+//
+// 这里刻意不写 demo_timeline：时间线记的是「对外发生过什么」（Demo 域 §3.11），
+// 而下架后的作品对外是墓碑、软删后的作品对外根本不存在。把这两件事写进时间线，
+// 要么读者以为它们对外可见，要么得给墓碑加一个「曾经被删过」的漏口。
+// 一次拿齐「能不能动」需要的全部状态。判定放在领域层，SQL 只负责取。
+func (q *Queries) GetDemoForLifecycle(ctx context.Context, slug string) (GetDemoForLifecycleRow, error) {
+	row := q.db.QueryRow(ctx, getDemoForLifecycle, slug)
+	var i GetDemoForLifecycleRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.AuthorID,
+		&i.LifecycleState,
+		&i.ModerationState,
+		&i.PublishedRevisionID,
+		&i.DeletedAt,
+		&i.ErasedAt,
+	)
+	return i, err
+}
+
 const getDemoForPreview = `-- name: GetDemoForPreview :one
 SELECT d.id,
        d.slug,
@@ -665,6 +746,29 @@ func (q *Queries) GetDemoForRestore(ctx context.Context, arg GetDemoForRestorePa
 		&i.RevisionDeletedAt,
 		&i.RevisionErasedAt,
 	)
+	return i, err
+}
+
+const getDemoGcWindow = `-- name: GetDemoGcWindow :one
+SELECT q.purge_after, q.purged_at, q.abandoned_at
+FROM gc_queue q
+WHERE q.kind = 'demo_dir' AND q.object_key = $1::text
+ORDER BY q.id DESC
+LIMIT 1
+`
+
+type GetDemoGcWindowRow struct {
+	PurgeAfter  pgtype.Timestamptz
+	PurgedAt    pgtype.Timestamptz
+	AbandonedAt pgtype.Timestamptz
+}
+
+// 恢复窗口的唯一判据：这条作品入队时算出的 purge_after（不是「当前配置的窗口」重算）。
+// 读不到行 = 没入过队 = 没有窗口可判，调用方按「不可恢复」处理。
+func (q *Queries) GetDemoGcWindow(ctx context.Context, objectKey string) (GetDemoGcWindowRow, error) {
+	row := q.db.QueryRow(ctx, getDemoGcWindow, objectKey)
+	var i GetDemoGcWindowRow
+	err := row.Scan(&i.PurgeAfter, &i.PurgedAt, &i.AbandonedAt)
 	return i, err
 }
 
@@ -828,6 +932,18 @@ func (q *Queries) NextRevisionNo(ctx context.Context, demoID int64) (int32, erro
 	return rev_no, err
 }
 
+const restoreDeletedDemo = `-- name: RestoreDeletedDemo :exec
+UPDATE demos
+SET deleted_at = NULL, delete_reason = '', updated_at = now()
+WHERE id = $1 AND deleted_at IS NOT NULL AND erased_at IS NULL
+`
+
+// 恢复 = 清空 deleted_at。作品自动回到删除前的档位，不需要额外的「原状态」列。
+func (q *Queries) RestoreDeletedDemo(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, restoreDeletedDemo, id)
+	return err
+}
+
 const setCurrentRevision = `-- name: SetCurrentRevision :exec
 UPDATE demos SET current_revision_id = $2, updated_at = now() WHERE id = $1
 `
@@ -861,4 +977,49 @@ type SetCurrentRevisionForEditParams struct {
 func (q *Queries) SetCurrentRevisionForEdit(ctx context.Context, arg SetCurrentRevisionForEditParams) error {
 	_, err := q.db.Exec(ctx, setCurrentRevisionForEdit, arg.ID, arg.CurrentRevisionID)
 	return err
+}
+
+const softDeleteDemo = `-- name: SoftDeleteDemo :exec
+UPDATE demos
+SET deleted_at = now(), delete_reason = $2, updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL AND erased_at IS NULL
+`
+
+type SoftDeleteDemoParams struct {
+	ID           int64
+	DeleteReason string
+}
+
+// 软删只写删除标记层，lifecycle_state 一个字节不动（生命周期 §4.3）。
+func (q *Queries) SoftDeleteDemo(ctx context.Context, arg SoftDeleteDemoParams) error {
+	_, err := q.db.Exec(ctx, softDeleteDemo, arg.ID, arg.DeleteReason)
+	return err
+}
+
+const transitionDemoLifecycle = `-- name: TransitionDemoLifecycle :execrows
+UPDATE demos
+SET lifecycle_state = $1::text, updated_at = now()
+WHERE id = $2
+  AND lifecycle_state = $3::text
+  AND deleted_at IS NULL
+  AND erased_at IS NULL
+`
+
+type TransitionDemoLifecycleParams struct {
+	ToState   string
+	DemoID    int64
+	FromState string
+}
+
+// 生命周期只有这一个写入口：目标状态与前置状态都由调用方给，条件在同一句里。
+//
+// 为什么不拆成 ArchiveDemo / UnarchiveDemo 两条：那会让「哪些跃迁合法」变成
+// 两个文件位置的事实，接「平台移除」「申诉恢复」时就是第三、第四份。
+// 现在合法性由 WHERE 的 lifecycle_state = @from_state 表达，唯一；0 行 = 跃迁不合法。
+func (q *Queries) TransitionDemoLifecycle(ctx context.Context, arg TransitionDemoLifecycleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, transitionDemoLifecycle, arg.ToState, arg.DemoID, arg.FromState)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

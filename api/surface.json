@@ -1,5 +1,25 @@
 {
   "models": {
+    "DemoDeleteRequest": {
+      "reason": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "DemoDeleteResult": {
+      "lifecycleState": {
+        "type": "LifecycleState",
+        "optional": false
+      },
+      "purgeAfter": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "DemoDetail": {
       "canEdit": {
         "type": "bool",
@@ -25,6 +45,10 @@
         "type": "bool",
         "optional": false
       },
+      "lifecycleActions": {
+        "type": "DemoLifecycleActions",
+        "optional": false
+      },
       "lifecycleState": {
         "type": "LifecycleState",
         "optional": false
@@ -39,6 +63,34 @@
       },
       "updatedAt": {
         "type": "time.Time",
+        "optional": false
+      }
+    },
+    "DemoLifecycleActions": {
+      "archive": {
+        "type": "bool",
+        "optional": false
+      },
+      "delete": {
+        "type": "bool",
+        "optional": false
+      },
+      "restore": {
+        "type": "bool",
+        "optional": false
+      },
+      "unarchive": {
+        "type": "bool",
+        "optional": false
+      }
+    },
+    "DemoLifecycleResult": {
+      "lifecycleState": {
+        "type": "LifecycleState",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
         "optional": false
       }
     },
@@ -444,12 +496,14 @@
     ],
     "ErrorCode": [
       "conflict",
+      "derivative_purged",
       "email_not_verified",
       "forbidden",
       "invalid_param",
       "not_found",
       "payload_too_large",
       "rate_limited",
+      "restore_window_closed",
       "unauthorized",
       "unavailable",
       "verification_required"
@@ -573,6 +627,11 @@
       "pathParams": 0,
       "params": null
     },
+    "DELETE /api/v1/demos/{slug}": {
+      "method": "DeleteDemo",
+      "pathParams": 1,
+      "params": null
+    },
     "GET /api/v1/demos/{slug}": {
       "method": "GetDemo",
       "pathParams": 1,
@@ -580,6 +639,16 @@
     },
     "PUT /api/v1/demos/{slug}": {
       "method": "UpdateDemo",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/demos/{slug}/archive": {
+      "method": "ArchiveDemo",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/demos/{slug}/restore": {
+      "method": "RestoreDemo",
       "pathParams": 1,
       "params": null
     },
@@ -591,6 +660,11 @@
     "POST /api/v1/demos/{slug}/revisions/{revNo}/restore": {
       "method": "RestoreDemoRevision",
       "pathParams": 2,
+      "params": null
+    },
+    "POST /api/v1/demos/{slug}/unarchive": {
+      "method": "UnarchiveDemo",
+      "pathParams": 1,
       "params": null
     },
     "GET /api/v1/me": {

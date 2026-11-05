@@ -26,7 +26,11 @@
  */
 
 export * from './accountStatus';
+export * from './demoDeleteRequest';
+export * from './demoDeleteResult';
 export * from './demoDetail';
+export * from './demoLifecycleActions';
+export * from './demoLifecycleResult';
 export * from './demoList';
 export * from './demoRevision';
 export * from './demoRevisionSource';

@@ -230,14 +230,18 @@ func TestGetDemoArchivedIsTombstone(t *testing.T) {
 	}
 }
 
-func TestGetDemoSoftDeletedIsTombstone(t *testing.T) {
-	// 作者删除（deleted_at 有值）也留墓碑，不返回 404——LIFE-008 统一口径。
+// 软删的作品**对外**不存在，连墓碑都不给。
+//
+// 这条曾经断言 200 + 墓碑（注释还写着「LIFE-008 统一口径」），而生命周期 §4.1 写的是
+// 相反的：「`deleted` / `erased` 对外就是不存在，给墓碑反而等于承认这里有过东西」。
+// 墓碑只属于 `archived` / `removed` 这两种「曾经公开过」的档位。
+//
+// 拿这条旧断言当依据的话，删除一件违规作品会留下一个「作者已删除」的页面——
+// 那正是作者删除时最不想留下的痕迹。
+func TestGetDemoSoftDeletedIsNotFoundForVisitor(t *testing.T) {
 	response := getDemo(t, detailRow("published", "标题", true, false))
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", response.Code)
-	}
-	if decode(t, response.Body.Bytes())["title"] != nil {
-		t.Fatal("软删的 title 必须为 null")
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("访客看软删作品 = %d，想要 404", response.Code)
 	}
 }
 

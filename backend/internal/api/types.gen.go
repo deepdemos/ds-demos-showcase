@@ -32,12 +32,14 @@ const (
 // Defines values for ErrorCode.
 const (
 	Conflict             ErrorCode = "conflict"
+	DerivativePurged     ErrorCode = "derivative_purged"
 	EmailNotVerified     ErrorCode = "email_not_verified"
 	Forbidden            ErrorCode = "forbidden"
 	InvalidParam         ErrorCode = "invalid_param"
 	NotFound             ErrorCode = "not_found"
 	PayloadTooLarge      ErrorCode = "payload_too_large"
 	RateLimited          ErrorCode = "rate_limited"
+	RestoreWindowClosed  ErrorCode = "restore_window_closed"
 	Unauthorized         ErrorCode = "unauthorized"
 	Unavailable          ErrorCode = "unavailable"
 	VerificationRequired ErrorCode = "verification_required"
@@ -122,6 +124,26 @@ const (
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
 type AccountStatus string
 
+// DemoDeleteRequest defines model for DemoDeleteRequest.
+type DemoDeleteRequest struct {
+	// Reason 删除理由，进 `demos.delete_reason`，只给自己留个记录
+	Reason *string `json:"reason,omitempty"`
+}
+
+// DemoDeleteResult defines model for DemoDeleteResult.
+type DemoDeleteResult struct {
+	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
+	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
+	// `archived` / `removed` 可见但为墓碑态。
+	LifecycleState LifecycleState `json:"lifecycleState"`
+
+	// PurgeAfter 最晚可恢复时刻。**在删除那一刻定型**（删除时刻 + 当时配置的
+	// `lifecycle.restore_window_days`），之后调整窗口参数不会改它——
+	// 否则系统会承诺一件它在原定日期做不到的事。
+	PurgeAfter time.Time `json:"purgeAfter"`
+	Slug       string    `json:"slug"`
+}
+
 // DemoDetail defines model for DemoDetail.
 type DemoDetail struct {
 	// CanEdit 当前调用者能不能编辑这个作品（只有作者本人在非墓碑态下为 `true`）。
@@ -155,6 +177,13 @@ type DemoDetail struct {
 	// 猜出来的按钮会点出 404。
 	Downloadable bool `json:"downloadable"`
 
+	// LifecycleActions 当前调用者此刻能对这个作品做哪些生命周期动作。四个布尔全给，
+	// 前端不需要再按 `lifecycleState` 自己推——推错的后果是「按钮点了 409」。
+	//
+	// 判定放在服务端，因为它取决于三个变量的组合：是不是作者、有没有被删、
+	// 是不是被平台移除。这三件事前端凑不齐（`deletedAt` 并不出现在响应里）。
+	LifecycleActions DemoLifecycleActions `json:"lifecycleActions"`
+
 	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
 	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
 	// `archived` / `removed` 可见但为墓碑态。
@@ -164,6 +193,38 @@ type DemoDetail struct {
 	// Title 墓碑态为 null
 	Title     *string   `json:"title"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// DemoLifecycleActions 当前调用者此刻能对这个作品做哪些生命周期动作。四个布尔全给，
+// 前端不需要再按 `lifecycleState` 自己推——推错的后果是「按钮点了 409」。
+//
+// 判定放在服务端，因为它取决于三个变量的组合：是不是作者、有没有被删、
+// 是不是被平台移除。这三件事前端凑不齐（`deletedAt` 并不出现在响应里）。
+type DemoLifecycleActions struct {
+	// Archive 能下架（已发布、未删除、非平台移除）
+	Archive bool `json:"archive"`
+
+	// Delete 能删除（未删除、非平台移除）
+	Delete bool `json:"delete"`
+
+	// Restore 能恢复（已删除、非平台移除）。
+	//
+	// 这里**不**判定恢复窗口是否过期：那要查 GC 队列，而详情页每次请求都多一次
+	// 队列查询不划算。窗口过期的正确表现是点「恢复」时收到 409
+	// `restore_window_closed`，页面上如实显示——比在详情页猜一个可能过期的数好。
+	Restore bool `json:"restore"`
+
+	// Unarchive 能重新上架（已下架、未删除）
+	Unarchive bool `json:"unarchive"`
+}
+
+// DemoLifecycleResult defines model for DemoLifecycleResult.
+type DemoLifecycleResult struct {
+	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
+	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
+	// `archived` / `removed` 可见但为墓碑态。
+	LifecycleState LifecycleState `json:"lifecycleState"`
+	Slug           string         `json:"slug"`
 }
 
 // DemoList defines model for DemoList.
@@ -505,6 +566,9 @@ type PostAuthVerifyEmailResendJSONRequestBody = VerifyEmailResendRequest
 
 // SubmitDemoMultipartRequestBody defines body for SubmitDemo for multipart/form-data ContentType.
 type SubmitDemoMultipartRequestBody SubmitDemoMultipartBody
+
+// DeleteDemoJSONRequestBody defines body for DeleteDemo for application/json ContentType.
+type DeleteDemoJSONRequestBody = DemoDeleteRequest
 
 // UpdateDemoMultipartRequestBody defines body for UpdateDemo for multipart/form-data ContentType.
 type UpdateDemoMultipartRequestBody UpdateDemoMultipartBody

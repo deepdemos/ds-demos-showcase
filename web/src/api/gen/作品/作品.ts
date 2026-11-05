@@ -25,7 +25,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  DemoDeleteRequest,
+  DemoDeleteResult,
   DemoDetail,
+  DemoLifecycleResult,
   DemoList,
   Error,
   ListDemosParams,
@@ -366,6 +369,305 @@ if(updateDemoBody.package !== undefined) {
 
   const data: updateDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as updateDemoResponse
+}
+
+
+export type deleteDemoResponse200 = {
+  data: DemoDeleteResult
+  status: 200
+}
+
+export type deleteDemoResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type deleteDemoResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type deleteDemoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteDemoResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type deleteDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type deleteDemoResponseSuccess = (deleteDemoResponse200) & {
+  headers: Headers;
+};
+export type deleteDemoResponseError = (deleteDemoResponse400 | deleteDemoResponse401 | deleteDemoResponse404 | deleteDemoResponse409 | deleteDemoResponse503) & {
+  headers: Headers;
+};
+
+export type deleteDemoResponse = (deleteDemoResponseSuccess | deleteDemoResponseError)
+
+export const getDeleteDemoUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}`
+}
+
+/**
+ * 写 `deleted_at` 并把作品目录入 GC 队列。**不改可见性层**：下架时删的，
+ * 恢复后还是下架。
+ *
+ * 删除后作品**对外不存在**（详情也是 404，不给墓碑——墓碑等于承认这里有过东西），
+ * 只有作者本人能看到「已删除 · 可恢复」。
+ *
+ * 恢复窗口在删除这一刻定型：响应里的 `purgeAfter` 就是最晚可恢复时刻，
+ * 之后恢复一律 409（`restore_window_closed`）。
+ * @summary 删除作品（软删，可恢复）
+ */
+export const deleteDemo = async (slug: string,
+    demoDeleteRequest?: DemoDeleteRequest, options?: RequestInit): Promise<deleteDemoResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getDeleteDemoUrl(slug),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(demoDeleteRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: deleteDemoResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as deleteDemoResponse
+}
+
+
+export type archiveDemoResponse200 = {
+  data: DemoLifecycleResult
+  status: 200
+}
+
+export type archiveDemoResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type archiveDemoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type archiveDemoResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type archiveDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type archiveDemoResponseSuccess = (archiveDemoResponse200) & {
+  headers: Headers;
+};
+export type archiveDemoResponseError = (archiveDemoResponse401 | archiveDemoResponse404 | archiveDemoResponse409 | archiveDemoResponse503) & {
+  headers: Headers;
+};
+
+export type archiveDemoResponse = (archiveDemoResponseSuccess | archiveDemoResponseError)
+
+export const getArchiveDemoUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/archive`
+}
+
+/**
+ * `published → archived`。下架后：作品库不再出现、详情返回墓碑页（200，只有标题与
+ * 「作者已下架」）、预览与下载 404。**渠道行不动**——下架不是删渠道，重新上架后
+ * 渠道仍在原来的可见性上。
+ *
+ * 这是作者自己的动作，见不到别人的作品（非作者一律 404，不返回 403：403 会承认
+ * 这个 slug 存在过）。
+ * @summary 下架作品（作者本人）
+ */
+export const archiveDemo = async (slug: string, options?: RequestInit): Promise<archiveDemoResponse> => {
+
+  const res = await fetch(getArchiveDemoUrl(slug),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: archiveDemoResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as archiveDemoResponse
+}
+
+
+export type unarchiveDemoResponse200 = {
+  data: DemoLifecycleResult
+  status: 200
+}
+
+export type unarchiveDemoResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type unarchiveDemoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type unarchiveDemoResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type unarchiveDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type unarchiveDemoResponseSuccess = (unarchiveDemoResponse200) & {
+  headers: Headers;
+};
+export type unarchiveDemoResponseError = (unarchiveDemoResponse401 | unarchiveDemoResponse404 | unarchiveDemoResponse409 | unarchiveDemoResponse503) & {
+  headers: Headers;
+};
+
+export type unarchiveDemoResponse = (unarchiveDemoResponseSuccess | unarchiveDemoResponseError)
+
+export const getUnarchiveDemoUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/unarchive`
+}
+
+/**
+ * `archived → published`。不发通知、不改渠道、不动对外版本——上架只改变可见性。
+ *
+ * 「被平台移除」（`removed`）的作品不能自己上架，那是治理域的处置。
+ * @summary 重新上架（作者本人）
+ */
+export const unarchiveDemo = async (slug: string, options?: RequestInit): Promise<unarchiveDemoResponse> => {
+
+  const res = await fetch(getUnarchiveDemoUrl(slug),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: unarchiveDemoResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as unarchiveDemoResponse
+}
+
+
+export type restoreDemoResponse200 = {
+  data: DemoLifecycleResult
+  status: 200
+}
+
+export type restoreDemoResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type restoreDemoResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type restoreDemoResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type restoreDemoResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type restoreDemoResponseSuccess = (restoreDemoResponse200) & {
+  headers: Headers;
+};
+export type restoreDemoResponseError = (restoreDemoResponse401 | restoreDemoResponse404 | restoreDemoResponse409 | restoreDemoResponse503) & {
+  headers: Headers;
+};
+
+export type restoreDemoResponse = (restoreDemoResponseSuccess | restoreDemoResponseError)
+
+export const getRestoreDemoUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/restore`
+}
+
+/**
+ * 清空 `deleted_at`，作品回到删除前的档位（下架时删的，恢复后还是下架）。
+ * 不返回 403：**恢复窗口过期**与**文件已被回收**都是 409，但错误码不同——
+ * 前者是「你来晚了」，后者是「系统提前清掉了」。
+ *
+ * 路径与 `POST /demos/{slug}/revisions/{revNo}/restore` 分开：那个恢复的是
+ * **内容版本**，这个恢复的是**被删掉的作品**。
+ * @summary 恢复已删除的作品（作者本人）
+ */
+export const restoreDemo = async (slug: string, options?: RequestInit): Promise<restoreDemoResponse> => {
+
+  const res = await fetch(getRestoreDemoUrl(slug),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: restoreDemoResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as restoreDemoResponse
 }
 
 
