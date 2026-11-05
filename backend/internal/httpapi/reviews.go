@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -74,6 +75,9 @@ func (h *Handler) writeReviewError(w http.ResponseWriter, err error) {
 	case errors.Is(err, demo.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, api.InvalidParam, messageOf(err))
 	default:
+		// 未分类的错误要留痕。否则线上只会看到一句「服务暂时不可用」，
+		// 日志里一片干净——排查时连是哪一层炸的都无从知道。
+		slog.Error("审核链路未分类错误", "err", err)
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 }

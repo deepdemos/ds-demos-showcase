@@ -44,7 +44,7 @@ WHERE slug = $1;
 -- 另一条拿到 0 行。先查后改在这个窗口里两条都会通过，然后第二次覆盖第一次的结果。
 UPDATE demos
 SET moderation_state = $2,
-    updated_at       = now()
+    updated_at       = GREATEST(now(), created_at)
 WHERE slug = $1
   AND moderation_state = 'pending'
   AND deleted_at IS NULL
@@ -63,7 +63,7 @@ UPDATE demos d
 SET published_revision_id = d.current_revision_id,
     title                 = COALESCE(r.title, d.title),
     description           = COALESCE(r.description, d.description),
-    updated_at            = now()
+    updated_at            = GREATEST(now(), d.created_at)
 FROM demo_revisions r
 WHERE d.slug = $1
   AND d.current_revision_id IS NOT NULL
@@ -100,7 +100,7 @@ SET lifecycle_state       = 'published',
     -- 第一次发布时把对外版本指向当前版本；已经有了就不动（复审期间发布的场景：
     -- 对外内容仍是上一版，发布动作不该顺手把未审的新版本推上线）。
     published_revision_id = COALESCE(published_revision_id, current_revision_id),
-    updated_at            = now()
+    updated_at            = GREATEST(now(), created_at)
 WHERE slug = $1
   AND lifecycle_state IN ('draft', 'archived')
   AND moderation_state = 'approved'

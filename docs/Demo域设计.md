@@ -183,6 +183,17 @@ CHECK (lifecycle_state  IN ('draft', 'published', 'archived', 'removed'))
 
 **为什么 `title` 两边都有**：`Demo.title` 是最新标题（列表直读，避免 JOIN）；`DemoRevision.title` 是该版本的标题（历史页正确渲染）。改标题不产生新版本——它只更新 `Demo.title`，`updated_at` 显式赋值。
 
+**落地状态（2026-11-05）——时间字段为什么都夹了一层 `GREATEST`**
+
+`ck_demos_time_order` 是 `updated_at >= created_at`（`deleted_at`、`erased_at` 同理递进）。它是真判据，但写点用的是 `now()`——那是**事务开始时间**，不是语句真正跑的时刻。库所在机器的时钟被 NTP 往回拨之后，相邻两条语句里后一条的 `now()` 可能比前一条刚写下的 `created_at` 还早，于是「更新自己刚写的行」撞约束：对外表现是审核接口偶发 503，而 `writeReviewError` 的 default 分支当时不写日志，日志里一行都没有。
+
+修法不是放宽约束，而是**给写点加天花板**：八处写 `demos.updated_at` / `deleted_at` 的语句统一取 `GREATEST(now(), created_at)`。时钟正常时它等于 `now()`（没有任何行为变化），时钟回拨时它顶在 `created_at` 上——宁可少记几秒，也不让一条合法操作变成 503。
+
+- 约束本身一个字节没动，仍然是判据；夹的是**写进去的值**。
+- 不选「在数据库上加夹紧触发器」：它会静默改写所有写点（包括将来的），而本仓的风格是「能在写点说清的就别藏在触发器里」。
+- 也不选「只把机器时钟修好」：CI 与生产上任何一次 NTP 回拨都会重现，代码不该依赖时钟单调。
+- 回归测试钉住三条路径：裁决、软删、恢复（`clock_integration_test.go`，把行的时间戳推到未来十分钟，之后任何 `now()` 都必然小于它）。
+
 ### 3.2 `DemoRevision`（不可变内容快照）
 
 | 字段 | 类型 | 空 | 默认 | 说明 |

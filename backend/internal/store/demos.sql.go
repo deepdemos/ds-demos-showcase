@@ -1023,7 +1023,7 @@ func (q *Queries) RecordDemoView(ctx context.Context, arg RecordDemoViewParams) 
 
 const restoreDeletedDemo = `-- name: RestoreDeletedDemo :exec
 UPDATE demos
-SET deleted_at = NULL, delete_reason = '', updated_at = now()
+SET deleted_at = NULL, delete_reason = '', updated_at = GREATEST(now(), created_at)
 WHERE id = $1 AND deleted_at IS NOT NULL AND erased_at IS NULL
 `
 
@@ -1034,7 +1034,7 @@ func (q *Queries) RestoreDeletedDemo(ctx context.Context, id int64) error {
 }
 
 const setCurrentRevision = `-- name: SetCurrentRevision :exec
-UPDATE demos SET current_revision_id = $2, updated_at = now() WHERE id = $1
+UPDATE demos SET current_revision_id = $2, updated_at = GREATEST(now(), created_at) WHERE id = $1
 `
 
 type SetCurrentRevisionParams struct {
@@ -1051,7 +1051,7 @@ const setCurrentRevisionForEdit = `-- name: SetCurrentRevisionForEdit :exec
 UPDATE demos
 SET current_revision_id = $2,
     moderation_state    = 'pending',
-    updated_at          = now()
+    updated_at          = GREATEST(now(), created_at)
 WHERE id = $1
 `
 
@@ -1070,7 +1070,8 @@ func (q *Queries) SetCurrentRevisionForEdit(ctx context.Context, arg SetCurrentR
 
 const softDeleteDemo = `-- name: SoftDeleteDemo :exec
 UPDATE demos
-SET deleted_at = now(), delete_reason = $2, updated_at = now()
+SET deleted_at = GREATEST(now(), created_at), delete_reason = $2,
+    updated_at = GREATEST(now(), created_at)
 WHERE id = $1 AND deleted_at IS NULL AND erased_at IS NULL
 `
 
@@ -1087,7 +1088,7 @@ func (q *Queries) SoftDeleteDemo(ctx context.Context, arg SoftDeleteDemoParams) 
 
 const transitionDemoLifecycle = `-- name: TransitionDemoLifecycle :execrows
 UPDATE demos
-SET lifecycle_state = $1::text, updated_at = now()
+SET lifecycle_state = $1::text, updated_at = GREATEST(now(), created_at)
 WHERE id = $2
   AND lifecycle_state = $3::text
   AND deleted_at IS NULL
