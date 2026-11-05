@@ -55,6 +55,12 @@ type SubmitInput struct {
 	PackageName string
 	// PackageSize 是它的字节数（由调用方边写边数，不信客户端给的 Content-Length）。
 	PackageSize int64
+	// ModelSlugs 是作者声明的模型（slug，不是 id）。空列表合法。
+	//
+	// 用 slug 而不是 id：id 是库内主键，前端拿到的模型清单来自
+	// `GET /api/v1/models`，它给的就是 slug；把 id 放进请求体等于让客户端
+	// 依赖一个会随主数据重建而变的数字。
+	ModelSlugs []string
 }
 
 // SubmitResult 是投稿成功后的最小回执。

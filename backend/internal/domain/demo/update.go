@@ -55,6 +55,12 @@ type UpdateInput struct {
 	PackagePath string
 	PackageName string
 	PackageSize int64
+	// ModelSlugs 是这一版声明的模型（slug）。
+	//
+	// 语义是**整体替换**：请求里给了就以它为准（空列表 = 这一版不声明任何模型），
+	// 不给也是空列表。不做「没传就沿用上一版」——multipart 里「没传」与「传了空」
+	// 在浏览器侧无法区分（空选择不会产生字段），沿用会让作者永远删不掉一个声明。
+	ModelSlugs []string
 }
 
 // UpdateResult 是编辑成功后的回执。
@@ -206,6 +212,16 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 			}); err != nil {
 				return fmt.Errorf("复制清单失败: %w", err)
 			}
+		}
+
+		// 这一版的模型声明整体替换（语义见 UpdateInput.ModelSlugs 的注释）。
+		// 新版本本来没有行，所以「替换」就是写入；不需要先删。
+		modelIDs, err := resolveModelSlugs(ctx, q, in.ModelSlugs)
+		if err != nil {
+			return err
+		}
+		if err := attachModels(ctx, q, rev.ID, modelIDs); err != nil {
+			return err
 		}
 
 		if err := q.SetCurrentRevisionForEdit(ctx, store.SetCurrentRevisionForEditParams{

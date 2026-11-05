@@ -42,6 +42,8 @@ func (r fakeRow) Scan(dest ...any) error {
 			*d = r.values[i].(pgtype.Text)
 		case *pgtype.Timestamptz:
 			*d = r.values[i].(pgtype.Timestamptz)
+		case *pgtype.Int8:
+			*d = r.values[i].(pgtype.Int8)
 		case *bool:
 			*d = r.values[i].(bool)
 		default:
@@ -185,6 +187,17 @@ func detailRow(state string, title string, deleted, erased bool) store.GetDemoBy
 		UpdatedAt:          ts(now),
 		DeletedAt:          pgtype.Timestamptz{Valid: deleted},
 		ErasedAt:           pgtype.Timestamptz{Valid: erased},
+		// 作者与发布时间（DEMO-042 第 4、7 项）。默认给一个有昵称的作者：
+		// 「昵称为空要回退到用户名」是界面的责任，不是这里的默认场景。
+		AuthorDisplayName: "测试作者",
+		AuthorUsername:    "it-author",
+		PublishedAt:       ts(now),
+		// 两条版本轴默认留空：模型声明是**按版本**查的第二条 SQL，而这里的假库
+		// 只有一行数据、不支持第二条查询（会走「读模型声明失败」那条容错路径，
+		// 在绿测试里打一行 ERROR 日志，看起来像缺陷）。
+		// 「按版本读模型」由 models_integration_test.go 用真库钉住。
+		PublishedRevisionID: pgtype.Int8{},
+		CurrentRevisionID:   pgtype.Int8{},
 	}
 }
 
@@ -197,6 +210,9 @@ func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorde
 		row.DemoType, row.SingleFile, row.HasPublishedRevision, row.PublishedRevNo,
 		row.AuthorSub, row.CurrentTitle, row.CurrentDescription, row.CurrentDemoType, row.CurrentRevNo,
 		row.HasVisibleChannel, row.ViewCount, row.DownloadCount,
+		// 作者名（昵称、用户名）、发布时间、两条版本轴的 id（模型声明按版本取）。
+		row.AuthorDisplayName, row.AuthorUsername, row.PublishedAt,
+		row.PublishedRevisionID, row.CurrentRevisionID,
 	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
 	return response
 }

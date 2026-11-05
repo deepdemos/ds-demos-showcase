@@ -5,8 +5,8 @@
  * 本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
  *
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
- * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数，以及身份
- * （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 24 个端点。
+ * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录，以及身份
+ * （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 25 个端点。
  * 实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
@@ -35,12 +35,73 @@ import type {
   DemoList,
   Error,
   ListDemosParams,
+  ModelList,
   RestoreResult,
   RevisionList,
   SubmissionResult,
   SubmitDemoBody,
   UpdateDemoBody
 } from '../model';
+
+
+export type listModelsResponse200 = {
+  data: ModelList
+  status: 200
+}
+
+export type listModelsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listModelsResponseSuccess = (listModelsResponse200) & {
+  headers: Headers;
+};
+export type listModelsResponseError = (listModelsResponse503) & {
+  headers: Headers;
+};
+
+export type listModelsResponse = (listModelsResponseSuccess | listModelsResponseError)
+
+export const getListModelsUrl = () => {
+
+
+
+
+  return `/api/v1/models`
+}
+
+/**
+ * 只返回 `status = active` 的模型，按名字排序。
+ *
+ * **为什么需要这个端点**：投稿与编辑表单要让作者声明「这个作品用了哪些模型」，
+ * 而模型是主数据（`models` 表），不能由前端写死一个列表——写死的那份迟早
+ * 与库里不一致，而且新增一个模型要发一次前端版本。
+ *
+ * `candidate` / `unverified` / `deprecated` 不出现：前两者还没被确认，
+ * 不该被作者当事实声明；后者是已退役的模型，新作品不该再选它。
+ *
+ * 本期没有分页：模型主数据是**受控的少量行**（外部目录导入的一部分），
+ * 不是用户内容。真到了几百行的规模再加分页，那时它会需要一个管理界面。
+ * @summary 模型主数据（给投稿表单的模型选择用）
+ */
+export const listModels = async ( options?: RequestInit): Promise<listModelsResponse> => {
+
+  const res = await fetch(getListModelsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listModelsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listModelsResponse
+}
 
 
 export type listDemosResponse200 = {
@@ -186,6 +247,9 @@ if(submitDemoBody.description !== undefined) {
  }
 formData.append(`demoType`, submitDemoBody.demoType);
 formData.append(`package`, submitDemoBody.package);
+if(submitDemoBody.modelIds !== undefined) {
+ submitDemoBody.modelIds.forEach(value => formData.append(`modelIds`, value));
+ }
 
   const res = await fetch(getSubmitDemoUrl(),
   {
@@ -410,6 +474,9 @@ if(updateDemoBody.demoType !== undefined) {
  }
 if(updateDemoBody.package !== undefined) {
  formData.append(`package`, updateDemoBody.package);
+ }
+if(updateDemoBody.modelIds !== undefined) {
+ updateDemoBody.modelIds.forEach(value => formData.append(`modelIds`, value));
  }
 
   const res = await fetch(getUpdateDemoUrl(slug),

@@ -98,12 +98,35 @@ SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        -- 用 COALESCE 而不是 JOIN 后的直接列：demo_stats 是懒建的，
        -- 一件从没人看过的新作品在这里根本没有行。
        COALESCE(st.view_count, 0)::bigint AS view_count,
-       COALESCE(st.download_count, 0)::bigint AS download_count
+       COALESCE(st.download_count, 0)::bigint AS download_count,
+       -- 作者（DEMO-042 第 4 项）：昵称优先，作者没设昵称时回退到用户名。
+       -- 展示名在 SQL 里就兜好，别让三个前端各自实现一遍「为空怎么办」。
+       COALESCE(pf.display_name, '')::text AS author_display_name,
+       COALESCE(pf.username, '')::text AS author_username,
+       -- 发布时间（第 7 项）：demo_channels.published_at 是发布动作写的、
+       -- 且 `UpsertDemoChannel` 用 COALESCE 保留第一次的值。
+       -- 一个作品可以挂多个渠道，取最早的一次——「它什么时候第一次被发出去」。
+       -- 用子查询而不是 join：渠道有零到多行，join 会把详情行复制成多行。
+       --
+       -- 这里**不再复述可见性判据**：这一行能不能被公开看到由上一条
+       -- `has_visible_channel` 决定，能走到公开详情的作品必然至少有一个可见渠道；
+       -- 再写一遍就是把同一份可见性判据抄成第二份——那正是这类洞的老来源
+       -- （`check-single-source` 按文本计数，连注释里的原样判据都会算进去，
+       -- 所以这段说明只描述、不抄写）。
+       (SELECT min(c.published_at)::timestamptz
+          FROM demo_channels c
+         WHERE c.demo_id = d.id)::timestamptz AS published_at,
+       -- 两条版本轴的 id（模型声明挂在 revision 上，要按视图选一条取）。
+       d.published_revision_id, d.current_revision_id
 FROM demos d
 LEFT JOIN users u ON u.id = d.author_id
 LEFT JOIN demo_revisions r ON r.id = d.published_revision_id
 LEFT JOIN demo_revisions cr ON cr.id = d.current_revision_id
 LEFT JOIN demo_stats st ON st.demo_id = d.id
+-- accounts 只用来接到 profiles：profiles 的主键是 accounts.id，不是 users.id。
+-- users 与 accounts 以 sub 对应（同一个 IdP 主体两条投影，见身份域 §4）。
+LEFT JOIN accounts ac ON ac.sub = u.sub
+LEFT JOIN profiles pf ON pf.account_id = ac.id
 WHERE d.slug = $1;
 
 -- ===== 投稿写入（Demo 域）=====

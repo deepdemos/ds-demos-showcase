@@ -22,6 +22,10 @@ func (s *stub) ListDemos(_ http.ResponseWriter, _ *http.Request, _ api.ListDemos
 	s.hits = append(s.hits, "list")
 }
 
+func (s *stub) ListModels(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "models")
+}
+
 func (s *stub) UpdateDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
 
 func (s *stub) ArchiveDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}

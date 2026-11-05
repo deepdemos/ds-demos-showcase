@@ -5,8 +5,8 @@
  * 本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
  *
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
- * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数，以及身份
- * （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 24 个端点。
+ * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录，以及身份
+ * （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 25 个端点。
  * 实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
@@ -50,6 +50,10 @@ export * from './listDemosParams';
 export * from './listDemosSort';
 export * from './loginRequest';
 export * from './me';
+export * from './model';
+export * from './modelAuthor';
+export * from './modelList';
+export * from './modelRef';
 export * from './passwordResetCodeRequest';
 export * from './passwordResetRequest';
 export * from './publishRequest';

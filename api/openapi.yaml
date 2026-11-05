@@ -7,8 +7,8 @@ info:
     本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
 
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
-    生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数，以及身份
-    （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 24 个端点。
+    生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录，以及身份
+    （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 25 个端点。
     实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
@@ -57,6 +57,37 @@ paths:
                 $ref: '#/components/schemas/Healthz'
         '503':
           description: 站点不可用（核心资料暂不可访问）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/models:
+    get:
+      operationId: listModels
+      tags: [作品]
+      summary: 模型主数据（给投稿表单的模型选择用）
+      description: |
+        只返回 `status = active` 的模型，按名字排序。
+
+        **为什么需要这个端点**：投稿与编辑表单要让作者声明「这个作品用了哪些模型」，
+        而模型是主数据（`models` 表），不能由前端写死一个列表——写死的那份迟早
+        与库里不一致，而且新增一个模型要发一次前端版本。
+
+        `candidate` / `unverified` / `deprecated` 不出现：前两者还没被确认，
+        不该被作者当事实声明；后者是已退役的模型，新作品不该再选它。
+
+        本期没有分页：模型主数据是**受控的少量行**（外部目录导入的一部分），
+        不是用户内容。真到了几百行的规模再加分页，那时它会需要一个管理界面。
+      responses:
+        '200':
+          description: 模型清单（按名字排序）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelList'
+        '503':
+          description: 数据库不可用
           content:
             application/json:
               schema:
@@ -169,6 +200,19 @@ paths:
                   type: string
                   format: binary
                   description: 作品文件（zip 或单个 html/svg）
+                modelIds:
+                  type: array
+                  description: |
+                    这一版用到的模型，取值为 `models.slug`（来自 `GET /api/v1/models`）。
+
+                    不传或空数组都合法——作品可以不声明模型。传了不存在的 slug、
+                    或者不是 `active` 的 slug 一律 400，不静默丢弃：
+                    作者以为声明了两个、库里只落了一个，他永远发现不了。
+
+                    没有条数上限：多少由作品的事实决定；重复的 slug 会被去重。
+                  items:
+                    type: string
+                    maxLength: 128
       responses:
         '201':
           description: 已接收，进入待审核（对外不可见）
@@ -347,6 +391,17 @@ paths:
                   type: string
                   format: binary
                   description: 新的作品文件；不传表示只改文字
+                modelIds:
+                  type: array
+                  description: |
+                    这一版声明的模型（`models.slug`），语义是**整体替换**。
+
+                    不传等价于空数组，也就是「这一版不声明任何模型」——不做
+                    「没传就沿用上一版」：multipart 里「没传」与「传空」在浏览器侧
+                    无法区分（空选择不产生字段），沿用会让作者永远删不掉一个声明。
+                  items:
+                    type: string
+                    maxLength: 128
       responses:
         '200':
           description: 新版本已追加，进入待审核（对外仍是上一版）
@@ -1345,6 +1400,54 @@ components:
           type: string
           enum: [ok]
 
+    ModelRef:
+      type: object
+      additionalProperties: false
+      required: [slug, name, vendor]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+          description: 稳定可引用的模型标识（`models.slug`）
+        name:
+          type: string
+          maxLength: 128
+          description: 给人看的模型名
+        vendor:
+          type: string
+          maxLength: 64
+          description: 厂商名；未知时为空串
+
+    Model:
+      allOf:
+        - $ref: '#/components/schemas/ModelRef'
+
+    ModelList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+
+    ModelAuthor:
+      type: object
+      additionalProperties: false
+      required: [username, displayName]
+      properties:
+        username:
+          type: string
+          maxLength: 20
+          description: |
+            用户名（不可变的标识）。作者注销后为空串——那时作品本身还留着，
+            只是「谁写的」这个信息不再存在。
+        displayName:
+          type: string
+          maxLength: 50
+          description: 昵称；作者没设昵称时为空串，界面应当回退显示 `username`
+
     DemoSummary:
       type: object
       additionalProperties: false
@@ -1446,7 +1549,7 @@ components:
         - $ref: '#/components/schemas/DemoSummary'
         - type: object
           additionalProperties: false
-          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions, viewCount, downloadCount]
+          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions, viewCount, downloadCount, author, publishedAt, models]
           properties:
             description:
               type: string
@@ -1499,6 +1602,33 @@ components:
               format: int64
               minimum: 0
               description: 下载数。一次成功写出的下载 +1；被 404 挡下或传输中断不计。
+            author:
+              $ref: '#/components/schemas/ModelAuthor'
+            publishedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: |
+                第一次对外发布的时间，取该作品全部对外可见渠道里最早的一次
+                `demo_channels.published_at`。
+
+                没有对外可见的渠道时为 null（草稿、待审、以及从未发布过的作品）。
+                它与 `createdAt` 是两件事：`createdAt` 是投稿那一刻，
+                `publishedAt` 是「它第一次被人看到」——作者写完稿压一个月再发，
+                这两个时间会差很远。
+
+                墓碑态与已删除的作品也给：它曾经公开过，这个事实不该被抹掉。
+            models:
+              type: array
+              description: |
+                这一版声明的模型（`demo_revision_models`），按名字排序。
+
+                - 访客看**对外版本**的声明，作者看**当前版本**的——与标题、简介同一口径
+                - 空数组是正常状态：作品可以不声明模型（展示件未必用了模型）
+                - 墓碑态恒为空数组：墓碑不承载内容，也就不承载「用了什么模型」
+                - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
+              items:
+                $ref: '#/components/schemas/ModelRef'
 
     DemoLifecycleActions:
       type: object
