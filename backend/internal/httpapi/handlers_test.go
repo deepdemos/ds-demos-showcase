@@ -196,7 +196,7 @@ func getDemo(t *testing.T, row store.GetDemoBySlugRow) *httptest.ResponseRecorde
 		row.LifecycleState, row.ModerationState, row.CreatedAt, row.UpdatedAt, row.DeletedAt, row.ErasedAt,
 		row.DemoType, row.SingleFile, row.HasPublishedRevision, row.PublishedRevNo,
 		row.AuthorSub, row.CurrentTitle, row.CurrentDescription, row.CurrentDemoType, row.CurrentRevNo,
-		row.HasVisibleChannel,
+		row.HasVisibleChannel, row.ViewCount, row.DownloadCount,
 	}}}), nil).GetDemo(response, httptest.NewRequest(http.MethodGet, "/api/v1/demos/demo-slug", nil), "demo-slug")
 	return response
 }
@@ -228,6 +228,25 @@ func TestGetDemoArchivedIsTombstone(t *testing.T) {
 	}
 	if body["lifecycleState"] != "archived" {
 		t.Fatalf("expected archived, got %v", body["lifecycleState"])
+	}
+}
+
+// 墓碑不披露计数。
+//
+// 「这件作品以前有多少人看过」本身就是关于内容的信息——墓碑页只该告诉读者
+// 「这里曾经有过一件作品，作者自己下架了」，不该顺带交出一份热度。
+func TestGetDemoTombstoneHidesCounts(t *testing.T) {
+	row := detailRow("archived", "标题", false, false)
+	row.ViewCount = 4321
+	row.DownloadCount = 99
+
+	response := getDemo(t, row)
+	body := decode(t, response.Body.Bytes())
+	if body["viewCount"] != float64(0) {
+		t.Fatalf("墓碑态 viewCount 应为 0，实际 %v", body["viewCount"])
+	}
+	if body["downloadCount"] != float64(0) {
+		t.Fatalf("墓碑态 downloadCount 应为 0，实际 %v", body["downloadCount"])
 	}
 }
 

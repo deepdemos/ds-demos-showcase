@@ -239,6 +239,35 @@ func TestIntegrationDownload(t *testing.T) {
 	}
 }
 
+// 分段请求不计下载数。
+//
+// 「一次下载」的判据是拿到完整文件——否则一个 10 段的续传会把计数刷成 10，
+// 而且中途断掉的传输也会各算一次，指标立刻失真。
+func TestIntegrationRangeRequestDoesNotCount(t *testing.T) {
+	pool := integrationPool(t)
+	dir := t.TempDir()
+	seedDownloadWorld(t, pool, dir)
+	handler := newDownload(t, pool, dir)
+
+	req := httptest.NewRequest(http.MethodGet, "/download/dl-zip", nil)
+	req.Header.Set("Range", "bytes=0-3")
+	rec := httptest.NewRecorder()
+	NewRouter(&stub{}, nil, handler).ServeHTTP(rec, req)
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("Range 请求期望 206，实际 %d", rec.Code)
+	}
+
+	var rows int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM demo_stats s JOIN demos d ON d.id = s.demo_id WHERE d.slug = 'dl-zip'`).
+		Scan(&rows); err != nil {
+		t.Fatalf("查计数失败: %v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("分段请求不该计入下载数，实际 demo_stats 有 %d 行", rows)
+	}
+}
+
 // TestIntegrationDownloadMissingFile 覆盖「行说要给、盘上没有」：
 // DEMO-040 要求明确失败，而不是回一个空文件。
 func TestIntegrationDownloadMissingFile(t *testing.T) {

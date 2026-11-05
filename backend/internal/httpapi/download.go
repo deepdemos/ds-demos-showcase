@@ -3,10 +3,12 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -147,10 +149,59 @@ func (d *Download) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 一个 30 MB 的包传到一半断线，客户端看到的是一个正常结束的短文件。
 	// Stat 失败不该拦下载（文件可能可读但元数据查不到），所以只降级不报错。
 	setDownloadHeaders(w, name)
-	if size, err := d.files.Stat(ctx, key); err == nil && size >= 0 {
+
+	// 断点续传：声明可分段，然后按 `Range` 决定这一趟发哪一段。
+	//
+	// 大文件下载断一次就要从头再来，是这个功能存在的全部理由；所以即使这次请求
+	// 没带 Range，也要回 `Accept-Ranges: bytes`——浏览器正是看到它才敢在断线后
+	// 发一个带 Range 的续传请求。
+	w.Header().Set("Accept-Ranges", "bytes")
+
+	size, sizeErr := d.files.Stat(ctx, key)
+	if sizeErr != nil || size < 0 {
+		if sizeErr != nil {
+			slog.Warn("download: 取文件大小失败，改按分块传输", "key", key, "err", sizeErr)
+		}
+		size = -1
+	}
+
+	// 只有知道大小时才谈得上分段：不知道总长就无法计算 Content-Range。
+	var span *byteRange
+	if size >= 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	} else if err != nil {
-		slog.Warn("download: 取文件大小失败，改按分块传输", "key", key, "err", err)
+		if spec := r.Header.Get("Range"); spec != "" {
+			got, err := parseByteRange(spec, size)
+			switch {
+			case errors.Is(err, errRangeUnsatisfiable):
+				// 416 必须带 `bytes */total`，否则客户端不知道真实长度，只能放弃。
+				w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(size, 10))
+				w.Header().Del("Content-Length")
+				http.Error(w, "请求的区间超出文件大小", http.StatusRequestedRangeNotSatisfiable)
+				return
+			case err != nil:
+				// 语法错的 Range 按 RFC 忽略，整份发回去——比 400 更不容易把用户卡住。
+				slog.Debug("download: 忽略无法解析的 Range", "range", spec, "err", err)
+			default:
+				span = &got
+			}
+		}
+	}
+
+	if span != nil {
+		length := span.end - span.start + 1
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", span.start, span.end, size))
+		w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
+		w.WriteHeader(http.StatusPartialContent)
+		if r.Method == http.MethodHead {
+			return
+		}
+		if _, err := seekAndCopy(w, f, span.start, length); err != nil {
+			slog.Error("download: 写响应失败", "slug", slug, "err", err)
+			return
+		}
+		// 分段下载不计数：一次「下载」是拿到完整文件，续传的每一段都算的话，
+		// 一个断过三次的包会被记成四次。
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -234,4 +285,97 @@ func setDownloadHeaders(w http.ResponseWriter, name string) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
+}
+
+// byteRange 是一次 `Range: bytes=…` 请求解析出来的闭区间。
+type byteRange struct {
+	start int64
+	end   int64 // 闭区间，含 end 那个字节
+}
+
+// errRangeUnsatisfiable 表示「请求的起点已经超过文件末尾」。
+// 与「语法错」分开：前者要回 416，后者按 RFC 忽略 Range 整份发回去。
+var errRangeUnsatisfiable = errors.New("download: 请求的区间超出文件大小")
+
+// parseByteRange 解析单区间 `Range`。
+//
+// 只支持单区间（`bytes=a-b` / `bytes=a-` / `bytes=-n`）：多区间要用
+// `multipart/byteranges` 拼响应体，而浏览器的续传与「跳到某处」都只发单区间，
+// 为它实现多段解析是纯粹的复杂度。
+//
+// 不支持的写法返回错误，调用方据此退化成整份下发——RFC 9110 允许服务端忽略 Range，
+// 而 400 会让一个只是格式怪一点的客户端彻底下不动。
+func parseByteRange(spec string, size int64) (byteRange, error) {
+	const prefix = "bytes="
+	if !strings.HasPrefix(spec, prefix) {
+		return byteRange{}, errors.New("download: 只支持 bytes 单位")
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(spec, prefix))
+	if strings.Contains(rest, ",") {
+		return byteRange{}, errors.New("download: 不支持多区间")
+	}
+	dash := strings.Index(rest, "-")
+	if dash < 0 {
+		return byteRange{}, errors.New("download: 缺分隔符")
+	}
+	startRaw := strings.TrimSpace(rest[:dash])
+	endRaw := strings.TrimSpace(rest[dash+1:])
+	if startRaw == "" && endRaw == "" {
+		return byteRange{}, errors.New("download: 起止都为空")
+	}
+	if size <= 0 {
+		return byteRange{}, errRangeUnsatisfiable
+	}
+
+	if startRaw == "" {
+		// `bytes=-n`：最后 n 个字节。n 大于文件时取全文件。
+		n, err := strconv.ParseInt(endRaw, 10, 64)
+		if err != nil || n <= 0 {
+			return byteRange{}, errors.New("download: 后缀长度非法")
+		}
+		if n > size {
+			n = size
+		}
+		return byteRange{start: size - n, end: size - 1}, nil
+	}
+
+	start, err := strconv.ParseInt(startRaw, 10, 64)
+	if err != nil || start < 0 {
+		return byteRange{}, errors.New("download: 起点非法")
+	}
+	if start >= size {
+		return byteRange{}, errRangeUnsatisfiable
+	}
+	end := size - 1
+	if endRaw != "" {
+		got, err := strconv.ParseInt(endRaw, 10, 64)
+		if err != nil || got < start {
+			return byteRange{}, errors.New("download: 终点非法")
+		}
+		if got < size {
+			end = got
+		}
+	}
+	return byteRange{start: start, end: end}, nil
+}
+
+// seekAndCopy 从 offset 起写 n 个字节。
+//
+// 用类型断言要 `io.ReadSeeker` 而不是给 `storage.Store` 加一个 GetRange：
+// 本地实现返回的是 `*os.File`，天然可 Seek；接口一变，两处实现与所有测试假件都要跟着改。
+// 代价是将来接 OSS 要单独实现（对象存储得发带 Range 的请求，不是 Seek），
+// 这一条记在已知松点里。
+//
+// 断言失败时退化成「读掉前面 offset 个字节再拷」：慢，但结果对。
+func seekAndCopy(w io.Writer, f io.ReadCloser, offset, n int64) (int64, error) {
+	if rs, ok := f.(io.ReadSeeker); ok {
+		if _, err := rs.Seek(offset, io.SeekStart); err != nil {
+			return 0, err
+		}
+		return io.CopyN(w, rs, n)
+	}
+	if _, err := io.CopyN(io.Discard, f, offset); err != nil {
+		return 0, err
+	}
+	return io.CopyN(w, f, n)
 }

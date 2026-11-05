@@ -332,6 +332,12 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	// 而「文件被外力删掉」属于事故，不该由详情页替它兜底（下载会明确 404）。
 	detail.Downloadable = row.DemoType != "" && row.DemoType != "link" && row.HasVisibleChannel && row.HasPublishedRevision
 	detail.LifecycleActions = lifecycleActionsOf(row, viewerIsAuthor)
+	// 业务统计：墓碑态不展示计数（那是在替一件已下架的作品做宣传）。
+	// 未发布的作品也不展示——它的浏览量没有意义，反而会让作者以为「有人在看」。
+	if state == api.LifecycleStatePublished && row.HasPublishedRevision {
+		detail.ViewCount = row.ViewCount
+		detail.DownloadCount = row.DownloadCount
+	}
 	return detail, true
 }
 

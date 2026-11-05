@@ -125,6 +125,20 @@ func (q *Queries) BumpDownloadCount(ctx context.Context, demoID int64) error {
 	return err
 }
 
+const bumpViewCount = `-- name: BumpViewCount :exec
+INSERT INTO demo_stats (demo_id, view_count)
+VALUES ($1, 1)
+ON CONFLICT (demo_id) DO UPDATE
+SET view_count = demo_stats.view_count + 1,
+    updated_at = now()
+`
+
+// 与 BumpDownloadCount 同一形状：UPSERT 保证「原子 +1」，不是读改写。
+func (q *Queries) BumpViewCount(ctx context.Context, demoID int64) error {
+	_, err := q.db.Exec(ctx, bumpViewCount, demoID)
+	return err
+}
+
 const copyRevisionFiles = `-- name: CopyRevisionFiles :exec
 INSERT INTO demo_revision_files (revision_id, path, blob_hash, size, mime)
 SELECT $1, f.path, f.blob_hash, f.size, f.mime
@@ -341,11 +355,17 @@ SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        EXISTS (
            SELECT 1 FROM demo_channels c
            WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
-       )::bool AS has_visible_channel
+       )::bool AS has_visible_channel,
+       -- 业务统计：详情页要展示「浏览 N 次 · 下载 M 次」。
+       -- 用 COALESCE 而不是 JOIN 后的直接列：demo_stats 是懒建的，
+       -- 一件从没人看过的新作品在这里根本没有行。
+       COALESCE(st.view_count, 0)::bigint AS view_count,
+       COALESCE(st.download_count, 0)::bigint AS download_count
 FROM demos d
 LEFT JOIN users u ON u.id = d.author_id
 LEFT JOIN demo_revisions r ON r.id = d.published_revision_id
 LEFT JOIN demo_revisions cr ON cr.id = d.current_revision_id
+LEFT JOIN demo_stats st ON st.demo_id = d.id
 WHERE d.slug = $1
 `
 
@@ -371,6 +391,8 @@ type GetDemoBySlugRow struct {
 	CurrentDemoType      string
 	CurrentRevNo         int32
 	HasVisibleChannel    bool
+	ViewCount            int64
+	DownloadCount        int64
 }
 
 // 不加可见性过滤：归档/移除的作品要能取出来渲染墓碑页。
@@ -404,6 +426,8 @@ func (q *Queries) GetDemoBySlug(ctx context.Context, slug string) (GetDemoBySlug
 		&i.CurrentDemoType,
 		&i.CurrentRevNo,
 		&i.HasVisibleChannel,
+		&i.ViewCount,
+		&i.DownloadCount,
 	)
 	return i, err
 }
@@ -930,6 +954,44 @@ func (q *Queries) NextRevisionNo(ctx context.Context, demoID int64) (int32, erro
 	var rev_no int32
 	err := row.Scan(&rev_no)
 	return rev_no, err
+}
+
+const recordDemoView = `-- name: RecordDemoView :one
+
+INSERT INTO demo_views (demo_id, viewer_key, viewed_on)
+SELECT d.id, $1::text, current_date
+FROM demos d
+WHERE d.slug = $2::text
+  AND d.lifecycle_state = 'published'
+  AND d.published_revision_id IS NOT NULL
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+ON CONFLICT (demo_id, viewer_key, viewed_on) DO NOTHING
+RETURNING demo_id
+`
+
+type RecordDemoViewParams struct {
+	ViewerKey string
+	Slug      string
+}
+
+// ===== 浏览计数（DEMO-041）=====
+// 一次浏览能不能算，全在这一条里判完：
+//  1. 作品得是对外可读的（有对外版本、已发布、未删未擦）——草稿不该有浏览量；
+//  2. 同一个人同一个自然日只算一次（主键冲突就不插入，返回 0 行）。
+//
+// **故意不判渠道visible性**：浏览计的是「有人来看了」，不是「它出现在哪里」。
+// 渠道是 hidden 的作品，访客的详情请求本来就会被详情端点挡成 404，
+// 到不了这里；而能拿到 slug 的人直接 POST 也只是给自己的记录加一行，一天一次封顶。
+//
+// 只返回被插入那一行的 demo_id：冲突（今天已经看过）时没有行，
+// 调用方据此决定要不要 +1。用 :one + ErrNoRows 而不是 :execrows，
+// 是因为 +1 还要拿 demo_id，再查一次 slug 换 id 就多一次往返。
+func (q *Queries) RecordDemoView(ctx context.Context, arg RecordDemoViewParams) (int64, error) {
+	row := q.db.QueryRow(ctx, recordDemoView, arg.ViewerKey, arg.Slug)
+	var demo_id int64
+	err := row.Scan(&demo_id)
+	return demo_id, err
 }
 
 const restoreDeletedDemo = `-- name: RestoreDeletedDemo :exec

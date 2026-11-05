@@ -201,6 +201,60 @@ formData.append(`package`, submitDemoBody.package);
 }
 
 
+export type postDemoViewResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postDemoViewResponseSuccess = (postDemoViewResponse204) & {
+  headers: Headers;
+};
+;
+
+export type postDemoViewResponse = (postDemoViewResponseSuccess)
+
+export const getPostDemoViewUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/view`
+}
+
+/**
+ * 由详情页在渲染成功之后调用一次。**不是**在 `GET /demos/{slug}` 里顺带计数：
+ * GET 有副作用的话，爬虫、预取、文档里试一下、curl 验证一下，全都会变成一次浏览。
+ *
+ * 同一个人（登录按账号、匿名按 IP 哈希）对同一作品，同一个自然日只算一次。
+ * 去重表是 `demo_views`，主键 `(demo_id, viewer_key, viewed_on)`。
+ *
+ * **一律返回 204**：作品不存在、已下架、今天已经看过、身份未接线——都不报错。
+ * 这个端点由页面自动调用，404 只会让「作品刚被删」这种正常情况在控制台里刷一片红；
+ * 真正的可见性判定在详情端点上。
+ *
+ * 不返回计数：那样它会变成「写 + 读」的混合体，前端拿它当准实时显示用，
+ * 缓存与去重就都失效了。计数由详情端点给。
+ * @summary 记一次浏览
+ */
+export const postDemoView = async (slug: string, options?: RequestInit): Promise<postDemoViewResponse> => {
+
+  const res = await fetch(getPostDemoViewUrl(slug),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: postDemoViewResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as postDemoViewResponse
+}
+
+
 export type getDemoResponse200 = {
   data: DemoDetail
   status: 200

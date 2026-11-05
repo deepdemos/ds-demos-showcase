@@ -213,6 +213,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/demos/{slug}/view:
+    post:
+      operationId: postDemoView
+      tags: [作品]
+      summary: 记一次浏览
+      description: |
+        由详情页在渲染成功之后调用一次。**不是**在 `GET /demos/{slug}` 里顺带计数：
+        GET 有副作用的话，爬虫、预取、文档里试一下、curl 验证一下，全都会变成一次浏览。
+
+        同一个人（登录按账号、匿名按 IP 哈希）对同一作品，同一个自然日只算一次。
+        去重表是 `demo_views`，主键 `(demo_id, viewer_key, viewed_on)`。
+
+        **一律返回 204**：作品不存在、已下架、今天已经看过、身份未接线——都不报错。
+        这个端点由页面自动调用，404 只会让「作品刚被删」这种正常情况在控制台里刷一片红；
+        真正的可见性判定在详情端点上。
+
+        不返回计数：那样它会变成「写 + 读」的混合体，前端拿它当准实时显示用，
+        缓存与去重就都失效了。计数由详情端点给。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$'
+            minLength: 1
+            maxLength: 128
+      responses:
+        '204':
+          description: 已受理（不表示这次真的计入了，去重与可见性由服务端判断）
+
   /api/v1/demos/{slug}:
     get:
       operationId: getDemo
@@ -1401,7 +1432,7 @@ components:
         - $ref: '#/components/schemas/DemoSummary'
         - type: object
           additionalProperties: false
-          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions]
+          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions, viewCount, downloadCount]
           properties:
             description:
               type: string
@@ -1441,6 +1472,19 @@ components:
                 猜出来的按钮会点出 404。
             lifecycleActions:
               $ref: '#/components/schemas/DemoLifecycleActions'
+            viewCount:
+              type: integer
+              format: int64
+              minimum: 0
+              description: |
+                浏览数。同一个人（登录按账号、匿名按 IP 哈希）对同一作品
+                同一个自然日在去重表里只留一行，所以刷新页面不会把它刷高。
+                墓碑态与未发布的作品恒为 0——它们根本没有被计数的机会。
+            downloadCount:
+              type: integer
+              format: int64
+              minimum: 0
+              description: 下载数。一次成功写出的下载 +1；被 404 挡下或传输中断不计。
 
     DemoLifecycleActions:
       type: object

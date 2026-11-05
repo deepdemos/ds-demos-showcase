@@ -284,6 +284,29 @@
           "name": "TestIntegrationSoftDeleteRejectsRemoved"
         }
       }
+    ],
+    "POST /api/v1/demos/{slug}/view": [
+      {
+        "case": "作品不存在也返回 204，不暴露 slug 是否存在",
+        "test": {
+          "file": "backend/internal/httpapi/views_integration_test.go",
+          "name": "TestIntegrationPostDemoView"
+        }
+      },
+      {
+        "case": "未发布的作品不计入浏览数",
+        "test": {
+          "file": "backend/internal/domain/demo/view_integration_test.go",
+          "name": "TestIntegrationRecordViewSkipsUnpublished"
+        }
+      },
+      {
+        "case": "同一人同一天重复浏览不重复计数",
+        "test": {
+          "file": "backend/internal/domain/demo/view_integration_test.go",
+          "name": "TestIntegrationRecordViewDedupesPerDay"
+        }
+      }
     ]
   },
   "outsideContract": {

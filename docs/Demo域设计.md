@@ -673,6 +673,21 @@ erDiagram
     DEMOS ||--o| DEMO_EXTERNAL_THREADS : discussed_in
 ```
 
+**落地状态（2026-11-05）——计数**
+
+- 浏览去重靠迁移 `0015_demo_views.sql` 建的表 `demo_views(demo_id, viewer_key, viewed_on)`
+  主键三列，`ON CONFLICT DO NOTHING RETURNING` 决定「今天算不算过一次」。
+  这张表不在上面的 ER 图里——图是设计态，表是落地态，以迁移为准。
+- 浏览的写入是**独立端点** `POST /api/v1/demos/{slug}/view`，不是详情 GET 的副作用。
+  详情页在挂载时调它一次。理由：GET 加副作用会让爬虫、`<link rel=prefetch>`、
+  以及任何 `curl` 都变成一次浏览，「浏览数」随即失去意义。
+- `viewer_key` 与评分同口径：登录 `user:<accounts.id>`、匿名 `anon:` + HMAC(IP)。
+  **只存哈希、不存 IP**，所以这张表即使泄露也不含个人信息。
+- 详情响应里的 `viewCount` / `downloadCount` 来自 `demo_stats`，**只在作品对外可见时填**；
+  墓碑与未发布恒为 0（不然墓碑页会暴露「这件作品以前有多少人看过」）。
+- 下载的 `Range` 支持靠 `io.ReadSeeker` 类型断言（`storage.Local.Get` 返回 `*os.File`），
+  **没有扩 `storage.Store` 接口**。分段请求**不计下载数**——一次「下载」的判据是拿到完整文件。
+
 ### 5.3 与模型域 / 题目的接缝
 
 > 作品↔分类的关联表（`demo_classifications`）由**标签域**拥有；生成条件的真表在 revision 级（模型域 / 标签域拥有），demo 层同名表是视图（§3.2.1 / §3.8）。本图只画模型维度，其余四张见 §5.4。
