@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button, Input } from '@/components/ui';
 import { postAuthPasswordReset, postAuthPasswordResetCode, type Error as ApiError } from '@/api';
+import { PASSWORD_MIN, passwordLengthError } from '@/lib/password';
 
 /**
  * 找回密码。
@@ -50,6 +51,13 @@ export function PasswordResetPage() {
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+    // 与注册页同一口径：太短的口令服务端会拒，但等到往返回来才说太迟了——
+    // 用户已经以为提交成功了，尤其这里还会把他的登录设备全部登出。
+    const lengthError = passwordLengthError(password);
+    if (lengthError) {
+      setError(lengthError);
+      return;
+    }
     if (password !== confirm) {
       setError('两次输入的密码不一致');
       return;
@@ -107,7 +115,7 @@ export function PasswordResetPage() {
               required
             />
             <Input
-              label="新密码（至少 10 位）"
+              label={`新密码（至少 ${PASSWORD_MIN} 位）`}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
