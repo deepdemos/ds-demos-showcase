@@ -100,7 +100,7 @@ func (s *stub) PostAuthPasswordReset(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "reset")
 }
 
-func (s *stub) SubmitDemo(http.ResponseWriter, *http.Request) {
+func (s *stub) SubmitDemo(_ http.ResponseWriter, _ *http.Request, _ api.SubmitDemoParams) {
 	s.hits = append(s.hits, "submit")
 }
 
