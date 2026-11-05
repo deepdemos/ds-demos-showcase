@@ -211,7 +211,7 @@ SET lifecycle_state       = 'published',
     -- 第一次发布时把对外版本指向当前版本；已经有了就不动（复审期间发布的场景：
     -- 对外内容仍是上一版，发布动作不该顺手把未审的新版本推上线）。
     published_revision_id = COALESCE(published_revision_id, current_revision_id),
-    updated_at            = now()
+    updated_at            = GREATEST(now(), created_at)
 WHERE slug = $1
   AND lifecycle_state IN ('draft', 'archived')
   AND moderation_state = 'approved'
@@ -233,7 +233,7 @@ func (q *Queries) PublishDemo(ctx context.Context, slug string) (int64, error) {
 const reviewDemo = `-- name: ReviewDemo :one
 UPDATE demos
 SET moderation_state = $2,
-    updated_at       = now()
+    updated_at       = GREATEST(now(), created_at)
 WHERE slug = $1
   AND moderation_state = 'pending'
   AND deleted_at IS NULL
@@ -266,7 +266,7 @@ UPDATE demos d
 SET published_revision_id = d.current_revision_id,
     title                 = COALESCE(r.title, d.title),
     description           = COALESCE(r.description, d.description),
-    updated_at            = now()
+    updated_at            = GREATEST(now(), d.created_at)
 FROM demo_revisions r
 WHERE d.slug = $1
   AND d.current_revision_id IS NOT NULL

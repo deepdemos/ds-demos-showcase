@@ -126,7 +126,7 @@ INSERT INTO demo_revisions (
 RETURNING id, rev_no;
 
 -- name: SetCurrentRevision :exec
-UPDATE demos SET current_revision_id = $2, updated_at = now() WHERE id = $1;
+UPDATE demos SET current_revision_id = $2, updated_at = GREATEST(now(), created_at) WHERE id = $1;
 
 -- ===== 更新作品（追加版本）=====
 
@@ -186,7 +186,7 @@ ON CONFLICT ON CONSTRAINT uq_manifest_path DO NOTHING;
 UPDATE demos
 SET current_revision_id = $2,
     moderation_state    = 'pending',
-    updated_at          = now()
+    updated_at          = GREATEST(now(), created_at)
 WHERE id = $1;
 
 -- name: DeleteDemoForCleanup :exec
@@ -409,7 +409,7 @@ WHERE d.slug = $1;
 -- 两个文件位置的事实，接「平台移除」「申诉恢复」时就是第三、第四份。
 -- 现在合法性由 WHERE 的 lifecycle_state = @from_state 表达，唯一；0 行 = 跃迁不合法。
 UPDATE demos
-SET lifecycle_state = @to_state::text, updated_at = now()
+SET lifecycle_state = @to_state::text, updated_at = GREATEST(now(), created_at)
 WHERE id = @demo_id
   AND lifecycle_state = @from_state::text
   AND deleted_at IS NULL
@@ -418,13 +418,14 @@ WHERE id = @demo_id
 -- name: SoftDeleteDemo :exec
 -- 软删只写删除标记层，lifecycle_state 一个字节不动（生命周期 §4.3）。
 UPDATE demos
-SET deleted_at = now(), delete_reason = $2, updated_at = now()
+SET deleted_at = GREATEST(now(), created_at), delete_reason = $2,
+    updated_at = GREATEST(now(), created_at)
 WHERE id = $1 AND deleted_at IS NULL AND erased_at IS NULL;
 
 -- name: RestoreDeletedDemo :exec
 -- 恢复 = 清空 deleted_at。作品自动回到删除前的档位，不需要额外的「原状态」列。
 UPDATE demos
-SET deleted_at = NULL, delete_reason = '', updated_at = now()
+SET deleted_at = NULL, delete_reason = '', updated_at = GREATEST(now(), created_at)
 WHERE id = $1 AND deleted_at IS NOT NULL AND erased_at IS NULL;
 
 -- name: GetDemoGcWindow :one
