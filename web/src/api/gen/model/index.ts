@@ -29,6 +29,7 @@
  */
 
 export * from './accountStatus';
+export * from './demoAuthor';
 export * from './demoDeleteRequest';
 export * from './demoDeleteResult';
 export * from './demoDetail';
@@ -51,7 +52,6 @@ export * from './listDemosSort';
 export * from './loginRequest';
 export * from './me';
 export * from './model';
-export * from './modelAuthor';
 export * from './modelList';
 export * from './modelRef';
 export * from './passwordResetCodeRequest';

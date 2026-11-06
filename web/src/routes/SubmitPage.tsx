@@ -51,9 +51,9 @@ export function SubmitPage() {
         title,
         description: description === '' ? undefined : description,
         demoType,
-        // 不传空数组：契约里 modelIds 可省略，空数组和不传在服务端是同一个语义
+        // 不传空数组：契约里 modelSlugs 可省略，空数组和不传在服务端是同一个语义
         // （整体替换），但省略能让请求体少一个字段、日志少一行噪音。
-        ...(modelSlugs.length > 0 ? { modelIds: modelSlugs } : {}),
+        ...(modelSlugs.length > 0 ? { modelSlugs: modelSlugs } : {}),
         package: file,
       });
       // 201 = 新建；200 = 重放（同一个 Idempotency-Key 已经建过）。

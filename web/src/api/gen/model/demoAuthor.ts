@@ -28,7 +28,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ModelAuthor {
+export interface DemoAuthor {
   /**
      * 用户名（不可变的标识）。作者注销后为空串——那时作品本身还留着，
      * 只是「谁写的」这个信息不再存在。

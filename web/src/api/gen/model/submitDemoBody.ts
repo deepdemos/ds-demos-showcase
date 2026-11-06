@@ -47,6 +47,10 @@ export type SubmitDemoBody = {
   /**
      * 这一版用到的模型，取值为 `models.slug`（来自 `GET /api/v1/models`）。
      *
+     * 字段名带 slugs 而不是 ids：调用方手里只有 slug（列表端点返回的就是它），
+     * 数字 id 是实现细节。叫 modelIds 却收 slug，等于让每个调用方都去翻一遍
+     * 文档确认自己没传错。
+     *
      * 不传或空数组都合法——作品可以不声明模型。传了不存在的 slug、
      * 或者不是 `active` 的 slug 一律 400，不静默丢弃：
      * 作者以为声明了两个、库里只落了一个，他永远发现不了。
@@ -54,5 +58,5 @@ export type SubmitDemoBody = {
      * 没有条数上限：多少由作品的事实决定；重复的 slug 会被去重。
      * @items.maxLength 128
      */
-  modelIds?: string[];
+  modelSlugs?: string[];
 };

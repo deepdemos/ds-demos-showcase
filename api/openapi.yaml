@@ -225,10 +225,14 @@ paths:
                   type: string
                   format: binary
                   description: 作品文件（zip 或单个 html/svg）
-                modelIds:
+                modelSlugs:
                   type: array
                   description: |
                     这一版用到的模型，取值为 `models.slug`（来自 `GET /api/v1/models`）。
+
+                    字段名带 slugs 而不是 ids：调用方手里只有 slug（列表端点返回的就是它），
+                    数字 id 是实现细节。叫 modelIds 却收 slug，等于让每个调用方都去翻一遍
+                    文档确认自己没传错。
 
                     不传或空数组都合法——作品可以不声明模型。传了不存在的 slug、
                     或者不是 `active` 的 slug 一律 400，不静默丢弃：
@@ -435,10 +439,11 @@ paths:
                   type: string
                   format: binary
                   description: 新的作品文件；不传表示只改文字
-                modelIds:
+                modelSlugs:
                   type: array
                   description: |
                     这一版声明的模型（`models.slug`），语义是**整体替换**。
+                    字段名带 slugs 而不是 ids，理由同 `POST /api/v1/demos`。
 
                     不传等价于空数组，也就是「这一版不声明任何模型」——不做
                     「没传就沿用上一版」：multipart 里「没传」与「传空」在浏览器侧
@@ -1476,7 +1481,9 @@ components:
           items:
             $ref: '#/components/schemas/Model'
 
-    ModelAuthor:
+    # 作品作者（`DemoDetail.author`）。它曾经叫 ModelAuthor，和旁边的 ModelRef /
+    # ModelList 同前缀，读起来像「模型的作者」——它跟模型域没有任何关系。
+    DemoAuthor:
       type: object
       additionalProperties: false
       required: [username, displayName]
@@ -1647,7 +1654,7 @@ components:
               minimum: 0
               description: 下载数。一次成功写出的下载 +1；被 404 挡下或传输中断不计。
             author:
-              $ref: '#/components/schemas/ModelAuthor'
+              $ref: '#/components/schemas/DemoAuthor'
             publishedAt:
               type: string
               format: date-time

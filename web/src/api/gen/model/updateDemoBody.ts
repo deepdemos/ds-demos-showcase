@@ -45,11 +45,12 @@ export type UpdateDemoBody = {
   package?: Blob | File;
   /**
      * 这一版声明的模型（`models.slug`），语义是**整体替换**。
+     * 字段名带 slugs 而不是 ids，理由同 `POST /api/v1/demos`。
      *
      * 不传等价于空数组，也就是「这一版不声明任何模型」——不做
      * 「没传就沿用上一版」：multipart 里「没传」与「传空」在浏览器侧
      * 无法区分（空选择不产生字段），沿用会让作者永远删不掉一个声明。
      * @items.maxLength 128
      */
-  modelIds?: string[];
+  modelSlugs?: string[];
 };
