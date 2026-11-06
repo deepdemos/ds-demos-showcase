@@ -24,6 +24,19 @@
 --
 -- `matched_in` 告诉前端这条是因为标题命中还是简介命中：只匹配简介时，
 -- 结果列表上看到的标题里没有关键词，不标出来就像「搜了但不相关」。
+--
+-- # 四个筛选参数
+--
+-- 语义是**维度内 OR、维度间 AND**（`docs/标签域数据结构设计.md` §5.5）。
+-- 用 `EXISTS` 而不是 join：一件作品在同维度挂两项时，join 会把列表撑成重复行，
+-- 而 `DISTINCT` 之后分页总数就没法用同一条 SQL 算。
+--
+-- 空数组表示不筛：`cardinality(@genre::text[]) = 0` 时整个 EXISTS 短路。
+-- 未收录的 slug 命中 0 行，**不报错**——筛选是查询不是写入。
+--
+-- 模型筛的是 `current_revision_id` 上的声明（不是已发布版本）：作者改稿换模型后
+-- 按旧模型搜不到，这是版本分离的直接后果，与详情页「访客看已发布、作者看当前」
+-- 是同一套规则的另一面。
 SELECT d.id, d.slug, d.title, d.cover_url, d.created_at,
        CASE
            WHEN @q::text = '' THEN 'title'
@@ -46,11 +59,47 @@ WHERE d.published_revision_id IS NOT NULL
       OR d.title ILIKE '%' || @q::text || '%' ESCAPE '\'
       OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%' ESCAPE '\'
   )
+  AND (
+      cardinality(@genre::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'genre'
+            AND cl.slug = ANY(@genre::text[])
+      )
+  )
+  AND (
+      cardinality(@technique::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'technique'
+            AND cl.slug = ANY(@technique::text[])
+      )
+  )
+  AND (
+      cardinality(@subject::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'subject'
+            AND cl.slug = ANY(@subject::text[])
+      )
+  )
+  AND (
+      cardinality(@model::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_revision_models rm
+          JOIN models m ON m.id = rm.model_id
+          WHERE rm.revision_id = d.current_revision_id
+            AND m.slug = ANY(@model::text[])
+      )
+  )
 ORDER BY d.created_at DESC, d.id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountPublishedDemos :one
--- 与 ListPublishedDemos 的 WHERE 必须逐字一致（含 q 的两个分支），
+-- 与 ListPublishedDemos 的 WHERE 必须逐字一致（含 q 与四个筛选的全部条件），
 -- 否则「共 N 个作品」与列表条数会对不上，分页也会算错页数。
 SELECT count(*)
 FROM demos d
@@ -68,6 +117,42 @@ WHERE d.published_revision_id IS NOT NULL
       @q::text = ''
       OR d.title ILIKE '%' || @q::text || '%' ESCAPE '\'
       OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%' ESCAPE '\'
+  )
+  AND (
+      cardinality(@genre::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'genre'
+            AND cl.slug = ANY(@genre::text[])
+      )
+  )
+  AND (
+      cardinality(@technique::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'technique'
+            AND cl.slug = ANY(@technique::text[])
+      )
+  )
+  AND (
+      cardinality(@subject::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'subject'
+            AND cl.slug = ANY(@subject::text[])
+      )
+  )
+  AND (
+      cardinality(@model::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_revision_models rm
+          JOIN models m ON m.id = rm.model_id
+          WHERE rm.revision_id = d.current_revision_id
+            AND m.slug = ANY(@model::text[])
+      )
   );
 
 -- name: GetDemoBySlug :one

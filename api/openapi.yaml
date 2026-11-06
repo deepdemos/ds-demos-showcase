@@ -7,9 +7,9 @@ info:
     本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
 
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
-    生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录，以及身份
-    （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 25 个端点。
-    实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
+    分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
+    共 26 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -62,6 +62,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/classifications:
+    get:
+      operationId: listClassifications
+      tags: [作品]
+      summary: 分类目录
+      description: |
+        全部可用的分类项，按维度分组返回。**每个维度都带 `demoCount`**——
+        它是「按这个分类筛选后会有多少条」，与列表端点的可见性判据同源，
+        所以筛选器上显示的数目与点进去看到的条数不会打架。
+
+        三个维度的分工：
+
+        - `genre` 形态：这是什么（小游戏 / 模拟 / 视觉特效 / 工具……），可带父子
+        - `technique` 技术：靠什么做的（3D 建模 / 仿真 / 动画 / 图形学 / 机器人）
+        - `subject` 题材：对着什么做的（某个具体作品、某个物件、某段历史），开放集
+
+        只返回 `status='active'` 的项。被合并掉的项不再出现，但它们的历史引用
+        仍然有效——详情页读出来的是当年那个名字。
+      responses:
+        '200':
+          description: 分类目录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationCatalog'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/models:
     get:
       operationId: listModels
@@ -102,6 +134,65 @@ paths:
         分页返回已公开的作品。分页参数口径与治理域 §P5 一致：默认 50，上限 200。
         超过上限直接 400，不静默截断——静默截断会让调用方以为拿到了全部。
       parameters:
+        - name: genre
+          in: query
+          description: |
+            按形态筛选，可重复（`?genre=game&genre=puzzle`）。
+
+            **语义：维度内取并集（OR）、维度间取交集（AND）**——这是
+            `docs/标签域数据结构设计.md` §5.5 定的口径，不是这里发明的。
+            所以「游戏或解谜」+「3D 建模」= 既是游戏或解谜、又用了 3D 建模的作品。
+
+            取值是 `classifications.slug`（见 `GET /api/v1/classifications`）。
+            **未收录的 slug 不报错、也不命中**：筛选是查询而不是写入，一个拼错的
+            条件应该得到空结果，而不是 400——否则「改 URL 试试看」会变成一堆红字。
+          schema:
+            type: array
+            items:
+              type: string
+            maxItems: 50
+          style: form
+          explode: true
+        - name: technique
+          in: query
+          description: 按技术筛选，语义同上（维度内 OR、维度间 AND）。
+          schema:
+            type: array
+            items:
+              type: string
+            maxItems: 50
+          style: form
+          explode: true
+        - name: subject
+          in: query
+          description: |
+            按题材筛选，语义同上。
+
+            `subject` 是开放集，长尾很长（92 条里 32 条只被一件作品用过），
+            所以它不一定出现在界面的筛选器上——接口支持它是为了让
+            「同一题材的作品」这类链接可以直达，而不是鼓励摆一列长尾。
+          schema:
+            type: array
+            items:
+              type: string
+            maxItems: 50
+          style: form
+          explode: true
+        - name: model
+          in: query
+          description: |
+            按模型筛选（`models.slug`），语义同上。
+
+            模型挂在**版本**上，不挂在作品上：这里比对的是作品当前版本声明的模型。
+            作者改稿换模型之后，按旧模型就搜不到它了——这是版本分离的直接后果，
+            与「访客看已发布版本、作者看当前版本」是同一套规则的另一面。
+          schema:
+            type: array
+            items:
+              type: string
+            maxItems: 50
+          style: form
+          explode: true
         - name: q
           in: query
           description: |
@@ -242,6 +333,27 @@ paths:
                   items:
                     type: string
                     maxLength: 128
+
+                classificationSlugs:
+                  type: array
+                  description: |
+                    这件作品的内容分类，取值为 `classifications.slug`（来自
+                    `GET /api/v1/classifications`）。
+
+                    **与 `modelSlugs` 的语义不同**：分类挂在作品上、模型挂在版本上。
+                    分类写一次就跟着作品走，之后的版本共享它；模型声明是一版一份。
+
+                    投稿时不传即没有分类。更新时**不传表示「不改」**，不是「清空」——
+                    multipart 里「没传」与「传了空」在浏览器侧无法区分，按整体替换
+                    处理会让任何只改标题的请求顺手清掉作者打的分类，而作者从页面上
+                    看不出这件事发生过。代价是「清空分类」暂无路径
+                    （`docs/已知松点.md` 第 48 条）。
+
+                    传了不存在的 slug 或维度内有歧义的 slug 一律 400，不静默丢弃。
+                  items:
+                    type: string
+                    maxLength: 128
+                  maxItems: 20
       responses:
         '201':
           description: 已接收，进入待审核（对外不可见）
@@ -451,6 +563,17 @@ paths:
                   items:
                     type: string
                     maxLength: 128
+
+                classificationSlugs:
+                  type: array
+                  description: |
+                    这件作品的内容分类（`classifications.slug`），语义是**整体替换**，
+                    但**不传表示「不改」而不是「清空」**——理由见 `POST /api/v1/demos`
+                    同名参数的说明与 `docs/已知松点.md` 第 48 条。
+                  items:
+                    type: string
+                    maxLength: 128
+                  maxItems: 20
       responses:
         '200':
           description: 新版本已追加，进入待审核（对外仍是上一版）
@@ -1449,6 +1572,88 @@ components:
           type: string
           enum: [ok]
 
+    ClassificationRef:
+      type: object
+      additionalProperties: false
+      required: [dimension, slug, label]
+      properties:
+        dimension:
+          type: string
+          enum: [genre, technique, subject]
+          description: 维度的合法取值由 `classification_dimensions` 定义，不是开放字符串
+        slug:
+          type: string
+          maxLength: 64
+          description: |
+            稳定标识。中文题材的 slug 就是中文原文（旧站的数据长这样，翻译会引入
+            第二份无人维护的映射表）。URL 里由调用方 encode。
+        label:
+          type: string
+          maxLength: 100
+          description: 展示名。管理员可以改它，slug 不动——所以「改个名字」不会让链接失效
+
+    Classification:
+      allOf:
+        - $ref: '#/components/schemas/ClassificationRef'
+        - type: object
+          additionalProperties: false
+          required: [demoCount]
+          properties:
+            demoCount:
+              type: integer
+              minimum: 0
+              description: |
+                按这一项筛选会命中多少件**已发布**作品。口径与列表端点同源；
+                为 0 表示还没有作品用它（新录入的分类就是这样）。
+            description:
+              type: string
+              description: 说明，可为空串
+            parentSlug:
+              type: string
+              nullable: true
+              description: |
+                父级 slug，只有 `genre` 会有（`game → FPS/肉鸽/跑酷`）。
+                `subject` 与 `technique` 永远是 null——这不是没填，是形状约束：
+                `ck_classifications_shape` 只允许 genre 带 parent。
+            aliases:
+              type: array
+              items:
+                type: string
+              description: 别名，只有 `subject` 会有（「魔方」有「魔方模拟器」「三阶魔方」）
+
+    ClassificationCatalog:
+      type: object
+      additionalProperties: false
+      required: [dimensions, items]
+      properties:
+        dimensions:
+          type: array
+          description: |
+            维度元数据，按 sort 排序。前端用它决定分组标题与顺序，
+            不自己写死三个中文名——那会是第三份维度清单。
+          items:
+            type: object
+            additionalProperties: false
+            required: [dimension, label, mode]
+            properties:
+              dimension:
+                type: string
+                enum: [genre, technique, subject]
+              label:
+                type: string
+              description:
+                type: string
+              mode:
+                type: string
+                enum: [fixed, open]
+                description: |
+                  `fixed` 是闭集（只有管理员能加），`open` 允许作者提交新词条待审。
+                  目前只有 `subject` 是 open——「对着什么做的」没法预先穷举。
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Classification'
+
     ModelRef:
       type: object
       additionalProperties: false
@@ -1502,11 +1707,21 @@ components:
     DemoSummary:
       type: object
       additionalProperties: false
-      required: [slug, title, coverUrl, createdAt, lifecycleState, matchedIn]
+      required: [slug, title, coverUrl, createdAt, lifecycleState, matchedIn, classifications]
       properties:
         slug:
           type: string
           maxLength: 128
+        classifications:
+          type: array
+          description: |
+            这件作品的分类，按维度排好序（genre → technique → subject）。
+            空数组表示没打分类，不表示加载失败。
+
+            列表上带着它，是为了让卡片能直接标出「小游戏 · 3D建模」而不必为每张
+            卡片再发一次请求。代价是列表响应变大——一条分类只有 slug + label 两个短字段。
+          items:
+            $ref: '#/components/schemas/ClassificationRef'
         title:
           type: string
           nullable: true

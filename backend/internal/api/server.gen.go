@@ -47,6 +47,9 @@ type ServerInterface interface {
 	// 重发验证邮件
 	// (POST /api/v1/auth/verify-email/resend)
 	PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request)
+	// 分类目录
+	// (GET /api/v1/classifications)
+	ListClassifications(w http.ResponseWriter, r *http.Request)
 	// 作品列表
 	// (GET /api/v1/demos)
 	ListDemos(w http.ResponseWriter, r *http.Request, params ListDemosParams)
@@ -158,6 +161,12 @@ func (_ Unimplemented) PostAuthVerifyEmail(w http.ResponseWriter, r *http.Reques
 // 重发验证邮件
 // (POST /api/v1/auth/verify-email/resend)
 func (_ Unimplemented) PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 分类目录
+// (GET /api/v1/classifications)
+func (_ Unimplemented) ListClassifications(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -461,6 +470,20 @@ func (siw *ServerInterfaceWrapper) PostAuthVerifyEmailResend(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
+// ListClassifications operation middleware
+func (siw *ServerInterfaceWrapper) ListClassifications(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListClassifications(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListDemos operation middleware
 func (siw *ServerInterfaceWrapper) ListDemos(w http.ResponseWriter, r *http.Request) {
 
@@ -468,6 +491,38 @@ func (siw *ServerInterfaceWrapper) ListDemos(w http.ResponseWriter, r *http.Requ
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListDemosParams
+
+	// ------------- Optional query parameter "genre" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "genre", r.URL.Query(), &params.Genre)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "genre", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "technique" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "technique", r.URL.Query(), &params.Technique)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "technique", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "subject" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "subject", r.URL.Query(), &params.Subject)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "model", r.URL.Query(), &params.Model)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		return
+	}
 
 	// ------------- Optional query parameter "q" -------------
 
@@ -1003,6 +1058,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/verify-email/resend", wrapper.PostAuthVerifyEmailResend)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/classifications", wrapper.ListClassifications)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demos", wrapper.ListDemos)

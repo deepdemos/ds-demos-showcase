@@ -57,7 +57,8 @@ func (h *Handler) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string
 		DemoType:    strings.TrimSpace(r.FormValue("demoType")),
 		// 语义是整体替换（见 UpdateInput.ModelSlugs 的注释）：
 		// 表单里没带 modelSlugs 就等于「这一版不声明任何模型」。
-		ModelSlugs: formValues(r, "modelSlugs"),
+		ModelSlugs:          formValues(r, "modelSlugs"),
+		ClassificationSlugs: formValues(r, "classificationSlugs"),
 	}
 
 	// package 可选：http.ErrMissingFile 表示这次只改文字。

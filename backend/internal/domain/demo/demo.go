@@ -70,6 +70,13 @@ type SubmitInput struct {
 	// `GET /api/v1/models`，它给的就是 slug；把 id 放进请求体等于让客户端
 	// 依赖一个会随主数据重建而变的数字。
 	ModelSlugs []string
+	// ClassificationSlugs 是这件作品的内容分类（取 classifications.slug）。
+	//
+	// 与 ModelSlugs 的关键区别：分类挂在**作品**上，模型挂在**版本**上
+	// （demo_classifications 没有 revision_id，demo_revision_models 有）。
+	// 改稿换技术实现不该让「这是个游戏」重算，而换模型声明会产生新版本。
+	// 所以分类只在投稿时写一次，之后所有版本共享。
+	ClassificationSlugs []string
 }
 
 // SubmitResult 是投稿成功后的最小回执。

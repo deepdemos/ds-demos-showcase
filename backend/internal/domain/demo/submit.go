@@ -351,6 +351,17 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 				return err
 			}
 
+			// 分类挂在**作品**上，不在这一版上（见 ClassificationSlugs 的注释）。
+			// 同一事务：分类写失败就等于这次投稿失败，不能出现「作品建好了、
+			// 打了的标签丢了」——作者下次打开编辑页会看到分类是空的。
+			picks, err := resolveClassificationSlugs(ctx, q, in.ClassificationSlugs)
+			if err != nil {
+				return err
+			}
+			if err := replaceClassifications(ctx, q, d.ID, picks); err != nil {
+				return err
+			}
+
 			return q.SetCurrentRevision(ctx, store.SetCurrentRevisionParams{
 				ID:                d.ID,
 				CurrentRevisionID: int8(rev.ID),

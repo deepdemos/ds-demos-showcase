@@ -5,9 +5,9 @@
  * 本文件是**接口的唯一事实源**。改接口先改这里，再跑生成，再改实现；不要手改生成目录。
  *
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
- * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录，以及身份
- * （注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），共 25 个端点。
- * 实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
+ * 分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
+ * 共 26 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -28,6 +28,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  ClassificationCatalog,
   DemoDeleteRequest,
   DemoDeleteResult,
   DemoDetail,
@@ -42,6 +43,67 @@ import type {
   SubmitDemoBody,
   UpdateDemoBody
 } from '../model';
+
+
+export type listClassificationsResponse200 = {
+  data: ClassificationCatalog
+  status: 200
+}
+
+export type listClassificationsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listClassificationsResponseSuccess = (listClassificationsResponse200) & {
+  headers: Headers;
+};
+export type listClassificationsResponseError = (listClassificationsResponse503) & {
+  headers: Headers;
+};
+
+export type listClassificationsResponse = (listClassificationsResponseSuccess | listClassificationsResponseError)
+
+export const getListClassificationsUrl = () => {
+
+
+
+
+  return `/api/v1/classifications`
+}
+
+/**
+ * 全部可用的分类项，按维度分组返回。**每个维度都带 `demoCount`**——
+ * 它是「按这个分类筛选后会有多少条」，与列表端点的可见性判据同源，
+ * 所以筛选器上显示的数目与点进去看到的条数不会打架。
+ *
+ * 三个维度的分工：
+ *
+ * - `genre` 形态：这是什么（小游戏 / 模拟 / 视觉特效 / 工具……），可带父子
+ * - `technique` 技术：靠什么做的（3D 建模 / 仿真 / 动画 / 图形学 / 机器人）
+ * - `subject` 题材：对着什么做的（某个具体作品、某个物件、某段历史），开放集
+ *
+ * 只返回 `status='active'` 的项。被合并掉的项不再出现，但它们的历史引用
+ * 仍然有效——详情页读出来的是当年那个名字。
+ * @summary 分类目录
+ */
+export const listClassifications = async ( options?: RequestInit): Promise<listClassificationsResponse> => {
+
+  const res = await fetch(getListClassificationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listClassificationsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listClassificationsResponse
+}
 
 
 export type listModelsResponse200 = {
@@ -132,6 +194,14 @@ export const getListDemosUrl = (params?: ListDemosParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["genre","technique","subject","model"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
 
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : String(value))
@@ -262,6 +332,9 @@ formData.append(`demoType`, submitDemoBody.demoType);
 formData.append(`package`, submitDemoBody.package);
 if(submitDemoBody.modelSlugs !== undefined) {
  submitDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));
+ }
+if(submitDemoBody.classificationSlugs !== undefined) {
+ submitDemoBody.classificationSlugs.forEach(value => formData.append(`classificationSlugs`, value));
  }
 
   const res = await fetch(getSubmitDemoUrl(),
@@ -490,6 +563,9 @@ if(updateDemoBody.package !== undefined) {
  }
 if(updateDemoBody.modelSlugs !== undefined) {
  updateDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));
+ }
+if(updateDemoBody.classificationSlugs !== undefined) {
+ updateDemoBody.classificationSlugs.forEach(value => formData.append(`classificationSlugs`, value));
  }
 
   const res = await fetch(getUpdateDemoUrl(slug),

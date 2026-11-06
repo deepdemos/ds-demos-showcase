@@ -22,6 +22,33 @@ const (
 	AccountStatusSuspended AccountStatus = "suspended"
 )
 
+// Defines values for ClassificationDimension.
+const (
+	ClassificationDimensionGenre     ClassificationDimension = "genre"
+	ClassificationDimensionSubject   ClassificationDimension = "subject"
+	ClassificationDimensionTechnique ClassificationDimension = "technique"
+)
+
+// Defines values for ClassificationCatalogDimensionsDimension.
+const (
+	ClassificationCatalogDimensionsDimensionGenre     ClassificationCatalogDimensionsDimension = "genre"
+	ClassificationCatalogDimensionsDimensionSubject   ClassificationCatalogDimensionsDimension = "subject"
+	ClassificationCatalogDimensionsDimensionTechnique ClassificationCatalogDimensionsDimension = "technique"
+)
+
+// Defines values for ClassificationCatalogDimensionsMode.
+const (
+	Fixed ClassificationCatalogDimensionsMode = "fixed"
+	Open  ClassificationCatalogDimensionsMode = "open"
+)
+
+// Defines values for ClassificationRefDimension.
+const (
+	Genre     ClassificationRefDimension = "genre"
+	Subject   ClassificationRefDimension = "subject"
+	Technique ClassificationRefDimension = "technique"
+)
+
 // Defines values for DemoDetailMatchedIn.
 const (
 	DemoDetailMatchedInDescription DemoDetailMatchedIn = "description"
@@ -143,6 +170,76 @@ const (
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
 type AccountStatus string
 
+// Classification defines model for Classification.
+type Classification struct {
+	// Aliases 别名，只有 `subject` 会有（「魔方」有「魔方模拟器」「三阶魔方」）
+	Aliases *[]string `json:"aliases,omitempty"`
+
+	// DemoCount 按这一项筛选会命中多少件**已发布**作品。口径与列表端点同源；
+	// 为 0 表示还没有作品用它（新录入的分类就是这样）。
+	DemoCount int `json:"demoCount"`
+
+	// Description 说明，可为空串
+	Description *string `json:"description,omitempty"`
+
+	// Dimension 维度的合法取值由 `classification_dimensions` 定义，不是开放字符串
+	Dimension ClassificationDimension `json:"dimension"`
+
+	// Label 展示名。管理员可以改它，slug 不动——所以「改个名字」不会让链接失效
+	Label string `json:"label"`
+
+	// ParentSlug 父级 slug，只有 `genre` 会有（`game → FPS/肉鸽/跑酷`）。
+	// `subject` 与 `technique` 永远是 null——这不是没填，是形状约束：
+	// `ck_classifications_shape` 只允许 genre 带 parent。
+	ParentSlug *string `json:"parentSlug"`
+
+	// Slug 稳定标识。中文题材的 slug 就是中文原文（旧站的数据长这样，翻译会引入
+	// 第二份无人维护的映射表）。URL 里由调用方 encode。
+	Slug string `json:"slug"`
+}
+
+// ClassificationDimension 维度的合法取值由 `classification_dimensions` 定义，不是开放字符串
+type ClassificationDimension string
+
+// ClassificationCatalog defines model for ClassificationCatalog.
+type ClassificationCatalog struct {
+	// Dimensions 维度元数据，按 sort 排序。前端用它决定分组标题与顺序，
+	// 不自己写死三个中文名——那会是第三份维度清单。
+	Dimensions []struct {
+		Description *string                                  `json:"description,omitempty"`
+		Dimension   ClassificationCatalogDimensionsDimension `json:"dimension"`
+		Label       string                                   `json:"label"`
+
+		// Mode `fixed` 是闭集（只有管理员能加），`open` 允许作者提交新词条待审。
+		// 目前只有 `subject` 是 open——「对着什么做的」没法预先穷举。
+		Mode ClassificationCatalogDimensionsMode `json:"mode"`
+	} `json:"dimensions"`
+	Items []Classification `json:"items"`
+}
+
+// ClassificationCatalogDimensionsDimension defines model for ClassificationCatalog.Dimensions.Dimension.
+type ClassificationCatalogDimensionsDimension string
+
+// ClassificationCatalogDimensionsMode `fixed` 是闭集（只有管理员能加），`open` 允许作者提交新词条待审。
+// 目前只有 `subject` 是 open——「对着什么做的」没法预先穷举。
+type ClassificationCatalogDimensionsMode string
+
+// ClassificationRef defines model for ClassificationRef.
+type ClassificationRef struct {
+	// Dimension 维度的合法取值由 `classification_dimensions` 定义，不是开放字符串
+	Dimension ClassificationRefDimension `json:"dimension"`
+
+	// Label 展示名。管理员可以改它，slug 不动——所以「改个名字」不会让链接失效
+	Label string `json:"label"`
+
+	// Slug 稳定标识。中文题材的 slug 就是中文原文（旧站的数据长这样，翻译会引入
+	// 第二份无人维护的映射表）。URL 里由调用方 encode。
+	Slug string `json:"slug"`
+}
+
+// ClassificationRefDimension 维度的合法取值由 `classification_dimensions` 定义，不是开放字符串
+type ClassificationRefDimension string
+
 // DemoAuthor defines model for DemoAuthor.
 type DemoAuthor struct {
 	// DisplayName 昵称；作者没设昵称时为空串，界面应当回退显示 `username`
@@ -184,9 +281,16 @@ type DemoDetail struct {
 	// - 作者看得到自己还没过审的稿件（公开视图对 `draft`/`pending`/`rejected` 一律 404）
 	// - 作者看到的 `title` / `description` / `demoType` 是**当前版本**的，
 	//   访客看到的是**对外版本**的——改稿期间两边内容不同是正常的
-	CanEdit   bool      `json:"canEdit"`
-	CoverUrl  *string   `json:"coverUrl"`
-	CreatedAt time.Time `json:"createdAt"`
+	CanEdit bool `json:"canEdit"`
+
+	// Classifications 这件作品的分类，按维度排好序（genre → technique → subject）。
+	// 空数组表示没打分类，不表示加载失败。
+	//
+	// 列表上带着它，是为了让卡片能直接标出「小游戏 · 3D建模」而不必为每张
+	// 卡片再发一次请求。代价是列表响应变大——一条分类只有 slug + label 两个短字段。
+	Classifications []ClassificationRef `json:"classifications"`
+	CoverUrl        *string             `json:"coverUrl"`
+	CreatedAt       time.Time           `json:"createdAt"`
 
 	// DemoType 作品类型，取自 `demo_types` 主数据（`web` / `zip` / `link` / `image`）。
 	// 墓碑态为空串——墓碑不承载内容，也就没有类型可言。
@@ -354,8 +458,14 @@ type DemoRevisionSource string
 
 // DemoSummary defines model for DemoSummary.
 type DemoSummary struct {
-	CoverUrl  *string   `json:"coverUrl"`
-	CreatedAt time.Time `json:"createdAt"`
+	// Classifications 这件作品的分类，按维度排好序（genre → technique → subject）。
+	// 空数组表示没打分类，不表示加载失败。
+	//
+	// 列表上带着它，是为了让卡片能直接标出「小游戏 · 3D建模」而不必为每张
+	// 卡片再发一次请求。代价是列表响应变大——一条分类只有 slug + label 两个短字段。
+	Classifications []ClassificationRef `json:"classifications"`
+	CoverUrl        *string             `json:"coverUrl"`
+	CreatedAt       time.Time           `json:"createdAt"`
 
 	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
 	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
@@ -623,6 +733,34 @@ type ListDemoReviewQueueParams struct {
 
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
+	// Genre 按形态筛选，可重复（`?genre=game&genre=puzzle`）。
+	//
+	// **语义：维度内取并集（OR）、维度间取交集（AND）**——这是
+	// `docs/标签域数据结构设计.md` §5.5 定的口径，不是这里发明的。
+	// 所以「游戏或解谜」+「3D 建模」= 既是游戏或解谜、又用了 3D 建模的作品。
+	//
+	// 取值是 `classifications.slug`（见 `GET /api/v1/classifications`）。
+	// **未收录的 slug 不报错、也不命中**：筛选是查询而不是写入，一个拼错的
+	// 条件应该得到空结果，而不是 400——否则「改 URL 试试看」会变成一堆红字。
+	Genre *[]string `form:"genre,omitempty" json:"genre,omitempty"`
+
+	// Technique 按技术筛选，语义同上（维度内 OR、维度间 AND）。
+	Technique *[]string `form:"technique,omitempty" json:"technique,omitempty"`
+
+	// Subject 按题材筛选，语义同上。
+	//
+	// `subject` 是开放集，长尾很长（92 条里 32 条只被一件作品用过），
+	// 所以它不一定出现在界面的筛选器上——接口支持它是为了让
+	// 「同一题材的作品」这类链接可以直达，而不是鼓励摆一列长尾。
+	Subject *[]string `form:"subject,omitempty" json:"subject,omitempty"`
+
+	// Model 按模型筛选（`models.slug`），语义同上。
+	//
+	// 模型挂在**版本**上，不挂在作品上：这里比对的是作品当前版本声明的模型。
+	// 作者改稿换模型之后，按旧模型就搜不到它了——这是版本分离的直接后果，
+	// 与「访客看已发布版本、作者看当前版本」是同一套规则的另一面。
+	Model *[]string `form:"model,omitempty" json:"model,omitempty"`
+
 	// Q 关键词，匹配标题或简介（子串匹配，不区分大小写）。
 	//
 	// 空串与全空格等同没传；超过 100 个字返回 400，不静默截断。
@@ -644,6 +782,21 @@ type ListDemosParamsSort string
 
 // SubmitDemoMultipartBody defines parameters for SubmitDemo.
 type SubmitDemoMultipartBody struct {
+	// ClassificationSlugs 这件作品的内容分类，取值为 `classifications.slug`（来自
+	// `GET /api/v1/classifications`）。
+	//
+	// **与 `modelSlugs` 的语义不同**：分类挂在作品上、模型挂在版本上。
+	// 分类写一次就跟着作品走，之后的版本共享它；模型声明是一版一份。
+	//
+	// 投稿时不传即没有分类。更新时**不传表示「不改」**，不是「清空」——
+	// multipart 里「没传」与「传了空」在浏览器侧无法区分，按整体替换
+	// 处理会让任何只改标题的请求顺手清掉作者打的分类，而作者从页面上
+	// 看不出这件事发生过。代价是「清空分类」暂无路径
+	// （`docs/已知松点.md` 第 48 条）。
+	//
+	// 传了不存在的 slug 或维度内有歧义的 slug 一律 400，不静默丢弃。
+	ClassificationSlugs *[]string `json:"classificationSlugs,omitempty"`
+
 	// DemoType 作品类型。取值见 `demo_types` 表——它是主数据，**加一种类型是加一行
 	// 数据，不是改契约**，所以这里不定 enum。
 	DemoType    string  `json:"demoType"`
@@ -683,6 +836,11 @@ type SubmitDemoParams struct {
 
 // UpdateDemoMultipartBody defines parameters for UpdateDemo.
 type UpdateDemoMultipartBody struct {
+	// ClassificationSlugs 这件作品的内容分类（`classifications.slug`），语义是**整体替换**，
+	// 但**不传表示「不改」而不是「清空」**——理由见 `POST /api/v1/demos`
+	// 同名参数的说明与 `docs/已知松点.md` 第 48 条。
+	ClassificationSlugs *[]string `json:"classificationSlugs,omitempty"`
+
 	// DemoType 作品类型。**只有同时上传 `package` 时才能改**。
 	DemoType    *string `json:"demoType,omitempty"`
 	Description *string `json:"description,omitempty"`
