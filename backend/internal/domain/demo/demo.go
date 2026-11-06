@@ -175,6 +175,15 @@ func (in SubmitInput) validate() error {
 // 中文标题压不出东西是正常的——返回空串，由调用方退回随机 slug。
 // 不引入拼音库：多一个依赖换来的只是「好看一点的 URL」，而 slug 一旦发出就不该再变，
 // 生成规则越简单越不容易在以后被改。
+// SlugifyForImport 把一个名字（可能是中文、可能带渠道标记）折成 slug 的基座。
+//
+// 中文折不出可读的 slug（一律归成分隔符），调用方拿到空串时应退回自己的兜底形态，
+// 而不是硬造一个 `-` 开头的串。这里只是把既有的 slugify 暴露给导入侧复用，
+// 保证「作者投稿建的 slug」与「管理员导入建的 slug」遵循同一套规则。
+func SlugifyForImport(name string) string {
+	return slugify(name)
+}
+
 func slugify(title string) string {
 	var b strings.Builder
 	lastDash := false

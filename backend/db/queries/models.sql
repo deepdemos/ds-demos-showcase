@@ -192,3 +192,215 @@ ON CONFLICT (alias) DO NOTHING;
 -- name: ModelSlugTaken :one
 -- slug 是公开 URL 的一部分、创建后不可变，生成时先查一遍再落库。
 SELECT EXISTS (SELECT 1 FROM models WHERE slug = $1)::bool AS taken;
+
+-- ===== 目录导入（models.dev 镜像 → 本地实体）=====
+
+-- name: ListCatalogItems :many
+-- 管理端导入页的搜索：在本地镜像里按名字 / id / canonical / 厂商找。
+--
+-- 为什么是本地镜像而不是实时查：models.dev 只提供整包 JSON（约 10MB），没有搜索接口。
+-- 上游不可用时本站照常工作——这是模型域 §4.6.1 的第一条原则。
+--
+-- `includeDeprecated=false` 默认过滤掉上游 `status=deprecated` 的条目（实测 904 条）。
+-- 这与我们的 `models.status='deprecated'`（合并退役）是两套语义，不可混用：
+-- 上游弃用说的是「厂商不再维护」，我们弃用说的是「这条已经并到别人身上」。
+SELECT i.id,
+       i.provider_id,
+       i.provider_name,
+       i.external_id,
+       i.name,
+       i.canonical_id,
+       i.vendor_slug,
+       i.family,
+       i.model_type,
+       i.upstream_status,
+       i.context_window,
+       i.max_output,
+       i.cost_in,
+       i.cost_out,
+       i.release_date,
+       i.knowledge_cutoff,
+       i.modalities_in,
+       i.modalities_out,
+       i.description,
+       i.fetched_at,
+       CASE WHEN EXISTS (
+           SELECT 1 FROM model_external_refs r
+           WHERE r.source = i.source
+             AND r.provider_id = i.provider_id
+             AND r.external_id = i.external_id
+       ) THEN true ELSE false END AS imported
+FROM model_catalog_items i
+WHERE (sqlc.narg('q')::text IS NULL
+       OR i.name ILIKE '%' || sqlc.narg('q')::text || '%'
+       OR i.external_id ILIKE '%' || sqlc.narg('q')::text || '%'
+       OR COALESCE(i.canonical_id, '') ILIKE '%' || sqlc.narg('q')::text || '%'
+       OR i.provider_name ILIKE '%' || sqlc.narg('q')::text || '%')
+  AND (sqlc.narg('include_deprecated')::boolean IS TRUE
+       OR COALESCE(i.upstream_status, '') <> 'deprecated')
+ORDER BY i.provider_name, i.name, i.id
+LIMIT sqlc.arg(row_limit)::int;
+
+-- name: GetCatalogItem :one
+-- 按 (source, provider_id, external_id) 取一条镜像行：导入的 preview 与 apply 都以它为准。
+--
+-- 不按 id 取，是因为 id 是本库的实现细节；上游身份三元组才是跨实例稳定的东西
+--（镜像重建、换库之后 id 都会变）。
+SELECT id,
+       source,
+       provider_id,
+       provider_name,
+       external_id,
+       name,
+       canonical_id,
+       vendor_slug,
+       family,
+       model_type,
+       upstream_status,
+       context_window,
+       max_output,
+       cost_in,
+       cost_out,
+       release_date,
+       knowledge_cutoff,
+       open_weights,
+       modalities_in,
+       modalities_out,
+       description
+FROM model_catalog_items
+WHERE source = sqlc.arg(source)::text
+  AND provider_id = sqlc.arg(provider_id)::text
+  AND external_id = sqlc.arg(external_id)::text;
+
+-- name: GetModelDiffTarget :one
+-- 「补全」模式要先知道这条上游条目认领到了哪个本地模型（没有就是新建）。
+--
+-- 匹配链路的前两步（模型域 §4.6.4）：先按 refs 精确命中，再按 canonical 命中任意 ref。
+-- 后面的别名 / slug / name 匹配交给 ResolveModelRefs——那条 SQL 已经覆盖了三种写法，
+-- 这里不重复一套优先级。
+SELECT r.model_id
+FROM model_external_refs r
+WHERE (r.source = sqlc.arg(source)::text
+       AND r.provider_id = sqlc.arg(provider_id)::text
+       AND r.external_id = sqlc.arg(external_id)::text)
+   OR (r.source = sqlc.arg(source)::text
+       AND sqlc.narg('canonical_id')::text IS NOT NULL
+       AND r.canonical_id = sqlc.narg('canonical_id')::text)
+ORDER BY (r.provider_id = sqlc.arg(provider_id)::text) DESC, r.id
+LIMIT 1;
+
+-- name: ListModelSpecsForFields :one
+-- 补全时要知道「当前值 + 字段来源 + 是否锁定」，才能算出哪些字段可以勾。
+SELECT ms.context_window,
+       ms.max_output,
+       ms.cost_in,
+       ms.cost_out,
+       ms.release_date,
+       ms.knowledge_cutoff,
+       ms.open_weights,
+       ms.modalities_in,
+       ms.modalities_out,
+       ms.license
+FROM model_specs ms
+WHERE ms.model_id = $1;
+
+-- name: ListLockedSpecFields :many
+-- 锁定字段与人工来源字段：同步**不许**覆盖它们（模型域 §4.6.1 第 4 条「手工优先」）。
+SELECT field, source, locked
+FROM model_spec_fields
+WHERE model_id = $1;
+
+-- name: UpsertModelSpecs :exec
+-- 应用 diff 时写档案。`source` 只表示「主要来源」，逐字段来源在 model_spec_fields。
+INSERT INTO model_specs (
+    model_id, context_window, max_output, cost_in, cost_out, release_date,
+    knowledge_cutoff, open_weights, modalities_in, modalities_out, license,
+    source, fetched_at
+) VALUES (
+    sqlc.arg(model_id), sqlc.narg(context_window), sqlc.narg(max_output),
+    sqlc.narg(cost_in), sqlc.narg(cost_out), sqlc.narg(release_date),
+    sqlc.narg(knowledge_cutoff), sqlc.narg(open_weights),
+    sqlc.arg(modalities_in), sqlc.arg(modalities_out),
+    sqlc.narg(license), sqlc.arg(source), now()
+)
+ON CONFLICT (model_id) DO UPDATE SET
+    context_window   = COALESCE(EXCLUDED.context_window, model_specs.context_window),
+    max_output       = COALESCE(EXCLUDED.max_output, model_specs.max_output),
+    cost_in          = COALESCE(EXCLUDED.cost_in, model_specs.cost_in),
+    cost_out         = COALESCE(EXCLUDED.cost_out, model_specs.cost_out),
+    release_date     = COALESCE(EXCLUDED.release_date, model_specs.release_date),
+    knowledge_cutoff = COALESCE(EXCLUDED.knowledge_cutoff, model_specs.knowledge_cutoff),
+    open_weights     = COALESCE(EXCLUDED.open_weights, model_specs.open_weights),
+    modalities_in    = CASE WHEN EXCLUDED.modalities_in  <> '' THEN EXCLUDED.modalities_in  ELSE model_specs.modalities_in  END,
+    modalities_out   = CASE WHEN EXCLUDED.modalities_out <> '' THEN EXCLUDED.modalities_out ELSE model_specs.modalities_out END,
+    license          = COALESCE(EXCLUDED.license, model_specs.license),
+    fetched_at       = now();
+
+-- name: UpsertSpecField :exec
+-- 逐字段来源与锁定（模型域 §4.6.5）。应用后每个被勾选的字段都留一行。
+INSERT INTO model_spec_fields (model_id, field, source, locked)
+VALUES (sqlc.arg(model_id), sqlc.arg(field), sqlc.arg(source), false)
+ON CONFLICT (model_id, field) DO UPDATE SET
+    source = EXCLUDED.source,
+    updated_at = now();
+
+-- name: UpsertModelExternalRef :exec
+-- 认领上游条目。唯一键 `(source, provider_id, external_id)` 保证一条上游条目只能被
+-- 一个本地模型认领——重复认领会造出两个模型指向同一个上游，是模型域 §4.7.4 明令禁止的。
+INSERT INTO model_external_refs (model_id, source, provider_id, provider_name, external_id, canonical_id, is_official)
+VALUES (sqlc.arg(model_id), sqlc.arg(source), sqlc.arg(provider_id), sqlc.arg(provider_name),
+        sqlc.arg(external_id), sqlc.narg(canonical_id), sqlc.arg(is_official))
+ON CONFLICT (source, provider_id, external_id) DO UPDATE SET
+    model_id = EXCLUDED.model_id,
+    provider_name = EXCLUDED.provider_name,
+    canonical_id = EXCLUDED.canonical_id,
+    is_official = EXCLUDED.is_official;
+
+-- name: UpdateModelFromCatalog :exec
+-- 导入新建后把展示名 / 描述 / 厂商补上。
+--
+-- 只改这三列：`slug` 与 `name` 是公开身份（slug 创建后不可变，name 是展示名），
+-- `status` / `resolution` 由「导入即 active」的规则单独设——把它们混进这条 UPDATE
+-- 会让「补全档案」顺手改掉状态。
+UPDATE models
+SET name        = sqlc.arg(name),
+    description = sqlc.arg(description),
+    vendor      = sqlc.narg(vendor),
+    updated_at  = GREATEST(now(), models.created_at)
+WHERE id = sqlc.arg(id);
+
+-- name: CreateModelFromCatalog :one
+-- 导入新建：落一个 active 的模型（模型域 §4.6.5「新建」模式）。
+--
+-- `status='active'` 而不是 `candidate`：目录导入是有人对着上游条目点的，不是作者随手填的。
+-- 这与作者手填建 `candidate` 是两条路，状态不同正是为了区分「谁给它背过书」。
+INSERT INTO models (slug, name, vendor, status, resolution, description)
+VALUES (
+    sqlc.arg(slug),
+    sqlc.arg(name),
+    sqlc.narg(vendor),
+    'active',
+    'exact',
+    sqlc.arg(description)
+)
+RETURNING id;
+
+-- name: GetModelByID :one
+-- 导入后回读，把 id 变成契约里的对象。
+SELECT m.id,
+       m.slug,
+       m.name,
+       COALESCE(m.vendor, '')::text AS vendor,
+       m.status,
+       m.resolution,
+       COALESCE(t.slug, '')::text AS merged_into_slug,
+       CASE
+           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = m.id) THEN 'models.dev'
+           ELSE 'manual'
+       END::text AS source,
+       m.description,
+       m.created_at,
+       m.updated_at
+FROM models m
+LEFT JOIN models t ON t.id = m.merged_into_id
+WHERE m.id = $1;

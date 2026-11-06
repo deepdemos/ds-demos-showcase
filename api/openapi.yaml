@@ -9,7 +9,7 @@ info:
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 26 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 29 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1377,6 +1377,202 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/models/catalog:
+    get:
+      operationId: listModelCatalog
+      tags: [治理]
+      summary: 上游目录镜像（导入页的搜索）
+      description: |
+        查的是**本地镜像** `model_catalog_items`，不是实时问 models.dev：上游只提供整包
+        JSON（约 10MB），没有搜索接口；上游不可用时本站照常工作（模型域 §4.6.1）。
+
+        每行带 `imported`：这个上游条目是否已被某个本地模型认领（`model_external_refs`
+        有行）。导入页据此显示「已导入 / 可导入」。
+
+        默认过滤掉上游 `status = 'deprecated'` 的条目（旧站实测 904 条）。这与我们的
+        `models.status = 'deprecated'`（合并退役）是**两套语义**：上游弃用说的是
+        「厂商不再维护」，我们弃用说的是「这条已经并到别人身上」。要看它们得显式传
+        `includeDeprecated=true`。
+
+        需要 `model.import` 权限。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 100 }
+          description: 按名称 / 上游 id / canonical / 厂商名模糊匹配；不传表示不过滤
+        - name: includeDeprecated
+          in: query
+          schema: { type: boolean, default: false }
+          description: 是否包含上游已弃用的条目
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: 目录条目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelCatalogList'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.import 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/models/import/preview:
+    post:
+      operationId: previewModelImport
+      tags: [治理]
+      summary: 导入 / 补全的字段级差异
+      description: |
+        给定一条上游目录条目，算出「本地当前值 / 上游值 / 当前来源 / 是否锁定 / 能不能勾」。
+
+        三种模式由数据决定，不由调用方声明：
+        - **新建**：没有本地模型认领这条上游条目，`mode = 'create'`，差异里 `current` 全空。
+        - **补全**：已有本地模型认领，`mode = 'complete'`，逐字段给出当前值与来源。
+        - **冲突**：这条上游条目被另一个模型占着且对方不可合并，`mode = 'conflict'`，
+          附 `conflictWith`；调用方不该继续。
+
+        哪些字段**不可勾选**（模型域 §4.6.5）：值相同（no-op）、`source = 'manual'`、
+        `locked = true`。后两者要显式解锁才能覆盖，接口不代劳。
+
+        需要 `model.import` 权限。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelImportRef'
+      responses:
+        '200':
+          description: 差异
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelImportPreview'
+        '400':
+          description: 请求体不合法（缺少 providerId / externalId）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.import 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 目录里没有这条上游条目（先刷新目录）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 该上游条目已被另一个模型认领
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/models/import/apply:
+    post:
+      operationId: applyModelImport
+      tags: [治理]
+      summary: 应用导入 / 补全
+      description: |
+        把勾选的字段写进本地：新建时先落一个 `status = 'active'` 的模型（有人对着上游条目
+        点过，不是作者随手填的 `candidate`），再写 `model_specs`、逐字段
+        `model_spec_fields(source='models.dev')`、`model_external_refs` 与审计。
+
+        **只写 `fields` 里列出的字段**：没勾的保持原样。上游字段消失时不清空本地值
+        （模型域 §4.6.8），只会在 preview 里标「上游已移除」。
+
+        单条独立事务：批量导入由调用方逐条发，一条失败不影响其它条。
+
+        需要 `model.import` 权限。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelImportApply'
+      responses:
+        '200':
+          description: 应用后的模型对象
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '400':
+          description: 请求体不合法（字段名不在白名单 / 一个字段都没勾）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.import 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 目录里没有这条上游条目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 该上游条目已被另一个模型认领
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/reviews/demo:
     get:
       operationId: listDemoReviewQueue
@@ -1680,6 +1876,212 @@ components:
           items:
             $ref: '#/components/schemas/Classification'
 
+    ModelCatalogItem:
+      type: object
+      additionalProperties: false
+      required: [providerId, providerName, externalId, name, canonicalId, vendorSlug, family, modelType, upstreamStatus, imported]
+      properties:
+        providerId:
+          type: string
+          maxLength: 128
+          description: 上游的 provider 标识（`models.dev` 的 `provider_id`）
+        providerName:
+          type: string
+          maxLength: 128
+          description: 上游的 provider 展示名
+        externalId:
+          type: string
+          maxLength: 200
+          description: 上游条目 id（原文，含 `:free` 这类渠道标记）
+        name:
+          type: string
+          maxLength: 200
+          description: 上游展示名
+        canonicalId:
+          type: string
+          description: 上游 canonical 标识（如 `deepseek/deepseek-v4-flash`）；上游没有时为空串
+        vendorSlug:
+          type: string
+          description: 由 canonical 前缀推出的厂商 slug；为空表示要人工确认
+        family:
+          type: string
+          description: 上游的模型家族；只落镜像，不进业务侧
+        modelType:
+          type: string
+          description: 上游 `type`（chat / image / embedding …）；只落镜像
+        upstreamStatus:
+          type: string
+          description: |
+            上游自己的状态（`deprecated` / `beta` / `alpha`）。**不改我们的 `Model.status`**：
+            上游弃用说的是「厂商不再维护」，我们弃用说的是「已合并到别的模型」。
+        imported:
+          type: boolean
+          description: 这个上游条目是否已被某个本地模型认领
+        contextWindow:
+          type: integer
+          nullable: true
+          description: 上游给的上下文窗口；未知时为空
+        maxOutput:
+          type: integer
+          nullable: true
+          description: 上游给的最大输出；未知时为空
+        costIn:
+          type: number
+          format: double
+          nullable: true
+          description: 输入单价（上游口径）
+        costOut:
+          type: number
+          format: double
+          nullable: true
+          description: 输出单价
+        releaseDate:
+          type: string
+          format: date
+          nullable: true
+          description: 发布日期
+        modalityIn:
+          type: string
+          description: 输入模态（上游原文，逗号分隔）；未知时为空串
+        modalityOut:
+          type: string
+          description: 输出模态
+        description:
+          type: string
+          description: 上游描述
+    ModelCatalogList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelCatalogItem'
+    ModelImportRef:
+      type: object
+      additionalProperties: false
+      required: [providerId, externalId]
+      properties:
+        source:
+          type: string
+          default: models.dev
+          description: 上游来源；目前只有 models.dev
+        providerId:
+          type: string
+          maxLength: 128
+          description: 上游 provider 标识
+        externalId:
+          type: string
+          maxLength: 200
+          description: 上游条目 id
+        canonicalId:
+          type: string
+          description: 上游 canonical 标识；用来命中「同一模型的其他 provider 条目」
+    ModelImportField:
+      type: object
+      additionalProperties: false
+      required: [field, current, upstream, source, locked, selectable]
+      properties:
+        field:
+          type: string
+          description: |
+            字段名，取值集合见 `POST /api/v1/admin/models/import/preview` 返回的 `fields`：
+            `name` / `description` / `contextWindow` / `maxOutput` / `costIn` / `costOut` /
+            `releaseDate` / `knowledgeCutoff` / `openWeights` / `modalityIn` / `modalityOut` /
+            `license`。
+
+            这里**故意不写成 enum**：`description` 与 `DemoSummary.matchedIn` 的取值重名，
+            而 oapi-codegen 遇到跨枚举的重名常量时会把全仓所有枚举常量改成带类型前缀的
+            形式（`api.Unavailable` → `api.ErrorCodeUnavailable`）。服务端的白名单
+            （`specFieldNames`）是这份取值集合的事实源，未知字段回 400。
+        current:
+          type: string
+          description: 本地当前值（新建时为空串）
+        upstream:
+          type: string
+          description: 上游值
+        source:
+          type: string
+          description: |
+            当前离线值是谁写的：`manual` / `models.dev` / `none`（本地还没有值）。
+
+            这里**故意不写成 enum**：它与 `Model.source` 的取值几乎重叠，一旦两个枚举
+            同名取值并存，生成器会把全仓的枚举常量改成带类型前缀的名字（`api.Unavailable`
+            → `api.ErrorCodeUnavailable`），那是为了一个描述性字段付的全局代价。
+        locked:
+          type: boolean
+          description: 是否被人工锁定（`model_spec_fields.locked`）
+        selectable:
+          type: boolean
+          description: |
+            能不能勾。值相同（no-op）、`source = manual`、`locked = true` 三种情况都是 false——
+            接口不替调用方解锁。
+    ModelImportPreview:
+      type: object
+      additionalProperties: false
+      required: [mode, fields]
+      properties:
+        mode:
+          type: string
+          description: |
+            `create`（新建）/ `complete`（补全）/ `conflict`（上游条目已被别的模型占着）。
+
+            这里**故意不写成 enum**：`conflict` 与错误码 `ErrorCodeConflict` 撞名，而
+            oapi-codegen 遇到跨枚举的重名常量时，会把全仓所有枚举常量改成带类型前缀的
+            形式（`api.Unavailable` → `api.ErrorCodeUnavailable`）。为一个只有三个取值的
+            描述性字段付这个全局代价不值得。
+        target:
+          $ref: '#/components/schemas/Model'
+          description: 已匹配到的本地模型；`mode = create` 时不返回
+        conflictWith:
+          $ref: '#/components/schemas/Model'
+          description: 占用该上游条目的模型；只有 `mode = conflict` 时返回
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelImportField'
+    ModelImportApply:
+      type: object
+      additionalProperties: false
+      required: [providerId, externalId, fields]
+      properties:
+        source:
+          type: string
+          default: models.dev
+          description: 上游来源
+        providerId:
+          type: string
+          maxLength: 128
+          description: 上游 provider 标识
+        externalId:
+          type: string
+          maxLength: 200
+          description: 上游条目 id
+        canonicalId:
+          type: string
+          description: 上游 canonical 标识
+        name:
+          type: string
+          maxLength: 128
+          description: |
+            新建时的展示名（通常取上游 `name`，去掉 `:free` 这类渠道标记）。
+            补全模式下被忽略——改展示名是另一件事。
+        vendor:
+          type: string
+          maxLength: 64
+          description: 新建时的厂商名；上游没有 canonical 时留空并在差异里标「需人工确认厂商」
+        fields:
+          type: array
+          description: |
+            要写入的字段名清单。**只写这里列出的**：没勾的保持原样。
+            一个都没给按 400 处理——那多半是调用方漏了勾选结果，而不是想「什么都不改」。
+          items:
+            type: string
+            # 取值与 `ModelImportField.field` 的 enum 逐字一致，但这里**不再写一遍 enum**：
+            # 两份同值枚举并存时，生成器会给全仓每个枚举常量加上类型前缀
+            #（`api.Unavailable` → `api.ErrorCodeUnavailable`），那是为一个数组元素
+            # 付的全局代价。合法取值以 `ModelImportField.field` 为准。
     ModelRef:
       type: object
       additionalProperties: false

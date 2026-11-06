@@ -72,6 +72,15 @@ func (h *Handler) modelAliases(ctx context.Context) (map[int64][]string, error) 
 	return out, nil
 }
 
+// modelOfDetailRow 与 modelOf 同形，只是行类型来自另一条 SQL。
+//
+// `ListModels` 与 `GetModelByID` 的列集逐字一致（同一个视图口径），但 sqlc 给的是
+// 两个不同的结构体。转一下比让调用方各写一份字段映射便宜——也避免「详情少一个字段」
+// 这种只在某个入口才出现的偏差。
+func modelOfDetailRow(m store.GetModelByIDRow, aliases []string) api.Model {
+	return modelOf(store.ListModelsRow(m), aliases)
+}
+
 // modelOf 把一行目录数据摊成契约里的 Model。
 //
 // 详情里的模型对象走同一个函数：同一份数据在两处长得不一样，前端就得写两套渲染。

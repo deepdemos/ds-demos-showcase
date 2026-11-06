@@ -27,5 +27,6 @@
   "db/migrations/0016_idempotency_per_author.sql": "0765d1660714fd0904fbdcf36f882cec69f884589171f630b767182ddd412faa",
   "db/migrations/0017_demo_visible_channels.sql": "0bb3a462b87860aa5f3eab8b58db8b565809f42529c53742cfe572b3b93ff377",
   "db/migrations/0018_classification_seed.sql": "f17b5b1f18806952f429267692f992822bfeb07bb3a7c776ab1a855a3b73bb29",
-  "db/migrations/0019_demo_listed_channels.sql": "bee85578f314f6be19d366081af431a607d2301f2241a329ea46c4fda7284973"
+  "db/migrations/0019_demo_listed_channels.sql": "bee85578f314f6be19d366081af431a607d2301f2241a329ea46c4fda7284973",
+  "db/migrations/0020_model_import_permission.sql": "a8244ddb3e4ee31d291be53dbdab8545e72665cdab50e62eb2b1acfcd044b9c1"
 }

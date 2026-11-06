@@ -7,7 +7,7 @@
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 26 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 29 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,12 +30,294 @@
 import type {
   Error,
   ListDemoReviewQueueParams,
+  ListModelCatalogParams,
+  Model,
+  ModelCatalogList,
+  ModelImportApply,
+  ModelImportPreview,
+  ModelImportRef,
   PublishRequest,
   PublishResult,
   ReviewDecision,
   ReviewQueue,
   ReviewResult
 } from '../model';
+
+
+export type listModelCatalogResponse200 = {
+  data: ModelCatalogList
+  status: 200
+}
+
+export type listModelCatalogResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listModelCatalogResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listModelCatalogResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listModelCatalogResponseSuccess = (listModelCatalogResponse200) & {
+  headers: Headers;
+};
+export type listModelCatalogResponseError = (listModelCatalogResponse401 | listModelCatalogResponse403 | listModelCatalogResponse503) & {
+  headers: Headers;
+};
+
+export type listModelCatalogResponse = (listModelCatalogResponseSuccess | listModelCatalogResponseError)
+
+export const getListModelCatalogUrl = (params?: ListModelCatalogParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/admin/models/catalog?${stringifiedParams}` : `/api/v1/admin/models/catalog`
+}
+
+/**
+ * 查的是**本地镜像** `model_catalog_items`，不是实时问 models.dev：上游只提供整包
+ * JSON（约 10MB），没有搜索接口；上游不可用时本站照常工作（模型域 §4.6.1）。
+ *
+ * 每行带 `imported`：这个上游条目是否已被某个本地模型认领（`model_external_refs`
+ * 有行）。导入页据此显示「已导入 / 可导入」。
+ *
+ * 默认过滤掉上游 `status = 'deprecated'` 的条目（旧站实测 904 条）。这与我们的
+ * `models.status = 'deprecated'`（合并退役）是**两套语义**：上游弃用说的是
+ * 「厂商不再维护」，我们弃用说的是「这条已经并到别人身上」。要看它们得显式传
+ * `includeDeprecated=true`。
+ *
+ * 需要 `model.import` 权限。
+ * @summary 上游目录镜像（导入页的搜索）
+ */
+export const listModelCatalog = async (params?: ListModelCatalogParams, options?: RequestInit): Promise<listModelCatalogResponse> => {
+
+  const res = await fetch(getListModelCatalogUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listModelCatalogResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listModelCatalogResponse
+}
+
+
+export type previewModelImportResponse200 = {
+  data: ModelImportPreview
+  status: 200
+}
+
+export type previewModelImportResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type previewModelImportResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type previewModelImportResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type previewModelImportResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type previewModelImportResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type previewModelImportResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type previewModelImportResponseSuccess = (previewModelImportResponse200) & {
+  headers: Headers;
+};
+export type previewModelImportResponseError = (previewModelImportResponse400 | previewModelImportResponse401 | previewModelImportResponse403 | previewModelImportResponse404 | previewModelImportResponse409 | previewModelImportResponse503) & {
+  headers: Headers;
+};
+
+export type previewModelImportResponse = (previewModelImportResponseSuccess | previewModelImportResponseError)
+
+export const getPreviewModelImportUrl = () => {
+
+
+
+
+  return `/api/v1/admin/models/import/preview`
+}
+
+/**
+ * 给定一条上游目录条目，算出「本地当前值 / 上游值 / 当前来源 / 是否锁定 / 能不能勾」。
+ *
+ * 三种模式由数据决定，不由调用方声明：
+ * - **新建**：没有本地模型认领这条上游条目，`mode = 'create'`，差异里 `current` 全空。
+ * - **补全**：已有本地模型认领，`mode = 'complete'`，逐字段给出当前值与来源。
+ * - **冲突**：这条上游条目被另一个模型占着且对方不可合并，`mode = 'conflict'`，
+ *   附 `conflictWith`；调用方不该继续。
+ *
+ * 哪些字段**不可勾选**（模型域 §4.6.5）：值相同（no-op）、`source = 'manual'`、
+ * `locked = true`。后两者要显式解锁才能覆盖，接口不代劳。
+ *
+ * 需要 `model.import` 权限。
+ * @summary 导入 / 补全的字段级差异
+ */
+export const previewModelImport = async (modelImportRef: ModelImportRef, options?: RequestInit): Promise<previewModelImportResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPreviewModelImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(modelImportRef)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: previewModelImportResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as previewModelImportResponse
+}
+
+
+export type applyModelImportResponse200 = {
+  data: Model
+  status: 200
+}
+
+export type applyModelImportResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type applyModelImportResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type applyModelImportResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type applyModelImportResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type applyModelImportResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type applyModelImportResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type applyModelImportResponseSuccess = (applyModelImportResponse200) & {
+  headers: Headers;
+};
+export type applyModelImportResponseError = (applyModelImportResponse400 | applyModelImportResponse401 | applyModelImportResponse403 | applyModelImportResponse404 | applyModelImportResponse409 | applyModelImportResponse503) & {
+  headers: Headers;
+};
+
+export type applyModelImportResponse = (applyModelImportResponseSuccess | applyModelImportResponseError)
+
+export const getApplyModelImportUrl = () => {
+
+
+
+
+  return `/api/v1/admin/models/import/apply`
+}
+
+/**
+ * 把勾选的字段写进本地：新建时先落一个 `status = 'active'` 的模型（有人对着上游条目
+ * 点过，不是作者随手填的 `candidate`），再写 `model_specs`、逐字段
+ * `model_spec_fields(source='models.dev')`、`model_external_refs` 与审计。
+ *
+ * **只写 `fields` 里列出的字段**：没勾的保持原样。上游字段消失时不清空本地值
+ * （模型域 §4.6.8），只会在 preview 里标「上游已移除」。
+ *
+ * 单条独立事务：批量导入由调用方逐条发，一条失败不影响其它条。
+ *
+ * 需要 `model.import` 权限。
+ * @summary 应用导入 / 补全
+ */
+export const applyModelImport = async (modelImportApply: ModelImportApply, options?: RequestInit): Promise<applyModelImportResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getApplyModelImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(modelImportApply)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: applyModelImportResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as applyModelImportResponse
+}
 
 
 export type listDemoReviewQueueResponse200 = {

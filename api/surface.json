@@ -388,6 +388,178 @@
         "optional": false
       }
     },
+    "ModelCatalogItem": {
+      "canonicalId": {
+        "type": "string",
+        "optional": false
+      },
+      "contextWindow": {
+        "type": "int",
+        "optional": true
+      },
+      "costIn": {
+        "type": "float64",
+        "optional": true
+      },
+      "costOut": {
+        "type": "float64",
+        "optional": true
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "externalId": {
+        "type": "string",
+        "optional": false
+      },
+      "family": {
+        "type": "string",
+        "optional": false
+      },
+      "imported": {
+        "type": "bool",
+        "optional": false
+      },
+      "maxOutput": {
+        "type": "int",
+        "optional": true
+      },
+      "modalityIn": {
+        "type": "string",
+        "optional": true
+      },
+      "modalityOut": {
+        "type": "string",
+        "optional": true
+      },
+      "modelType": {
+        "type": "string",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "providerId": {
+        "type": "string",
+        "optional": false
+      },
+      "providerName": {
+        "type": "string",
+        "optional": false
+      },
+      "releaseDate": {
+        "type": "openapi_types.Date",
+        "optional": true
+      },
+      "upstreamStatus": {
+        "type": "string",
+        "optional": false
+      },
+      "vendorSlug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "ModelCatalogList": {
+      "items": {
+        "type": "[]ModelCatalogItem",
+        "optional": false
+      }
+    },
+    "ModelImportApply": {
+      "canonicalId": {
+        "type": "string",
+        "optional": true
+      },
+      "externalId": {
+        "type": "string",
+        "optional": false
+      },
+      "fields": {
+        "type": "[]string",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": true
+      },
+      "providerId": {
+        "type": "string",
+        "optional": false
+      },
+      "source": {
+        "type": "string",
+        "optional": true
+      },
+      "vendor": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "ModelImportField": {
+      "current": {
+        "type": "string",
+        "optional": false
+      },
+      "field": {
+        "type": "string",
+        "optional": false
+      },
+      "locked": {
+        "type": "bool",
+        "optional": false
+      },
+      "selectable": {
+        "type": "bool",
+        "optional": false
+      },
+      "source": {
+        "type": "string",
+        "optional": false
+      },
+      "upstream": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "ModelImportPreview": {
+      "conflictWith": {
+        "type": "Model",
+        "optional": true
+      },
+      "fields": {
+        "type": "[]ModelImportField",
+        "optional": false
+      },
+      "mode": {
+        "type": "string",
+        "optional": false
+      },
+      "target": {
+        "type": "Model",
+        "optional": true
+      }
+    },
+    "ModelImportRef": {
+      "canonicalId": {
+        "type": "string",
+        "optional": true
+      },
+      "externalId": {
+        "type": "string",
+        "optional": false
+      },
+      "providerId": {
+        "type": "string",
+        "optional": false
+      },
+      "source": {
+        "type": "string",
+        "optional": true
+      }
+    },
     "ModelList": {
       "items": {
         "type": "[]Model",
@@ -799,6 +971,21 @@
     "POST /api/v1/admin/demos/{slug}/publish": {
       "method": "PublishDemo",
       "pathParams": 1,
+      "params": null
+    },
+    "GET /api/v1/admin/models/catalog": {
+      "method": "ListModelCatalog",
+      "pathParams": 0,
+      "params": "ListModelCatalogParams"
+    },
+    "POST /api/v1/admin/models/import/apply": {
+      "method": "ApplyModelImport",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/admin/models/import/preview": {
+      "method": "PreviewModelImport",
+      "pathParams": 0,
       "params": null
     },
     "GET /api/v1/admin/reviews/demo": {

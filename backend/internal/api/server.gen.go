@@ -17,6 +17,15 @@ type ServerInterface interface {
 	// 发布作品
 	// (POST /api/v1/admin/demos/{slug}/publish)
 	PublishDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 上游目录镜像（导入页的搜索）
+	// (GET /api/v1/admin/models/catalog)
+	ListModelCatalog(w http.ResponseWriter, r *http.Request, params ListModelCatalogParams)
+	// 应用导入 / 补全
+	// (POST /api/v1/admin/models/import/apply)
+	ApplyModelImport(w http.ResponseWriter, r *http.Request)
+	// 导入 / 补全的字段级差异
+	// (POST /api/v1/admin/models/import/preview)
+	PreviewModelImport(w http.ResponseWriter, r *http.Request)
 	// 待审作品队列
 	// (GET /api/v1/admin/reviews/demo)
 	ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams)
@@ -101,6 +110,24 @@ type Unimplemented struct{}
 // 发布作品
 // (POST /api/v1/admin/demos/{slug}/publish)
 func (_ Unimplemented) PublishDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 上游目录镜像（导入页的搜索）
+// (GET /api/v1/admin/models/catalog)
+func (_ Unimplemented) ListModelCatalog(w http.ResponseWriter, r *http.Request, params ListModelCatalogParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 应用导入 / 补全
+// (POST /api/v1/admin/models/import/apply)
+func (_ Unimplemented) ApplyModelImport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 导入 / 补全的字段级差异
+// (POST /api/v1/admin/models/import/preview)
+func (_ Unimplemented) PreviewModelImport(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -285,6 +312,95 @@ func (siw *ServerInterfaceWrapper) PublishDemo(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PublishDemo(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListModelCatalog operation middleware
+func (siw *ServerInterfaceWrapper) ListModelCatalog(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListModelCatalogParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "includeDeprecated" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "includeDeprecated", r.URL.Query(), &params.IncludeDeprecated)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeDeprecated", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListModelCatalog(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApplyModelImport operation middleware
+func (siw *ServerInterfaceWrapper) ApplyModelImport(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyModelImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewModelImport operation middleware
+func (siw *ServerInterfaceWrapper) PreviewModelImport(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewModelImport(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1041,6 +1157,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/demos/{slug}/publish", wrapper.PublishDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/models/catalog", wrapper.ListModelCatalog)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/models/import/apply", wrapper.ApplyModelImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/models/import/preview", wrapper.PreviewModelImport)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/reviews/demo", wrapper.ListDemoReviewQueue)
