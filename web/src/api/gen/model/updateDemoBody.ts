@@ -44,8 +44,9 @@ export type UpdateDemoBody = {
   /** 新的作品文件；不传表示只改文字 */
   package?: Blob | File;
   /**
-     * 这一版声明的模型（`models.slug`），语义是**整体替换**。
-     * 字段名带 slugs 而不是 ids，理由同 `POST /api/v1/demos`。
+     * 这一版声明的模型，语义是**整体替换**。每一项是模型指称
+     * （slug / 展示名 / 别名），解析不到时自动建候选项，
+     * 规则与 `POST /api/v1/demos` 完全相同。
      *
      * 不传等价于空数组，也就是「这一版不声明任何模型」——不做
      * 「没传就沿用上一版」：multipart 里「没传」与「传空」在浏览器侧

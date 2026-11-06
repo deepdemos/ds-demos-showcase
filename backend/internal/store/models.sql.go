@@ -34,6 +34,76 @@ func (q *Queries) CopyRevisionModels(ctx context.Context, arg CopyRevisionModels
 	return err
 }
 
+const createCandidateModel = `-- name: CreateCandidateModel :one
+INSERT INTO models (slug, name, vendor, status, resolution, description)
+VALUES (
+    $1,
+    $2,
+    $3,
+    'candidate',
+    'exact',
+    ''
+)
+ON CONFLICT DO NOTHING
+RETURNING id
+`
+
+type CreateCandidateModelParams struct {
+	Slug   string
+	Name   string
+	Vendor pgtype.Text
+}
+
+// 作者填了一个库里没有的名字：**立刻建实体**，状态 `candidate`。
+//
+// 为什么不让投稿失败：AI 圈的灰测模型等不起人工审核（旧站的 142 个模型写法里有大量
+// 上游没收录的名字）。先落 `candidate` 让作品能提交，管理员事后归并——归并是按 id 改指针，
+// 作品不用动。
+//
+// `ON CONFLICT DO NOTHING` 不带目标：`slug` 与 `name` 两个唯一约束都要兜住并发。
+// 冲突时不返回行，调用方据此回查现有行（而不是把它当失败）。
+func (q *Queries) CreateCandidateModel(ctx context.Context, arg CreateCandidateModelParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createCandidateModel, arg.Slug, arg.Name, arg.Vendor)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const findModelByName = `-- name: FindModelByName :one
+SELECT id
+FROM models
+WHERE lower(name) = lower($1)
+LIMIT 1
+`
+
+// 建档撞唯一约束后回查：名字是作者给的，slug 才是机器生成的，按名字找人话更准。
+func (q *Queries) FindModelByName(ctx context.Context, name string) (int64, error) {
+	row := q.db.QueryRow(ctx, findModelByName, name)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertModelAlias = `-- name: InsertModelAlias :exec
+INSERT INTO model_aliases (alias, model_id)
+VALUES ($1, $2)
+ON CONFLICT (alias) DO NOTHING
+`
+
+type InsertModelAliasParams struct {
+	Alias   string
+	ModelID int64
+}
+
+// 把作者这次填的原文记成别名，下次同样的写法直接命中，不用再建一遍。
+//
+// `alias` 是单列主键（全库唯一）：同一个写法不允许同时指两个模型，否则解析结果取决于
+// 查询顺序——那是比「解析不到」更糟的状态。
+func (q *Queries) InsertModelAlias(ctx context.Context, arg InsertModelAliasParams) error {
+	_, err := q.db.Exec(ctx, insertModelAlias, arg.Alias, arg.ModelID)
+	return err
+}
+
 const insertRevisionModel = `-- name: InsertRevisionModel :exec
 INSERT INTO demo_revision_models (revision_id, model_id, provider_id, serving_note, source)
 VALUES ($1, $2, NULL, '', 'api')
@@ -268,6 +338,89 @@ func (q *Queries) ListRevisionModels(ctx context.Context, revisionID int64) ([]L
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const modelSlugTaken = `-- name: ModelSlugTaken :one
+SELECT EXISTS (SELECT 1 FROM models WHERE slug = $1)::bool AS taken
+`
+
+// slug 是公开 URL 的一部分、创建后不可变，生成时先查一遍再落库。
+func (q *Queries) ModelSlugTaken(ctx context.Context, slug string) (bool, error) {
+	row := q.db.QueryRow(ctx, modelSlugTaken, slug)
+	var taken bool
+	err := row.Scan(&taken)
+	return taken, err
+}
+
+const resolveModelRefs = `-- name: ResolveModelRefs :many
+WITH input AS (
+    SELECT DISTINCT lower(btrim(r))::text AS ref
+    FROM unnest($1::text[]) AS r
+    WHERE btrim(r) <> ''
+),
+cand AS (
+    SELECT i.ref,
+           COALESCE(t.id, m.id) AS model_id,
+           CASE
+               WHEN lower(m.slug) = i.ref THEN 0
+               WHEN EXISTS (
+                   SELECT 1 FROM model_aliases a
+                   WHERE a.model_id = m.id AND lower(a.alias) = i.ref
+               ) THEN 1
+               ELSE 2
+           END AS rank
+    FROM input i
+    JOIN models m
+      ON lower(m.slug) = i.ref
+      OR lower(m.name) = i.ref
+      OR EXISTS (
+          SELECT 1 FROM model_aliases a
+          WHERE a.model_id = m.id AND lower(a.alias) = i.ref
+      )
+    LEFT JOIN models t
+      ON t.id = m.merged_into_id AND m.status = 'deprecated'
+)
+SELECT DISTINCT ON (ref) ref::text AS ref, model_id
+FROM cand
+ORDER BY ref, rank, model_id
+`
+
+type ResolveModelRefsRow struct {
+	Ref     string
+	ModelID int64
+}
+
+// 把作者填的「模型指称」解析成模型 id。指称可以是 slug、展示名或别名，**大小写不敏感**。
+//
+// 为什么一条 SQL 里带三种匹配：作者在投稿框里手打的是「DeepSeek V4 Flash」这种人话，
+// 不是 slug；只认 slug 等于要求他先去查目录。三种形态在库里本来就是同一件事的三种写法
+// （`models.slug` / `models.name` / `model_aliases.alias`），解析放在一处，别让每个调用点
+// 各写一套优先级。
+//
+// `rank` 决定同名不同形态时谁优先：slug(0) > alias(1) > name(2)。同 rank 再按 id 取小的，
+// 保证结果稳定——否则同一份输入两次解析可能命中不同的行，作者会看到模型莫名换掉。
+//
+// 已合并的模型（`status='deprecated'` 且 `merged_into_id` 非空）沿指针走一跳，返回归宿 id：
+// 作者手里可能还留着旧名字，报错「模型不存在」既不准确也没帮助。只走一跳——多级合并链
+// 在库里没出现过，真出现时再按需展开。
+func (q *Queries) ResolveModelRefs(ctx context.Context, refs []string) ([]ResolveModelRefsRow, error) {
+	rows, err := q.db.Query(ctx, resolveModelRefs, refs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ResolveModelRefsRow{}
+	for rows.Next() {
+		var i ResolveModelRefsRow
+		if err := rows.Scan(&i.Ref, &i.ModelID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

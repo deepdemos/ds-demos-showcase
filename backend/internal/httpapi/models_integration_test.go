@@ -7,7 +7,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -361,27 +363,49 @@ func TestIntegrationSubmitDeclaresModels(t *testing.T) {
 		t.Fatalf("作者看详情 models = %v，想要 [it-model-active]", got)
 	}
 
-	// 2) 不存在的模型：整次投稿失败，而不是「悄悄少声明一个」。
-	rec = submitHTMLWithModels(t, h, sid, "声明了不存在的模型", `<!doctype html><p>m</p>`,
-		[]string{"it-model-active", "it-model-nope"})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("声明不存在的模型 = %d，想要 400；响应体：%s", rec.Code, rec.Body.String())
-	}
-	body := rec.Body.String()
-	if !bytes.Contains([]byte(body), []byte("it-model-nope")) {
-		t.Fatalf("400 的文案要点出是哪个模型不对，实际：%s", body)
-	}
-	// 「模型不存在」是输入问题，不是落库故障：文案里不该出现「落库失败」，
-	// 否则作者会以为是我们这边坏了，去做无意义的等待或反馈。
-	if bytes.Contains([]byte(body), []byte("落库失败")) {
-		t.Fatalf("输入错误被说成了落库失败：%s", body)
-	}
-
-	// 3) 候选（未启用）模型：同样拒绝——目录里选不到，接口也不能被绕过。
+	// 2) 库里的候选（未启用）模型：**可以声明**。
+	//
+	// 早先这里断言「候选模型回 400」，理由是「目录里选不到、接口不能被绕过」。
+	// 那条规矩在「作者可以自由填模型名」之后就自相矛盾了：作者自己填的名字
+	// 落库时就是 candidate，若候选一律不可用，他刚建的那个也立刻不能用了。
 	rec = submitHTMLWithModels(t, h, sid, "声明候选模型", `<!doctype html><p>m</p>`,
 		[]string{"it-model-candidate"})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("声明候选模型 = %d，想要 400；响应体：%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("声明候选模型 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
+	}
+
+	// 3) 库里没有的模型名：**建一个候选项，而不是让整次投稿失败**。
+	//
+	// 名字带本用例专属的后缀：这条用例会在库里**建出**一行，若名字固定，
+	// 第二次跑时它已经存在，「解析不到就建」这条路径根本不会被走到——
+	// 那时候就算把建行逻辑整段删掉，测试照样绿（已踩过一次）。
+	//
+	// 名字带纳秒后缀：上一次跑留下的行（清理可能因外键删不掉）会让这条路径不被走到。
+	unknown := "尚未收录的灰测模型-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM model_aliases WHERE alias = $1`, unknown)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM models WHERE name = $1`, unknown)
+	})
+	rec = submitHTMLWithModels(t, h, sid, "声明上游还没收录的模型", `<!doctype html><p>m</p>`,
+		[]string{"it-model-active", unknown})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("声明未收录模型 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("解析投稿回执失败: %v", err)
+	}
+	got = modelSlugsOf(t, getDemoAs(t, h, created.Slug, sid))
+	if len(got) != 2 {
+		t.Fatalf("作者看详情 models = %v，想要两条（一条已有、一条新建）", got)
+	}
+	// 新建的那条必须是 candidate：active 意味着「已确认」，而它只是作者的输入。
+	var status string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT status FROM models WHERE name = $1`, unknown).Scan(&status); err != nil {
+		t.Fatalf("回查新建模型失败: %v", err)
+	}
+	if status != "candidate" {
+		t.Fatalf("作者新建的模型 status = %q，想要 candidate", status)
 	}
 
 	// 4) 一次都不传：合法，models 是空数组而不是 null。
@@ -392,6 +416,78 @@ func TestIntegrationSubmitDeclaresModels(t *testing.T) {
 	}
 	if got := modelSlugsOf(t, detail); len(got) != 0 {
 		t.Fatalf("没声明模型的详情 models = %v，想要空", got)
+	}
+}
+
+// TestIntegrationModelRefsAcceptNameAndAlias 钉住「指称可以不是 slug」。
+//
+// 这条用例存在的理由：接口曾经只认 slug，而作者在表单里打的是人话。
+// 三种写法必须落到同一个模型上，否则同一件作品会因为在两个页面里写法不同
+// 而显示成两个模型。
+func TestIntegrationModelRefsAcceptNameAndAlias(t *testing.T) {
+	h, idSvc, pool := newModelTestHandler(t)
+	insertModel(t, pool, "it-model-ref", "测试指称模型", "active")
+	var id int64
+	if err := pool.QueryRow(context.Background(),
+		`SELECT id FROM models WHERE slug = $1`, "it-model-ref").Scan(&id); err != nil {
+		t.Fatalf("回查模型 id 失败: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO model_aliases (alias, model_id) VALUES ($1, $2)
+		 ON CONFLICT (alias) DO UPDATE SET model_id = excluded.model_id`, "it-指称别名", id); err != nil {
+		t.Fatalf("插别名失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM model_aliases WHERE alias = $1`, "it-指称别名")
+	})
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-ref@example.com",
+		Password:    "modeltest1234",
+		Username:    "it-ref",
+		DisplayName: "指称作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+
+	// 一次投稿里把三种写法都写上：slug、展示名、别名。
+	rec := submitHTMLWithModels(t, h, sid, "三种写法指的是同一个模型", `<!doctype html><p>m</p>`,
+		[]string{"it-model-ref", "测试指称模型", "it-指称别名"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("投稿 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("解析投稿回执失败: %v", err)
+	}
+	// 三种写法解析到同一个 id，去重之后只剩一条——不是三条，也不是两条。
+	got := modelSlugsOf(t, getDemoAs(t, h, created.Slug, sid))
+	if len(got) != 1 || got[0] != "it-model-ref" {
+		t.Fatalf("三种写法解析后 models = %v，想要 [it-model-ref]", got)
+	}
+}
+
+// TestIntegrationCandidateModelCanBeUsed 钉住「候选项不是不可用」。
+//
+// 作者自由填的模型一开始就是 candidate。若候选一律拒绝，他刚建的那条立刻不能用，
+// 「让作者自己填」这条设计就只剩一半。
+func TestIntegrationCandidateModelCanBeUsed(t *testing.T) {
+	h, idSvc, pool := newModelTestHandler(t)
+	insertModel(t, pool, "it-cand", "候选模型甲", "candidate")
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-cand@example.com",
+		Password:    "modeltest1234",
+		Username:    "it-cand",
+		DisplayName: "候选作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+
+	rec := submitHTMLWithModels(t, h, sid, "用了候选模型", `<!doctype html><p>m</p>`,
+		[]string{"it-cand"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("声明候选模型 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
 	}
 }
 

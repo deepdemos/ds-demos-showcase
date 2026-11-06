@@ -230,7 +230,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 
 		// 这一版的模型声明整体替换（语义见 UpdateInput.ModelSlugs 的注释）。
 		// 新版本本来没有行，所以「替换」就是写入；不需要先删。
-		modelIDs, err := resolveModelSlugs(ctx, q, in.ModelSlugs)
+		modelIDs, err := resolveModelRefs(ctx, q, in.ModelSlugs)
 		if err != nil {
 			return err
 		}

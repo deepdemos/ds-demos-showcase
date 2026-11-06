@@ -103,6 +103,37 @@ describe('SubmitPage', () => {
   });
 
   /**
+   * 手填的模型名也要进请求体。
+   *
+   * 这条钉的是「目录不是白名单」：灰测模型上游没收录，作者只能自己打。
+   * 若手填的只留在草稿里、没进 value，投稿会成功但声明是空的——
+   * 没有任何错误，作者也不会去核对。
+   */
+  test('手填的模型名跟着投稿一起提交', async () => {
+    auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+    auth.isLoading = false;
+    vi.mocked(submitDemo).mockResolvedValue({
+      status: 201,
+      data: { slug: 'demo-a', lifecycleState: 'draft', moderationState: 'pending' },
+    } as never);
+
+    renderAt('/submit');
+
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '用了灰测模型' } });
+    pickFile();
+
+    const box = await screen.findByLabelText('手填模型名');
+    fireEvent.change(box, { target: { value: '某厂家的灰测模型' } });
+    fireEvent.click(screen.getByRole('button', { name: '添加' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
+
+    await waitFor(() => expect(submitDemo).toHaveBeenCalled());
+    const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(body.modelSlugs).toEqual(['某厂家的灰测模型']);
+  });
+
+  /**
    * 200 是重放（同一个 Idempotency-Key 已经建过），对用户来说是同一件事：
    * 作品在里面了。只认 201 的话，用户会看到一条空的报错。
    */
