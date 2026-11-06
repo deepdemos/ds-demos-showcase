@@ -34,7 +34,7 @@ export interface ModelSyncResult {
   /**
      * 同步后的状态，取值为 `ok` / `stale` / `failed`。
      * 故意不是 enum：与 `model_source_sync.status` 同一取值集，
-     * 在门禁里核对，避免生成器把全仓枚举常量改名（见松点 52）。
+     * 在门禁里核对，避免生成器把全仓枚举常量改名（见松点 53）。
      */
   status: string;
   /** 镜像里的条目数（`skipped=true` 时是上一次成功的条数） */
