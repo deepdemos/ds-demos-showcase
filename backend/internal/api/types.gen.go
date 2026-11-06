@@ -639,6 +639,159 @@ type ModelSource string
 // 条目但来源可疑；`deprecated` 已退役。
 type ModelStatus string
 
+// ModelCatalogItem defines model for ModelCatalogItem.
+type ModelCatalogItem struct {
+	// CanonicalId 上游 canonical 标识（如 `deepseek/deepseek-v4-flash`）；上游没有时为空串
+	CanonicalId string `json:"canonicalId"`
+
+	// ContextWindow 上游给的上下文窗口；未知时为空
+	ContextWindow *int `json:"contextWindow"`
+
+	// CostIn 输入单价（上游口径）
+	CostIn *float64 `json:"costIn"`
+
+	// CostOut 输出单价
+	CostOut *float64 `json:"costOut"`
+
+	// Description 上游描述
+	Description *string `json:"description,omitempty"`
+
+	// ExternalId 上游条目 id（原文，含 `:free` 这类渠道标记）
+	ExternalId string `json:"externalId"`
+
+	// Family 上游的模型家族；只落镜像，不进业务侧
+	Family string `json:"family"`
+
+	// Imported 这个上游条目是否已被某个本地模型认领
+	Imported bool `json:"imported"`
+
+	// MaxOutput 上游给的最大输出；未知时为空
+	MaxOutput *int `json:"maxOutput"`
+
+	// ModalityIn 输入模态（上游原文，逗号分隔）；未知时为空串
+	ModalityIn *string `json:"modalityIn,omitempty"`
+
+	// ModalityOut 输出模态
+	ModalityOut *string `json:"modalityOut,omitempty"`
+
+	// ModelType 上游 `type`（chat / image / embedding …）；只落镜像
+	ModelType string `json:"modelType"`
+
+	// Name 上游展示名
+	Name string `json:"name"`
+
+	// ProviderId 上游的 provider 标识（`models.dev` 的 `provider_id`）
+	ProviderId string `json:"providerId"`
+
+	// ProviderName 上游的 provider 展示名
+	ProviderName string `json:"providerName"`
+
+	// ReleaseDate 发布日期
+	ReleaseDate *openapi_types.Date `json:"releaseDate"`
+
+	// UpstreamStatus 上游自己的状态（`deprecated` / `beta` / `alpha`）。**不改我们的 `Model.status`**：
+	// 上游弃用说的是「厂商不再维护」，我们弃用说的是「已合并到别的模型」。
+	UpstreamStatus string `json:"upstreamStatus"`
+
+	// VendorSlug 由 canonical 前缀推出的厂商 slug；为空表示要人工确认
+	VendorSlug string `json:"vendorSlug"`
+}
+
+// ModelCatalogList defines model for ModelCatalogList.
+type ModelCatalogList struct {
+	Items []ModelCatalogItem `json:"items"`
+}
+
+// ModelImportApply defines model for ModelImportApply.
+type ModelImportApply struct {
+	// CanonicalId 上游 canonical 标识
+	CanonicalId *string `json:"canonicalId,omitempty"`
+
+	// ExternalId 上游条目 id
+	ExternalId string `json:"externalId"`
+
+	// Fields 要写入的字段名清单。**只写这里列出的**：没勾的保持原样。
+	// 一个都没给按 400 处理——那多半是调用方漏了勾选结果，而不是想「什么都不改」。
+	Fields []string `json:"fields"`
+
+	// Name 新建时的展示名（通常取上游 `name`，去掉 `:free` 这类渠道标记）。
+	// 补全模式下被忽略——改展示名是另一件事。
+	Name *string `json:"name,omitempty"`
+
+	// ProviderId 上游 provider 标识
+	ProviderId string `json:"providerId"`
+
+	// Source 上游来源
+	Source *string `json:"source,omitempty"`
+
+	// Vendor 新建时的厂商名；上游没有 canonical 时留空并在差异里标「需人工确认厂商」
+	Vendor *string `json:"vendor,omitempty"`
+}
+
+// ModelImportField defines model for ModelImportField.
+type ModelImportField struct {
+	// Current 本地当前值（新建时为空串）
+	Current string `json:"current"`
+
+	// Field 字段名，取值集合见 `GET /api/v1/admin/models/import/preview` 的说明：
+	// `name` / `description` / `contextWindow` / `maxOutput` / `costIn` / `costOut` /
+	// `releaseDate` / `knowledgeCutoff` / `openWeights` / `modalityIn` / `modalityOut` /
+	// `license`。
+	//
+	// 这里**故意不写成 enum**：`description` 与 `DemoSummary.matchedIn` 的取值重名，
+	// 而 oapi-codegen 遇到跨枚举的重名常量时会把全仓所有枚举常量改成带类型前缀的
+	// 形式（`api.Unavailable` → `api.ErrorCodeUnavailable`）。服务端的白名单
+	// （`specFieldNames`）是这份取值集合的事实源，未知字段回 400。
+	Field string `json:"field"`
+
+	// Locked 是否被人工锁定（`model_spec_fields.locked`）
+	Locked bool `json:"locked"`
+
+	// Selectable 能不能勾。值相同（no-op）、`source = manual`、`locked = true` 三种情况都是 false——
+	// 接口不替调用方解锁。
+	Selectable bool `json:"selectable"`
+
+	// Source 当前离线值是谁写的：`manual` / `models.dev` / `none`（本地还没有值）。
+	//
+	// 这里**故意不写成 enum**：它与 `Model.source` 的取值几乎重叠，一旦两个枚举
+	// 同名取值并存，生成器会把全仓的枚举常量改成带类型前缀的名字（`api.Unavailable`
+	// → `api.ErrorCodeUnavailable`），那是为了一个描述性字段付的全局代价。
+	Source string `json:"source"`
+
+	// Upstream 上游值
+	Upstream string `json:"upstream"`
+}
+
+// ModelImportPreview defines model for ModelImportPreview.
+type ModelImportPreview struct {
+	ConflictWith *Model             `json:"conflictWith,omitempty"`
+	Fields       []ModelImportField `json:"fields"`
+
+	// Mode `create`（新建）/ `complete`（补全）/ `conflict`（上游条目已被别的模型占着）。
+	//
+	// 这里**故意不写成 enum**：`conflict` 与错误码 `ErrorCodeConflict` 撞名，而
+	// oapi-codegen 遇到跨枚举的重名常量时，会把全仓所有枚举常量改成带类型前缀的
+	// 形式（`api.Unavailable` → `api.ErrorCodeUnavailable`）。为一个只有三个取值的
+	// 描述性字段付这个全局代价不值得。
+	Mode   string `json:"mode"`
+	Target *Model `json:"target,omitempty"`
+}
+
+// ModelImportRef defines model for ModelImportRef.
+type ModelImportRef struct {
+	// CanonicalId 上游 canonical 标识；用来命中「同一模型的其他 provider 条目」
+	CanonicalId *string `json:"canonicalId,omitempty"`
+
+	// ExternalId 上游条目 id
+	ExternalId string `json:"externalId"`
+
+	// ProviderId 上游 provider 标识
+	ProviderId string `json:"providerId"`
+
+	// Source 上游来源；目前只有 models.dev
+	Source *string `json:"source,omitempty"`
+}
+
 // ModelList defines model for ModelList.
 type ModelList struct {
 	Items []Model `json:"items"`
@@ -809,6 +962,16 @@ type VerifyEmailResendRequest struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// ListModelCatalogParams defines parameters for ListModelCatalog.
+type ListModelCatalogParams struct {
+	// Q 按名称 / 上游 id / canonical / 厂商名模糊匹配；不传表示不过滤
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// IncludeDeprecated 是否包含上游已弃用的条目
+	IncludeDeprecated *bool `form:"includeDeprecated,omitempty" json:"includeDeprecated,omitempty"`
+	Limit             *int  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListDemoReviewQueueParams defines parameters for ListDemoReviewQueue.
 type ListDemoReviewQueueParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -964,6 +1127,12 @@ type ListModelsParamsStatus string
 
 // PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
 type PublishDemoJSONRequestBody = PublishRequest
+
+// ApplyModelImportJSONRequestBody defines body for ApplyModelImport for application/json ContentType.
+type ApplyModelImportJSONRequestBody = ModelImportApply
+
+// PreviewModelImportJSONRequestBody defines body for PreviewModelImport for application/json ContentType.
+type PreviewModelImportJSONRequestBody = ModelImportRef
 
 // ReviewDemoJSONRequestBody defines body for ReviewDemo for application/json ContentType.
 type ReviewDemoJSONRequestBody = ReviewDecision

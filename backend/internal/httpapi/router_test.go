@@ -30,6 +30,18 @@ func (s *stub) ListClassifications(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "classifications")
 }
 
+func (s *stub) ListModelCatalog(_ http.ResponseWriter, _ *http.Request, _ api.ListModelCatalogParams) {
+	s.hits = append(s.hits, "catalog")
+}
+
+func (s *stub) PreviewModelImport(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "import-preview")
+}
+
+func (s *stub) ApplyModelImport(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "import-apply")
+}
+
 func (s *stub) UpdateDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
 
 func (s *stub) ArchiveDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}

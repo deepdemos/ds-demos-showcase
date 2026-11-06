@@ -492,6 +492,14 @@ func (s *Service) compensate(ctx context.Context, slug string, st staged) {
 		"slug", slug, "files", len(st.files))
 }
 
+// InTx 在同一个事务里跑 fn，供需要跨查询原子性的调用方复用。
+//
+// 导出它是为了让「审核 / 导入」这类一次要写好几张表的管理动作共用一个事务语义——
+// 各自再 Begin 一次，就会在失败时留下半截数据。
+func (s *Service) InTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	return s.inTx(ctx, fn)
+}
+
 func (s *Service) inTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	if s.pool == nil {
 		return errors.New("demo: 数据库未配置")

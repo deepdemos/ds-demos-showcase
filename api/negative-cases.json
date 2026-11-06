@@ -395,6 +395,47 @@
           "name": "TestIntegrationClassificationsSurviveNewRevision"
         }
       }
+    ],
+    "GET /api/v1/admin/models/catalog": [
+      {
+        "case": "没有 model.import 权限的用户 403，不是空目录",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_integration_test.go",
+          "name": "TestIntegrationModelImportPermissions"
+        }
+      },
+      {
+        "case": "默认不返回上游已弃用的条目",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_integration_test.go",
+          "name": "TestIntegrationModelCatalogSearch"
+        }
+      }
+    ],
+    "POST /api/v1/admin/models/import/preview": [
+      {
+        "case": "没有 model.import 权限的用户 403",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_integration_test.go",
+          "name": "TestIntegrationModelImportPermissions"
+        }
+      }
+    ],
+    "POST /api/v1/admin/models/import/apply": [
+      {
+        "case": "一个字段都没勾时 400，不静默成功",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_integration_test.go",
+          "name": "TestIntegrationModelImportRejectsEmptyFields"
+        }
+      },
+      {
+        "case": "本地人工写过的字段不可勾，导入不会覆盖",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_integration_test.go",
+          "name": "TestIntegrationModelImportPreviewMarksUnselectable"
+        }
+      }
     ]
   },
   "outsideContract": {
