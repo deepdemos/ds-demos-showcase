@@ -1,6 +1,6 @@
 {
   "visibility-sql": {
-    "backend/db/queries/demos.sql": 5
+    "backend/db/queries/demos.sql": 2
   },
   "visibility-go": {
     "backend/internal/domain/demo/publish.go": 2,
