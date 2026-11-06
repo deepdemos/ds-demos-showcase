@@ -809,6 +809,26 @@ type ModelRef struct {
 	Vendor string `json:"vendor"`
 }
 
+// ModelSyncResult defines model for ModelSyncResult.
+type ModelSyncResult struct {
+	// Items 镜像里的条目数（`skipped=true` 时是上一次成功的条数）
+	Items int64 `json:"items"`
+
+	// Skipped payload 指纹与上一次成功相同，因此没有重写镜像
+	Skipped bool `json:"skipped"`
+
+	// Source 来源标识，当前固定 `models.dev`
+	Source string `json:"source"`
+
+	// Status 同步后的状态，取值为 `ok` / `stale` / `failed`。
+	// 故意不是 enum：与 `model_source_sync.status` 同一取值集，
+	// 在门禁里核对，避免生成器把全仓枚举常量改名（见松点 52）。
+	Status string `json:"status"`
+
+	// SyncedAt 这次同步的完成时间（`skipped=true` 时是本次检查时间）
+	SyncedAt time.Time `json:"syncedAt"`
+}
+
 // PasswordResetCodeRequest defines model for PasswordResetCodeRequest.
 type PasswordResetCodeRequest struct {
 	Email openapi_types.Email `json:"email"`

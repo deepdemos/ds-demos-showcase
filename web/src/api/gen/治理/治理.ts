@@ -7,7 +7,7 @@
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 29 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 30 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -36,12 +36,99 @@ import type {
   ModelImportApply,
   ModelImportPreview,
   ModelImportRef,
+  ModelSyncResult,
   PublishRequest,
   PublishResult,
   ReviewDecision,
   ReviewQueue,
   ReviewResult
 } from '../model';
+
+
+export type syncModelCatalogResponse200 = {
+  data: ModelSyncResult
+  status: 200
+}
+
+export type syncModelCatalogResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type syncModelCatalogResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type syncModelCatalogResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type syncModelCatalogResponse502 = {
+  data: Error
+  status: 502
+}
+
+export type syncModelCatalogResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type syncModelCatalogResponseSuccess = (syncModelCatalogResponse200) & {
+  headers: Headers;
+};
+export type syncModelCatalogResponseError = (syncModelCatalogResponse401 | syncModelCatalogResponse403 | syncModelCatalogResponse409 | syncModelCatalogResponse502 | syncModelCatalogResponse503) & {
+  headers: Headers;
+};
+
+export type syncModelCatalogResponse = (syncModelCatalogResponseSuccess | syncModelCatalogResponseError)
+
+export const getSyncModelCatalogUrl = () => {
+
+
+
+
+  return `/api/v1/admin/models/sync`
+}
+
+/**
+ * 拉 `models.dev` 整包（约 6 MB）重写本地镜像 `model_catalog_items`，并写一行
+ * `model_source_sync` 记账。整包地址与定时开关见模型域 §6.3。
+ *
+ * **整表重写**而不是逐条 upsert：镜像只回答「上游现在有什么」，混两个时间点之后
+ * 就分不清「上游改了」与「这条还没更新」。行 id 会整批变，但没有任何地方引用它
+ * （认领关系存的是 `(source, provider_id, external_id)` 三元组）。
+ *
+ * 三件失败保护：
+ *
+ * - payload 指纹与上次相同 → 不重写，回 200 `skipped=true`；
+ * - 解析失败 / 上游不可达 → 保留旧镜像，`model_source_sync.status='failed'`
+ *   并写 `error`；
+ * - 另一个同步正在进行（多实例或连点）→ 409，不排队。
+ *
+ * 需要 `model.import` 权限。定时同步是另一条路（设置项
+ * `modelsdev.sync_enabled` / `modelsdev.sync_interval_hours`），两者共用同一把
+ * advisory lock。
+ * @summary 立即同步上游目录镜像
+ */
+export const syncModelCatalog = async ( options?: RequestInit): Promise<syncModelCatalogResponse> => {
+
+  const res = await fetch(getSyncModelCatalogUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: syncModelCatalogResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as syncModelCatalogResponse
+}
 
 
 export type listModelCatalogResponse200 = {

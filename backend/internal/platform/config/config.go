@@ -53,6 +53,12 @@ type Config struct {
 	// **目前还没接设置域**（设置域服务尚未实现），等它落地后改为运行时读；
 	// 在那之前改这个值要发版——已登记在 docs/已知松点.md。
 	UploadMaxPackageMiB int64
+	// ModelCatalogURL 是模型目录镜像的上游整包地址，默认 models.dev。
+	//
+	// 它是**部署拓扑**（换镜像源、走内网代理）不是运营参数，所以不进设置域。
+	// 空字符串表示用默认地址——让「没配」与「配成本地文件」区分开。
+	ModelCatalogURL string
+
 	// UploadMaxPending 是一个作者同时能压多少条待审。默认 5。
 	// 投稿是全站最贵的写路径（200 MiB 包 + 最多 500 MiB 解压），
 	// 没有这道闸时登录用户循环 POST 就能把磁盘写满。
@@ -75,6 +81,7 @@ func Load() Config {
 		SMTPFrom:            os.Getenv("SMTP_FROM"),
 		MailLogCodes:        os.Getenv("MAIL_LOG_CODES") == "1",
 		StorageRoot:         getenv("STORAGE_ROOT", "./var/storage"),
+		ModelCatalogURL:     os.Getenv("MODEL_CATALOG_URL"),
 		UploadMaxPackageMiB: intenv("UPLOAD_MAX_PACKAGE_MIB", 200),
 		UploadMaxPending:    int(intenv("UPLOAD_MAX_PENDING", 5)),
 	}

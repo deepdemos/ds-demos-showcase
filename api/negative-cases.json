@@ -436,6 +436,36 @@
           "name": "TestIntegrationModelImportPreviewMarksUnselectable"
         }
       }
+    ],
+    "POST /api/v1/admin/models/sync": [
+      {
+        "case": "上游不可达时回 502，且旧镜像一行不动",
+        "test": {
+          "file": "backend/internal/httpapi/model_sync_integration_test.go",
+          "name": "TestIntegrationSyncKeepsMirrorOnFailure"
+        }
+      },
+      {
+        "case": "另一个实例正在同步时回 409，不排队也不并发写",
+        "test": {
+          "file": "backend/internal/httpapi/model_sync_integration_test.go",
+          "name": "TestSyncBusyIsConflict"
+        }
+      },
+      {
+        "case": "payload 没变就不重写镜像（行 id 原封不动）",
+        "test": {
+          "file": "backend/internal/httpapi/model_sync_integration_test.go",
+          "name": "TestIntegrationSyncSkipsUnchangedPayload"
+        }
+      },
+      {
+        "case": "上游返回空目录当作失败，不用它清空镜像",
+        "test": {
+          "file": "backend/internal/httpapi/model_sync_integration_test.go",
+          "name": "TestIntegrationSyncRejectsEmptyCatalog"
+        }
+      }
     ]
   },
   "outsideContract": {

@@ -9,7 +9,7 @@ info:
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 29 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 30 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1377,6 +1377,69 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/models/sync:
+    post:
+      operationId: syncModelCatalog
+      tags: [治理]
+      summary: 立即同步上游目录镜像
+      description: |
+        拉 `models.dev` 整包（约 6 MB）重写本地镜像 `model_catalog_items`，并写一行
+        `model_source_sync` 记账。整包地址与定时开关见模型域 §6.3。
+
+        **整表重写**而不是逐条 upsert：镜像只回答「上游现在有什么」，混两个时间点之后
+        就分不清「上游改了」与「这条还没更新」。行 id 会整批变，但没有任何地方引用它
+        （认领关系存的是 `(source, provider_id, external_id)` 三元组）。
+
+        三件失败保护：
+
+        - payload 指纹与上次相同 → 不重写，回 200 `skipped=true`；
+        - 解析失败 / 上游不可达 → 保留旧镜像，`model_source_sync.status='failed'`
+          并写 `error`；
+        - 另一个同步正在进行（多实例或连点）→ 409，不排队。
+
+        需要 `model.import` 权限。定时同步是另一条路（设置项
+        `modelsdev.sync_enabled` / `modelsdev.sync_interval_hours`），两者共用同一把
+        advisory lock。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 同步完成（`skipped=true` 表示 payload 未变，镜像没重写）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSyncResult'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.import 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 另一个同步正在进行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: 上游不可达或返回了无法解析的内容（本地镜像保持原样）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/models/catalog:
     get:
       operationId: listModelCatalog
@@ -1958,6 +2021,31 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModelCatalogItem'
+    ModelSyncResult:
+      type: object
+      required: [source, status, items, skipped, syncedAt]
+      properties:
+        source:
+          type: string
+          description: 来源标识，当前固定 `models.dev`
+        status:
+          type: string
+          description: |
+            同步后的状态，取值为 `ok` / `stale` / `failed`。
+            故意不是 enum：与 `model_source_sync.status` 同一取值集，
+            在门禁里核对，避免生成器把全仓枚举常量改名（见松点 52）。
+        items:
+          type: integer
+          format: int64
+          description: 镜像里的条目数（`skipped=true` 时是上一次成功的条数）
+        skipped:
+          type: boolean
+          description: payload 指纹与上一次成功相同，因此没有重写镜像
+        syncedAt:
+          type: string
+          format: date-time
+          description: 这次同步的完成时间（`skipped=true` 时是本次检查时间）
+
     ModelImportRef:
       type: object
       additionalProperties: false
