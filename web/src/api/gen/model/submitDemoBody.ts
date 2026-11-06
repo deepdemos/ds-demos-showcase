@@ -59,4 +59,22 @@ export type SubmitDemoBody = {
      * @items.maxLength 128
      */
   modelSlugs?: string[];
+  /**
+     * 这件作品的内容分类，取值为 `classifications.slug`（来自
+     * `GET /api/v1/classifications`）。
+     *
+     * **与 `modelSlugs` 的语义不同**：分类挂在作品上、模型挂在版本上。
+     * 分类写一次就跟着作品走，之后的版本共享它；模型声明是一版一份。
+     *
+     * 投稿时不传即没有分类。更新时**不传表示「不改」**，不是「清空」——
+     * multipart 里「没传」与「传了空」在浏览器侧无法区分，按整体替换
+     * 处理会让任何只改标题的请求顺手清掉作者打的分类，而作者从页面上
+     * 看不出这件事发生过。代价是「清空分类」暂无路径
+     * （`docs/已知松点.md` 第 48 条）。
+     *
+     * 传了不存在的 slug 或维度内有歧义的 slug 一律 400，不静默丢弃。
+     * @maxItems 20
+     * @items.maxLength 128
+     */
+  classificationSlugs?: string[];
 };

@@ -249,6 +249,13 @@
           "file": "backend/internal/httpapi/submit_idempotency_integration_test.go",
           "name": "TestIntegrationSubmitIsIdempotent"
         }
+      },
+      {
+        "case": "声明不存在的分类 slug → 400，且点出是哪一个（不静默丢弃）",
+        "test": {
+          "file": "backend/internal/httpapi/classifications_integration_test.go",
+          "name": "TestIntegrationSubmitDeclaresClassifications"
+        }
       }
     ],
     "POST /api/v1/demos/{slug}/archive": [
@@ -379,6 +386,13 @@
         "test": {
           "file": "backend/internal/httpapi/update_integration_test.go",
           "name": "TestIntegrationUpdateDemoRouteUsesPUT"
+        }
+      },
+      {
+        "case": "改稿不带分类字段时，分类不能被清空（不传 = 不改）",
+        "test": {
+          "file": "backend/internal/httpapi/classifications_integration_test.go",
+          "name": "TestIntegrationClassificationsSurviveNewRevision"
         }
       }
     ]

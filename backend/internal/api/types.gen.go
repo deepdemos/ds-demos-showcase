@@ -782,6 +782,21 @@ type ListDemosParamsSort string
 
 // SubmitDemoMultipartBody defines parameters for SubmitDemo.
 type SubmitDemoMultipartBody struct {
+	// ClassificationSlugs 这件作品的内容分类，取值为 `classifications.slug`（来自
+	// `GET /api/v1/classifications`）。
+	//
+	// **与 `modelSlugs` 的语义不同**：分类挂在作品上、模型挂在版本上。
+	// 分类写一次就跟着作品走，之后的版本共享它；模型声明是一版一份。
+	//
+	// 投稿时不传即没有分类。更新时**不传表示「不改」**，不是「清空」——
+	// multipart 里「没传」与「传了空」在浏览器侧无法区分，按整体替换
+	// 处理会让任何只改标题的请求顺手清掉作者打的分类，而作者从页面上
+	// 看不出这件事发生过。代价是「清空分类」暂无路径
+	// （`docs/已知松点.md` 第 48 条）。
+	//
+	// 传了不存在的 slug 或维度内有歧义的 slug 一律 400，不静默丢弃。
+	ClassificationSlugs *[]string `json:"classificationSlugs,omitempty"`
+
 	// DemoType 作品类型。取值见 `demo_types` 表——它是主数据，**加一种类型是加一行
 	// 数据，不是改契约**，所以这里不定 enum。
 	DemoType    string  `json:"demoType"`
@@ -821,6 +836,11 @@ type SubmitDemoParams struct {
 
 // UpdateDemoMultipartBody defines parameters for UpdateDemo.
 type UpdateDemoMultipartBody struct {
+	// ClassificationSlugs 这件作品的内容分类（`classifications.slug`），语义是**整体替换**，
+	// 但**不传表示「不改」而不是「清空」**——理由见 `POST /api/v1/demos`
+	// 同名参数的说明与 `docs/已知松点.md` 第 48 条。
+	ClassificationSlugs *[]string `json:"classificationSlugs,omitempty"`
+
 	// DemoType 作品类型。**只有同时上传 `package` 时才能改**。
 	DemoType    *string `json:"demoType,omitempty"`
 	Description *string `json:"description,omitempty"`

@@ -565,6 +565,10 @@
       }
     },
     "SubmitDemoMultipartBody": {
+      "classificationSlugs": {
+        "type": "[]string",
+        "optional": true
+      },
       "demoType": {
         "type": "string",
         "optional": false
@@ -593,6 +597,10 @@
       }
     },
     "UpdateDemoMultipartBody": {
+      "classificationSlugs": {
+        "type": "[]string",
+        "optional": true
+      },
       "demoType": {
         "type": "string",
         "optional": true

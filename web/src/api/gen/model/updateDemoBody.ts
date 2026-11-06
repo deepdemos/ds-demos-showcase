@@ -53,4 +53,12 @@ export type UpdateDemoBody = {
      * @items.maxLength 128
      */
   modelSlugs?: string[];
+  /**
+     * 这件作品的内容分类（`classifications.slug`），语义是**整体替换**，
+     * 但**不传表示「不改」而不是「清空」**——理由见 `POST /api/v1/demos`
+     * 同名参数的说明与 `docs/已知松点.md` 第 48 条。
+     * @maxItems 20
+     * @items.maxLength 128
+     */
+  classificationSlugs?: string[];
 };

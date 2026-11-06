@@ -333,6 +333,9 @@ formData.append(`package`, submitDemoBody.package);
 if(submitDemoBody.modelSlugs !== undefined) {
  submitDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));
  }
+if(submitDemoBody.classificationSlugs !== undefined) {
+ submitDemoBody.classificationSlugs.forEach(value => formData.append(`classificationSlugs`, value));
+ }
 
   const res = await fetch(getSubmitDemoUrl(),
   {
@@ -560,6 +563,9 @@ if(updateDemoBody.package !== undefined) {
  }
 if(updateDemoBody.modelSlugs !== undefined) {
  updateDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));
+ }
+if(updateDemoBody.classificationSlugs !== undefined) {
+ updateDemoBody.classificationSlugs.forEach(value => formData.append(`classificationSlugs`, value));
  }
 
   const res = await fetch(getUpdateDemoUrl(slug),
