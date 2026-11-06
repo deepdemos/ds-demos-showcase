@@ -83,3 +83,50 @@ test('空文档不炸：没有小节就是没有可验的东西', () => {
   assert.equal(r.ok, true);
   assert.equal(r.entries, 0);
 });
+
+test('「在哪」指向不存在的文件时失败', () => {
+  const doc = [
+    '# 台账',
+    '',
+    '## 1. 一条松点',
+    '',
+    '| | |',
+    '| --- | --- |',
+    '| 在哪 | `backend/internal/nope/missing.go` |',
+    '| 能保证 | 无 |',
+    '',
+    '## 变更记录',
+    '',
+    '| 日期 | 变更 |',
+    '| --- | --- |',
+    '| 2026-11-06 | 建台账 |',
+    '',
+  ].join('\n');
+  const r = checkLoosePoints(doc);
+  assert.equal(r.ok, false);
+  assert.ok(r.problems.some((p) => p.includes('missing.go')), r.problems.join(' / '));
+});
+
+test('「在哪」里的裸文件名不当路径核对', () => {
+  // `grant.go` 这种写法指不清是哪个包。硬核会逼人把路径写成猜的样子，
+  // 而那条松点本身可能完全正确——所以只核带目录的路径。
+  const doc = [
+    '# 台账',
+    '',
+    '## 1. 一条松点',
+    '',
+    '| | |',
+    '| --- | --- |',
+    '| 在哪 | `grant.go`（校验在这里） |',
+    '| 能保证 | 无 |',
+    '',
+    '## 变更记录',
+    '',
+    '| 日期 | 变更 |',
+    '| --- | --- |',
+    '| 2026-11-06 | 建台账 |',
+    '',
+  ].join('\n');
+  const r = checkLoosePoints(doc);
+  assert.equal(r.ok, true, r.problems.join(' / '));
+});

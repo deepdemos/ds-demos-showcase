@@ -52,8 +52,9 @@ const (
 	previewReadTimeout = 10 * time.Second
 
 	// previewMaxHTMLBytes 是需要注入 <base> 时读进内存的上限。
-	// 超过这个体积的 HTML 不注入（仍然照常返回）——一个几 MB 的单页应用
-	// 读进内存再复制一份，收益抵不上内存峰值。
+	// 超过这个体积的 HTML **不注入 <base>**，但文件其余部分照常原样补发：
+	// 把几 MB 的单页应用读进内存再复制一份，收益抵不上内存峰值。
+	// 代价是超大 HTML 里的相对路径不会被改写——那种作品本来就该用绝对路径。
 	previewMaxHTMLBytes = 8 << 20
 
 	// previewCSP 见上面「同源渲染的隔离」。
@@ -164,7 +165,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 其他人看对外版本。**顺序不能反**——先判作者再判对外，
 	// 否则作者改完稿打开自己的作品看到的还是旧版。
 	//
-	// 变量叫 privilegedView 而不是 privilegedView：mayPreviewDraft 对**作者与持
+	// 变量叫 privilegedView 而不是 authorView：mayPreviewDraft 对**作者与持
 	// demo.review 的审核员**都返回 true。按作者命名会让下面那句
 	// `if rev > 0 && !privilegedView` 读起来像「审核员被挡」，实际不是。
 	privilegedView := p.mayPreviewDraft(ctx, r, row.AuthorSub)

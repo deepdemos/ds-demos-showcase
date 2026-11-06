@@ -18,10 +18,15 @@
  * 2. **变更记录只出现在「变更记录」小节里**：任何 `| YYYY-MM-DD | … |` 行
  *    出现在别的小节里即失败。这正是上面那三次事故的形状。
  * 3. **变更记录按日期不倒序**：新日期在上。倒序说明有人插到了中间。
+ * 4. **「在哪」一栏提到的文件真的存在**：路径是松点唯一可核的部分。
+ *    文件被改名/合并之后，这条松点就变成了「指向空气的警告」——它不会报错，
+ *    只会让下一个人点开一个不存在的路径，然后开始怀疑整份台账。
+ *    这条是在第五轮 review 里补的：前三条只判结构与顺序，判不了「还指得准」。
  *
  * # 它不能证明什么
  *
  * 它证明不了「这条松点写得对」——内容质量只有 review 能管。
+ * 判据 4 也只核「文件在不在」，不核「这个文件里还有没有那段判据」。
  * 它也不检查「每条都写了能保证 / 不能保证」，因为历史条目用的是多种措辞，
  * 硬套关键词只会让人把措辞改成能被匹配的样子，而不是把话说清楚。
  */
@@ -91,6 +96,27 @@ export function checkLoosePoints(text) {
     changes += 1;
   });
 
+  // 4) 每条松点的「在哪」栏里提到的文件必须存在
+  //
+  // 只认反引号里**带目录**的路径：`grant.go` 这种裸文件名指不清是哪个包，
+  // 硬核只会逼人把路径写成猜的样子；松点里也会写 `now()`、`GREATEST(…)`
+  // 这类代码片段，一律当路径去核会把台账本身变成噪音源。
+  const PATH_TOKEN = /`([\w.-]+\/[\w./-]*\.(?:go|sql|mjs|ts|tsx|js|json|yaml|yml|md))`/g;
+  lines.forEach((line, i) => {
+    if (!line.startsWith('| 在哪 |')) return;
+    let m;
+    PATH_TOKEN.lastIndex = 0;
+    while ((m = PATH_TOKEN.exec(line)) !== null) {
+      const rel = m[1].replace(/#L\d+(-L\d+)?$/, '');
+      if (!existsSync(join(ROOT, rel))) {
+        problems.push(
+          `第 ${i + 1} 行（${current[i] ?? '（文件开头）'}）的「在哪」指向 ${rel}，` +
+            '但仓库里没有这个文件：松点指向空气等于没有松点。',
+        );
+      }
+    }
+  });
+
   // 3) 变更记录按日期不倒序
   const changeDates = [];
   lines.forEach((line, i) => {
@@ -121,7 +147,9 @@ function main() {
     for (const p of result.problems) console.error(`  - ${p}`);
     process.exit(1);
   }
-  console.log(`松点门禁通过（${result.entries} 条松点，变更记录 ${result.changes} 行，编号与落点都对）`);
+  console.log(
+    `松点门禁通过（${result.entries} 条松点，变更记录 ${result.changes} 行，编号、落点与指路都对）`,
+  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
