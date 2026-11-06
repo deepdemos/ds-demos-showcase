@@ -23,6 +23,9 @@ type ServerInterface interface {
 	// 应用导入 / 补全
 	// (POST /api/v1/admin/models/import/apply)
 	ApplyModelImport(w http.ResponseWriter, r *http.Request)
+	// 批量应用导入 / 补全
+	// (POST /api/v1/admin/models/import/apply-batch)
+	ApplyModelImportBatch(w http.ResponseWriter, r *http.Request)
 	// 导入 / 补全的字段级差异
 	// (POST /api/v1/admin/models/import/preview)
 	PreviewModelImport(w http.ResponseWriter, r *http.Request)
@@ -125,6 +128,12 @@ func (_ Unimplemented) ListModelCatalog(w http.ResponseWriter, r *http.Request, 
 // 应用导入 / 补全
 // (POST /api/v1/admin/models/import/apply)
 func (_ Unimplemented) ApplyModelImport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 批量应用导入 / 补全
+// (POST /api/v1/admin/models/import/apply-batch)
+func (_ Unimplemented) ApplyModelImportBatch(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -390,6 +399,26 @@ func (siw *ServerInterfaceWrapper) ApplyModelImport(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ApplyModelImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApplyModelImportBatch operation middleware
+func (siw *ServerInterfaceWrapper) ApplyModelImportBatch(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyModelImportBatch(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1192,6 +1221,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/models/import/apply", wrapper.ApplyModelImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/models/import/apply-batch", wrapper.ApplyModelImportBatch)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/models/import/preview", wrapper.PreviewModelImport)

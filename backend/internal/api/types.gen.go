@@ -728,6 +728,32 @@ type ModelImportApply struct {
 	Vendor *string `json:"vendor,omitempty"`
 }
 
+// ModelImportBatchRequest defines model for ModelImportBatchRequest.
+type ModelImportBatchRequest struct {
+	// Items 一次最多 50 条；批内同一个上游条目出现两次整批 400
+	Items []ModelImportApply `json:"items"`
+}
+
+// ModelImportBatchResult defines model for ModelImportBatchResult.
+type ModelImportBatchResult struct {
+	// Results 与请求 items 一一对应、顺序相同
+	Results []ModelImportBatchResultItem `json:"results"`
+}
+
+// ModelImportBatchResultItem defines model for ModelImportBatchResultItem.
+type ModelImportBatchResultItem struct {
+	// Error 失败原因（成功时为空串）
+	Error      *string `json:"error,omitempty"`
+	ExternalId string  `json:"externalId"`
+	Model      *Model  `json:"model,omitempty"`
+	ProviderId string  `json:"providerId"`
+
+	// Status `created`（新建）/ `completed`（补全已有模型）/ `failed`。
+	// 故意不是 enum：写成 enum 会让生成器给全仓枚举常量加类型前缀，
+	// 与 `ModelSyncResult.status` 同一个理由（见松点 53）。
+	Status string `json:"status"`
+}
+
 // ModelImportField defines model for ModelImportField.
 type ModelImportField struct {
 	// Current 本地当前值（新建时为空串）
@@ -1150,6 +1176,9 @@ type PublishDemoJSONRequestBody = PublishRequest
 
 // ApplyModelImportJSONRequestBody defines body for ApplyModelImport for application/json ContentType.
 type ApplyModelImportJSONRequestBody = ModelImportApply
+
+// ApplyModelImportBatchJSONRequestBody defines body for ApplyModelImportBatch for application/json ContentType.
+type ApplyModelImportBatchJSONRequestBody = ModelImportBatchRequest
 
 // PreviewModelImportJSONRequestBody defines body for PreviewModelImport for application/json ContentType.
 type PreviewModelImportJSONRequestBody = ModelImportRef

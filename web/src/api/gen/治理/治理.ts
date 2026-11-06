@@ -6,8 +6,9 @@
  *
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
- * 分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 30 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 模型目录同步与导入（含批量）、分类目录与筛选，
+ * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
+ * 共 31 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -34,6 +35,8 @@ import type {
   Model,
   ModelCatalogList,
   ModelImportApply,
+  ModelImportBatchRequest,
+  ModelImportBatchResult,
   ModelImportPreview,
   ModelImportRef,
   ModelSyncResult,
@@ -404,6 +407,97 @@ const res = await fetch(getApplyModelImportUrl(),
 
   const data: applyModelImportResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as applyModelImportResponse
+}
+
+
+export type applyModelImportBatchResponse200 = {
+  data: ModelImportBatchResult
+  status: 200
+}
+
+export type applyModelImportBatchResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type applyModelImportBatchResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type applyModelImportBatchResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type applyModelImportBatchResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type applyModelImportBatchResponseSuccess = (applyModelImportBatchResponse200) & {
+  headers: Headers;
+};
+export type applyModelImportBatchResponseError = (applyModelImportBatchResponse400 | applyModelImportBatchResponse401 | applyModelImportBatchResponse403 | applyModelImportBatchResponse503) & {
+  headers: Headers;
+};
+
+export type applyModelImportBatchResponse = (applyModelImportBatchResponseSuccess | applyModelImportBatchResponseError)
+
+export const getApplyModelImportBatchUrl = () => {
+
+
+
+
+  return `/api/v1/admin/models/import/apply-batch`
+}
+
+/**
+ * `apply` 的批量版：一次最多 50 条，每条**各自一个事务**，逐条返回结果。
+ *
+ * 为什么不做整批回滚：第一次导入就是几十条起步，第 17 条撞「已被认领」时
+ * 前 16 条白做，管理员得重新勾一遍。而「逐条结果」让他只重试失败那几条。
+ * 代价是这一批不是原子的——`results` 里 `failed` 的那些确实没落库。
+ *
+ * **批内同一个上游条目（`providerId` + `externalId`）出现两次直接 400 整批拒绝**：
+ * 那是拼装请求的 bug，静默去重会让「我勾了两次」看起来像成功。
+ *
+ * 字段名不在白名单、或某条一个字段都没勾，同样按 400 整批拒绝——那是调用方
+ * 的请求形态问题，不是某一条数据的运气问题。
+ *
+ * 需要 `model.import` 权限。
+ * @summary 批量应用导入 / 补全
+ */
+export const applyModelImportBatch = async (modelImportBatchRequest: ModelImportBatchRequest, options?: RequestInit): Promise<applyModelImportBatchResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getApplyModelImportBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(modelImportBatchRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: applyModelImportBatchResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as applyModelImportBatchResponse
 }
 
 

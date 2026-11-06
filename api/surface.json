@@ -498,6 +498,40 @@
         "optional": true
       }
     },
+    "ModelImportBatchRequest": {
+      "items": {
+        "type": "[]ModelImportApply",
+        "optional": false
+      }
+    },
+    "ModelImportBatchResult": {
+      "results": {
+        "type": "[]ModelImportBatchResultItem",
+        "optional": false
+      }
+    },
+    "ModelImportBatchResultItem": {
+      "error": {
+        "type": "string",
+        "optional": true
+      },
+      "externalId": {
+        "type": "string",
+        "optional": false
+      },
+      "model": {
+        "type": "Model",
+        "optional": true
+      },
+      "providerId": {
+        "type": "string",
+        "optional": false
+      },
+      "status": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "ModelImportField": {
       "current": {
         "type": "string",
@@ -1002,6 +1036,11 @@
     },
     "POST /api/v1/admin/models/import/apply": {
       "method": "ApplyModelImport",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/admin/models/import/apply-batch": {
+      "method": "ApplyModelImportBatch",
       "pathParams": 0,
       "params": null
     },

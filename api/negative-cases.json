@@ -466,6 +466,36 @@
           "name": "TestIntegrationSyncRejectsEmptyCatalog"
         }
       }
+    ],
+    "POST /api/v1/admin/models/import/apply-batch": [
+      {
+        "case": "批内同一条上游条目出现两次，整批 400 且一条都不写",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_batch_integration_test.go",
+          "name": "TestIntegrationBatchImportRejectsDuplicateRefs"
+        }
+      },
+      {
+        "case": "一次超过 50 条，整批 400（上限与契约 maxItems 一致）",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_batch_integration_test.go",
+          "name": "TestIntegrationBatchImportRejectsTooMany"
+        }
+      },
+      {
+        "case": "某条带了不认识的字段名，整批 400（形态错误不做逐条降级）",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_batch_integration_test.go",
+          "name": "TestIntegrationBatchImportRejectsUnknownField"
+        }
+      },
+      {
+        "case": "没有 model.import 权限的用户 403",
+        "test": {
+          "file": "backend/internal/httpapi/model_import_batch_integration_test.go",
+          "name": "TestIntegrationBatchImportPermissions"
+        }
+      }
     ]
   },
   "outsideContract": {
