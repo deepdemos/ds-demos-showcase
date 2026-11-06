@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
@@ -190,6 +191,52 @@ func updateDemo(t *testing.T, h *Handler, sid, slug, title, description string, 
 	rec := httptest.NewRecorder()
 	NewRouter(h, nil, nil).ServeHTTP(rec, req)
 	return rec
+}
+
+// 同一段非法字节，投稿会得到 400，编辑曾经得到 503——两条链路各写了一份校验。
+// 这条用例钉住「编辑也说人话」。构造方式：直接用 bytes 造一个非 UTF-8 的标题，
+// multipart 会把它原样搬过去，正是 Windows 上 curl 传中文按 GBK 发出去的样子。
+func TestIntegrationUpdateRejectsInvalidUTF8(t *testing.T) {
+	pool := integrationPool(t)
+	q := store.New(pool)
+	idSvc := integrationIdentity(t, pool)
+	files, err := storage.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatalf("初始化存储失败: %v", err)
+	}
+	h := New(pool, q, idSvc, nil, demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil))
+
+	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email: "it-update-utf8@example.com", Password: "updatetest123", Username: "it-upd-utf8", DisplayName: "编辑作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, acc.Sub) })
+	slug := submitHTML(t, h, sid, "编辑 UTF8", "<h1>hi</h1>")
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	// 0xc5 0xe4 是「你好」的 GBK 编码，不是合法 UTF-8。
+	if err := mw.WriteField("title", string([]byte{0xc5, 0xe4})); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/demos/"+slug, &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
+	rec := httptest.NewRecorder()
+	NewRouter(h, nil, nil).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("标题不是合法 UTF-8 时应回 400，实际 %d：%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析错误体失败: %v", err)
+	}
+	if !strings.Contains(body["message"], "UTF-8") {
+		t.Fatalf("错误文案应指出是 UTF-8 问题，实际 %q", body["message"])
+	}
 }
 
 func updateDemoWithType(t *testing.T, h *Handler, sid, slug, title, demoType string) *httptest.ResponseRecorder {
