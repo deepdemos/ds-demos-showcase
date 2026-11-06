@@ -1,5 +1,55 @@
 {
   "models": {
+    "Classification": {
+      "aliases": {
+        "type": "[]string",
+        "optional": true
+      },
+      "demoCount": {
+        "type": "int",
+        "optional": false
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "dimension": {
+        "type": "ClassificationDimension",
+        "optional": false
+      },
+      "label": {
+        "type": "string",
+        "optional": false
+      },
+      "parentSlug": {
+        "type": "string",
+        "optional": true
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "ClassificationCatalog": {
+      "items": {
+        "type": "[]Classification",
+        "optional": false
+      }
+    },
+    "ClassificationRef": {
+      "dimension": {
+        "type": "ClassificationRefDimension",
+        "optional": false
+      },
+      "label": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "DemoAuthor": {
       "displayName": {
         "type": "string",
@@ -37,6 +87,10 @@
       },
       "canEdit": {
         "type": "bool",
+        "optional": false
+      },
+      "classifications": {
+        "type": "[]ClassificationRef",
         "optional": false
       },
       "coverUrl": {
@@ -197,6 +251,10 @@
       }
     },
     "DemoSummary": {
+      "classifications": {
+        "type": "[]ClassificationRef",
+        "optional": false
+      },
       "coverUrl": {
         "type": "string",
         "optional": true
@@ -565,6 +623,25 @@
       "pending",
       "suspended"
     ],
+    "ClassificationDimension": [
+      "genre",
+      "subject",
+      "technique"
+    ],
+    "ClassificationCatalogDimensionsDimension": [
+      "genre",
+      "subject",
+      "technique"
+    ],
+    "ClassificationCatalogDimensionsMode": [
+      "fixed",
+      "open"
+    ],
+    "ClassificationRefDimension": [
+      "genre",
+      "subject",
+      "technique"
+    ],
     "DemoDetailMatchedIn": [
       "description",
       "title"
@@ -703,6 +780,11 @@
     },
     "POST /api/v1/auth/verify-email/resend": {
       "method": "PostAuthVerifyEmailResend",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/classifications": {
+      "method": "ListClassifications",
       "pathParams": 0,
       "params": null
     },

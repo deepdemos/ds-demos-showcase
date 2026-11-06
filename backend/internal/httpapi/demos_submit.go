@@ -70,6 +70,7 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.
 	// 用 MultipartForm.Value 而不是 FormValue：后者只返回第一个值，
 	// 会把「选了三个模型」悄悄变成「只声明了一个」。
 	modelIDs := formValues(r, "modelSlugs")
+	classificationSlugs := formValues(r, "classificationSlugs")
 
 	file, header, err := r.FormFile("package")
 	if err != nil {
@@ -103,15 +104,16 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.
 	}
 
 	res, err := h.demos.Submit(ctx, demo.SubmitInput{
-		AuthorID:       account.UserID,
-		Title:          title,
-		Description:    description,
-		DemoType:       demoType,
-		PackagePath:    pkgPath,
-		PackageName:    header.Filename,
-		PackageSize:    pkgSize,
-		ModelSlugs:     modelIDs,
-		IdempotencyKey: idemKey,
+		AuthorID:            account.UserID,
+		Title:               title,
+		Description:         description,
+		DemoType:            demoType,
+		PackagePath:         pkgPath,
+		PackageName:         header.Filename,
+		PackageSize:         pkgSize,
+		ModelSlugs:          modelIDs,
+		ClassificationSlugs: classificationSlugs,
+		IdempotencyKey:      idemKey,
 	})
 	if err != nil {
 		h.writeDemoError(w, err)

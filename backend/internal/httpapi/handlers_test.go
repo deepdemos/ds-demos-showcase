@@ -59,9 +59,35 @@ func (fakeDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
 
+// Query 返回**空的**行集，而不是报错。
+//
+// 一个详情请求现在会查两次：作品行用 QueryRow，分类用 Query。假库不支持 Query 的话
+// 每次详情都会打一条「读作品分类失败」的日志——测试仍然绿，但绿在一个
+// 我们自己造出来的错误上，下次真出问题时那条日志就成了噪音。
+//
+// 空行集是诚实的：这层用例断言的是「从行到响应体」的形状，不是分类内容；
+// 分类的读写由 classifications_integration_test.go 用真库钉住。
 func (fakeDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return nil, errors.New("fakeDB: Query 不该被调用")
+	return &emptyRows{}, nil
 }
+
+// emptyRows 是一个立即结束的行集。
+//
+// 它只需要实现 pgx.Rows 的四个方法：我们从不真的读它（store 生成的代码在
+// Next() 返回 false 之后会直接 Close）。
+type emptyRows struct{ closed bool }
+
+func (r *emptyRows) Close()                                       {}
+func (r *emptyRows) Err() error                                   { return nil }
+func (r *emptyRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (r *emptyRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (r *emptyRows) Next() bool                                   { return false }
+func (r *emptyRows) Scan(...any) error                            { return nil }
+func (r *emptyRows) Values() ([]any, error)                       { return nil, nil }
+func (r *emptyRows) RawValues() [][]byte                          { return nil }
+func (r *emptyRows) Conn() *pgx.Conn                              { return nil }
+
+func (r *emptyRows) TypeMap() *pgtype.Map { return nil }
 
 // QueryRow 按 SQL 文本分派。
 //

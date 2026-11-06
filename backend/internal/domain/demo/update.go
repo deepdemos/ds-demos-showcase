@@ -59,8 +59,22 @@ type UpdateInput struct {
 	//
 	// 语义是**整体替换**：请求里给了就以它为准（空列表 = 这一版不声明任何模型），
 	// 不给也是空列表。不做「没传就沿用上一版」——multipart 里「没传」与「传了空」
-	// 在浏览器侧无法区分（空选择不会产生字段），沿用会让作者永远删不掉一个声明。
+	// 在浏览器侧无法区分（空选择不会产生字段），沿用会让作者永远删掉不了一个声明。
 	ModelSlugs []string
+	// ClassificationSlugs 是这件作品的内容分类（取 classifications.slug）。
+	//
+	// **注意：它的语义与 ModelSlugs 不同——不传（空）表示「不改」，不是「清空」。**
+	//
+	// 为什么这里破例：模型声明挂在版本上，每个新版本本来就该是一份完整的声明，
+	// 所以「不传 = 这一版不声明」是对的。分类挂在作品上、与版本无关，而
+	// multipart 里「没传」与「传了空」在浏览器侧无法区分——若按整体替换处理，
+	// 一个还没加分类控件的旧编辑页（或任何只改标题的脚本）都会把作者辛苦打的
+	// 分类顺手清空，而作者从页面上看不出这件事发生过。
+	//
+	// 代价是「清空分类」目前没有路径：要清空，前端得传一个明确的值。
+	// 这一条记在 docs/已知松点.md 第 48 条，等真的需要「清空」时再补一个
+	// 显式字段（比如 `classificationSlugs=[]` 的语义位），而不是把它塞回这条路径。
+	ClassificationSlugs []string
 }
 
 // UpdateResult 是编辑成功后的回执。
@@ -222,6 +236,18 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 		}
 		if err := attachModels(ctx, q, rev.ID, modelIDs); err != nil {
 			return err
+		}
+
+		// 分类是作品级的，改它不产生新版本也不动审核态。
+		// 只在**传了**的时候替换：不传 = 不改（理由见 UpdateInput.ClassificationSlugs）。
+		if len(in.ClassificationSlugs) > 0 {
+			picks, err := resolveClassificationSlugs(ctx, q, in.ClassificationSlugs)
+			if err != nil {
+				return err
+			}
+			if err := replaceClassifications(ctx, q, cur.ID, picks); err != nil {
+				return err
+			}
 		}
 
 		if err := q.SetCurrentRevisionForEdit(ctx, store.SetCurrentRevisionForEditParams{
