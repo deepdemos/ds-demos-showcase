@@ -67,7 +67,7 @@ func (h *Handler) ApplyModelImport(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 
-	model, err := h.applyImport(ctx, actor, ref, body, fields)
+	model, _, err := h.applyImport(ctx, actor, ref, body, fields)
 	if err != nil {
 		h.writeModelError(w, err)
 		return
@@ -102,19 +102,24 @@ func normalizeSpecFields(raw []string) ([]string, error) {
 	return out, nil
 }
 
+// applyImport 是单条导入的唯一实现：批量版只是循环调用它并收集结果。
+//
+// 第二个返回值是「这次是新建还是补全」——批量要把它写进逐条结果，单独再查一次
+// 会引入竞态（查的时候还没有，写的时候已经有了）。
 func (h *Handler) applyImport(
 	ctx context.Context,
 	actor demo.Actor,
 	ref catalogRef,
 	body api.ModelImportApply,
 	fields []string,
-) (api.Model, error) {
+) (api.Model, bool, error) {
 	item, err := h.catalogItem(ctx, ref)
 	if err != nil {
-		return api.Model{}, err
+		return api.Model{}, false, err
 	}
 
 	var out api.Model
+	created := false
 	err = h.demos.InTx(ctx, func(tx pgx.Tx) error {
 		q := h.queries.WithTx(tx)
 
@@ -158,6 +163,7 @@ func (h *Handler) applyImport(
 				return fmt.Errorf("建模型失败: %w", err)
 			}
 			modelID = id
+			created = true
 			before["status"] = ""
 		} else {
 			modelID = target.ID
@@ -220,9 +226,9 @@ func (h *Handler) applyImport(
 		return nil
 	})
 	if err != nil {
-		return api.Model{}, err
+		return api.Model{}, false, err
 	}
-	return out, nil
+	return out, created, nil
 }
 
 // selectedFields 把勾选清单摊成集合。

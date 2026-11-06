@@ -8,8 +8,9 @@ info:
 
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
-    分类目录与筛选，以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 30 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    模型目录同步与导入（含批量）、分类目录与筛选，
+    以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
+    共 31 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1636,6 +1637,65 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/models/import/apply-batch:
+    post:
+      operationId: applyModelImportBatch
+      tags: [治理]
+      summary: 批量应用导入 / 补全
+      description: |
+        `apply` 的批量版：一次最多 50 条，每条**各自一个事务**，逐条返回结果。
+
+        为什么不做整批回滚：第一次导入就是几十条起步，第 17 条撞「已被认领」时
+        前 16 条白做，管理员得重新勾一遍。而「逐条结果」让他只重试失败那几条。
+        代价是这一批不是原子的——`results` 里 `failed` 的那些确实没落库。
+
+        **批内同一个上游条目（`providerId` + `externalId`）出现两次直接 400 整批拒绝**：
+        那是拼装请求的 bug，静默去重会让「我勾了两次」看起来像成功。
+
+        字段名不在白名单、或某条一个字段都没勾，同样按 400 整批拒绝——那是调用方
+        的请求形态问题，不是某一条数据的运气问题。
+
+        需要 `model.import` 权限。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelImportBatchRequest'
+      responses:
+        '200':
+          description: 逐条结果（整体成功；条目的失败在 results 里）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelImportBatchResult'
+        '400':
+          description: 请求体不合法（超过 50 条 / 批内重复 / 未知字段 / 某条空勾选）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.import 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/reviews/demo:
     get:
       operationId: listDemoReviewQueue
@@ -2105,6 +2165,51 @@ components:
           description: |
             能不能勾。值相同（no-op）、`source = manual`、`locked = true` 三种情况都是 false——
             接口不替调用方解锁。
+    ModelImportBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          description: 一次最多 50 条；批内同一个上游条目出现两次整批 400
+          items:
+            $ref: '#/components/schemas/ModelImportApply'
+
+    ModelImportBatchResult:
+      type: object
+      additionalProperties: false
+      required: [results]
+      properties:
+        results:
+          type: array
+          description: 与请求 items 一一对应、顺序相同
+          items:
+            $ref: '#/components/schemas/ModelImportBatchResultItem'
+
+    ModelImportBatchResultItem:
+      type: object
+      additionalProperties: false
+      required: [providerId, externalId, status]
+      properties:
+        providerId:
+          type: string
+        externalId:
+          type: string
+        status:
+          type: string
+          description: |
+            `created`（新建）/ `completed`（补全已有模型）/ `failed`。
+            故意不是 enum：写成 enum 会让生成器给全仓枚举常量加类型前缀，
+            与 `ModelSyncResult.status` 同一个理由（见松点 53）。
+        model:
+          $ref: '#/components/schemas/Model'
+        error:
+          type: string
+          description: 失败原因（成功时为空串）
+
     ModelImportPreview:
       type: object
       additionalProperties: false

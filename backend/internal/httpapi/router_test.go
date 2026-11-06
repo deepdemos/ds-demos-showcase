@@ -46,6 +46,10 @@ func (s *stub) ApplyModelImport(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "import-apply")
 }
 
+func (s *stub) ApplyModelImportBatch(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "import-apply-batch")
+}
+
 func (s *stub) UpdateDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}
 
 func (s *stub) ArchiveDemo(_ http.ResponseWriter, _ *http.Request, _ string) {}

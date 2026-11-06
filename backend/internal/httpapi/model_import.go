@@ -61,23 +61,38 @@ func (h *Handler) modelImporter(ctx context.Context, r *http.Request) (demo.Acto
 
 // writeModelError 把模型导入链路的错误映射成状态码。
 func (h *Handler) writeModelError(w http.ResponseWriter, err error) {
+	status, code, msg := modelErrorParts(err)
+	writeError(w, status, code, msg)
+}
+
+// modelErrorParts 把导入链路的分支错误摊成「状态码 + 契约错误码 + 人话」。
+//
+// 单独抽出来是因为批量导入要把同一句话写进逐条结果的 `error` 字段，而不是再写一份
+// 映射——两份映射迟早会漂成两种说法。
+func modelErrorParts(err error) (int, api.ErrorCode, string) {
 	switch {
 	case errors.Is(err, identity.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, api.Unauthorized, "请先登录")
+		return http.StatusUnauthorized, api.Unauthorized, "请先登录"
 	case errors.Is(err, errForbidden):
-		writeError(w, http.StatusForbidden, api.Forbidden, "没有模型导入权限")
+		return http.StatusForbidden, api.Forbidden, "没有模型导入权限"
 	case errors.Is(err, errCatalogItemMissing):
-		writeError(w, http.StatusNotFound, api.NotFound, "目录里没有这条上游条目，先刷新目录")
+		return http.StatusNotFound, api.NotFound, "目录里没有这条上游条目，先刷新目录"
 	case errors.Is(err, errCatalogItemClaimed):
-		writeError(w, http.StatusConflict, api.Conflict, "这条上游条目已被另一个模型认领")
+		return http.StatusConflict, api.Conflict, "这条上游条目已被另一个模型认领"
 	case errors.Is(err, errNoFieldsSelected):
-		writeError(w, http.StatusBadRequest, api.InvalidParam, "一个字段都没勾")
+		return http.StatusBadRequest, api.InvalidParam, "一个字段都没勾"
 	case errors.Is(err, errUnknownSpecField):
-		writeError(w, http.StatusBadRequest, api.InvalidParam, err.Error())
+		return http.StatusBadRequest, api.InvalidParam, err.Error()
 	default:
 		slog.Error("模型导入链路未分类错误", "err", err)
-		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用"
 	}
+}
+
+// modelErrorText 是 modelErrorParts 的人话部分，给批量结果用。
+func modelErrorText(err error) string {
+	_, _, msg := modelErrorParts(err)
+	return msg
 }
 
 // 传输层自己的哨兵：这几个判断只在这里用得上，不进领域包。
