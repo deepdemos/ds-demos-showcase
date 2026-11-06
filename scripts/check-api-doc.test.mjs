@@ -51,3 +51,30 @@ test('端点表为空时认 0：不让「一个端点都没有」悄悄通过', 
   assert.equal(r.ok, false);
   assert.match(r.problems[0], /实际 0 个/);
 });
+
+test('描述里引用了不存在的端点时失败', () => {
+  // 第五轮 review 的原话：一句「发布走上架端点」可以长期指向一个不存在的路径，
+  // 数字对得上、门禁全绿，读的人照着去调得到 404。
+  const spec = [
+    'info:',
+    '  description: |',
+    '    共 1 个端点。',
+    '    换渠道请走 `POST /admin/demos/{slug}/channels`。',
+  ].join('\n');
+  const surface = { endpoints: { 'GET /api/v1/demos': {} } };
+  const r = checkApiDoc({ spec, surface });
+  assert.equal(r.ok, false);
+  assert.ok(r.problems.some((p) => p.includes('/admin/demos/{slug}/channels')), r.problems.join(' / '));
+});
+
+test('契约外端点被放行', () => {
+  const spec = [
+    'info:',
+    '  description: |',
+    '    共 1 个端点。',
+    '    不在契约里的端点：`GET /download/{slug}`（返回字节而不是 JSON）。',
+  ].join('\n');
+  const surface = { endpoints: { 'GET /api/v1/demos': {} } };
+  const r = checkApiDoc({ spec, surface });
+  assert.equal(r.ok, true, r.problems.join(' / '));
+});

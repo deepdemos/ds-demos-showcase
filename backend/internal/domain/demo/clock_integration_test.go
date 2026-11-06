@@ -109,3 +109,66 @@ func TestIntegrationRestoreSurvivesClockStepBack(t *testing.T) {
 	}
 	assertTimeOrder(t, pool, slug)
 }
+
+// pushChannelTimeForward 把渠道行的时间戳推到未来 10 分钟。
+//
+// demo_channels 与 demos 一样有 ck_channel_time（updated_at >= created_at、
+// published_at 为空或 >= created_at）。发布走的是 UPSERT，冲突分支写
+// updated_at = GREATEST(now(), created_at)——这条用例钉的正是那次漏改。
+func pushChannelTimeForward(t *testing.T, pool *pgxpool.Pool, slug string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE demo_channels
+		    SET created_at = now() + interval '10 minutes',
+		        updated_at = now() + interval '10 minutes',
+		        published_at = CASE WHEN published_at IS NULL THEN NULL
+		                            ELSE now() + interval '10 minutes' END
+		  WHERE demo_id = (SELECT id FROM demos WHERE slug = $1)`, slug); err != nil {
+		t.Fatalf("造渠道时钟回拨现场失败: %v", err)
+	}
+}
+
+// 下架再重新发布会走到 UpsertDemoChannel 的冲突分支——那是第九个写时间的地方，
+// df60f09 只改了 demos 的八处，这一处漏了。表现与当年那批一模一样：发布接口 503。
+func TestIntegrationRepublishSurvivesChannelClockStepBack(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	ctx := context.Background()
+
+	// 发布是管理员动作、归档是作者动作，两个身份都得有，所以不能直接用 approvedOne。
+	author := mkAuthor(t, pool, "clock-ch")
+	reviewerAccount, reviewerUser := mkReviewer(t, pool, "clock-ch-rev")
+	slug := submitOne(t, s, author, "clock-ch")
+	if _, err := s.Review(ctx, Actor{
+		AccountID: reviewerAccount, UserID: reviewerUser, Role: "moderator",
+	}, ReviewInput{Slug: slug, Approve: true, Reason: "内容正常"}); err != nil {
+		t.Fatalf("裁决失败: %v", err)
+	}
+	actor := publisher(t, pool, "clock-ch")
+	authorActor := actorOf(t, pool, author)
+
+	if _, err := s.Publish(ctx, actor, PublishInput{Slug: slug, Channel: "deep", Visibility: "listed"}); err != nil {
+		t.Fatalf("首次发布失败: %v", err)
+	}
+
+	pushChannelTimeForward(t, pool, slug)
+
+	// 归档之后才允许再发布：PublishDemo 的 WHERE 只认 draft / archived。
+	if _, err := s.Archive(ctx, LifecycleInput{Actor: authorActor, Slug: slug}); err != nil {
+		t.Fatalf("归档失败: %v", err)
+	}
+
+	if _, err := s.Publish(ctx, actor, PublishInput{Slug: slug, Channel: "deep", Visibility: "unlisted"}); err != nil {
+		t.Fatalf("时钟回拨后重新发布失败（渠道写点没夹紧？）: %v", err)
+	}
+
+	var ok bool
+	if err := pool.QueryRow(ctx,
+		`SELECT c.updated_at >= c.created_at AND (c.published_at IS NULL OR c.published_at >= c.created_at)
+		   FROM demo_channels c WHERE c.demo_id = (SELECT id FROM demos WHERE slug = $1)`, slug).Scan(&ok); err != nil {
+		t.Fatalf("读渠道时间戳失败: %v", err)
+	}
+	if !ok {
+		t.Fatalf("渠道时间顺序被破坏：updated_at / published_at 早于 created_at")
+	}
+}

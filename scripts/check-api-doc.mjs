@@ -18,8 +18,16 @@
  *
  * # 它不能证明什么
  *
- * 它只核对**这个数字**。描述里对端点分组的文字说明（「身份」「生命周期」）是否
- * 跟实现一一对应，仍然只能靠 review；门禁只保证「数得清的那部分数得对」。
+ * 它核对两件事，都是「数得清 / 查得到」的部分：
+ *
+ * 1. 描述里的「共 N 个端点」等于 `api/surface.json` 的端点数。
+ * 2. 描述正文里提到的每个 `METHOD /path` 都真的是契约里的端点。
+ *
+ * 第 2 条是第五轮 review 补的：只判数字时，一句「发布走 `POST /admin/demos/{slug}/channels`」
+ * 可以长期指向一个**不存在的端点**——数字对得上，读的人照着去调，得到 404。
+ * 那正是 2026-11-04 那条 CRITICAL 的形状（契约指向了不存在的上架端点）。
+ *
+ * 它仍然证明不了「分组说明与实现语义一致」——那只能靠 review。
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -48,6 +56,33 @@ export function checkApiDoc({ spec, surface }) {
     return { ok: false, problems, stated: null, actual };
   }
   const stated = Number(m[1]);
+
+  // 描述里形如 `POST /api/v1/demos` 或 `POST /admin/demos/{slug}/channels` 的引用，
+  // 必须能在 surface.json 的端点表里找到。允许省略前缀：文档里常写相对路径。
+  const REF = /`(GET|POST|PUT|DELETE|PATCH)\s+(\/[\w/{}\-.]*)`/g;
+  const known = Object.keys(surface?.endpoints ?? {});
+  // 契约外端点（预览与下载）是**刻意**不在契约里的：它们的响应体是 HTML / zip 字节，
+  // 「所有端点返回 JSON」这条前提对它们不成立。描述里提到它们是对的，
+  // 所以这里按名字白名单放行——白名单本身写在契约描述里那句「不在契约里的两个端点」中，
+  // 改这里等于改那句，别让两边漂。
+  const OUTSIDE = ['GET /download/{slug}', 'GET /preview/{slug}/{path}', 'GET /preview/{slug}/v{rev}/{path}'];
+  let ref;
+  REF.lastIndex = 0;
+  while ((ref = REF.exec(text)) !== null) {
+    const [, method, path] = ref;
+    if (OUTSIDE.includes(`${method} ${path}`)) continue;
+    const hit = known.some((k) => {
+      const [km, kp] = k.split(' ');
+      if (km !== method) return false;
+      return kp === path || kp.endsWith(path.replace(/^\/api\/v1/, '')) || kp.endsWith(path);
+    });
+    if (!hit) {
+      problems.push(
+        `契约描述里引用了 \`${method} ${path}\`，但契约里没有这个端点：` +
+          '读的人会照着去调，然后得到 404。',
+      );
+    }
+  }
   if (stated !== actual) {
     problems.push(
       `契约描述写「共 ${stated} 个端点」，实际 ${actual} 个：` +

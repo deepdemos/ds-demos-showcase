@@ -19,12 +19,15 @@
 -- （「探针」「回滚」）切不出完整三元组，索引用不上，最后还是回退成扫描。
 -- 那不如直接子串匹配——它至少**搜得到**。「搜得快」等数据量真的需要时再谈。
 --
+-- `q` 在进 SQL 之前已经由 handler 转义过 `\` `%` `_`，所以 `ESCAPE '\'`
+-- 之下它就是**字面**子串：搜 `%` 只找含 `%` 的作品，不再等于「全部作品」。
+--
 -- `matched_in` 告诉前端这条是因为标题命中还是简介命中：只匹配简介时，
 -- 结果列表上看到的标题里没有关键词，不标出来就像「搜了但不相关」。
 SELECT d.id, d.slug, d.title, d.cover_url, d.created_at,
        CASE
            WHEN @q::text = '' THEN 'title'
-           WHEN d.title ILIKE '%' || @q::text || '%' THEN 'title'
+           WHEN d.title ILIKE '%' || @q::text || '%' ESCAPE '\' THEN 'title'
            ELSE 'description'
        END::text AS matched_in
 FROM demos d
@@ -40,8 +43,8 @@ WHERE d.published_revision_id IS NOT NULL
   )
   AND (
       @q::text = ''
-      OR d.title ILIKE '%' || @q::text || '%'
-      OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%'
+      OR d.title ILIKE '%' || @q::text || '%' ESCAPE '\'
+      OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%' ESCAPE '\'
   )
 ORDER BY d.created_at DESC, d.id DESC
 LIMIT $1 OFFSET $2;
@@ -61,8 +64,8 @@ WHERE d.published_revision_id IS NOT NULL
   )
   AND (
       @q::text = ''
-      OR d.title ILIKE '%' || @q::text || '%'
-      OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%'
+      OR d.title ILIKE '%' || @q::text || '%' ESCAPE '\'
+      OR COALESCE(d.description, '') ILIKE '%' || @q::text || '%' ESCAPE '\'
   );
 
 -- name: GetDemoBySlug :one
@@ -91,8 +94,8 @@ SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        COALESCE(cr.demo_type, '')::text AS current_demo_type,
        COALESCE(cr.rev_no, 0)::int AS current_rev_no,
        EXISTS (
-           SELECT 1 FROM demo_channels c
-           WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
+           SELECT 1 FROM demo_visible_channels c
+           WHERE c.demo_id = d.id
        )::bool AS has_visible_channel,
        -- 业务统计：详情页要展示「浏览 N 次 · 下载 M 次」。
        -- 用 COALESCE 而不是 JOIN 后的直接列：demo_stats 是懒建的，
@@ -108,13 +111,12 @@ SELECT d.id, d.slug, d.title, d.description, d.cover_url,
        -- 一个作品可以挂多个渠道，取最早的一次——「它什么时候第一次被发出去」。
        -- 用子查询而不是 join：渠道有零到多行，join 会把详情行复制成多行。
        --
-       -- 这里**不再复述可见性判据**：这一行能不能被公开看到由上一条
-       -- `has_visible_channel` 决定，能走到公开详情的作品必然至少有一个可见渠道；
-       -- 再写一遍就是把同一份可见性判据抄成第二份——那正是这类洞的老来源
-       -- （`check-single-source` 按文本计数，连注释里的原样判据都会算进去，
-       -- 所以这段说明只描述、不抄写）。
+       -- 只算**对外可见**的渠道：hidden 是「内部预览，对外不可见」，
+       -- 把它算进来会让发布时间提前几个月（先发 hidden、确认后再上 listed 正是
+       -- 这个可见性存在的理由）。判据本身在视图 demo_visible_channels 里，
+       -- 这里只问视图，不再复述枚举。
        (SELECT min(c.published_at)::timestamptz
-          FROM demo_channels c
+          FROM demo_visible_channels c
          WHERE c.demo_id = d.id)::timestamptz AS published_at,
        -- 两条版本轴的 id（模型声明挂在 revision 上，要按视图选一条取）。
        d.published_revision_id, d.current_revision_id
@@ -270,8 +272,8 @@ SELECT d.id,
        --
        -- 注意：对外可见的**内容来源**是 published 那个版本，不是这一列。
        EXISTS (
-           SELECT 1 FROM demo_channels c
-           WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
+           SELECT 1 FROM demo_visible_channels c
+           WHERE c.demo_id = d.id
        )::bool AS has_visible_channel
 FROM demos d
 LEFT JOIN users u ON u.id = d.author_id
@@ -314,8 +316,8 @@ SELECT d.id,
        r.deleted_at AS revision_deleted_at,
        r.erased_at  AS revision_erased_at,
        EXISTS (
-           SELECT 1 FROM demo_channels c
-           WHERE c.demo_id = d.id AND c.visibility IN ('listed', 'unlisted')
+           SELECT 1 FROM demo_visible_channels c
+           WHERE c.demo_id = d.id
        )::bool AS has_visible_channel
 FROM demos d
 LEFT JOIN demo_revisions r ON r.id = d.published_revision_id

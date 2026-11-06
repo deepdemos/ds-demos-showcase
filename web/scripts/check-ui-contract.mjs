@@ -286,12 +286,20 @@ for (const file of sourceFiles) {
 // 原生 `<button>` / `<textarea>` 一个都不导入，于是整条规则对它们完全隐形。三处裸
 // `<textarea>` 与七处裸 `<button>` 就是这么长出来的——门禁全绿，页面里却各有各的边框色。
 //
-// 扫描范围是 `src/routes`（页面层）。控件库自己要用原生元素，它住在 uiRoot 里天然豁免；
-// Dev Room 是演示场，也不该被这条约束。
+// 扫描范围是**页面层与页面级组件**：`src/routes` 与 `src/components`（除控件库 ui/、
+// Dev Room 与测试）。只扫 routes 曾经放过一次：`src/components/model-picker.tsx`
+// 里就能写裸 `<button>` 而门禁全绿——AGENTS 的原话是「页面（含页面级组件）」，
+// 而页面级组件恰好住在 components/ 下。
 const nativeControls = new Set(['button', 'textarea', 'input', 'select']);
 const routesRoot = path.join(srcRoot, 'routes');
+const componentsRoot = path.join(srcRoot, 'components');
+// 控件库自己要用原生元素（它就是把原生控件包起来的），Dev Room 是演示场。
+const nativeExempt = [path.join(componentsRoot, 'ui'), path.join(componentsRoot, 'dev-room')];
 for (const file of sourceFiles) {
-  if (!isInside(file, routesRoot)) continue;
+  const inScope =
+    isInside(file, routesRoot) ||
+    (isInside(file, componentsRoot) && !nativeExempt.some((dir) => isInside(file, dir)));
+  if (!inScope) continue;
   // 测试里的合成触发器不是页面控件（例如「用 useNavigate 的按钮」验证 URL 变化后输入框跟随），
   // 它不出现在用户看到的界面上，套控件库只会让测试依赖一件与它无关的东西。
   if (/\.test\.(ts|tsx)$/.test(file)) continue;

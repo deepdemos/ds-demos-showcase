@@ -116,4 +116,6 @@ SET visibility = EXCLUDED.visibility,
     lang = EXCLUDED.lang,
     published_at = COALESCE(demo_channels.published_at, EXCLUDED.published_at),
     curated_by = EXCLUDED.curated_by,
-    updated_at = now();
+    -- 与 demos 的时间字段同一口径：时钟回拨时现在这一刻可能早于这行的 created_at，
+    -- demo_channels 上有 ck_channel_time，写回退后的值会把发布打成 503。
+    updated_at = GREATEST(now(), demo_channels.created_at);

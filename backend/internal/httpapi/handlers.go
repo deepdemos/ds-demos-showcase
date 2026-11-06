@@ -40,6 +40,13 @@ const (
 	maxPageSize     = 200
 )
 
+// likeEscaper 把 LIKE 的通配符转成字面量。用户搜 `100%` 时想找的是带百分号的
+// 作品，不是「100 后面随便什么」；不转义的话 `q=%` 会回到全部作品，而 matchedIn
+// 还会把它们全标成「标题命中」——搜索框里那个字符根本不存在于标题。
+//
+// 与本文件配套的是 SQL 里的 `ESCAPE '\'`：反斜杠本身也要能被搜到，所以它先转。
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 // Pinger 是 /healthz 依赖的最小接口，便于单测替换。
 type Pinger interface {
 	Ping(ctx context.Context) error
@@ -150,6 +157,9 @@ func (h *Handler) ListDemos(w http.ResponseWriter, r *http.Request, params api.L
 		writeError(w, http.StatusBadRequest, api.InvalidParam, "搜索词太长，最多 100 个字")
 		return
 	}
+	// 长度按**用户输入**判定（上面那行），转义放在判定之后：转义会改变字符数，
+	// 不该让「搜一串百分号」比「搜同样多的汉字」更容易被拒。
+	q = likeEscaper.Replace(q)
 	// sort 目前只有 latest 一个合法值，传别的也按 latest 处理：契约里是枚举，
 	// 生成物已经替我们挡掉了非法值，这里不需要再判。
 

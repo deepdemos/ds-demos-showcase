@@ -125,3 +125,77 @@ func repeatRune(r rune, n int) string {
 	}
 	return string(out)
 }
+
+// 通配符测试：`%` `_` 是 LIKE 的元字符，不转义时用户搜它们等于「搜全部」。
+//
+// 这条用例的存在理由不是「覆盖率」：没有它的时候，`q=%` 会安静地返回全部作品，
+// 而 `matched_in` 还会把它们全标成「标题命中」——搜索框里那个字符根本不在标题里。
+// 反向验证的办法是把 handler 里的 likeEscaper 换成恒等函数，四条断言会一起红。
+func TestIntegrationSearchTreatsWildcardsLiterally(t *testing.T) {
+	pool := integrationPool(t)
+	seed(t, pool)
+	ctx := context.Background()
+
+	// 造一条标题里真的带百分号、简介里真的带下划线的作品。
+	var id int64
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO demos (slug, title, description, moderation_state, lifecycle_state)
+		VALUES ('it-wild', '100% 覆盖', 'a_b 测试', 'approved', 'draft')
+		RETURNING id`).Scan(&id); err != nil {
+		t.Fatalf("插入通配符作品失败: %v", err)
+	}
+	var rev int64
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO demo_revisions (demo_id, rev_no, demo_type, source)
+		VALUES ($1, 1, 'web', 'upload') RETURNING id`, id).Scan(&rev); err != nil {
+		t.Fatalf("插入版本失败: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE demos SET current_revision_id = $1 WHERE id = $2`, rev, id); err != nil {
+		t.Fatalf("设置当前版本失败: %v", err)
+	}
+	publishNow(t, pool, "it-wild")
+
+	h := New(pool, store.New(pool), integrationIdentity(t, pool), nil, nil)
+
+	cases := []struct {
+		name      string
+		q         string
+		wantTotal int
+		wantIn    string
+	}{
+		{name: "百分号只找带百分号的", q: "%", wantTotal: 1, wantIn: "title"},
+		{name: "下划线只找带下划线的", q: "_", wantTotal: 1, wantIn: "description"},
+		{name: "百分号连着数字一起搜", q: "100%", wantTotal: 1, wantIn: "title"},
+		{name: "数字仍然能搜到", q: "100", wantTotal: 1, wantIn: "title"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			q := tc.q
+			h.ListDemos(rec, httptest.NewRequest(http.MethodGet, "/api/v1/demos", nil),
+				api.ListDemosParams{Q: &q})
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("状态码 = %d，想要 200；响应体：%s", rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Items []map[string]any `json:"items"`
+				Total int              `json:"total"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("响应不是 JSON: %v", err)
+			}
+			if body.Total != tc.wantTotal {
+				t.Fatalf("q=%q 的 total = %d，想要 %d（通配符被当成元字符了？）",
+					tc.q, body.Total, tc.wantTotal)
+			}
+			if len(body.Items) != 1 {
+				t.Fatalf("列表 %d 条，想要 1 条", len(body.Items))
+			}
+			if got := body.Items[0]["matchedIn"]; got != tc.wantIn {
+				t.Fatalf("matchedIn = %v，想要 %s", got, tc.wantIn)
+			}
+		})
+	}
+}

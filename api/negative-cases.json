@@ -31,6 +31,13 @@
           "file": "backend/internal/httpapi/search_integration_test.go",
           "name": "TestIntegrationSearchDemos"
         }
+      },
+      {
+        "case": "通配符按字面匹配（% 与 _ 不被当成元字符）",
+        "test": {
+          "file": "backend/internal/httpapi/search_integration_test.go",
+          "name": "TestIntegrationSearchTreatsWildcardsLiterally"
+        }
       }
     ],
     "POST /api/v1/demos": [
