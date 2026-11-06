@@ -343,7 +343,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 
 			// 模型声明挂在**这一版**上（MODEL-007）。放在同一事务里：
 			// 声明写失败就等于这次投稿失败，不能出现「作品建好了、声明丢了」。
-			modelIDs, err := resolveModelSlugs(ctx, q, in.ModelSlugs)
+			modelIDs, err := resolveModelRefs(ctx, q, in.ModelSlugs)
 			if err != nil {
 				return err
 			}
@@ -370,7 +370,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 		if err == nil {
 			return slug, revID, nil, nil
 		}
-		// 输入问题原样往上抛：模型声明不合格（resolveModelSlugs）也是在这一层
+		// 输入问题原样往上抛：模型声明不合格（resolveModelRefs）也是在这一层
 		// 返回的，若继续往下走会被包成「落库失败: …」，作者会以为是我们这边坏了。
 		if errors.Is(err, ErrInvalidInput) {
 			return "", 0, nil, err

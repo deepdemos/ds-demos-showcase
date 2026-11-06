@@ -106,3 +106,89 @@ WHERE ma.model_id IN (
     SELECT rm.model_id FROM demo_revision_models rm WHERE rm.revision_id = $1
 )
 ORDER BY ma.model_id, ma.alias;
+
+-- name: ResolveModelRefs :many
+-- 把作者填的「模型指称」解析成模型 id。指称可以是 slug、展示名或别名，**大小写不敏感**。
+--
+-- 为什么一条 SQL 里带三种匹配：作者在投稿框里手打的是「DeepSeek V4 Flash」这种人话，
+-- 不是 slug；只认 slug 等于要求他先去查目录。三种形态在库里本来就是同一件事的三种写法
+-- （`models.slug` / `models.name` / `model_aliases.alias`），解析放在一处，别让每个调用点
+-- 各写一套优先级。
+--
+-- `rank` 决定同名不同形态时谁优先：slug(0) > alias(1) > name(2)。同 rank 再按 id 取小的，
+-- 保证结果稳定——否则同一份输入两次解析可能命中不同的行，作者会看到模型莫名换掉。
+--
+-- 已合并的模型（`status='deprecated'` 且 `merged_into_id` 非空）沿指针走一跳，返回归宿 id：
+-- 作者手里可能还留着旧名字，报错「模型不存在」既不准确也没帮助。只走一跳——多级合并链
+-- 在库里没出现过，真出现时再按需展开。
+WITH input AS (
+    SELECT DISTINCT lower(btrim(r))::text AS ref
+    FROM unnest(sqlc.arg(refs)::text[]) AS r
+    WHERE btrim(r) <> ''
+),
+cand AS (
+    SELECT i.ref,
+           COALESCE(t.id, m.id) AS model_id,
+           CASE
+               WHEN lower(m.slug) = i.ref THEN 0
+               WHEN EXISTS (
+                   SELECT 1 FROM model_aliases a
+                   WHERE a.model_id = m.id AND lower(a.alias) = i.ref
+               ) THEN 1
+               ELSE 2
+           END AS rank
+    FROM input i
+    JOIN models m
+      ON lower(m.slug) = i.ref
+      OR lower(m.name) = i.ref
+      OR EXISTS (
+          SELECT 1 FROM model_aliases a
+          WHERE a.model_id = m.id AND lower(a.alias) = i.ref
+      )
+    LEFT JOIN models t
+      ON t.id = m.merged_into_id AND m.status = 'deprecated'
+)
+SELECT DISTINCT ON (ref) ref::text AS ref, model_id
+FROM cand
+ORDER BY ref, rank, model_id;
+
+-- name: CreateCandidateModel :one
+-- 作者填了一个库里没有的名字：**立刻建实体**，状态 `candidate`。
+--
+-- 为什么不让投稿失败：AI 圈的灰测模型等不起人工审核（旧站的 142 个模型写法里有大量
+-- 上游没收录的名字）。先落 `candidate` 让作品能提交，管理员事后归并——归并是按 id 改指针，
+-- 作品不用动。
+--
+-- `ON CONFLICT DO NOTHING` 不带目标：`slug` 与 `name` 两个唯一约束都要兜住并发。
+-- 冲突时不返回行，调用方据此回查现有行（而不是把它当失败）。
+INSERT INTO models (slug, name, vendor, status, resolution, description)
+VALUES (
+    sqlc.arg(slug),
+    sqlc.arg(name),
+    sqlc.narg(vendor),
+    'candidate',
+    'exact',
+    ''
+)
+ON CONFLICT DO NOTHING
+RETURNING id;
+
+-- name: FindModelByName :one
+-- 建档撞唯一约束后回查：名字是作者给的，slug 才是机器生成的，按名字找人话更准。
+SELECT id
+FROM models
+WHERE lower(name) = lower(sqlc.arg(name))
+LIMIT 1;
+
+-- name: InsertModelAlias :exec
+-- 把作者这次填的原文记成别名，下次同样的写法直接命中，不用再建一遍。
+--
+-- `alias` 是单列主键（全库唯一）：同一个写法不允许同时指两个模型，否则解析结果取决于
+-- 查询顺序——那是比「解析不到」更糟的状态。
+INSERT INTO model_aliases (alias, model_id)
+VALUES (sqlc.arg(alias), sqlc.arg(model_id))
+ON CONFLICT (alias) DO NOTHING;
+
+-- name: ModelSlugTaken :one
+-- slug 是公开 URL 的一部分、创建后不可变，生成时先查一遍再落库。
+SELECT EXISTS (SELECT 1 FROM models WHERE slug = $1)::bool AS taken;
