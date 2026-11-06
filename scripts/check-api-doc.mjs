@@ -71,10 +71,16 @@ export function checkApiDoc({ spec, surface }) {
   while ((ref = REF.exec(text)) !== null) {
     const [, method, path] = ref;
     if (OUTSIDE.includes(`${method} ${path}`)) continue;
+    // 只认全串相等：描述里引用端点必须写出 `/api/v1/...` 全路径。
+    //
+    // 曾经用 endsWith 兜「相对路径」，两种漏法都真实发生过：
+    // ① `GET /v1/demos` 命中 `/api/v1/demos`；② `GET /demos` 也命中。
+    // 第二种尤其糟——这份描述本来就用**无前缀**的写法指代契约外的
+    // `GET /download/{slug}` 与 `GET /preview/...`，于是「无前缀」在读者眼里
+    // 等于「不在契约里」，而门禁却把 `/demos` 当成了契约端点。
     const hit = known.some((k) => {
       const [km, kp] = k.split(' ');
-      if (km !== method) return false;
-      return kp === path || kp.endsWith(path.replace(/^\/api\/v1/, '')) || kp.endsWith(path);
+      return km === method && kp === path;
     });
     if (!hit) {
       problems.push(

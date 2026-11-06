@@ -67,6 +67,27 @@ test('描述里引用了不存在的端点时失败', () => {
   assert.ok(r.problems.some((p) => p.includes('/admin/demos/{slug}/channels')), r.problems.join(' / '));
 });
 
+test('省掉 /api/v1 前缀也不再放行：引用必须写全路径', () => {
+  // 判据曾经允许省略前缀（endsWith 兜相对路径），结果是「无前缀」在读者眼里
+  // 有两种含义：契约内的省略写法，与契约外端点的指代方式（`/download/{slug}`）。
+  // 现在统一成一条：引用契约端点写全 `/api/v1/...`，无前缀只用于契约外端点白名单。
+  const spec = ['info:', '  description: |', '    共 1 个端点。', '    详情见 `GET /demos/{slug}`。'].join('\n');
+  const surface = { endpoints: { 'GET /api/v1/demos/{slug}': {} } };
+  const r = checkApiDoc({ spec, surface });
+  assert.equal(r.ok, false, r.problems.join(' / '));
+});
+
+test('半截路径不算命中：`GET /demos` 必须报错', () => {
+  // 这条判据曾经写的是 endsWith，于是 `/demos` 命中 `/api/v1/demos`。
+  // 半截路径恰好是路径漂移最常见的样子（`/v1/demos`、`/demos/{slug}` 都能蒙对），
+  // 而这道门禁存在的理由就是把这类引用拦下来。
+  const spec = ['info:', '  description: |', '    共 1 个端点。', '    换渠道请走 `GET /demos`。'].join('\n');
+  const surface = { endpoints: { 'GET /api/v1/demos': {} } };
+  const r = checkApiDoc({ spec, surface });
+  assert.equal(r.ok, false);
+  assert.ok(r.problems.some((p) => p.includes('GET /demos')), r.problems.join(' / '));
+});
+
 test('契约外端点被放行', () => {
   const spec = [
     'info:',
