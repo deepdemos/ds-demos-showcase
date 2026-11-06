@@ -733,7 +733,7 @@ type ModelImportField struct {
 	// Current 本地当前值（新建时为空串）
 	Current string `json:"current"`
 
-	// Field 字段名，取值集合见 `GET /api/v1/admin/models/import/preview` 的说明：
+	// Field 字段名，取值集合见 `POST /api/v1/admin/models/import/preview` 返回的 `fields`：
 	// `name` / `description` / `contextWindow` / `maxOutput` / `costIn` / `costOut` /
 	// `releaseDate` / `knowledgeCutoff` / `openWeights` / `modalityIn` / `modalityOut` /
 	// `license`。
