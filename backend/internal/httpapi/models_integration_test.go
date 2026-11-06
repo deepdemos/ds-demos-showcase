@@ -56,7 +56,7 @@ func insertModel(t *testing.T, pool *pgxpool.Pool, slug, name, status string) {
 	})
 }
 
-// submitHTMLWithModels 是 submitHTML 的多选版：同一个 multipart 表单多带 modelIds。
+// submitHTMLWithModels 是 submitHTML 的多选版：同一个 multipart 表单多带 modelSlugs。
 // 重复的 key 才是「多选」——`r.FormValue` 只返回第一个值，所以表单参数用
 // `mw.WriteField` 逐条写，解析侧走 `formValues`。
 func submitHTMLWithModels(t *testing.T, h *Handler, sid, title, body string, modelIDs []string) *httptest.ResponseRecorder {
@@ -73,7 +73,7 @@ func submitHTMLWithModels(t *testing.T, h *Handler, sid, title, body string, mod
 		t.Fatal(err)
 	}
 	for _, id := range modelIDs {
-		if err := mw.WriteField("modelIds", id); err != nil {
+		if err := mw.WriteField("modelSlugs", id); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -105,7 +105,7 @@ func updateWithModels(t *testing.T, h *Handler, sid, slug, title string, modelID
 		t.Fatal(err)
 	}
 	for _, id := range modelIDs {
-		if err := mw.WriteField("modelIds", id); err != nil {
+		if err := mw.WriteField("modelSlugs", id); err != nil {
 			t.Fatal(err)
 		}
 	}

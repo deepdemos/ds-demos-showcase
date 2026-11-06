@@ -364,7 +364,7 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 		UpdatedAt:       row.UpdatedAt.Time,
 		LifecycleState:  state,
 		ModerationState: moderationState,
-		Author: api.ModelAuthor{
+		Author: api.DemoAuthor{
 			Username:    row.AuthorUsername,
 			DisplayName: row.AuthorDisplayName,
 		},

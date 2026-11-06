@@ -99,7 +99,7 @@ describe('SubmitPage', () => {
 
     await waitFor(() => expect(submitDemo).toHaveBeenCalled());
     const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
-    expect(body.modelIds).toEqual(['deepseek-reasoner']);
+    expect(body.modelSlugs).toEqual(['deepseek-reasoner']);
   });
 
   /**
@@ -125,7 +125,7 @@ describe('SubmitPage', () => {
 
   // 一个都没勾时不要塞一个空数组：契约里 modelIds 可省略，空数组和不传语义相同，
   // 但少一个字段能让请求体与日志都干净些。
-  test('一个模型都没勾时不传 modelIds', async () => {
+  test('一个模型都没勾时不传 modelSlugs', async () => {
     auth.me = { sub: 'x', username: 'u', displayName: 'U' };
     auth.isLoading = false;
     vi.mocked(submitDemo).mockResolvedValue({
@@ -140,6 +140,6 @@ describe('SubmitPage', () => {
 
     await waitFor(() => expect(submitDemo).toHaveBeenCalled());
     const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
-    expect(body.modelIds).toBeUndefined();
+    expect(body.modelSlugs).toBeUndefined();
   });
 });

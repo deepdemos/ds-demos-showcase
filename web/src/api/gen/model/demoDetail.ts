@@ -27,9 +27,9 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DemoAuthor } from './demoAuthor';
 import type { DemoLifecycleActions } from './demoLifecycleActions';
 import type { DemoSummary } from './demoSummary';
-import type { ModelAuthor } from './modelAuthor';
 import type { ModelRef } from './modelRef';
 
 export type DemoDetail = DemoSummary & ({
@@ -81,7 +81,7 @@ export type DemoDetail = DemoSummary & ({
      * @minimum 0
      */
   downloadCount: number;
-  author: ModelAuthor;
+  author: DemoAuthor;
   /**
      * 第一次对外发布的时间，取该作品全部对外可见渠道里最早的一次
      * `demo_channels.published_at`。

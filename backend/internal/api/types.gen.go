@@ -143,6 +143,16 @@ const (
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
 type AccountStatus string
 
+// DemoAuthor defines model for DemoAuthor.
+type DemoAuthor struct {
+	// DisplayName 昵称；作者没设昵称时为空串，界面应当回退显示 `username`
+	DisplayName string `json:"displayName"`
+
+	// Username 用户名（不可变的标识）。作者注销后为空串——那时作品本身还留着，
+	// 只是「谁写的」这个信息不再存在。
+	Username string `json:"username"`
+}
+
 // DemoDeleteRequest defines model for DemoDeleteRequest.
 type DemoDeleteRequest struct {
 	// Reason 删除理由，进 `demos.delete_reason`，只给自己留个记录
@@ -165,7 +175,7 @@ type DemoDeleteResult struct {
 
 // DemoDetail defines model for DemoDetail.
 type DemoDetail struct {
-	Author ModelAuthor `json:"author"`
+	Author DemoAuthor `json:"author"`
 
 	// CanEdit 当前调用者能不能编辑这个作品（只有作者本人在非墓碑态下为 `true`）。
 	//
@@ -436,16 +446,6 @@ type Me struct {
 // Model defines model for Model.
 type Model = ModelRef
 
-// ModelAuthor defines model for ModelAuthor.
-type ModelAuthor struct {
-	// DisplayName 昵称；作者没设昵称时为空串，界面应当回退显示 `username`
-	DisplayName string `json:"displayName"`
-
-	// Username 用户名（不可变的标识）。作者注销后为空串——那时作品本身还留着，
-	// 只是「谁写的」这个信息不再存在。
-	Username string `json:"username"`
-}
-
 // ModelList defines model for ModelList.
 type ModelList struct {
 	Items []Model `json:"items"`
@@ -649,14 +649,18 @@ type SubmitDemoMultipartBody struct {
 	DemoType    string  `json:"demoType"`
 	Description *string `json:"description,omitempty"`
 
-	// ModelIds 这一版用到的模型，取值为 `models.slug`（来自 `GET /api/v1/models`）。
+	// ModelSlugs 这一版用到的模型，取值为 `models.slug`（来自 `GET /api/v1/models`）。
+	//
+	// 字段名带 slugs 而不是 ids：调用方手里只有 slug（列表端点返回的就是它），
+	// 数字 id 是实现细节。叫 modelIds 却收 slug，等于让每个调用方都去翻一遍
+	// 文档确认自己没传错。
 	//
 	// 不传或空数组都合法——作品可以不声明模型。传了不存在的 slug、
 	// 或者不是 `active` 的 slug 一律 400，不静默丢弃：
 	// 作者以为声明了两个、库里只落了一个，他永远发现不了。
 	//
 	// 没有条数上限：多少由作品的事实决定；重复的 slug 会被去重。
-	ModelIds *[]string `json:"modelIds,omitempty"`
+	ModelSlugs *[]string `json:"modelSlugs,omitempty"`
 
 	// Package 作品文件（zip 或单个 html/svg）
 	Package openapi_types.File `json:"package"`
@@ -683,12 +687,13 @@ type UpdateDemoMultipartBody struct {
 	DemoType    *string `json:"demoType,omitempty"`
 	Description *string `json:"description,omitempty"`
 
-	// ModelIds 这一版声明的模型（`models.slug`），语义是**整体替换**。
+	// ModelSlugs 这一版声明的模型（`models.slug`），语义是**整体替换**。
+	// 字段名带 slugs 而不是 ids，理由同 `POST /api/v1/demos`。
 	//
 	// 不传等价于空数组，也就是「这一版不声明任何模型」——不做
 	// 「没传就沿用上一版」：multipart 里「没传」与「传空」在浏览器侧
 	// 无法区分（空选择不产生字段），沿用会让作者永远删不掉一个声明。
-	ModelIds *[]string `json:"modelIds,omitempty"`
+	ModelSlugs *[]string `json:"modelSlugs,omitempty"`
 
 	// Package 新的作品文件；不传表示只改文字
 	Package *openapi_types.File `json:"package,omitempty"`

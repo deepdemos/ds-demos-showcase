@@ -260,8 +260,8 @@ if(submitDemoBody.description !== undefined) {
  }
 formData.append(`demoType`, submitDemoBody.demoType);
 formData.append(`package`, submitDemoBody.package);
-if(submitDemoBody.modelIds !== undefined) {
- submitDemoBody.modelIds.forEach(value => formData.append(`modelIds`, value));
+if(submitDemoBody.modelSlugs !== undefined) {
+ submitDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));
  }
 
   const res = await fetch(getSubmitDemoUrl(),
@@ -488,8 +488,8 @@ if(updateDemoBody.demoType !== undefined) {
 if(updateDemoBody.package !== undefined) {
  formData.append(`package`, updateDemoBody.package);
  }
-if(updateDemoBody.modelIds !== undefined) {
- updateDemoBody.modelIds.forEach(value => formData.append(`modelIds`, value));
+if(updateDemoBody.modelSlugs !== undefined) {
+ updateDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));
  }
 
   const res = await fetch(getUpdateDemoUrl(slug),

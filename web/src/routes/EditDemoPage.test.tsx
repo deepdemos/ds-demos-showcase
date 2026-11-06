@@ -127,7 +127,7 @@ test('预填已有的模型声明，保存时原样交回', async () => {
 
   await waitFor(() => expect(updateDemo).toHaveBeenCalled());
   const [, body] = updateDemo.mock.calls[0] as [string, Record<string, unknown>];
-  expect(body.modelIds).toEqual(['deepseek-chat']);
+  expect(body.modelSlugs).toEqual(['deepseek-chat']);
 });
 
 /**
@@ -149,5 +149,5 @@ test('取消勾选后保存，声明被清空', async () => {
 
   await waitFor(() => expect(updateDemo).toHaveBeenCalled());
   const [, body] = updateDemo.mock.calls[0] as [string, Record<string, unknown>];
-  expect(body.modelIds).toEqual([]);
+  expect(body.modelSlugs).toEqual([]);
 });

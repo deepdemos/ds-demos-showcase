@@ -159,7 +159,7 @@ export function EditDemoPage() {
         demoType: file ? demoType : undefined,
         // 声明是整体替换语义：这里**总是**把当前勾选交上去，不勾就是清空。
         // 想保留原来的声明，就得让它们继续保持勾选——预填负责这件事。
-        modelIds: modelSlugs,
+        modelSlugs: modelSlugs,
         package: file ?? undefined,
       });
       if (response.status === 200) {

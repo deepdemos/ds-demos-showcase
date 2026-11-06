@@ -33,7 +33,7 @@ type ModelRef struct {
 //
 // 这里没有「最多 N 个」的上限：模型的多少由主数据（active 的行数）与作品本身的
 // 事实决定，人为封顶只是给真实作品添麻烦。重复提交同一个 slug 会被去重，
-// 所以 `modelIds` 里出现重复也不会多落行。
+// 所以 `modelSlugs` 里出现重复也不会多落行。
 func resolveModelSlugs(ctx context.Context, q *store.Queries, slugs []string) ([]int64, error) {
 	wanted := make([]string, 0, len(slugs))
 	seen := make(map[string]struct{}, len(slugs))
