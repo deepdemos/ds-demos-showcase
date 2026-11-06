@@ -86,9 +86,9 @@ type ServerInterface interface {
 	// 当前登录者
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
-	// 模型主数据（给投稿表单的模型选择用）
+	// 模型目录（全部状态，可筛）
 	// (GET /api/v1/models)
-	ListModels(w http.ResponseWriter, r *http.Request)
+	ListModels(w http.ResponseWriter, r *http.Request, params ListModelsParams)
 	// 站点可用性
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -242,9 +242,9 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 模型主数据（给投稿表单的模型选择用）
+// 模型目录（全部状态，可筛）
 // (GET /api/v1/models)
-func (_ Unimplemented) ListModels(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ListModels(w http.ResponseWriter, r *http.Request, params ListModelsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -888,8 +888,21 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 // ListModels operation middleware
 func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListModelsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListModels(w, r)
+		siw.Handler.ListModels(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

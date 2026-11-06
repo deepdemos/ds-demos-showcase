@@ -130,7 +130,7 @@
         "optional": false
       },
       "models": {
-        "type": "[]ModelRef",
+        "type": "[]Model",
         "optional": false
       },
       "moderationState": {
@@ -346,6 +346,44 @@
         "optional": false
       },
       "username": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "Model": {
+      "aliases": {
+        "type": "[]string",
+        "optional": false
+      },
+      "description": {
+        "type": "string",
+        "optional": false
+      },
+      "mergedIntoSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "resolution": {
+        "type": "ModelResolution",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "source": {
+        "type": "ModelSource",
+        "optional": false
+      },
+      "status": {
+        "type": "ModelStatus",
+        "optional": false
+      },
+      "vendor": {
         "type": "string",
         "optional": false
       }
@@ -693,6 +731,22 @@
       "rejected",
       "removed"
     ],
+    "ModelResolution": [
+      "exact",
+      "family",
+      "guess",
+      "unknown"
+    ],
+    "ModelSource": [
+      "manual",
+      "models.dev"
+    ],
+    "ModelStatus": [
+      "active",
+      "candidate",
+      "deprecated",
+      "unverified"
+    ],
     "PublishRequestLang": [
       "en",
       "zh"
@@ -733,6 +787,12 @@
     ],
     "ListDemosParamsSort": [
       "latest"
+    ],
+    "ListModelsParamsStatus": [
+      "active",
+      "candidate",
+      "deprecated",
+      "unverified"
     ]
   },
   "endpoints": {
@@ -859,7 +919,7 @@
     "GET /api/v1/models": {
       "method": "ListModels",
       "pathParams": 0,
-      "params": null
+      "params": "ListModelsParams"
     },
     "GET /healthz": {
       "method": "GetHealthz",

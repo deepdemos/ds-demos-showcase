@@ -36,6 +36,7 @@ import type {
   DemoList,
   Error,
   ListDemosParams,
+  ListModelsParams,
   ModelList,
   RestoreResult,
   RevisionList,
@@ -125,31 +126,43 @@ export type listModelsResponseError = (listModelsResponse503) & {
 
 export type listModelsResponse = (listModelsResponseSuccess | listModelsResponseError)
 
-export const getListModelsUrl = () => {
+export const getListModelsUrl = (params?: ListModelsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/v1/models`
+  return stringifiedParams.length > 0 ? `/api/v1/models?${stringifiedParams}` : `/api/v1/models`
 }
 
 /**
- * 只返回 `status = active` 的模型，按名字排序。
+ * 返回模型目录，按名字排序。**默认返回全部状态**，可以用 `?status=` 筛。
  *
  * **为什么需要这个端点**：投稿与编辑表单要让作者声明「这个作品用了哪些模型」，
  * 而模型是主数据（`models` 表），不能由前端写死一个列表——写死的那份迟早
  * 与库里不一致，而且新增一个模型要发一次前端版本。
  *
- * `candidate` / `unverified` / `deprecated` 不出现：前两者还没被确认，
- * 不该被作者当事实声明；后者是已退役的模型，新作品不该再选它。
+ * **为什么不再默认只出 `active`**：那样契约里的 `status` 字段永远等于同一个值，
+ * 等于给了个常量。目录页要展示「候选 / 未核实 / 已退役（并指向合并归宿）」，
+ * 这个筛选交给调用方做——表单那边自己传 `?status=active`。
  *
- * 本期没有分页：模型主数据是**受控的少量行**（外部目录导入的一部分），
+ * `source` 是**派生的**（有 `model_external_refs` 行就是 `models.dev`，否则
+ * `manual`），不是表上的列：`models` 表没有这一列，而「有没有被上游目录认领过」
+ * 本来就是 refs 表的事实。多加一列等于给同一件事两个出处。
+ *
+ * 本期没有分页：模型目录是**受控的少量行**（外部目录导入的一部分），
  * 不是用户内容。真到了几百行的规模再加分页，那时它会需要一个管理界面。
- * @summary 模型主数据（给投稿表单的模型选择用）
+ * @summary 模型目录（全部状态，可筛）
  */
-export const listModels = async ( options?: RequestInit): Promise<listModelsResponse> => {
+export const listModels = async (params?: ListModelsParams, options?: RequestInit): Promise<listModelsResponse> => {
 
-  const res = await fetch(getListModelsUrl(),
+  const res = await fetch(getListModelsUrl(params),
   {
     ...options,
     method: 'GET'

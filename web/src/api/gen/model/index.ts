@@ -56,6 +56,8 @@ export * from './lifecycleState';
 export * from './listDemoReviewQueueParams';
 export * from './listDemosParams';
 export * from './listDemosSort';
+export * from './listModelsParams';
+export * from './listModelsStatus';
 export * from './loginRequest';
 export * from './me';
 export * from './model';
