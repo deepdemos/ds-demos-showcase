@@ -822,7 +822,7 @@ type ModelSyncResult struct {
 
 	// Status 同步后的状态，取值为 `ok` / `stale` / `failed`。
 	// 故意不是 enum：与 `model_source_sync.status` 同一取值集，
-	// 在门禁里核对，避免生成器把全仓枚举常量改名（见松点 52）。
+	// 在门禁里核对，避免生成器把全仓枚举常量改名（见松点 53）。
 	Status string `json:"status"`
 
 	// SyncedAt 这次同步的完成时间（`skipped=true` 时是本次检查时间）

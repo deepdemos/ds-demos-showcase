@@ -227,6 +227,11 @@ func (s *Service) recordFailure(ctx context.Context, cause error) {
 	s.log.Warn("模型目录同步失败", "source", catalog.Source, "err", cause)
 }
 
+// retryGap 是「上次失败之后多久再试」。
+//
+// 比定时器的 5 分钟略长：上游长时间不可达时，别变成每跳一次就发一个请求。
+const retryGap = 10 * time.Minute
+
 // SyncIfDue 是定时循环的入口：读了设置才知道要不要跑、多久跑一次。
 //
 // 每次循环都重新读设置，而不是启动时读一次缓存：管理员在界面上打开开关之后
@@ -254,9 +259,19 @@ func (s *Service) SyncIfDue(ctx context.Context) error {
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("读同步状态失败: %w", err)
 	}
-	if err == nil && last.LastSuccessAt.Valid {
+	if err == nil && last.LastSuccessAt.Valid && last.Status != StatusFailed {
 		if time.Since(last.LastSuccessAt.Time) < interval {
 			return nil // 没到点
+		}
+	}
+	// 上一次失败了就按 retryGap 重试，而不是等满一个 interval。
+	//
+	// 只用 last_success_at 判断「到点没有」的话，一次网络抖动会让镜像停在旧版本
+	// 直到下一个 interval（默认 24 小时）——恰恰是最需要自动同步的时候它不动了。
+	// 也不能没有间隔：定时器 5 分钟一跳，上游长时间不可达就变成每 5 分钟打一次。
+	if err == nil && last.Status == StatusFailed && last.LastAttemptAt.Valid {
+		if time.Since(last.LastAttemptAt.Time) < retryGap {
+			return nil
 		}
 	}
 	_, err = s.Sync(ctx)
