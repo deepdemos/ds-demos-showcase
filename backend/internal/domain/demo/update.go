@@ -84,7 +84,7 @@ type UpdateResult struct {
 func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, error) {
 	var out UpdateResult
 
-	if err := validateMeta(in.Title, in.Description); err != nil {
+	if err := validateMeta(in.Title, in.Description, in.DemoType); err != nil {
 		return out, err
 	}
 	if s.maxPackageBytes > 0 && in.PackageSize > s.maxPackageBytes {
@@ -272,7 +272,13 @@ type revisionMeta struct {
 }
 
 // validateMeta 检查标题与简介。与 SubmitInput.validate 共用同一套口径。
-func validateMeta(title, description string) error {
+//
+// 文本合法性（UTF-8）也必须在这里过一遍：编辑走 PUT，与投稿走的是两条链路，
+// 少了这一步的结果是「同一段非法字节，POST 回 400、PUT 回 503」。
+func validateMeta(title, description, demoType string) error {
+	if err := validateMetaTexts(title, description, demoType, nil); err != nil {
+		return err
+	}
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return fmt.Errorf("%w: 标题不能为空", ErrInvalidInput)

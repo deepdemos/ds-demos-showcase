@@ -128,6 +128,58 @@ func pushChannelTimeForward(t *testing.T, pool *pgxpool.Pool, slug string) {
 	}
 }
 
+// 0013 回填的老作品，渠道行 published_at 是 NULL。首次重发布走的是
+// COALESCE(旧值, EXCLUDED.published_at) 的**右边**——那条路径上 EXCLUDED 就是裸
+// now()，回拨窗口里它会早于渠道行自己的 created_at，撞 ck_channel_time。
+//
+// 上面那条用例抓不到这一格：它先发布过一次，published_at 已非 NULL，COALESCE 走左边。
+func TestIntegrationFirstRepublishAfterBackfillSurvivesClockStepBack(t *testing.T) {
+	pool := testPool(t)
+	s := testService(t, pool)
+	ctx := context.Background()
+
+	author := mkAuthor(t, pool, "clock-null")
+	reviewerAccount, reviewerUser := mkReviewer(t, pool, "clock-null-rev")
+	slug := submitOne(t, s, author, "clock-null")
+	if _, err := s.Review(ctx, Actor{
+		AccountID: reviewerAccount, UserID: reviewerUser, Role: "moderator",
+	}, ReviewInput{Slug: slug, Approve: true, Reason: "内容正常"}); err != nil {
+		t.Fatalf("裁决失败: %v", err)
+	}
+	actor := publisher(t, pool, "clock-null")
+
+	// 直接造出 0013 回填之后的现场：有渠道行、published_at 为 NULL、时间戳在未来。
+	if _, err := s.Publish(ctx, actor, PublishInput{Slug: slug, Channel: "deep", Visibility: "listed"}); err != nil {
+		t.Fatalf("首次发布失败: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE demo_channels
+		    SET published_at = NULL,
+		        created_at = now() + interval '10 minutes',
+		        updated_at = now() + interval '10 minutes'
+		  WHERE demo_id = (SELECT id FROM demos WHERE slug = $1)`, slug); err != nil {
+		t.Fatalf("造回填现场失败: %v", err)
+	}
+
+	authorActor := actorOf(t, pool, author)
+	if _, err := s.Archive(ctx, LifecycleInput{Actor: authorActor, Slug: slug}); err != nil {
+		t.Fatalf("归档失败: %v", err)
+	}
+	if _, err := s.Publish(ctx, actor, PublishInput{Slug: slug, Channel: "deep", Visibility: "unlisted"}); err != nil {
+		t.Fatalf("回填行在时钟回拨下重新发布失败（published_at 没夹紧？）: %v", err)
+	}
+
+	var ok bool
+	if err := pool.QueryRow(ctx,
+		`SELECT c.published_at IS NOT NULL AND c.published_at >= c.created_at
+		   FROM demo_channels c WHERE c.demo_id = (SELECT id FROM demos WHERE slug = $1)`, slug).Scan(&ok); err != nil {
+		t.Fatalf("读渠道时间戳失败: %v", err)
+	}
+	if !ok {
+		t.Fatalf("首次写入的 published_at 早于渠道行 created_at：ck_channel_time 是这么被撞的")
+	}
+}
+
 // 下架再重新发布会走到 UpsertDemoChannel 的冲突分支——那是第九个写时间的地方，
 // df60f09 只改了 demos 的八处，这一处漏了。表现与当年那批一模一样：发布接口 503。
 func TestIntegrationRepublishSurvivesChannelClockStepBack(t *testing.T) {

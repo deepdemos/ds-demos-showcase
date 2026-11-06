@@ -126,6 +126,14 @@ test('e2e 用例文件算测试文件：标题可以当结论的落点', () => {
   assert.equal(isTestFile('lifecycle.e2e.ts'), true);
 });
 
+test('门禁自己的用例也算：判据有门禁用例钉着是最该被认的证据', () => {
+  // 第六轮的实际形状：F3 的落点是 check-api-doc.test.mjs 里那条用例，
+  // 而扫描根里没有 scripts/、扩展名过滤也不认 .mjs —— 「有门禁用例钉着」
+  // 反过来过不了门禁。
+  assert.equal(isTestFile('check-api-doc.test.mjs'), true);
+  assert.equal(isTestFile('check-api-doc.mjs'), false);
+});
+
 test('普通源码文件不算测试文件：随便一个函数名糊不过去', () => {
   assert.equal(isTestFile('lifecycle.ts'), false);
   assert.equal(isTestFile('handlers.go'), false);

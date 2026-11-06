@@ -302,7 +302,7 @@ export const getPostDemoViewUrl = (slug: string,) => {
 }
 
 /**
- * 由详情页在渲染成功之后调用一次。**不是**在 `GET /demos/{slug}` 里顺带计数：
+ * 由详情页在渲染成功之后调用一次。**不是**在 `GET /api/v1/demos/{slug}` 里顺带计数：
  * GET 有副作用的话，爬虫、预取、文档里试一下、curl 验证一下，全都会变成一次浏览。
  *
  * 同一个人（登录按账号、匿名按 IP 哈希）对同一作品，同一个自然日只算一次。
@@ -785,7 +785,7 @@ export const getRestoreDemoUrl = (slug: string,) => {
  * 不返回 403：**恢复窗口过期**与**文件已被回收**都是 409，但错误码不同——
  * 前者是「你来晚了」，后者是「系统提前清掉了」。
  *
- * 路径与 `POST /demos/{slug}/revisions/{revNo}/restore` 分开：那个恢复的是
+ * 路径与 `POST /api/v1/demos/{slug}/revisions/{revNo}/restore` 分开：那个恢复的是
  * **内容版本**，这个恢复的是**被删掉的作品**。
  * @summary 恢复已删除的作品（作者本人）
  */

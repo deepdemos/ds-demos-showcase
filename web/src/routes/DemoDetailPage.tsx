@@ -187,9 +187,7 @@ export function DemoDetailPage() {
               服务端对他们恒回 approved（见 handlers.go 的 detailOf）。 */}
           {data.demo.canEdit && data.demo.moderationState !== 'approved' ? (
             <p className="mt-4 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
-              {data.demo.moderationState === 'pending'
-                ? '审核中：通过之前，这条不会出现在作品库里，也不能发布。'
-                : '审核未通过：改好之后重新提交，会再次进入待审队列。'}
+              {moderationBanner(data.demo.moderationState, data.demo.lifecycleState)}
             </p>
           ) : null}
 
@@ -280,6 +278,21 @@ export function DemoDownload({ slug }: { slug: string }) {
       </span>
     </p>
   );
+}
+
+// 审核态提示文案。**必须同时看 lifecycleState**：对外内容由 published_revision_id
+// 决定、审核态只描述当前版本（迁移 0014 的版本分离），所以「已发布 + 待审」是
+// 作者改稿的正常状态——那时作品还在库里、也还发布着，说「不会出现在作品库里、
+// 也不能发布」两句都是假的，而作者的下一步很可能就是再去点一次发布。
+function moderationBanner(state: string, lifecycle: string): string {
+  if (state === 'pending') {
+    return lifecycle === 'published'
+      ? '新版本审核中：线上仍是上一版，通过之前这次的改动不会对外生效。'
+      : '审核中：通过之前，这条不会出现在作品库里，也不能发布。';
+  }
+  return lifecycle === 'published'
+    ? '新版本未通过审核：线上仍是上一版，改好后重新提交会再次进入待审队列。'
+    : '审核未通过：改好之后重新提交，会再次进入待审队列。';
 }
 
 /**

@@ -1187,7 +1187,8 @@ sequenceDiagram
 | 项 | 现在 | 为什么 |
 |---|---|---|
 | 定义处 | 视图 `demo_visible_channels`（迁移 0017） | 判据只写一次，调用处只问「这个 demo 在不在视图里」 |
-| 调用处 | `demos.sql` 四处（三处 `has_visible_channel`、一处发布时间） | 不再各写一遍 `visibility IN (…)` |
+| 调用处 | `demos.sql` 四处问视图（三处 `has_visible_channel`、一处发布时间） | 不再各写一遍 `visibility IN (…)` |
+| 另有 | `demos.sql:42` 与 `:63` 的 `visibility = 'listed'` 两处 | 它们问的是「上不上列表」，不是「对外可见」：`unlisted` 可直链但不上列表，所以不能问同一个视图。这两处是「上列表」判据的定义处 |
 | 副本变化 | `visibility-sql` 5 → 2（剩下两处问的是「上列表」，不是「对外可见」） | 棘轮往下拨，而不是开口子 |
 | 为什么不是函数 | 视图能被 `EXISTS` / join 直接用，语义上也确实是一张表的子集 | — |
 

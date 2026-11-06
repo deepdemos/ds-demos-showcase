@@ -24,6 +24,8 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	// 让全仓直调 slog.* 的地方也走这个 handler（否则出现两种日志格式）。
+	slog.SetDefault(logger)
 	cfg := config.Load()
 
 	// 两个变量都保持 nil，表示「未配置数据库」。注意不能把 *pgxpool.Pool 的 nil 值
@@ -133,6 +135,11 @@ func main() {
 // 为什么不直接启动失败：本地开发和 CI 里没人会去配这个变量，而它缺失只影响
 // 「跨重启、跨实例的限流计数是否连续」，不影响登录正确性。但必须 WARN——
 // 否则生产上漏配会表现成「限流时灵时不灵」，那是最难查的一类问题。
+// 全仓有三十余处直调 slog.Error/Warn（download.go、identity.go、preview.go…）。
+// 不 SetDefault 的话它们走标准库的默认文本 handler，而启动路径用 logger.Info 走的是
+// JSON——同一次 500 在日志里出现两种格式，且文本那半边丢掉结构化字段。
+// 所以 logger 一建好就把默认 handler 换成它。
+
 func loadIPSecret(cfg config.Config) []byte {
 	if cfg.IPHashSecret != "" {
 		return []byte(cfg.IPHashSecret)
@@ -151,10 +158,19 @@ func loadVerificationSecret(cfg config.Config) []byte {
 	if cfg.VerificationSecret != "" {
 		return []byte(cfg.VerificationSecret)
 	}
+	// 与 IP 密钥不同的地方就在这里：IP 密钥缺失只影响限流计数是否连续，
+	// 验证码密钥缺失会让**用户功能**坏掉——A 实例发的码 B 实例永远验不过，
+	// 而用户看到的是「验证码错误，请重试」，重发几次都一样。
+	//
+	// 所以只要配了数据库（也就是它不可能是本地随手起的进程），就没有「临时生成」这个选项。
+	if cfg.HasDatabase() {
+		panic("VERIFICATION_SECRET 未配置：配了数据库的运行形态下不允许进程内临时生成密钥，" +
+			"否则多实例发出的验证码互不认账，用户表现为「验证码总是错」")
+	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		panic("生成验证码密钥失败: " + err.Error())
 	}
-	slog.Warn("VERIFICATION_SECRET 未配置：本进程临时生成一把。重启后已发出的验证码全部作废，多实例之间也互不认账")
+	slog.Warn("VERIFICATION_SECRET 未配置：本进程临时生成一把（仅限未配数据库的开发形态）。重启后已发出的验证码全部作废")
 	return secret
 }

@@ -294,7 +294,11 @@ const nativeControls = new Set(['button', 'textarea', 'input', 'select']);
 const routesRoot = path.join(srcRoot, 'routes');
 const componentsRoot = path.join(srcRoot, 'components');
 // 控件库自己要用原生元素（它就是把原生控件包起来的），Dev Room 是演示场。
-const nativeExempt = [path.join(componentsRoot, 'ui'), path.join(componentsRoot, 'dev-room')];
+//
+// Dev Room 的路径必须用 devRoomRoot：它住在 `src/dev-room`，不是 `src/components/dev-room`。
+// 上一版的写法拼出了后者的路径，那条豁免从加进去那天起就没命中过——而它不命中
+// 也不报错，于是「豁免存在」与「豁免生效」是两件事。
+const nativeExempt = [uiRoot, devRoomRoot];
 for (const file of sourceFiles) {
   const inScope =
     isInside(file, routesRoot) ||

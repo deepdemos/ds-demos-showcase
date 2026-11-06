@@ -99,21 +99,34 @@ func validateText(field, v string) error {
 	return nil
 }
 
-func (in SubmitInput) validate() error {
+// validateMetaTexts 校验「元信息」这一类输入：标题、描述、作品类型、模型标识。
+//
+// 投稿与编辑共用一套口径——两边各写一份的结果是编辑链路上少了 UTF-8 校验，
+// 同一类非法字节在 POST 上得到 400、在 PUT 上得到 503（第六轮 review 抓到的）。
+func validateMetaTexts(title, description, demoType string, modelSlugs []string) error {
 	for _, f := range []struct{ name, value string }{
-		{"标题", in.Title},
-		{"描述", in.Description},
-		{"作品类型", in.DemoType},
-		{"幂等键", in.IdempotencyKey},
+		{"标题", title},
+		{"描述", description},
+		{"作品类型", demoType},
 	} {
 		if err := validateText(f.name, f.value); err != nil {
 			return err
 		}
 	}
-	for _, slug := range in.ModelSlugs {
+	for _, slug := range modelSlugs {
 		if err := validateText("模型标识", slug); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (in SubmitInput) validate() error {
+	if err := validateText("幂等键", in.IdempotencyKey); err != nil {
+		return err
+	}
+	if err := validateMetaTexts(in.Title, in.Description, in.DemoType, in.ModelSlugs); err != nil {
+		return err
 	}
 
 	title := strings.TrimSpace(in.Title)

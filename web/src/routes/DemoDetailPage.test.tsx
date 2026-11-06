@@ -184,6 +184,36 @@ test('作者看待审作品时看到审核中', async () => {
 });
 
 /**
+ * 「已发布 + 待审」是作者改稿的正常状态：对外内容由 published_revision_id 决定，
+ * 审核态只描述当前版本。那时作品还在库里、也还发布着——文案必须说这件事，
+ * 否则作者会以为自己的作品下线了，下一步就是再去点一次发布。
+ */
+test('已发布的作品改稿待审时，文案说的是「线上仍是上一版」', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ canEdit: true, moderationState: 'pending', lifecycleState: 'published' }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText(/新版本审核中/)).toBeInTheDocument());
+  expect(screen.getByText(/线上仍是上一版/)).toBeInTheDocument();
+  expect(screen.queryByText(/不会出现在作品库里/)).toBeNull();
+});
+
+test('已发布的作品改稿被驳回时，也先说线上仍在服务', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ canEdit: true, moderationState: 'rejected', lifecycleState: 'published' }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText(/新版本未通过审核/)).toBeInTheDocument());
+  expect(screen.getByText(/线上仍是上一版/)).toBeInTheDocument();
+});
+
+/**
  * 已通过的作品不显示这条——否则每个作者打开自己的作品都会看到一句「审核中」。
  */
 test('已通过的作品不显示审核提示', async () => {

@@ -315,7 +315,11 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 				// 没给 key 时是 NULL：`uq_demos_idempotency_key` 是部分索引
 				// （WHERE idempotency_key IS NOT NULL），不给 key 的投稿之间
 				// 永远不会互相冲突。
-				IdempotencyKey: nullableText(in.IdempotencyKey),
+				//
+				// 这里是 `text()` 而不是另写一个函数：空串映射成 NULL 的规则
+				// 全仓只有这一条，而「空在业务上合法」是调用点的事实，
+				// 不该由两个函数体逐字相同的函数来表达。
+				IdempotencyKey: text(in.IdempotencyKey),
 			})
 			if err != nil {
 				return err
@@ -556,14 +560,4 @@ func text(s string) pgtype.Text {
 
 func int8(v int64) pgtype.Int8 {
 	return pgtype.Int8{Int64: v, Valid: true}
-}
-
-// nullableText 与 text 的区别只在语义上：这里空串**就是 NULL**，
-// 而且调用方明确知道「空的」是一个合法取值（没给幂等键），
-// 不是「内容列的默认空」。
-func nullableText(s string) pgtype.Text {
-	if s == "" {
-		return pgtype.Text{}
-	}
-	return pgtype.Text{String: s, Valid: true}
 }

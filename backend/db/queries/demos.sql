@@ -58,6 +58,8 @@ WHERE d.published_revision_id IS NOT NULL
   AND d.lifecycle_state = 'published'
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
+  -- 同上：这里是「上列表」判据的第二处副本，与 ListPublishedDemos 的 WHERE
+  -- 必须逐字一致（含这行注释外的条件）。
   AND EXISTS (
       SELECT 1 FROM demo_channels c
       WHERE c.demo_id = d.id AND c.visibility = 'listed'
