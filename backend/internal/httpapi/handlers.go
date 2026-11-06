@@ -475,8 +475,8 @@ func (h *Handler) ListClassifications(w http.ResponseWriter, r *http.Request) {
 //
 // 查询失败不把整个详情打成 503：模型声明是**附加信息**，缺了它详情页仍然可用。
 // 这是刻意的取舍——为了一块可选的展示，让整个页面挂掉不划算。
-func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, viewerIsAuthor bool, detail api.DemoDetail) []api.ModelRef {
-	out := []api.ModelRef{}
+func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, viewerIsAuthor bool, detail api.DemoDetail) []api.Model {
+	out := []api.Model{}
 	// 墓碑态：detailOf 只填了标题与 lifecycleActions，类型是空串。
 	// 用「有没有类型」判不可靠（异常数据也可能没有），所以直接看重放出来的字段。
 	if detail.LifecycleState == api.LifecycleStateArchived || detail.LifecycleState == api.LifecycleStateRemoved {
@@ -501,8 +501,29 @@ func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, view
 		slog.Error("读模型声明失败", "slug", row.Slug, "err", err)
 		return out
 	}
+	aliasRows, err := h.queries.ListRevisionModelAliases(ctx, revID.Int64)
+	if err != nil {
+		// 别名是锦上添花：读不到不该让整条详情变成 503，但得留下痕迹。
+		slog.Error("读模型别名失败", "slug", row.Slug, "err", err)
+	}
+	aliases := map[int64][]string{}
+	for _, a := range aliasRows {
+		aliases[a.ModelID] = append(aliases[a.ModelID], a.Alias)
+	}
 	for _, m := range rows {
-		out = append(out, api.ModelRef{Slug: m.Slug, Name: m.Name, Vendor: m.Vendor})
+		out = append(out, modelOf(store.ListModelsRow{
+			ID:             m.ID,
+			Slug:           m.Slug,
+			Name:           m.Name,
+			Vendor:         m.Vendor,
+			Status:         m.Status,
+			Resolution:     m.Resolution,
+			MergedIntoSlug: m.MergedIntoSlug,
+			Source:         m.Source,
+			Description:    m.Description,
+			CreatedAt:      m.CreatedAt,
+			UpdatedAt:      m.UpdatedAt,
+		}, aliases[m.ID]))
 	}
 	return out
 }
@@ -578,7 +599,7 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 			Username:    row.AuthorUsername,
 			DisplayName: row.AuthorDisplayName,
 		},
-		Models: []api.ModelRef{},
+		Models: []api.Model{},
 	}
 	// 发布时间：没有对外可见渠道时为 null（草稿、从未发布过）。
 	// 墓碑与已删除的作品仍然给——「它曾经公开过」这个事实不该被抹掉。

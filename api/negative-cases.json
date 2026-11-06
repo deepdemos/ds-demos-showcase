@@ -108,17 +108,17 @@
     ],
     "GET /api/v1/models": [
       {
-        "case": "候选模型不出现在模型目录里（目录是投稿表单的选项来源）",
+        "case": "目录默认出全部状态，status 字段不是常量；?status= 能筛",
         "test": {
           "file": "backend/internal/httpapi/models_integration_test.go",
-          "name": "TestIntegrationListActiveModels"
+          "name": "TestIntegrationListModels"
         }
       },
       {
-        "case": "目录为空时 items 是 [] 而不是 null，前端不必特判",
+        "case": "合并归宿与别名能读出来（deprecated 指向 mergedIntoSlug）",
         "test": {
           "file": "backend/internal/httpapi/models_integration_test.go",
-          "name": "TestIntegrationListActiveModels"
+          "name": "TestIntegrationListModelsShowsMergeAndAliases"
         }
       }
     ],

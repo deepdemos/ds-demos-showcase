@@ -7,8 +7,11 @@ import { Button, Checkbox } from '@/components/ui';
 //
 // 为什么是勾选而不是自由输入：模型是主数据（有 slug、有状态），自由输入立刻长出
 // 「deepseek-chat」「DeepSeek Chat」「deepseek chat v3」三种写法，之后没法聚合。
+// 只取 `active` 的：目录端点现在默认返回全部状态（候选 / 未核实 / 已退役），
+// 那是给目录页用的。投稿表单让人**声明**一个模型，候选与已退役的都不该出现在
+// 选择题里——前者还没被核实，后者已经并到别处了。筛选责任在调用方，正是这个意思。
 async function fetchModels(): Promise<Model[]> {
-  const response = await listModels();
+  const response = await listModels({ status: 'active' });
   if (response.status === 200) return response.data.items;
   throw new Error(`模型目录加载失败（HTTP ${response.status}）`);
 }

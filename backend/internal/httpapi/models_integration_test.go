@@ -138,39 +138,196 @@ func modelSlugsOf(t *testing.T, rec *httptest.ResponseRecorder) []string {
 	return out
 }
 
-func TestIntegrationListActiveModels(t *testing.T) {
+// 详情里的模型对象与目录里的是**同一个形状**（同一个 `Model` schema）。
+//
+// 早先详情只回 slug/name/vendor，目录也差不多——于是「这个模型可不可信」在前端
+// 无处可查。现在两处字段面一致，前端只写一套渲染。
+func TestIntegrationDetailModelHasCatalogFields(t *testing.T) {
+	h, idSvc, pool := newModelTestHandler(t)
+	insertModel(t, pool, "it-model-detail", "测试详情模型", "active")
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-model-detail@example.com",
+		Password:    "modeltest1234",
+		Username:    "it-model-det",
+		DisplayName: "模型详情作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+
+	rec := submitHTMLWithModels(t, h, sid, "详情字段面", `<!doctype html><p>d</p>`,
+		[]string{"it-model-detail"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("投稿 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("解析投稿回执失败: %v", err)
+	}
+
+	detail := getDemoAs(t, h, created.Slug, sid)
+	if detail.Code != http.StatusOK {
+		t.Fatalf("作者读详情 = %d，想要 200；响应体：%s", detail.Code, detail.Body.String())
+	}
+	var body struct {
+		Models []struct {
+			Slug           string   `json:"slug"`
+			Status         string   `json:"status"`
+			Resolution     string   `json:"resolution"`
+			MergedIntoSlug string   `json:"mergedIntoSlug"`
+			Source         string   `json:"source"`
+			Aliases        []string `json:"aliases"`
+			Description    string   `json:"description"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(detail.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析详情失败: %v", err)
+	}
+	if len(body.Models) != 1 {
+		t.Fatalf("详情里的模型数 = %d，想要 1", len(body.Models))
+	}
+	m := body.Models[0]
+	if m.Status != "active" || m.Resolution != "exact" || m.Source != "manual" {
+		t.Fatalf("详情的模型字段面不完整：%+v", m)
+	}
+	if m.Aliases == nil {
+		t.Fatalf("详情的 aliases 是 null，应该是空数组")
+	}
+}
+
+// 模型目录的字段面。
+//
+// 契约里的 `status` 字段早先永远等于 `active`——因为查询写死了 `WHERE status='active'`，
+// 那等于给了个常量。现在默认出全部状态、可以按 status 筛，筛选责任交回调用方。
+func TestIntegrationListModels(t *testing.T) {
 	h, _, pool := newModelTestHandler(t)
 	insertModel(t, pool, "it-model-active", "测试甲模型", "active")
 	insertModel(t, pool, "it-model-candidate", "测试乙模型", "candidate")
 
+	var body struct {
+		Items []struct {
+			Slug           string   `json:"slug"`
+			Name           string   `json:"name"`
+			Status         string   `json:"status"`
+			Resolution     string   `json:"resolution"`
+			MergedIntoSlug string   `json:"mergedIntoSlug"`
+			Source         string   `json:"source"`
+			Aliases        []string `json:"aliases"`
+		} `json:"items"`
+	}
+
+	// 1) 不筛状态：两种状态都在，字段面完整。
 	rec := httptest.NewRecorder()
-	h.ListModels(rec, httptest.NewRequest(http.MethodGet, "/api/v1/models", nil))
+	h.ListModels(rec, httptest.NewRequest(http.MethodGet, "/api/v1/models", nil), api.ListModelsParams{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("模型目录 = %d，想要 200；响应体：%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析模型目录失败: %v", err)
+	}
+	seen := map[string]string{}
+	for _, m := range body.Items {
+		seen[m.Slug] = m.Status
+	}
+	if _, ok := seen["it-model-active"]; !ok {
+		t.Fatalf("启用的模型没出现在目录里：%+v", body.Items)
+	}
+	if seen["it-model-candidate"] != "candidate" {
+		t.Fatalf("候选模型应出现在目录里且 status=candidate，实际 %q", seen["it-model-candidate"])
+	}
+	if body.Items == nil {
+		t.Fatalf("items 是 null，应该是空数组")
+	}
+	// 没被上游认领过就是 manual；别名没写过就是 []（不是 null）。
+	for _, m := range body.Items {
+		if m.Slug != "it-model-active" && m.Slug != "it-model-candidate" {
+			continue
+		}
+		if m.Source != "manual" {
+			t.Fatalf("%s 的 source = %q，没有 model_external_refs 行时应为 manual", m.Slug, m.Source)
+		}
+		if m.Aliases == nil {
+			t.Fatalf("%s 的 aliases 是 null，应该是空数组", m.Slug)
+		}
+		if m.Resolution != "exact" {
+			t.Fatalf("%s 的 resolution = %q，默认应为 exact", m.Slug, m.Resolution)
+		}
+	}
+
+	// 2) 按状态筛：只出 active 的（表单那边就是传这个）。
+	active := api.ListModelsParamsStatusActive
+	rec = httptest.NewRecorder()
+	h.ListModels(rec, httptest.NewRequest(http.MethodGet, "/api/v1/models?status=active", nil),
+		api.ListModelsParams{Status: &active})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("按状态筛 = %d，想要 200；响应体：%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析模型目录失败: %v", err)
+	}
+	for _, m := range body.Items {
+		if m.Status != "active" {
+			t.Fatalf("筛 active 之后出现了 %s（status=%s）", m.Slug, m.Status)
+		}
+	}
+}
+
+// 合并归宿与别名：deprecated 的模型要指出它并到了谁，别名要能从目录读出来。
+func TestIntegrationListModelsShowsMergeAndAliases(t *testing.T) {
+	h, _, pool := newModelTestHandler(t)
+	insertModel(t, pool, "it-merged-src", "测试旧名模型", "deprecated")
+	insertModel(t, pool, "it-merged-dst", "测试新名模型", "active")
+
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE models SET merged_into_id = (SELECT id FROM models WHERE slug = 'it-merged-dst')
+		  WHERE slug = 'it-merged-src'`); err != nil {
+		t.Fatalf("造合并关系失败: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO model_aliases (alias, model_id)
+		 VALUES ('it-merged-src-alias', (SELECT id FROM models WHERE slug = 'it-merged-src'))
+		 ON CONFLICT (alias) DO NOTHING`); err != nil {
+		t.Fatalf("造别名失败: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(),
+			`DELETE FROM model_aliases WHERE alias = 'it-merged-src-alias'`); err != nil {
+			t.Logf("清理别名失败: %v", err)
+		}
+	})
+
+	rec := httptest.NewRecorder()
+	h.ListModels(rec, httptest.NewRequest(http.MethodGet, "/api/v1/models", nil), api.ListModelsParams{})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("模型目录 = %d，想要 200；响应体：%s", rec.Code, rec.Body.String())
 	}
 
 	var body struct {
 		Items []struct {
-			Slug string `json:"slug"`
-			Name string `json:"name"`
+			Slug           string   `json:"slug"`
+			MergedIntoSlug string   `json:"mergedIntoSlug"`
+			Aliases        []string `json:"aliases"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("解析模型目录失败: %v", err)
 	}
-	seen := map[string]bool{}
+	var found bool
 	for _, m := range body.Items {
-		seen[m.Slug] = true
+		if m.Slug != "it-merged-src" {
+			continue
+		}
+		found = true
+		if m.MergedIntoSlug != "it-merged-dst" {
+			t.Fatalf("mergedIntoSlug = %q，想要 it-merged-dst", m.MergedIntoSlug)
+		}
+		if len(m.Aliases) != 1 || m.Aliases[0] != "it-merged-src-alias" {
+			t.Fatalf("aliases = %v，想要 [it-merged-src-alias]", m.Aliases)
+		}
 	}
-	if !seen["it-model-active"] {
-		t.Fatalf("启用的模型没出现在目录里：%+v", body.Items)
-	}
-	if seen["it-model-candidate"] {
-		t.Fatalf("候选模型不该出现在投稿表单的选项里")
-	}
-	// 空目录要序列化成 []，不是 null：前端直接把 items 交给下拉框。
-	if body.Items == nil {
-		t.Fatalf("items 是 null，应该是空数组")
+	if !found {
+		t.Fatalf("目录里没找到 it-merged-src")
 	}
 }
 

@@ -7,6 +7,8 @@ package store
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const copyRevisionModels = `-- name: CopyRevisionModels :exec
@@ -50,19 +52,75 @@ func (q *Queries) InsertRevisionModel(ctx context.Context, arg InsertRevisionMod
 	return err
 }
 
-const listActiveModels = `-- name: ListActiveModels :many
-
-SELECT id, slug, name, COALESCE(vendor, '')::text AS vendor
-FROM models
-WHERE status = 'active'
-ORDER BY name, id
+const listModelAliases = `-- name: ListModelAliases :many
+SELECT model_id, alias
+FROM model_aliases
+ORDER BY model_id, alias
 `
 
-type ListActiveModelsRow struct {
-	ID     int64
-	Slug   string
-	Name   string
-	Vendor string
+type ListModelAliasesRow struct {
+	ModelID int64
+	Alias   string
+}
+
+// 全部别名，按 model_id 分组用。
+//
+// 一次取全量而不是「每个模型一次查询」：别名表是解析入口，行数比 models 少一个量级
+// （同一个模型的五六种写法），单独一条 SQL 比 N+1 更省。
+func (q *Queries) ListModelAliases(ctx context.Context) ([]ListModelAliasesRow, error) {
+	rows, err := q.db.Query(ctx, listModelAliases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListModelAliasesRow{}
+	for rows.Next() {
+		var i ListModelAliasesRow
+		if err := rows.Scan(&i.ModelID, &i.Alias); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModels = `-- name: ListModels :many
+
+SELECT m.id,
+       m.slug,
+       m.name,
+       COALESCE(m.vendor, '')::text AS vendor,
+       m.status,
+       m.resolution,
+       COALESCE(t.slug, '')::text AS merged_into_slug,
+       CASE
+           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = m.id) THEN 'models.dev'
+           ELSE 'manual'
+       END::text AS source,
+       m.description,
+       m.created_at,
+       m.updated_at
+FROM models m
+LEFT JOIN models t ON t.id = m.merged_into_id
+WHERE $1::text IS NULL OR m.status = $1::text
+ORDER BY m.name, m.id
+`
+
+type ListModelsRow struct {
+	ID             int64
+	Slug           string
+	Name           string
+	Vendor         string
+	Status         string
+	Resolution     string
+	MergedIntoSlug string
+	Source         string
+	Description    string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 // 模型维度的查询。
@@ -70,22 +128,37 @@ type ListActiveModelsRow struct {
 // 为什么单独一个文件：`db/queries/` 原来只有 authz/blob/demos/identity/review/settings/
 // verification 七个——模型域有 15 张表，却一条 SQL 都没有。详情页要展示「这个作品用了
 // 哪些模型」，靠的就是这里的四个查询。
-// 下拉与筛选用的主数据：只出 `active` 的，且按名字排序（选单里乱序等于让人找不到）。
-// `unverified` / `candidate` 不上选单——它们还没有被确认过，不该被作者当事实声明。
-func (q *Queries) ListActiveModels(ctx context.Context) ([]ListActiveModelsRow, error) {
-	rows, err := q.db.Query(ctx, listActiveModels)
+// 模型目录：**全部状态**，可以按 status 筛，也可以不筛。
+//
+// 早先这里写死 `WHERE status = 'active'`，于是契约里的 `status` 字段永远是同一个值——
+// 那等于没给。把筛选交给调用方（`?status=candidate`），字段才有意义。
+//
+// `source` 是派生的，不是列：`models` 表没有这一列，「这个模型是不是被上游目录认领过」
+// 本来就是 `model_external_refs` 的事实。多加一列等于给同一件事两个出处。
+//
+// `merged_into_slug` 而不是 `merged_into_id`：合并归宿要用 slug 表达（引用一律 slug），
+// 数字 id 是实现细节。
+func (q *Queries) ListModels(ctx context.Context, status pgtype.Text) ([]ListModelsRow, error) {
+	rows, err := q.db.Query(ctx, listModels, status)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListActiveModelsRow{}
+	items := []ListModelsRow{}
 	for rows.Next() {
-		var i ListActiveModelsRow
+		var i ListModelsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Slug,
 			&i.Name,
 			&i.Vendor,
+			&i.Status,
+			&i.Resolution,
+			&i.MergedIntoSlug,
+			&i.Source,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -97,22 +170,82 @@ func (q *Queries) ListActiveModels(ctx context.Context) ([]ListActiveModelsRow, 
 	return items, nil
 }
 
+const listRevisionModelAliases = `-- name: ListRevisionModelAliases :many
+SELECT ma.model_id, ma.alias
+FROM model_aliases ma
+WHERE ma.model_id IN (
+    SELECT rm.model_id FROM demo_revision_models rm WHERE rm.revision_id = $1
+)
+ORDER BY ma.model_id, ma.alias
+`
+
+type ListRevisionModelAliasesRow struct {
+	ModelID int64
+	Alias   string
+}
+
+// 详情里那些模型各自的别名（与 ListRevisionModels 同一批 model_id）。
+func (q *Queries) ListRevisionModelAliases(ctx context.Context, revisionID int64) ([]ListRevisionModelAliasesRow, error) {
+	rows, err := q.db.Query(ctx, listRevisionModelAliases, revisionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRevisionModelAliasesRow{}
+	for rows.Next() {
+		var i ListRevisionModelAliasesRow
+		if err := rows.Scan(&i.ModelID, &i.Alias); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRevisionModels = `-- name: ListRevisionModels :many
-SELECT mo.slug, mo.name, COALESCE(mo.vendor, '')::text AS vendor
+SELECT mo.id,
+       mo.slug,
+       mo.name,
+       COALESCE(mo.vendor, '')::text AS vendor,
+       mo.status,
+       mo.resolution,
+       COALESCE(t.slug, '')::text AS merged_into_slug,
+       CASE
+           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = mo.id) THEN 'models.dev'
+           ELSE 'manual'
+       END::text AS source,
+       mo.description,
+       mo.created_at,
+       mo.updated_at
 FROM demo_revision_models rm
 JOIN models mo ON mo.id = rm.model_id
+LEFT JOIN models t ON t.id = mo.merged_into_id
 WHERE rm.revision_id = $1
 ORDER BY mo.name, mo.id
 `
 
 type ListRevisionModelsRow struct {
-	Slug   string
-	Name   string
-	Vendor string
+	ID             int64
+	Slug           string
+	Name           string
+	Vendor         string
+	Status         string
+	Resolution     string
+	MergedIntoSlug string
+	Source         string
+	Description    string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 // 详情页用：某一版的模型声明（作者视图看当前版本、访客看对外版本）。
-// 排序按名字，让同一个作品两次打开的顺序一致。
+//
+// 字段面与 ListModels **逐字一致**：详情里的模型对象与目录里的模型对象是同一个形状，
+// 否则前端要为两处写两套渲染（同一份数据在两张页面上长得不一样，是最容易被忽略的
+// 不一致）。排序按名字，让同一个作品两次打开的顺序一致。
 func (q *Queries) ListRevisionModels(ctx context.Context, revisionID int64) ([]ListRevisionModelsRow, error) {
 	rows, err := q.db.Query(ctx, listRevisionModels, revisionID)
 	if err != nil {
@@ -122,7 +255,19 @@ func (q *Queries) ListRevisionModels(ctx context.Context, revisionID int64) ([]L
 	items := []ListRevisionModelsRow{}
 	for rows.Next() {
 		var i ListRevisionModelsRow
-		if err := rows.Scan(&i.Slug, &i.Name, &i.Vendor); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.Vendor,
+			&i.Status,
+			&i.Resolution,
+			&i.MergedIntoSlug,
+			&i.Source,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

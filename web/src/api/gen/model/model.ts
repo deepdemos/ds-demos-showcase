@@ -29,4 +29,38 @@
  */
 import type { ModelRef } from './modelRef';
 
-export type Model = ModelRef;
+export type Model = ModelRef & ({
+  /**
+     * `candidate` 作者手动建、未核实；`active` 可用；`unverified` 认领了上游
+     * 条目但来源可疑；`deprecated` 已退役。
+     */
+  status: 'candidate' | 'active' | 'unverified' | 'deprecated';
+  /**
+     * 名称的精确度。`exact` 是确切的型号；`family` 只到系列；`unknown` /
+     * `guess` 是兜底实体（作者说不清具体用了什么）。
+     */
+  resolution: 'exact' | 'family' | 'unknown' | 'guess';
+  /**
+     * 合并归宿的 slug；没被合并时为空串。**只在 `status = deprecated` 时有值**。
+     *
+     * 这里给「归宿」而不是替调用方解析过去：作者当初声明的就是这一个，
+     * 服务端悄悄换成别的会让「我明明写的是这个」变成另一种东西。
+     */
+  mergedIntoSlug: string;
+  /**
+     * 这条是从哪来的，**派生值**：有 `model_external_refs` 行就是 `models.dev`
+     * （被上游目录认领过），否则 `manual`（人工建/导入）。
+     * 它不是 `models` 表上的列——同一件事不该有两个出处。
+     */
+  source: 'manual' | 'models.dev';
+  /**
+     * 这个模型的其他写法（`model_aliases`）。用它可以把作者手填的名字
+     * 解析回来，也用于展示「同一个模型在别处叫什么」。
+     *
+     * 别名是**解析入口**，不是展示字段：同一条会被多个模型共享是数据错误，
+     * 所以它反过来是 `alias` 单列主键。
+     */
+  aliases: string[];
+  /** 人工说明；没有时为空串 */
+  description: string;
+});

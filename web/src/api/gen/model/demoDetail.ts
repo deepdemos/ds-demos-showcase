@@ -30,7 +30,7 @@
 import type { DemoAuthor } from './demoAuthor';
 import type { DemoLifecycleActions } from './demoLifecycleActions';
 import type { DemoSummary } from './demoSummary';
-import type { ModelRef } from './modelRef';
+import type { Model } from './model';
 
 export type DemoDetail = DemoSummary & ({
   /**
@@ -102,8 +102,10 @@ export type DemoDetail = DemoSummary & ({
      * - 空数组是正常状态：作品可以不声明模型（展示件未必用了模型）
      * - 墓碑态恒为空数组：墓碑不承载内容，也就不承载「用了什么模型」
      * - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
+     * - 字段面与 `GET /api/v1/models` 的**每一项完全相同**（同一个 `Model`
+     *   schema）：同一份数据在两处长得不一样，前端就得写两套渲染
      */
-  models: ModelRef[];
+  models: Model[];
   /**
      * 当前版本的审核态。
      *

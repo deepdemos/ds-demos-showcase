@@ -106,6 +106,28 @@ const (
 	LifecycleStateRemoved   LifecycleState = "removed"
 )
 
+// Defines values for ModelResolution.
+const (
+	Exact   ModelResolution = "exact"
+	Family  ModelResolution = "family"
+	Guess   ModelResolution = "guess"
+	Unknown ModelResolution = "unknown"
+)
+
+// Defines values for ModelSource.
+const (
+	Manual    ModelSource = "manual"
+	ModelsDev ModelSource = "models.dev"
+)
+
+// Defines values for ModelStatus.
+const (
+	ModelStatusActive     ModelStatus = "active"
+	ModelStatusCandidate  ModelStatus = "candidate"
+	ModelStatusDeprecated ModelStatus = "deprecated"
+	ModelStatusUnverified ModelStatus = "unverified"
+)
+
 // Defines values for PublishRequestLang.
 const (
 	En PublishRequestLang = "en"
@@ -165,6 +187,14 @@ const (
 // Defines values for ListDemosParamsSort.
 const (
 	Latest ListDemosParamsSort = "latest"
+)
+
+// Defines values for ListModelsParamsStatus.
+const (
+	ListModelsParamsStatusActive     ListModelsParamsStatus = "active"
+	ListModelsParamsStatusCandidate  ListModelsParamsStatus = "candidate"
+	ListModelsParamsStatusDeprecated ListModelsParamsStatus = "deprecated"
+	ListModelsParamsStatusUnverified ListModelsParamsStatus = "unverified"
 )
 
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
@@ -339,7 +369,9 @@ type DemoDetail struct {
 	// - 空数组是正常状态：作品可以不声明模型（展示件未必用了模型）
 	// - 墓碑态恒为空数组：墓碑不承载内容，也就不承载「用了什么模型」
 	// - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
-	Models []ModelRef `json:"models"`
+	// - 字段面与 `GET /api/v1/models` 的**每一项完全相同**（同一个 `Model`
+	//   schema）：同一份数据在两处长得不一样，前端就得写两套渲染
+	Models []Model `json:"models"`
 
 	// ModerationState 当前版本的审核态。
 	//
@@ -554,7 +586,58 @@ type Me struct {
 }
 
 // Model defines model for Model.
-type Model = ModelRef
+type Model struct {
+	// Aliases 这个模型的其他写法（`model_aliases`）。用它可以把作者手填的名字
+	// 解析回来，也用于展示「同一个模型在别处叫什么」。
+	//
+	// 别名是**解析入口**，不是展示字段：同一条会被多个模型共享是数据错误，
+	// 所以它反过来是 `alias` 单列主键。
+	Aliases []string `json:"aliases"`
+
+	// Description 人工说明；没有时为空串
+	Description string `json:"description"`
+
+	// MergedIntoSlug 合并归宿的 slug；没被合并时为空串。**只在 `status = deprecated` 时有值**。
+	//
+	// 这里给「归宿」而不是替调用方解析过去：作者当初声明的就是这一个，
+	// 服务端悄悄换成别的会让「我明明写的是这个」变成另一种东西。
+	MergedIntoSlug string `json:"mergedIntoSlug"`
+
+	// Name 给人看的模型名
+	Name string `json:"name"`
+
+	// Resolution 名称的精确度。`exact` 是确切的型号；`family` 只到系列；`unknown` /
+	// `guess` 是兜底实体（作者说不清具体用了什么）。
+	Resolution ModelResolution `json:"resolution"`
+
+	// Slug 稳定可引用的模型标识（`models.slug`）
+	Slug string `json:"slug"`
+
+	// Source 这条是从哪来的，**派生值**：有 `model_external_refs` 行就是 `models.dev`
+	// （被上游目录认领过），否则 `manual`（人工建/导入）。
+	// 它不是 `models` 表上的列——同一件事不该有两个出处。
+	Source ModelSource `json:"source"`
+
+	// Status `candidate` 作者手动建、未核实；`active` 可用；`unverified` 认领了上游
+	// 条目但来源可疑；`deprecated` 已退役。
+	Status ModelStatus `json:"status"`
+
+	// Vendor 厂商名；未知时为空串
+	Vendor string `json:"vendor"`
+}
+
+// ModelResolution 名称的精确度。`exact` 是确切的型号；`family` 只到系列；`unknown` /
+// `guess` 是兜底实体（作者说不清具体用了什么）。
+type ModelResolution string
+
+// ModelSource 这条是从哪来的，**派生值**：有 `model_external_refs` 行就是 `models.dev`
+// （被上游目录认领过），否则 `manual`（人工建/导入）。
+// 它不是 `models` 表上的列——同一件事不该有两个出处。
+type ModelSource string
+
+// ModelStatus `candidate` 作者手动建、未核实；`active` 可用；`unverified` 认领了上游
+// 条目但来源可疑；`deprecated` 已退役。
+type ModelStatus string
 
 // ModelList defines model for ModelList.
 type ModelList struct {
@@ -857,6 +940,18 @@ type UpdateDemoMultipartBody struct {
 	Package *openapi_types.File `json:"package,omitempty"`
 	Title   string              `json:"title"`
 }
+
+// ListModelsParams defines parameters for ListModels.
+type ListModelsParams struct {
+	// Status 只出这个状态的行。不传表示全部。
+	//
+	// `candidate` 是作者手动建、还没被核实的新行；`unverified` 是认领了上游
+	// 条目但来源可疑的；`deprecated` 是已退役，`mergedIntoSlug` 指出它并到了谁。
+	Status *ListModelsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListModelsParamsStatus defines parameters for ListModels.
+type ListModelsParamsStatus string
 
 // PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
 type PublishDemoJSONRequestBody = PublishRequest

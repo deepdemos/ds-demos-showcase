@@ -1208,6 +1208,29 @@ sequenceDiagram
 
 分类的「整体替换但不传即不改」是**明知不对称而为之**：若按整体替换处理，一个还没加分类控件的旧编辑页（任何只改标题的脚本也一样）会把作者打的分类顺手清空，而作者从页面上看不出这件事发生过。代价是「清空分类」暂无路径，记在 `docs/已知松点.md` 第 48 条。
 
+**落地状态（2026-11-06）——模型对象的字段面，以及 `status` 不再是个常量**
+
+契约里的 `Model` 早先只有 `slug / name / vendor`，而 `GET /api/v1/models` 又写死
+`WHERE status = 'active'`。两件事叠在一起的结果是：契约里那个 `status` 字段
+（如果它存在的话）永远等于同一个值，等于没给。
+
+现在：
+
+| 字段 | 来源 | 为什么给 |
+|---|---|---|
+| `status` | `models.status` 列 | 目录页要区分「可用 / 候选 / 未核实 / 已退役」。默认**返回全部状态**，表单那边自己传 `?status=active`——筛选责任交给调用方，接口不替它决定看什么 |
+| `resolution` | `models.resolution` 列 | `exact` 与 `family` 的可信度不同；作者说不清具体型号时会落到 `unknown` / `guess`，前端据此决定要不要标「未核实」 |
+| `mergedIntoSlug` | `models.merged_into_id` join 回 `models.slug` | 已退役的模型要指出它并到了谁。给 slug 而不是替调用方解析过去：作者当初声明的就是这一个 |
+| `source` | **派生**：有 `model_external_refs` 行 → `models.dev`，否则 `manual` | `models` 表没有这一列。「有没有被上游目录认领过」本来就是 refs 表的事实，多加一列等于给同一件事两个出处 |
+| `aliases` | `model_aliases` | 同一个模型在别处的写法（旧站实测：同一个 DeepSeek V4 Flash 有五种写法）。它是**解析入口**，所以 `alias` 是单列主键 |
+| `description` | `models.description` | 人工说明，没有时为空串 |
+
+**详情里的 `models` 用同一个 `Model` schema**（早先它是精简的 `ModelRef`）。同一份数据
+在目录页与详情页长得不一样，前端就得写两套渲染——那是这类不一致最容易藏的地方。
+
+`model_specs`（参数规格）与 `model_catalog_items`（上游目录快照）仍然空着，本期不接：
+规格的面比字段面大得多（context / 价格 / 模态…），先有真实数据再谈。
+
 **词表来源**：迁移 `0018_classification_seed.sql`，93 行（3 个维度 + genre 顶层 13 + genre 子级 18 + technique 5 + subject 56），由旧站 `GET /api/v1/tags/tag-keys`（10 个键 / 356 个值）归并而成——`type` 与 `game` 里混着类型词与具体作品，前者归 `genre`、后者归 `subject`；`demo`(204)/`html`(43)/`svg`(25)/`slides`(0) 与 `ppt`(0) 是垃圾桶值，剔掉。slug 保留旧站英文原文，label 换中文：这样旧链接与新链接指向同一项。
 
 **可见性判据的第二张视图**：`demo_listed_channels`（迁移 0019）只含 `visibility = 'listed'`。它与 0017 的 `demo_visible_channels` 不是重复——后者回答「对外可见吗」（`listed` 与 `unlisted` 都是），前者回答「上列表吗」（`unlisted` 可直链但不在列表里）。分类目录上的「游戏 · 230 件」必须与点进去的列表条数一致，所以计数也问这张视图，而不是再抄一遍 `visibility = 'listed'`（`check-single-source` 抓到过那一处）。

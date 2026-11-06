@@ -98,19 +98,36 @@ paths:
     get:
       operationId: listModels
       tags: [作品]
-      summary: 模型主数据（给投稿表单的模型选择用）
+      summary: 模型目录（全部状态，可筛）
       description: |
-        只返回 `status = active` 的模型，按名字排序。
+        返回模型目录，按名字排序。**默认返回全部状态**，可以用 `?status=` 筛。
 
         **为什么需要这个端点**：投稿与编辑表单要让作者声明「这个作品用了哪些模型」，
         而模型是主数据（`models` 表），不能由前端写死一个列表——写死的那份迟早
         与库里不一致，而且新增一个模型要发一次前端版本。
 
-        `candidate` / `unverified` / `deprecated` 不出现：前两者还没被确认，
-        不该被作者当事实声明；后者是已退役的模型，新作品不该再选它。
+        **为什么不再默认只出 `active`**：那样契约里的 `status` 字段永远等于同一个值，
+        等于给了个常量。目录页要展示「候选 / 未核实 / 已退役（并指向合并归宿）」，
+        这个筛选交给调用方做——表单那边自己传 `?status=active`。
 
-        本期没有分页：模型主数据是**受控的少量行**（外部目录导入的一部分），
+        `source` 是**派生的**（有 `model_external_refs` 行就是 `models.dev`，否则
+        `manual`），不是表上的列：`models` 表没有这一列，而「有没有被上游目录认领过」
+        本来就是 refs 表的事实。多加一列等于给同一件事两个出处。
+
+        本期没有分页：模型目录是**受控的少量行**（外部目录导入的一部分），
         不是用户内容。真到了几百行的规模再加分页，那时它会需要一个管理界面。
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [candidate, active, unverified, deprecated]
+          description: |
+            只出这个状态的行。不传表示全部。
+
+            `candidate` 是作者手动建、还没被核实的新行；`unverified` 是认领了上游
+            条目但来源可疑的；`deprecated` 是已退役，`mergedIntoSlug` 指出它并到了谁。
       responses:
         '200':
           description: 模型清单（按名字排序）
@@ -1672,9 +1689,54 @@ components:
           maxLength: 64
           description: 厂商名；未知时为空串
 
+    # 模型目录里的一行（`GET /api/v1/models`）。详情里作者声明的模型也是这个形状——
+    # 同一份数据在两张页面上长得不一样，是最容易被忽略的不一致。
     Model:
       allOf:
         - $ref: '#/components/schemas/ModelRef'
+        - type: object
+          additionalProperties: false
+          required: [status, resolution, mergedIntoSlug, source, aliases, description]
+          properties:
+            status:
+              type: string
+              enum: [candidate, active, unverified, deprecated]
+              description: |
+                `candidate` 作者手动建、未核实；`active` 可用；`unverified` 认领了上游
+                条目但来源可疑；`deprecated` 已退役。
+            resolution:
+              type: string
+              enum: [exact, family, unknown, guess]
+              description: |
+                名称的精确度。`exact` 是确切的型号；`family` 只到系列；`unknown` /
+                `guess` 是兜底实体（作者说不清具体用了什么）。
+            mergedIntoSlug:
+              type: string
+              description: |
+                合并归宿的 slug；没被合并时为空串。**只在 `status = deprecated` 时有值**。
+
+                这里给「归宿」而不是替调用方解析过去：作者当初声明的就是这一个，
+                服务端悄悄换成别的会让「我明明写的是这个」变成另一种东西。
+            source:
+              type: string
+              enum: [manual, models.dev]
+              description: |
+                这条是从哪来的，**派生值**：有 `model_external_refs` 行就是 `models.dev`
+                （被上游目录认领过），否则 `manual`（人工建/导入）。
+                它不是 `models` 表上的列——同一件事不该有两个出处。
+            aliases:
+              type: array
+              description: |
+                这个模型的其他写法（`model_aliases`）。用它可以把作者手填的名字
+                解析回来，也用于展示「同一个模型在别处叫什么」。
+
+                别名是**解析入口**，不是展示字段：同一条会被多个模型共享是数据错误，
+                所以它反过来是 `alias` 单列主键。
+              items:
+                type: string
+            description:
+              type: string
+              description: 人工说明；没有时为空串
 
     ModelList:
       type: object
@@ -1893,8 +1955,10 @@ components:
                 - 空数组是正常状态：作品可以不声明模型（展示件未必用了模型）
                 - 墓碑态恒为空数组：墓碑不承载内容，也就不承载「用了什么模型」
                 - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
+                - 字段面与 `GET /api/v1/models` 的**每一项完全相同**（同一个 `Model`
+                  schema）：同一份数据在两处长得不一样，前端就得写两套渲染
               items:
-                $ref: '#/components/schemas/ModelRef'
+                $ref: '#/components/schemas/Model'
             moderationState:
               type: string
               enum: [pending, approved, rejected]
