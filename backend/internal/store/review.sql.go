@@ -291,7 +291,15 @@ VALUES ($1, $2, $3, $4, now(), $5)
 ON CONFLICT (demo_id, channel) DO UPDATE
 SET visibility = EXCLUDED.visibility,
     lang = EXCLUDED.lang,
-    published_at = COALESCE(demo_channels.published_at, EXCLUDED.published_at),
+    -- 第一次发布时才写 published_at，之后保留首次值（列表按它排「新发布」）。
+    -- 右侧也要夹紧：0013 回填的渠道行 published_at 是 NULL，这条路径上
+    -- EXCLUDED.published_at 就是裸 now()，回拨窗口里它会早于 created_at，
+    -- 而 ck_channel_time 要求 published_at >= created_at——于是老作品的
+    -- 第一次重发布必 503。
+    published_at = COALESCE(
+        demo_channels.published_at,
+        GREATEST(EXCLUDED.published_at, demo_channels.created_at)
+    ),
     curated_by = EXCLUDED.curated_by,
     -- 与 demos 的时间字段同一口径：时钟回拨时现在这一刻可能早于这行的 created_at，
     -- demo_channels 上有 ck_channel_time，写回退后的值会把发布打成 503。
