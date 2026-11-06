@@ -26,6 +26,9 @@ type ServerInterface interface {
 	// 导入 / 补全的字段级差异
 	// (POST /api/v1/admin/models/import/preview)
 	PreviewModelImport(w http.ResponseWriter, r *http.Request)
+	// 立即同步上游目录镜像
+	// (POST /api/v1/admin/models/sync)
+	SyncModelCatalog(w http.ResponseWriter, r *http.Request)
 	// 待审作品队列
 	// (GET /api/v1/admin/reviews/demo)
 	ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams)
@@ -128,6 +131,12 @@ func (_ Unimplemented) ApplyModelImport(w http.ResponseWriter, r *http.Request) 
 // 导入 / 补全的字段级差异
 // (POST /api/v1/admin/models/import/preview)
 func (_ Unimplemented) PreviewModelImport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 立即同步上游目录镜像
+// (POST /api/v1/admin/models/sync)
+func (_ Unimplemented) SyncModelCatalog(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -401,6 +410,26 @@ func (siw *ServerInterfaceWrapper) PreviewModelImport(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PreviewModelImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SyncModelCatalog operation middleware
+func (siw *ServerInterfaceWrapper) SyncModelCatalog(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SyncModelCatalog(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1166,6 +1195,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/models/import/preview", wrapper.PreviewModelImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/models/sync", wrapper.SyncModelCatalog)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/reviews/demo", wrapper.ListDemoReviewQueue)

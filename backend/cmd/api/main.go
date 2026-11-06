@@ -13,8 +13,10 @@ import (
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/model"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/httpapi"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/kernel/verification"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/catalog"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/config"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/database"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/mailer"
@@ -63,6 +65,7 @@ func main() {
 	var queries *store.Queries
 	var identitySvc *identity.Service
 	var demoSvc *demo.Service
+	var modelSvc *model.Service
 
 	if cfg.HasDatabase() {
 		pool, err := database.Open(context.Background(), cfg.DatabaseURL)
@@ -82,6 +85,7 @@ func main() {
 			cfg.UploadMaxPending,
 			logger,
 		)
+		modelSvc = model.New(pool, queries, catalog.NewFetcher(cfg.ModelCatalogURL, nil), logger)
 	} else {
 		logger.Warn("DATABASE_URL 未配置：/healthz 仍可用，业务端点返回 503")
 	}
@@ -89,7 +93,7 @@ func main() {
 	server := &http.Server{
 		Addr: cfg.Addr(),
 		Handler: httpapi.NewRouter(
-			httpapi.New(pinger, queries, identitySvc, mail, demoSvc),
+			httpapi.New(pinger, queries, identitySvc, mail, demoSvc).WithModels(modelSvc),
 			httpapi.NewPreview(queries, files, identitySvc),
 			httpapi.NewDownload(queries, files),
 		),
@@ -109,6 +113,10 @@ func main() {
 		// 而 `/download/{slug}` 可以传几百 MB——慢网下几分钟很正常，
 		// 设一个数就等于给下载功能加了个随机的失败点。
 		// 代价是「读响应很慢」的客户端能占住一个连接；已知松点 41 记了这件事。
+	}
+
+	if modelSvc != nil {
+		go scheduleCatalogSync(modelSvc, logger)
 	}
 
 	go func() {
@@ -173,4 +181,42 @@ func loadVerificationSecret(cfg config.Config) []byte {
 	}
 	slog.Warn("VERIFICATION_SECRET 未配置：本进程临时生成一把（仅限未配数据库的开发形态）。重启后已发出的验证码全部作废")
 	return secret
+}
+
+// scheduleCatalogSync 每隔几分钟问一次「到点了没」，而不是按间隔 sleep。
+//
+// 为什么问而不是睡：间隔是设置域的值，管理员随时可能改（24 小时 → 1 小时）。
+// 按启动时读到的值 sleep 一整轮的话，改完要等下一次进程重启才生效。
+//
+// 为什么不直接按秒级 tick：那一轮里是不是同步由 `SyncIfDue` 判断（读设置、比
+// last_success_at、抢 advisory lock），这里只是个闹钟。5 分钟一次对「最快 1 小时
+// 同步一次」的场景绰绰有余，代价只是每分钟一条空 SELECT。
+func scheduleCatalogSync(svc *model.Service, log *slog.Logger) {
+	const tick = 5 * time.Minute
+	timer := time.NewTicker(tick)
+	defer timer.Stop()
+
+	// 起服先看一次：重启频繁的环境里（滚动发布），等 5 分钟意味着可能永远轮不到。
+	catalogTick(svc, log)
+	for range timer.C {
+		catalogTick(svc, log)
+	}
+}
+
+func catalogTick(svc *model.Service, log *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	err := svc.SyncIfDue(ctx)
+	switch {
+	case err == nil:
+		return
+	case errors.Is(err, model.ErrSyncDisabled):
+		// 开关没开。静默返回：这是正常状态，不是错误。
+		return
+	case errors.Is(err, model.ErrSyncBusy):
+		log.Info("模型目录同步被另一个实例占用，跳过这一轮")
+	default:
+		// 失败已经写进 model_source_sync 了，这里只留一条日志便于排查。
+		log.Warn("定时同步模型目录失败", "err", err)
+	}
 }

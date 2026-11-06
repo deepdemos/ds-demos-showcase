@@ -39,7 +39,9 @@ const EXPECTED_KEYS = [
   ['collection.max_items', 'site', 'number', '500'],
   ['history.max_entries_account', 'site', 'number', '200'],
   ['lifecycle.restore_window_days', 'site', 'number', '30'],
-  ['modelsdev.sync_enabled', 'site', 'boolean', 'false'],
+  // v1.15 起默认 true（迁移 0021）：这个键登记进基线时同步还没实现，默认 false 的意思是
+  // 「没有可同步的东西」；同步落地后它变成「装好了但永远不动」。
+  ['modelsdev.sync_enabled', 'site', 'boolean', 'true'],
   ['modelsdev.sync_interval_hours', 'site', 'number', '24'],
   ['modelsdev.search_official_only', 'site', 'boolean', 'true'],
   ['notify.retention_days', 'site', 'number', '90'],

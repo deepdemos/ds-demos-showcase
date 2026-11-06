@@ -580,6 +580,28 @@
         "optional": false
       }
     },
+    "ModelSyncResult": {
+      "items": {
+        "type": "int64",
+        "optional": false
+      },
+      "skipped": {
+        "type": "bool",
+        "optional": false
+      },
+      "source": {
+        "type": "string",
+        "optional": false
+      },
+      "status": {
+        "type": "string",
+        "optional": false
+      },
+      "syncedAt": {
+        "type": "time.Time",
+        "optional": false
+      }
+    },
     "PasswordResetCodeRequest": {
       "email": {
         "type": "openapi_types.Email",
@@ -985,6 +1007,11 @@
     },
     "POST /api/v1/admin/models/import/preview": {
       "method": "PreviewModelImport",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/admin/models/sync": {
+      "method": "SyncModelCatalog",
       "pathParams": 0,
       "params": null
     },

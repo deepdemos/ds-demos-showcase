@@ -3,3 +3,17 @@
 //   sqlc v1.30.0
 
 package store
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type ModelSourceSync struct {
+	Source        string
+	LastAttemptAt pgtype.Timestamptz
+	LastSuccessAt pgtype.Timestamptz
+	PayloadHash   pgtype.Text
+	ItemCount     pgtype.Int8
+	Status        string
+	Error         string
+}

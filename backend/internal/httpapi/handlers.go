@@ -20,6 +20,7 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/model"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/mailer"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
@@ -61,6 +62,7 @@ type Handler struct {
 	identity *identity.Service // nil 表示身份域未接线
 	mailer   mailer.Mailer     // nil 表示不投递（验证码请求仍然返回 204）
 	demos    *demo.Service     // nil 表示作品域未接线
+	models   *model.Service    // nil 表示模型域未接线
 
 	// maxUploadBytes 是上传包的体积硬上限，用来给请求体套 MaxBytesReader。
 	maxUploadBytes int64
@@ -72,6 +74,15 @@ func New(pinger Pinger, queries *store.Queries, identitySvc *identity.Service, m
 	if demos != nil {
 		h.maxUploadBytes = demos.MaxPackageBytes()
 	}
+	return h
+}
+
+// WithModels 注入模型域服务，返回自身以便链式组装。
+//
+// 用可选注入而不是扩 `New` 的签名：模型域目前只有一个端点用得上，
+// 改签名会让 30 多个测试调用点跟着改，收益为零。
+func (h *Handler) WithModels(s *model.Service) *Handler {
+	h.models = s
 	return h
 }
 

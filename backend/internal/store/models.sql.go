@@ -105,6 +105,27 @@ func (q *Queries) CreateModelFromCatalog(ctx context.Context, arg CreateModelFro
 	return id, err
 }
 
+const deleteCatalogItemsBySource = `-- name: DeleteCatalogItemsBySource :exec
+
+DELETE FROM model_catalog_items WHERE source = $1::text
+`
+
+// ---------------------------------------------------------------------------
+// 目录同步（镜像表 model_catalog_items + 刷新状态 model_source_sync）
+//
+// 这几个查询与上面的模型目录读写同属一个域，放在一起是为了让「模型域有哪些 SQL」
+// 只有一个文件要看；同步具体怎么算（diff、快照、定时）在
+// internal/domain/model/sync.go 里。
+// ---------------------------------------------------------------------------
+// 整表快照的前半步：镜像是「上游现在有什么」，不是我们的数据。逐条 upsert 会把两个
+// 时间点的行混在一张表里，「目录更新于什么时候」就答不出来。
+// 敢整表删的前提是：没有任何人引用 catalog 行的 id——外部引用存的是
+// (source, provider_id, external_id) 三元组。
+func (q *Queries) DeleteCatalogItemsBySource(ctx context.Context, source string) error {
+	_, err := q.db.Exec(ctx, deleteCatalogItemsBySource, source)
+	return err
+}
+
 const findModelByName = `-- name: FindModelByName :one
 SELECT id
 FROM models
@@ -300,6 +321,79 @@ func (q *Queries) GetModelDiffTarget(ctx context.Context, arg GetModelDiffTarget
 	var model_id int64
 	err := row.Scan(&model_id)
 	return model_id, err
+}
+
+const getModelSourceSync = `-- name: GetModelSourceSync :one
+SELECT source, last_attempt_at, last_success_at, payload_hash, item_count, status, error
+FROM model_source_sync
+WHERE source = $1::text
+`
+
+// 读一个来源的同步状态。从没同步过时返回 ErrNoRows（不返回零值行）：
+// 「有一行但全是零」与「一行都没有」对调用方是两件事，前者会让「上次成功于 0001 年」。
+func (q *Queries) GetModelSourceSync(ctx context.Context, source string) (ModelSourceSync, error) {
+	row := q.db.QueryRow(ctx, getModelSourceSync, source)
+	var i ModelSourceSync
+	err := row.Scan(
+		&i.Source,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.PayloadHash,
+		&i.ItemCount,
+		&i.Status,
+		&i.Error,
+	)
+	return i, err
+}
+
+const getSiteSettingBoolean = `-- name: GetSiteSettingBoolean :one
+SELECT (COALESCE(s.value, k.default_value))::text::boolean AS value
+FROM setting_keys k
+LEFT JOIN site_settings s ON s.key = k.key
+WHERE k.key = $1::text
+  AND k.scope = 'site'
+  AND k.value_type = 'boolean'
+  AND k.is_active
+`
+
+// 读一个 boolean 类型的站点参数：有覆盖读覆盖，没有读注册表里的默认值。
+//
+// 与 GetSiteSettingNumber 同一形状（缺键直接 ErrNoRows，不返回 false）：
+// 键名拼错时「定时同步永远关着」比「启动就炸」更难发现。
+func (q *Queries) GetSiteSettingBoolean(ctx context.Context, key string) (bool, error) {
+	row := q.db.QueryRow(ctx, getSiteSettingBoolean, key)
+	var value bool
+	err := row.Scan(&value)
+	return value, err
+}
+
+type InsertCatalogItemParams struct {
+	Source                   string
+	ProviderID               string
+	ProviderName             string
+	ExternalID               string
+	Name                     string
+	CanonicalID              pgtype.Text
+	VendorSlug               pgtype.Text
+	Family                   pgtype.Text
+	Description              string
+	ModalitiesIn             string
+	ModalitiesOut            string
+	ContextWindow            pgtype.Int4
+	MaxOutput                pgtype.Int4
+	CostIn                   pgtype.Float8
+	CostOut                  pgtype.Float8
+	ReleaseDate              pgtype.Date
+	KnowledgeCutoff          pgtype.Text
+	OpenWeights              pgtype.Int4
+	ModelType                pgtype.Text
+	UpstreamStatus           pgtype.Text
+	SupportsToolCall         pgtype.Int4
+	SupportsReasoning        pgtype.Int4
+	SupportsStructuredOutput pgtype.Int4
+	SupportsAttachment       pgtype.Int4
+	RawJson                  string
+	FetchedAt                pgtype.Timestamptz
 }
 
 const insertModelAlias = `-- name: InsertModelAlias :exec
@@ -779,6 +873,15 @@ func (q *Queries) ModelSlugTaken(ctx context.Context, slug string) (bool, error)
 	return taken, err
 }
 
+const releaseModelSyncLock = `-- name: ReleaseModelSyncLock :exec
+SELECT pg_advisory_unlock($1::bigint)
+`
+
+func (q *Queries) ReleaseModelSyncLock(ctx context.Context, key int64) error {
+	_, err := q.db.Exec(ctx, releaseModelSyncLock, key)
+	return err
+}
+
 const resolveModelRefs = `-- name: ResolveModelRefs :many
 WITH input AS (
     SELECT DISTINCT lower(btrim(r))::text AS ref
@@ -886,6 +989,24 @@ func (q *Queries) ResolveModelSlugs(ctx context.Context, slugs []string) ([]Reso
 	return items, nil
 }
 
+const tryModelSyncLock = `-- name: TryModelSyncLock :one
+SELECT pg_try_advisory_lock($1::bigint) AS acquired
+`
+
+// 抢一把进程间的锁。
+//
+// 定时同步在多实例部署下会同时到点。没有这把锁，两个实例会各拉一次 5.96 MB、
+// 各清一次表——后完成的那次覆盖前一次的记账，而且中间有一段时间表是空的。
+//
+// 用 `pg_try_advisory_lock` 而不是 `pg_advisory_lock`：抢不到应该直接跳过这一轮，
+// 而不是排队等——等到的下一轮本来就已经过时了。
+func (q *Queries) TryModelSyncLock(ctx context.Context, key int64) (bool, error) {
+	row := q.db.QueryRow(ctx, tryModelSyncLock, key)
+	var acquired bool
+	err := row.Scan(&acquired)
+	return acquired, err
+}
+
 const updateModelFromCatalog = `-- name: UpdateModelFromCatalog :exec
 UPDATE models
 SET name        = $1,
@@ -949,6 +1070,52 @@ func (q *Queries) UpsertModelExternalRef(ctx context.Context, arg UpsertModelExt
 		arg.ExternalID,
 		arg.CanonicalID,
 		arg.IsOfficial,
+	)
+	return err
+}
+
+const upsertModelSourceSync = `-- name: UpsertModelSourceSync :exec
+INSERT INTO model_source_sync (source, last_attempt_at, last_success_at, payload_hash, item_count, status, error)
+VALUES (
+    $1::text,
+    now(),
+    $2,
+    $3,
+    $4,
+    $5::text,
+    $6::text
+)
+ON CONFLICT (source) DO UPDATE SET
+    last_attempt_at = EXCLUDED.last_attempt_at,
+    -- 成功才推 last_success_at；失败保留旧值。
+    last_success_at = COALESCE(EXCLUDED.last_success_at, model_source_sync.last_success_at),
+    payload_hash    = COALESCE(EXCLUDED.payload_hash, model_source_sync.payload_hash),
+    item_count      = COALESCE(EXCLUDED.item_count, model_source_sync.item_count),
+    status          = EXCLUDED.status,
+    error           = EXCLUDED.error
+`
+
+type UpsertModelSourceSyncParams struct {
+	Source        string
+	LastSuccessAt pgtype.Timestamptz
+	PayloadHash   pgtype.Text
+	ItemCount     pgtype.Int8
+	Status        string
+	Error         string
+}
+
+// 记账一行：这次同步什么时候试的、成没成、抓到了多少条、payload 指纹是什么。
+//
+// 失败时**不更新** `last_success_at` 与 `item_count`：镜像还是上一次成功那份，
+// 这两个值就该停在上一次。否则运维看到「成功时间 = 刚才」，会以为镜像已经更新。
+func (q *Queries) UpsertModelSourceSync(ctx context.Context, arg UpsertModelSourceSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertModelSourceSync,
+		arg.Source,
+		arg.LastSuccessAt,
+		arg.PayloadHash,
+		arg.ItemCount,
+		arg.Status,
+		arg.Error,
 	)
 	return err
 }
