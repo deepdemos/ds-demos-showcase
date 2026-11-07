@@ -281,6 +281,15 @@ func (h *Handler) GetDemo(w http.ResponseWriter, r *http.Request, slug string) {
 	// 分类是作品级的，与版本无关：墓碑态也照样给它——「这是一款游戏」这件事
 	// 不会因为下架而不再是事实，而墓碑页正需要一点上下文。
 	detail.Classifications = h.classificationsOf(ctx, row.ID)
+	// 评分是读出来的附加信息：读失败按 0 分 0 票，不让详情跟着 503
+	// （与浏览计数同一原则：它是详情页的一部分，不是详情本身）。
+	// 墓碑态照样给——「这件作品当初 4.5 分」是事实，不因为下架而不再成立。
+	if h.demos != nil {
+		_, viewerKey := h.raterOf(ctx, r)
+		detail.Rating = h.ratingOfDetail(ctx, slug, viewerKey)
+	} else {
+		detail.Rating = api.DemoRating{}
+	}
 	writeJSON(w, http.StatusOK, detail)
 }
 

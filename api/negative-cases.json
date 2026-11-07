@@ -496,6 +496,38 @@
           "name": "TestIntegrationBatchImportPermissions"
         }
       }
+    ],
+    "PUT /api/v1/demos/{slug}/rating": [
+      {
+        "case": "分数越界（0 / 6 / 负数 / 100）一律 400，且一条都不落库",
+        "test": {
+          "file": "backend/internal/httpapi/rating_integration_test.go",
+          "name": "TestIntegrationRatingRejectsOutOfRange"
+        }
+      },
+      {
+        "case": "给未发布的作品打分 404，与详情同一判据",
+        "test": {
+          "file": "backend/internal/httpapi/rating_integration_test.go",
+          "name": "TestIntegrationRatingRequiresVisibleDemo"
+        }
+      },
+      {
+        "case": "同一个人改分不追加票（一人一票）",
+        "test": {
+          "file": "backend/internal/httpapi/rating_integration_test.go",
+          "name": "TestIntegrationPutDemoRating"
+        }
+      }
+    ],
+    "DELETE /api/v1/demos/{slug}/rating": [
+      {
+        "case": "没打过分的撤销是幂等的 200，不是 404",
+        "test": {
+          "file": "backend/internal/httpapi/rating_integration_test.go",
+          "name": "TestIntegrationDeleteDemoRating"
+        }
+      }
     ]
   },
   "outsideContract": {

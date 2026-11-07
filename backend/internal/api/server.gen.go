@@ -83,6 +83,12 @@ type ServerInterface interface {
 	// 下架作品（作者本人）
 	// (POST /api/v1/demos/{slug}/archive)
 	ArchiveDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 撤销自己的评分
+	// (DELETE /api/v1/demos/{slug}/rating)
+	DeleteDemoRating(w http.ResponseWriter, r *http.Request, slug string)
+	// 给作品打分（1–5，一人一票，可改）
+	// (PUT /api/v1/demos/{slug}/rating)
+	PutDemoRating(w http.ResponseWriter, r *http.Request, slug string)
 	// 恢复已删除的作品（作者本人）
 	// (POST /api/v1/demos/{slug}/restore)
 	RestoreDemo(w http.ResponseWriter, r *http.Request, slug string)
@@ -248,6 +254,18 @@ func (_ Unimplemented) UpdateDemo(w http.ResponseWriter, r *http.Request, slug s
 // 下架作品（作者本人）
 // (POST /api/v1/demos/{slug}/archive)
 func (_ Unimplemented) ArchiveDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 撤销自己的评分
+// (DELETE /api/v1/demos/{slug}/rating)
+func (_ Unimplemented) DeleteDemoRating(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 给作品打分（1–5，一人一票，可改）
+// (PUT /api/v1/demos/{slug}/rating)
+func (_ Unimplemented) PutDemoRating(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -893,6 +911,56 @@ func (siw *ServerInterfaceWrapper) ArchiveDemo(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteDemoRating operation middleware
+func (siw *ServerInterfaceWrapper) DeleteDemoRating(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteDemoRating(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutDemoRating operation middleware
+func (siw *ServerInterfaceWrapper) PutDemoRating(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutDemoRating(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RestoreDemo operation middleware
 func (siw *ServerInterfaceWrapper) RestoreDemo(w http.ResponseWriter, r *http.Request) {
 
@@ -1281,6 +1349,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/demos/{slug}/archive", wrapper.ArchiveDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/demos/{slug}/rating", wrapper.DeleteDemoRating)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/demos/{slug}/rating", wrapper.PutDemoRating)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/demos/{slug}/restore", wrapper.RestoreDemo)
