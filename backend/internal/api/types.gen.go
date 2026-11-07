@@ -403,6 +403,7 @@ type DemoDetail struct {
 	//
 	// 墓碑态与已删除的作品也给：它曾经公开过，这个事实不该被抹掉。
 	PublishedAt *time.Time `json:"publishedAt"`
+	Rating      DemoRating `json:"rating"`
 	Slug        string     `json:"slug"`
 
 	// Title 墓碑态为 null
@@ -473,6 +474,24 @@ type DemoList struct {
 
 	// Total 满足条件的总条数（不是当前页条数）
 	Total int `json:"total"`
+}
+
+// DemoRating defines model for DemoRating.
+type DemoRating struct {
+	// Average 平均分，保留两位小数；**没有票时是 0**，不是 null
+	Average float64 `json:"average"`
+
+	// Count 有效票数（撤销的不算）
+	Count int `json:"count"`
+
+	// Mine 当前调用者的分数；没打过是 null。匿名调用者同样有意义——他改分时界面要能回显
+	Mine *int `json:"mine"`
+}
+
+// DemoRatingInput defines model for DemoRatingInput.
+type DemoRatingInput struct {
+	// Score 1–5 分，整数。没有 0.5 分这回事——评分是表态，不是测量。
+	Score int `json:"score"`
 }
 
 // DemoRevision 版本列表里的一行。
@@ -1223,3 +1242,6 @@ type DeleteDemoJSONRequestBody = DemoDeleteRequest
 
 // UpdateDemoMultipartRequestBody defines body for UpdateDemo for multipart/form-data ContentType.
 type UpdateDemoMultipartRequestBody UpdateDemoMultipartBody
+
+// PutDemoRatingJSONRequestBody defines body for PutDemoRating for application/json ContentType.
+type PutDemoRatingJSONRequestBody = DemoRatingInput

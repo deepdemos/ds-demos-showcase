@@ -141,6 +141,10 @@
         "type": "time.Time",
         "optional": true
       },
+      "rating": {
+        "type": "DemoRating",
+        "optional": false
+      },
       "slug": {
         "type": "string",
         "optional": false
@@ -200,6 +204,26 @@
         "optional": false
       },
       "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "DemoRating": {
+      "average": {
+        "type": "float64",
+        "optional": false
+      },
+      "count": {
+        "type": "int",
+        "optional": false
+      },
+      "mine": {
+        "type": "int",
+        "optional": true
+      }
+    },
+    "DemoRatingInput": {
+      "score": {
         "type": "int",
         "optional": false
       }
@@ -1136,6 +1160,16 @@
     },
     "POST /api/v1/demos/{slug}/archive": {
       "method": "ArchiveDemo",
+      "pathParams": 1,
+      "params": null
+    },
+    "DELETE /api/v1/demos/{slug}/rating": {
+      "method": "DeleteDemoRating",
+      "pathParams": 1,
+      "params": null
+    },
+    "PUT /api/v1/demos/{slug}/rating": {
+      "method": "PutDemoRating",
       "pathParams": 1,
       "params": null
     },

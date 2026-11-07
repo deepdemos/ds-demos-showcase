@@ -6,9 +6,9 @@
  *
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
- * 模型目录同步与导入（含批量）、分类目录与筛选，
+ * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 31 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 33 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -35,6 +35,8 @@ import type {
   DemoDetail,
   DemoLifecycleResult,
   DemoList,
+  DemoRating,
+  DemoRatingInput,
   Error,
   ListDemosParams,
   ListModelsParams,
@@ -365,6 +367,150 @@ if(submitDemoBody.classificationSlugs !== undefined) {
 
   const data: submitDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as submitDemoResponse
+}
+
+
+export type putDemoRatingResponse200 = {
+  data: DemoRating
+  status: 200
+}
+
+export type putDemoRatingResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type putDemoRatingResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type putDemoRatingResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type putDemoRatingResponseSuccess = (putDemoRatingResponse200) & {
+  headers: Headers;
+};
+export type putDemoRatingResponseError = (putDemoRatingResponse400 | putDemoRatingResponse404 | putDemoRatingResponse503) & {
+  headers: Headers;
+};
+
+export type putDemoRatingResponse = (putDemoRatingResponseSuccess | putDemoRatingResponseError)
+
+export const getPutDemoRatingUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/rating`
+}
+
+/**
+ * 同一人对同一作品只有一票：再打一次是改分，不是追加。去重键是
+ * `rater_key`（登录用户 `user:<id>`，匿名 `anon:<HMAC(ip)>`），
+ * 与浏览计数同一套口径——两处如果各算各的，同一个人在两处会是两个人。
+ *
+ * **匿名也能打分**：民间成果展的作品大多是给外人看的，要求先注册才能
+ * 说「这个不错」，等于把最轻的一次表态推到最重的门槛后面。
+ * 代价是同一出口 IP 的多人共用一票（已知松点第 39 条同一口径）。
+ *
+ * **作者可以给自己打分**（`rate-self B`）。不拦的理由：作者给自��作品
+ * 打 5 分这件事，在页面上是看得见的（作者名与评分都在），而且它的
+ * 影响面只有自己的作品；为它加一条「不能给自己投票」的规则，会连带
+ * 让「作者参与自己的作品合集」这类正当操作也被拦住。
+ *
+ * 作品不存在或不可见 → 404（与详情一致）；分数越界 → 400。
+ * @summary 给作品打分（1–5，一人一票，可改）
+ */
+export const putDemoRating = async (slug: string,
+    demoRatingInput: DemoRatingInput, options?: RequestInit): Promise<putDemoRatingResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getPutDemoRatingUrl(slug),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(demoRatingInput)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: putDemoRatingResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as putDemoRatingResponse
+}
+
+
+export type deleteDemoRatingResponse200 = {
+  data: DemoRating
+  status: 200
+}
+
+export type deleteDemoRatingResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteDemoRatingResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type deleteDemoRatingResponseSuccess = (deleteDemoRatingResponse200) & {
+  headers: Headers;
+};
+export type deleteDemoRatingResponseError = (deleteDemoRatingResponse404 | deleteDemoRatingResponse503) & {
+  headers: Headers;
+};
+
+export type deleteDemoRatingResponse = (deleteDemoRatingResponseSuccess | deleteDemoRatingResponseError)
+
+export const getDeleteDemoRatingUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/rating`
+}
+
+/**
+ * 撤销之后该作品的平均分按剩余票重新算。没打过分的调用是幂等的 200，
+ * 不报错——「我不想给它打分了」这个意图本来就成立。
+ * @summary 撤销自己的评分
+ */
+export const deleteDemoRating = async (slug: string, options?: RequestInit): Promise<deleteDemoRatingResponse> => {
+
+  const res = await fetch(getDeleteDemoRatingUrl(slug),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: deleteDemoRatingResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as deleteDemoRatingResponse
 }
 
 

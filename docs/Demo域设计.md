@@ -707,6 +707,32 @@ erDiagram
 - 下载的 `Range` 支持靠 `io.ReadSeeker` 类型断言（`storage.Local.Get` 返回 `*os.File`），
   **没有扩 `storage.Store` 接口**。分段请求**不计下载数**——一次「下载」的判据是拿到完整文件。
 
+**落地状态（2026-11-07）——评分**
+
+- 端点：`PUT /api/v1/demos/{slug}/rating`（`{score}` 1–5）与
+  `DELETE /api/v1/demos/{slug}/rating`（撤销）。**不是**详情 GET 的副作用，
+  与浏览计数同一理由：GET 有副作用的话，缓存、预取、爬虫都会变成一次表态。
+- 去重键 `demo_ratings.rater_key` 与浏览计数**同一套口径**
+  （`identity.Service.ViewerKey`：登录 `user:<accounts.id>`、匿名 `anon:` + HMAC(IP)）。
+  两处各算各的，同一个人就会在「看过」和「打过分」里变成两个人。只存哈希，不存 IP。
+- **一人一票，改分是 UPDATE**（`ON CONFLICT ON CONSTRAINT uq_rating_per_rater DO UPDATE`）。
+  所以 `PUT` 而不是 `POST`：请求重发多少次结果一样，重试不用担心刷票。
+- **匿名可评**（`rate-anon`）。民间成果展的作品大多是给外人看的；要求先注册才能
+  说一句「这个不错」，等于把最轻的一次表态推到最重的门槛后面。代价是同一出口 IP
+  的多人共用一票（与松点第 39 条同一口径）。
+- **作者可以给自己打分**（`rate-self`）。不拦：这件事在页面上是看得见的（作者名与
+  分数都在），影响面只有自己的作品；加一条「不能给自己投票」会连带把「作者参与
+  自己的作品合集」这类正当操作也拦住。
+- **汇总从 `demo_ratings` 重算**（`RefreshDemoRatingStats`），不做增量。改分与撤销
+  都会让总和减少，增量写法要记住旧分；重算只有一条路径，错了再跑一次就能恢复。
+  两步在**同一事务**里，但**不是同一条语句**——数据修改型 CTE 互相看不见对方的写入，
+  合成一条会让统计永远落后一票（这个坑在浏览计数里已经踩过一次）。
+- 详情响应带 `rating{average, count, mine}`：没有票时 `average=0, count=0`、
+  `mine=null`（不是 404，也不是 null 对象）。墓碑页照样带——「它当初 4.5 分」是事实。
+- `demo_ratings.score` 的 `ck_rating_time` 也做了时间夹紧
+  （`updated_at = GREATEST(now(), created_at)`），与 `demos` 的时间列同一处置。
+- **评分不产生新版本**（DEMO-019）：`demo_ratings` 是独立表，天然满足。
+
 ### 5.3 与模型域 / 题目的接缝
 
 > 作品↔分类的关联表（`demo_classifications`）由**标签域**拥有；生成条件的真表在 revision 级（模型域 / 标签域拥有），demo 层同名表是视图（§3.2.1 / §3.8）。本图只画模型维度，其余四张见 §5.4。

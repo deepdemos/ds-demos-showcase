@@ -8,9 +8,9 @@ info:
 
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
-    模型目录同步与导入（含批量）、分类目录与筛选，
+    模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 31 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 33 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -444,6 +444,102 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: 存储或数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/rating:
+    put:
+      operationId: putDemoRating
+      tags: [作品]
+      summary: 给作品打分（1–5，一人一票，可改）
+      description: |
+        同一人对同一作品只有一票：再打一次是改分，不是追加。去重键是
+        `rater_key`（登录用户 `user:<id>`，匿名 `anon:<HMAC(ip)>`），
+        与浏览计数同一套口径——两处如果各算各的，同一个人在两处会是两个人。
+
+        **匿名也能打分**：民间成果展的作品大多是给外人看的，要求先注册才能
+        说「这个不错」，等于把最轻的一次表态推到最重的门槛后面。
+        代价是同一出口 IP 的多人共用一票（已知松点第 39 条同一口径）。
+
+        **作者可以给自己打分**（`rate-self B`）。不拦的理由：作者给自��作品
+        打 5 分这件事，在页面上是看得见的（作者名与评分都在），而且它的
+        影响面只有自己的作品；为它加一条「不能给自己投票」的规则，会连带
+        让「作者参与自己的作品合集」这类正当操作也被拦住。
+
+        作品不存在或不可见 → 404（与详情一致）；分数越界 → 400。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$'
+            minLength: 1
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoRatingInput'
+      responses:
+        '200':
+          description: 打分成功，返回该作品当前的评分汇总
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoRating'
+        '400':
+          description: 分数越界或请求体不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在或不可见
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: deleteDemoRating
+      tags: [作品]
+      summary: 撤销自己的评分
+      description: |
+        撤销之后该作品的平均分按剩余票重新算。没打过分的调用是幂等的 200，
+        不报错——「我不想给它打分了」这个意图本来就成立。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$'
+            minLength: 1
+            maxLength: 128
+      responses:
+        '200':
+          description: 撤销后的评分汇总
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoRating'
+        '404':
+          description: 作品不存在或不可见
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
           content:
             application/json:
               schema:
@@ -2374,6 +2470,39 @@ components:
           maxLength: 50
           description: 昵称；作者没设昵称时为空串，界面应当回退显示 `username`
 
+    DemoRatingInput:
+      type: object
+      additionalProperties: false
+      required: [score]
+      properties:
+        score:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 1–5 分，整数。没有 0.5 分这回事——评分是表态，不是测量。
+
+    DemoRating:
+      type: object
+      additionalProperties: false
+      required: [average, count]
+      properties:
+        average:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 5
+          description: 平均分，保留两位小数；**没有票时是 0**，不是 null
+        count:
+          type: integer
+          minimum: 0
+          description: 有效票数（撤销的不算）
+        mine:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+          description: 当前调用者的分数；没打过是 null。匿名调用者同样有意义——他改分时界面要能回显
+
     DemoSummary:
       type: object
       additionalProperties: false
@@ -2485,7 +2614,7 @@ components:
         - $ref: '#/components/schemas/DemoSummary'
         - type: object
           additionalProperties: false
-          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions, viewCount, downloadCount, author, publishedAt, models, moderationState]
+          required: [description, updatedAt, demoType, downloadable, canEdit, lifecycleActions, viewCount, downloadCount, author, publishedAt, models, moderationState, rating]
           properties:
             description:
               type: string
@@ -2538,6 +2667,8 @@ components:
               format: int64
               minimum: 0
               description: 下载数。一次成功写出的下载 +1；被 404 挡下或传输中断不计。
+            rating:
+              $ref: '#/components/schemas/DemoRating'
             author:
               $ref: '#/components/schemas/DemoAuthor'
             publishedAt:

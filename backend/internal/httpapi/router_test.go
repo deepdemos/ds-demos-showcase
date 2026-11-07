@@ -30,6 +30,14 @@ func (s *stub) ListModels(_ http.ResponseWriter, _ *http.Request, _ api.ListMode
 	s.hits = append(s.hits, "models")
 }
 
+func (s *stub) PutDemoRating(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "rate:"+slug)
+}
+
+func (s *stub) DeleteDemoRating(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "unrate:"+slug)
+}
+
 func (s *stub) ListClassifications(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "classifications")
 }

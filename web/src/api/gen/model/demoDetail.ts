@@ -6,9 +6,9 @@
  *
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
- * 模型目录同步与导入（含批量）、分类目录与筛选，
+ * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 31 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 33 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,6 +30,7 @@
  */
 import type { DemoAuthor } from './demoAuthor';
 import type { DemoLifecycleActions } from './demoLifecycleActions';
+import type { DemoRating } from './demoRating';
 import type { DemoSummary } from './demoSummary';
 import type { Model } from './model';
 
@@ -82,6 +83,7 @@ export type DemoDetail = DemoSummary & ({
      * @minimum 0
      */
   downloadCount: number;
+  rating: DemoRating;
   author: DemoAuthor;
   /**
      * 第一次对外发布的时间，取该作品全部对外可见渠道里最早的一次
