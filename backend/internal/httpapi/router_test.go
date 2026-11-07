@@ -42,6 +42,10 @@ func (s *stub) ListClassifications(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "classifications")
 }
 
+func (s *stub) GetModelSyncStatus(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "sync-status")
+}
+
 func (s *stub) ListModelCatalog(_ http.ResponseWriter, _ *http.Request, _ api.ListModelCatalogParams) {
 	s.hits = append(s.hits, "catalog")
 }

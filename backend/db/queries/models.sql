@@ -232,14 +232,32 @@ SELECT i.id,
        ) THEN true ELSE false END AS imported
 FROM model_catalog_items i
 WHERE (sqlc.narg('q')::text IS NULL
-       OR i.name ILIKE '%' || sqlc.narg('q')::text || '%'
-       OR i.external_id ILIKE '%' || sqlc.narg('q')::text || '%'
-       OR COALESCE(i.canonical_id, '') ILIKE '%' || sqlc.narg('q')::text || '%'
-       OR i.provider_name ILIKE '%' || sqlc.narg('q')::text || '%')
+       OR i.name ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\'
+       OR i.external_id ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\'
+       OR COALESCE(i.canonical_id, '') ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\'
+       OR i.provider_name ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\')
   AND (sqlc.narg('include_deprecated')::boolean IS TRUE
        OR COALESCE(i.upstream_status, '') <> 'deprecated')
 ORDER BY i.provider_name, i.name, i.id
-LIMIT sqlc.arg(row_limit)::int;
+LIMIT sqlc.arg(row_limit)::int
+OFFSET sqlc.arg(row_offset)::int;
+
+-- name: CountCatalogItems :one
+-- 与 `ListCatalogItems` 同一组筛选条件下的总数（分页要用）。
+--
+-- 两条 SQL 的 WHERE 必须逐字一致，否则「共 N 条」与翻页到底的条数对不上——
+-- 那种偏差在界面上表现为「最后一页少几条」，很难归因。
+--
+-- `%` / `_` / `\` 由调用方先转义（与作品搜索同一口径），这里只负责 `ESCAPE '\'`。
+SELECT count(*)::bigint
+FROM model_catalog_items i
+WHERE (sqlc.narg('q')::text IS NULL
+       OR i.name ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\'
+       OR i.external_id ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\'
+       OR COALESCE(i.canonical_id, '') ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\'
+       OR i.provider_name ILIKE '%' || sqlc.narg('q')::text || '%' ESCAPE '\')
+  AND (sqlc.narg('include_deprecated')::boolean IS TRUE
+       OR COALESCE(i.upstream_status, '') <> 'deprecated');
 
 -- name: GetCatalogItem :one
 -- 按 (source, provider_id, external_id) 取一条镜像行：导入的 preview 与 apply 都以它为准。

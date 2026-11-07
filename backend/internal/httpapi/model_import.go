@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -135,7 +136,10 @@ func (h *Handler) ListModelCatalog(w http.ResponseWriter, r *http.Request, param
 
 	var q pgtype.Text
 	if params.Q != nil && strings.TrimSpace(*params.Q) != "" {
-		q = pgtype.Text{String: strings.TrimSpace(*params.Q), Valid: true}
+		// 转义 LIKE 的通配符：搜索框里输入 `_` 不该匹配任意字符。
+		// 与作品搜索同一口径（`handlers.go` 的 likeEscaper）——两处都转义，
+		// 才不存在「这个搜索框能通配、那个不能」的差异。
+		q = pgtype.Text{String: likeEscaper.Replace(strings.TrimSpace(*params.Q)), Valid: true}
 	}
 	includeDeprecated := false
 	if params.IncludeDeprecated != nil {
@@ -145,6 +149,10 @@ func (h *Handler) ListModelCatalog(w http.ResponseWriter, r *http.Request, param
 	if params.Limit != nil {
 		limit = int32(*params.Limit)
 	}
+	offset := int32(0)
+	if params.Offset != nil {
+		offset = int32(*params.Offset)
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
@@ -152,7 +160,18 @@ func (h *Handler) ListModelCatalog(w http.ResponseWriter, r *http.Request, param
 	rows, err := h.queries.ListCatalogItems(ctx, store.ListCatalogItemsParams{
 		Q:                 q,
 		IncludeDeprecated: pgtype.Bool{Bool: includeDeprecated, Valid: true},
+		RowOffset:         offset,
 		RowLimit:          limit,
+	})
+	if err != nil {
+		unavailable(w, err)
+		return
+	}
+	// 总数与列表**同一组筛选条件**：两条 SQL 的 WHERE 逐字一致，否则
+	// 「共 N 条」与翻页到底的条数会对不上，而那种偏差在界面上表现为「最后一页少几条」。
+	total, err := h.queries.CountCatalogItems(ctx, store.CountCatalogItemsParams{
+		Q:                 q,
+		IncludeDeprecated: pgtype.Bool{Bool: includeDeprecated, Valid: true},
 	})
 	if err != nil {
 		unavailable(w, err)
@@ -182,7 +201,75 @@ func (h *Handler) ListModelCatalog(w http.ResponseWriter, r *http.Request, param
 			Description:    strPtrOf(c.Description),
 		})
 	}
-	writeJSON(w, http.StatusOK, api.ModelCatalogList{Items: items})
+	writeJSON(w, http.StatusOK, api.ModelCatalogList{
+		Items:  items,
+		Total:  int(total),
+		Limit:  int(limit),
+		Offset: int(offset),
+	})
+}
+
+// GetModelSyncStatus 读目录同步的记账（`model_source_sync`）。
+//
+// # 为什么「从没同步过」不是 404
+//
+// 它是**正常状态**，而且是最该被显示的初始状态：管理页要能据此说「点上面的同步」，
+// 而不是画一条红色错误让人以为服务坏了。所以返回 200 + `status = never`。
+//
+// # `status` 直接取库里的值，不在读取时重算
+//
+// 库里的 `status` 由**写入方**（同步任务）在它知道的上下文里判定：成功写 `ok`、
+// 失败写 `failed`、`UpsertModelSourceSync` 用 `COALESCE` 保住 `last_success_at`。
+// 读的时候再算一次「是否已过间隔」，等于把定时器的配置耦合进读取端点，
+// 而真正需要「过期了该重新同步」的是定时器自己（`SyncIfDue`）。
+func (h *Handler) GetModelSyncStatus(w http.ResponseWriter, r *http.Request) {
+	if h.queries == nil {
+		unavailable(w, errors.New("database not configured"))
+		return
+	}
+	if _, err := h.modelImporter(r.Context(), r); err != nil {
+		h.writeModelError(w, err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+
+	row, err := h.queries.GetModelSourceSync(ctx, catalogSource)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeJSON(w, http.StatusOK, api.ModelSyncStatus{
+				Source: catalogSource,
+				Status: "never",
+				Items:  0,
+			})
+			return
+		}
+		unavailable(w, err)
+		return
+	}
+
+	out := api.ModelSyncStatus{
+		Source:        row.Source,
+		Status:        row.Status,
+		Items:         int(row.ItemCount.Int64),
+		LastAttemptAt: timePtrOf(row.LastAttemptAt),
+		LastSuccessAt: timePtrOf(row.LastSuccessAt),
+	}
+	if row.Error != "" {
+		msg := row.Error
+		out.Error = &msg
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// timePtrOf 把 timestamptz 摊成指针：契约里这两个字段可空，null 表示「从未发生过」。
+func timePtrOf(v pgtype.Timestamptz) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	t := v.Time
+	return &t
 }
 
 func strPtrOf(s string) *string {
