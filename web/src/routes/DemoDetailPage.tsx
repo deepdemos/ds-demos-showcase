@@ -172,6 +172,21 @@ export function DemoDetailPage() {
             {data.demo.description ?? '作者没有填写简介。'}
           </p>
 
+          {data.demo.classifications.length > 0 ? (
+            <p className="mt-4 flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              分类
+              {data.demo.classifications.map((c) => (
+                <Link
+                  key={`${c.dimension}:${c.slug}`}
+                  to={`/demos?${c.dimension}=${encodeURIComponent(c.slug)}`}
+                  className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-700 no-underline hover:border-gray-300 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700"
+                >
+                  {c.label}
+                </Link>
+              ))}
+            </p>
+          ) : null}
+
           {/* 模型声明是作者自述，不是平台核验过的结论——文案里说清楚，
               否则读者会把它当成「这个作品确实跑在这些模型上」的保证。 */}
           {data.demo.models.length > 0 ? (

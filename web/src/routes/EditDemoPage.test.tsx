@@ -21,9 +21,22 @@ const updateDemo = vi.fn();
 // 编辑页现在嵌了版本历史组件，它会调 listDemoRevisions。
 // 不在这里补一个的话，测试全绿但 vitest 会报两条 unhandled rejection——
 // 「绿了但报错」比红更危险，因为没人会去看。
+const classificationCatalog = {
+  dimensions: [
+    { dimension: 'genre', label: '形态', mode: 'fixed' },
+    { dimension: 'technique', label: '技术', mode: 'fixed' },
+    { dimension: 'subject', label: '题材', mode: 'open' },
+  ],
+  items: [
+    { dimension: 'genre', slug: 'game', label: '小游戏', demoCount: 3 },
+    { dimension: 'technique', slug: '3D建模', label: '3D建模', demoCount: 1 },
+  ],
+};
+
 vi.mock('@/api', () => ({
   getDemo: (...args: unknown[]) => getDemo(...args),
   updateDemo: (...args: unknown[]) => updateDemo(...args),
+  listClassifications: () => Promise.resolve({ status: 200, data: classificationCatalog }),
   listDemoRevisions: () => Promise.resolve({ status: 200, data: { items: [] } }),
   listModels: () =>
     Promise.resolve({
@@ -58,6 +71,7 @@ const demo = (over: Record<string, unknown> = {}) => ({
   author: { username: 'alice', displayName: 'Alice' },
   publishedAt: '2026-01-01T00:00:00Z',
   models: [{ slug: 'deepseek-chat', name: 'DeepSeek Chat', vendor: 'DeepSeek' }],
+  classifications: [{ dimension: 'genre', slug: 'game', label: '小游戏' }],
   ...over,
 });
 
@@ -136,6 +150,22 @@ test('预填已有的模型声明，保存时原样交回', async () => {
  * 这条是「整体替换」的另一半：服务端把「没传」与「传空」都当清空，
  * 前端则必须**显式**传一个数组，让「我确实不要这些声明了」成为一个可表达的意图。
  */
+/**
+ * 分类也要预填。
+ *
+ * 服务端把「不传 classificationSlugs」当作「不改」，所以即使前端不预填，
+ * 保存一次也不会真的清掉。但界面显示成空会让作者以为分类没了，
+ * 于是他会重新勾一遍——而这一次提交的是「重新勾的那些」，语义就变了。
+ */
+test('预填已有的分类', async () => {
+  getDemo.mockResolvedValue({ status: 200, data: demo() } as never);
+
+  renderPage();
+
+  const box = await screen.findByLabelText('小游戏');
+  expect(box).toBeChecked();
+});
+
 test('取消勾选后保存，声明被清空', async () => {
   getDemo.mockResolvedValue({ status: 200, data: demo() });
   updateDemo.mockResolvedValue({ status: 200, data: { slug: 'demo-a', revisionNo: 2 } });

@@ -34,6 +34,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   lifecycleActions: { edit: false, archive: false, restore: false, delete: false },
   author: { username: 'alice', displayName: 'Alice' },
   models: [],
+  classifications: [],
   ...over,
 });
 
@@ -141,6 +142,10 @@ test('详情显示作者、发布时间与模型声明', async () => {
     status: 200,
     data: detail({
       models: [{ slug: 'deepseek-chat', name: 'DeepSeek Chat', vendor: 'DeepSeek' }],
+      classifications: [
+        { dimension: 'genre', slug: 'game', label: '小游戏' },
+        { dimension: 'technique', slug: '3D建模', label: '3D建模' },
+      ],
     }),
   } as never);
 
@@ -159,6 +164,35 @@ test('详情显示作者、发布时间与模型声明', async () => {
  * 空数组还渲染的话，页面会出现一行「模型声明：」后面什么都没有——
  * 读者会以为加载失败。
  */
+/**
+ * 分类要显示出来。
+ *
+ * 分类挂作品、模型挂版本，两处渲染的是不同的数据。漏掉分类的表现是
+ * 「作者打了标签但页面上什么都没有」，而且不报任何错。
+ *
+ * 链接也一起断言：分类标签是入口，指错了地方（比如少 encode 中文）
+ * 会把用户带到 404，而页面本身看起来完全正常。
+ */
+test('详情显示作品分类，并链到对应筛选', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({
+      classifications: [
+        { dimension: 'genre', slug: 'game', label: '小游戏' },
+        { dimension: 'technique', slug: '3D建模', label: '3D建模' },
+      ],
+    }),
+  } as never);
+  renderPage();
+
+  expect(await screen.findByText('分类')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '小游戏' })).toHaveAttribute('href', '/demos?genre=game');
+  expect(screen.getByRole('link', { name: '3D建模' })).toHaveAttribute(
+    'href',
+    `/demos?technique=${encodeURIComponent('3D建模')}`,
+  );
+});
+
 test('没有模型声明时不渲染那一行', async () => {
   vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
   renderPage();

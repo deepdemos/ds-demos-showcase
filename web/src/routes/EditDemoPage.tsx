@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { Button, ErrorState, FileInput, Input, Select, Skeleton, Textarea } from '@/components/ui';
+import { ClassificationPicker } from '@/components/classification-picker';
 import { ModelPicker } from '@/components/model-picker';
 import { getDemo, updateDemo, type DemoDetail, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -62,6 +63,7 @@ export function EditDemoPage() {
   const [description, setDescription] = useState('');
   const [demoType, setDemoType] = useState('web');
   const [modelSlugs, setModelSlugs] = useState<string[]>([]);
+  const [classificationSlugs, setClassificationSlugs] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -82,6 +84,9 @@ export function EditDemoPage() {
           setDemoType(next.demo.demoType === '' ? 'web' : next.demo.demoType);
           // 预填当前的声明：编辑表单提交的是「这次声明了哪些」，不预填就等于默认清空。
           setModelSlugs(next.demo.models.map((m) => m.slug));
+          // 分类同样要预填。但注意语义差异：服务端把「不传」当作「不改」，
+          // 所以这里的预填是「让勾选状态如实反映现状」，而不是「必须交回」。
+          setClassificationSlugs(next.demo.classifications.map((c) => c.slug));
         }
       } catch (e) {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : '读取作品失败');
@@ -160,6 +165,9 @@ export function EditDemoPage() {
         // 声明是整体替换语义：这里**总是**把当前勾选交上去，不勾就是清空。
         // 想保留原来的声明，就得让它们继续保持勾选——预填负责这件事。
         modelSlugs: modelSlugs,
+        // 分类：总是交回当前勾选。**一个都没勾时不传**——服务端把空数组
+        // 与不传都当「不改」，真要清空得另开路径（见松点 48）。
+        ...(classificationSlugs.length > 0 ? { classificationSlugs: classificationSlugs } : {}),
         package: file ?? undefined,
       });
       if (response.status === 200) {
@@ -240,6 +248,13 @@ export function EditDemoPage() {
             ariaLabel="作品类型"
           />
         </label>
+
+        <ClassificationPicker
+          value={classificationSlugs}
+          onChange={setClassificationSlugs}
+          disabled={busy}
+          extra={state.kind === 'ok' ? state.demo.classifications.map((c) => c.slug) : []}
+        />
 
         <ModelPicker
           value={modelSlugs}
