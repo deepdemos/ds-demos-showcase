@@ -6,6 +6,7 @@ import {
   ButtonPrimaryDemo,
 } from './button.demo';
 import { CheckboxDefaultDemo, CheckboxDisabledDemo } from './checkbox.demo';
+import { RatingDefaultDemo, RatingDisabledDemo, RatingEmptyDemo } from './rating.demo';
 import { EmptyStateDefaultDemo, EmptyStateWithActionDemo } from './empty-state.demo';
 import { ErrorStateDefaultDemo, ErrorStateWithRetryDemo } from './error-state.demo';
 import {
@@ -225,6 +226,30 @@ export const controls: ControlSpec[] = [
     category: 'selection',
     description: '不可选择状态。',
     Demo: SelectDisabledDemo,
+  },
+  {
+    id: 'rating/default',
+    component: 'Rating',
+    name: '五颗星评分',
+    category: 'input',
+    description: '点星打分，点已选中的那颗表示撤销。',
+    Demo: RatingDefaultDemo,
+  },
+  {
+    id: 'rating/empty',
+    component: 'Rating',
+    name: '未评分',
+    category: 'input',
+    description: '还没打分时的样子。',
+    Demo: RatingEmptyDemo,
+  },
+  {
+    id: 'rating/disabled',
+    component: 'Rating',
+    name: '禁用评分',
+    category: 'input',
+    description: '提交中不可操作。',
+    Demo: RatingDisabledDemo,
   },
   {
     id: 'checkbox/default',

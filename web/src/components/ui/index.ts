@@ -7,6 +7,7 @@ export { FileInput, type FileInputProps } from './file-input';
 export { ErrorState, type ErrorStateProps } from './error-state';
 export { Input, type InputProps } from './input';
 export { Pagination, type PaginationProps } from './pagination';
+export { Rating, type RatingProps } from './rating';
 export { Select, type SelectOption, type SelectProps } from './select';
 export { Skeleton, type SkeletonProps } from './skeleton';
 export { Textarea, type TextareaProps } from './textarea';
