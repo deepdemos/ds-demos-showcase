@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { Button, EmptyState, ErrorState, Skeleton } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Rating, Skeleton } from '@/components/ui';
 import {
   archiveDemo,
   deleteDemo,
+  deleteDemoRating,
   getDemo,
   postDemoView,
+  putDemoRating,
   restoreDemo,
   unarchiveDemo,
   type DemoDetail,
@@ -149,6 +151,8 @@ export function DemoDetailPage() {
               {data.demo.downloadCount.toLocaleString('zh-CN')} 次
             </p>
           ) : null}
+
+          <RatingBlock slug={slug} demo={data.demo} />
 
           {data.demo.coverUrl ? (
             <img
@@ -326,6 +330,74 @@ function moderationBanner(state: string, lifecycle: string): string {
  * `confirm` 也行，但那会把「30 天内可恢复」这层信息压成一个干巴巴的问句；
  * 就地展开一行确认，能顺带把这句话说清楚。
  */
+/**
+ * 评分区：平均分 + 票数 + 五颗星。
+ *
+ * # 为什么用 PUT 语义
+ *
+ * 「我对这件作品的分数是 4」是一个状态，不是一条流水。`PUT` 重发多少次结果一样，
+ * 所以连点也不会刷出多票（服务端还有 `rater_key` 唯一约束兜底）。
+ *
+ * # 为什么失败要显示出来
+ *
+ * 评分是用户主动做的动作。静默失败会让他以为自己打了 5 分而实际没打上——
+ * 这与浏览计数相反（那个是页面自己顺带记的，失败不该打扰人）。
+ *
+ * # 为什么点同一颗星是撤销
+ *
+ * 改主意的唯一入口。没有它，用户想取消评分就得去别处找按钮，而页面没有那个按钮。
+ */
+function RatingBlock({ slug, demo }: { slug: string; demo: DemoDetail }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | undefined>();
+
+  function refresh() {
+    // 只重取详情：均分与「我打了几分」都在里面。直接改缓存会让两处口径
+    // （详情 vs 服务端重算）漂开，而这个页面本来就依赖服务端算好的数字。
+    void queryClient.invalidateQueries({ queryKey: ['demo', slug] });
+  }
+
+  const rate = useMutation({
+    mutationFn: async (score: number) => {
+      const response =
+        score > 0 ? await putDemoRating(slug, { score }) : await deleteDemoRating(slug);
+      if (response.status !== 200) {
+        throw new Error(
+          score > 0 ? `打分失败（HTTP ${response.status}）` : `撤销失败（HTTP ${response.status}）`,
+        );
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      setError(undefined);
+      refresh();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const { average, count, mine } = demo.rating;
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <Rating
+        label="给这个作品打分"
+        value={mine ?? 0}
+        onChange={(score) => rate.mutate(score)}
+        disabled={rate.isPending}
+        showValueText
+      />
+      <span className="text-xs text-gray-500 dark:text-gray-400">
+        {count > 0 ? `平均 ${average.toFixed(2)} 分，${count} 人评过` : '还没有人评分'}
+      </span>
+      {error ? (
+        <span role="alert" className="text-xs text-red-600 dark:text-red-400">
+          {error}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function LifecycleBar({ slug, demo }: { slug: string; demo: DemoDetail }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);

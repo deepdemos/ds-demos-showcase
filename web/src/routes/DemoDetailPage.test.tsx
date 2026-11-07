@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { expect, test, vi } from 'vitest';
-import { getDemo } from '@/api';
+import { deleteDemoRating, getDemo, putDemoRating } from '@/api';
 import { DemoDetailPage, DemoDownload, DemoPreview, tombstoneText } from './DemoDetailPage';
 
 vi.mock('@/api', async (importOriginal) => {
@@ -13,6 +13,8 @@ vi.mock('@/api', async (importOriginal) => {
     // 记浏览是 fire-and-forget：不 mock 就会去打真 fetch，落进 catch 里静默失败，
     // 测试仍是绿的但控制台会有一串噪音。
     postDemoView: () => Promise.resolve({ status: 204 }),
+    putDemoRating: vi.fn(),
+    deleteDemoRating: vi.fn(),
   };
 });
 
@@ -31,6 +33,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   moderationState: 'approved',
   viewCount: 0,
   downloadCount: 0,
+  rating: { average: 0, count: 0, mine: null },
   lifecycleActions: { edit: false, archive: false, restore: false, delete: false },
   author: { username: 'alice', displayName: 'Alice' },
   models: [],
@@ -261,4 +264,63 @@ test('已通过的作品不显示审核提示', async () => {
   await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
   expect(screen.queryByText(/审核中/)).toBeNull();
   expect(screen.queryByText(/审核未通过/)).toBeNull();
+});
+
+/**
+ * 评分区的三件事。缺任何一条这块就是摆设：显示不出来 = 没人知道有评分；
+ * 点星不写 = 打了等于没打；错误不显示 = 用户以为打上了。
+ */
+test('详情显示平均分与票数', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ rating: { average: 4.5, count: 12, mine: null } }),
+  } as never);
+  renderPage();
+  await waitFor(() => expect(screen.getByText(/平均 4\.50 分，12 人评过/)).toBeTruthy());
+});
+
+test('点星会把分数写回去', async () => {
+  vi.mocked(putDemoRating).mockResolvedValue({
+    status: 200,
+    data: { average: 5, count: 1, mine: 5 },
+  } as never);
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ rating: { average: 0, count: 0, mine: null } }),
+  } as never);
+  renderPage();
+  await waitFor(() => expect(screen.getByText(/还没有人评分/)).toBeTruthy());
+  screen.getByRole('radio', { name: '打 5 分' }).click();
+  await waitFor(() =>
+    expect(vi.mocked(putDemoRating)).toHaveBeenCalledWith('demo-a', { score: 5 }),
+  );
+});
+
+test('点已选中的那颗星是撤销', async () => {
+  vi.mocked(deleteDemoRating).mockResolvedValue({
+    status: 200,
+    data: { average: 0, count: 0, mine: null },
+  } as never);
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ rating: { average: 3, count: 1, mine: 3 } }),
+  } as never);
+  renderPage();
+  const selected = await screen.findByRole('radio', { name: /取消评分/ });
+  selected.click();
+  await waitFor(() => expect(vi.mocked(deleteDemoRating)).toHaveBeenCalledWith('demo-a'));
+});
+
+test('打分失败时把原因显示出来', async () => {
+  vi.mocked(putDemoRating).mockResolvedValue({ status: 503 } as never);
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ rating: { average: 0, count: 0, mine: null } }),
+  } as never);
+  renderPage();
+  // 等数据到位再点：详情是异步查询，抢在渲染前点会点到空气（这也是
+  // 「点了没反应」在真实页面里最容易被误判成实现坏了的场景）。
+  await waitFor(() => expect(screen.getByText(/还没有人评分/)).toBeTruthy());
+  screen.getByRole('radio', { name: '打 2 分' }).click();
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('打分失败'));
 });
