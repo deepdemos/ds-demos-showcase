@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, FileInput, Input, Select, Textarea } from '@/components/ui';
+import { ClassificationPicker } from '@/components/classification-picker';
 import { ModelPicker } from '@/components/model-picker';
 import { submitDemo, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -26,6 +27,7 @@ export function SubmitPage() {
   const [description, setDescription] = useState('');
   const [demoType, setDemoType] = useState('web');
   const [modelSlugs, setModelSlugs] = useState<string[]>([]);
+  const [classificationSlugs, setClassificationSlugs] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -54,6 +56,8 @@ export function SubmitPage() {
         // 不传空数组：契约里 modelSlugs 可省略，空数组和不传在服务端是同一个语义
         // （整体替换），但省略能让请求体少一个字段、日志少一行噪音。
         ...(modelSlugs.length > 0 ? { modelSlugs: modelSlugs } : {}),
+        // 分类同理：空数组与不传在服务端都是「没打分类」，省略少一个字段。
+        ...(classificationSlugs.length > 0 ? { classificationSlugs: classificationSlugs } : {}),
         package: file,
       });
       // 201 = 新建；200 = 重放（同一个 Idempotency-Key 已经建过）。
@@ -140,6 +144,12 @@ export function SubmitPage() {
             ariaLabel="作品类型"
           />
         </label>
+
+        <ClassificationPicker
+          value={classificationSlugs}
+          onChange={setClassificationSlugs}
+          disabled={busy}
+        />
 
         <ModelPicker value={modelSlugs} onChange={setModelSlugs} disabled={busy} />
 

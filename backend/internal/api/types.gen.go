@@ -240,8 +240,12 @@ type ClassificationCatalog struct {
 		Dimension   ClassificationCatalogDimensionsDimension `json:"dimension"`
 		Label       string                                   `json:"label"`
 
-		// Mode `fixed` 是闭集（只有管理员能加），`open` 允许作者提交新词条待审。
-		// 目前只有 `subject` 是 open——「对着什么做的」没法预先穷举。
+		// Mode `fixed` 是闭集，`open` 表示这个维度天然会长尾（目前只有 `subject`）。
+		//
+		// **两个取值都不代表作者能自助新增词条**：投稿与更新时传的 slug 必须是
+		// 库里已有的，填一个不存在的会 400。`open` 说的是「维度本身开放增长」，
+		// 录入仍由管理员完成——自助提交待审那条路径尚未实现
+		// （见 `docs/已知松点.md` 第 55 条）。
 		Mode ClassificationCatalogDimensionsMode `json:"mode"`
 	} `json:"dimensions"`
 	Items []Classification `json:"items"`
@@ -250,8 +254,12 @@ type ClassificationCatalog struct {
 // ClassificationCatalogDimensionsDimension defines model for ClassificationCatalog.Dimensions.Dimension.
 type ClassificationCatalogDimensionsDimension string
 
-// ClassificationCatalogDimensionsMode `fixed` 是闭集（只有管理员能加），`open` 允许作者提交新词条待审。
-// 目前只有 `subject` 是 open——「对着什么做的」没法预先穷举。
+// ClassificationCatalogDimensionsMode `fixed` 是闭集，`open` 表示这个维度天然会长尾（目前只有 `subject`）。
+//
+// **两个取值都不代表作者能自助新增词条**：投稿与更新时传的 slug 必须是
+// 库里已有的，填一个不存在的会 400。`open` 说的是「维度本身开放增长」，
+// 录入仍由管理员完成——自助提交待审那条路径尚未实现
+// （见 `docs/已知松点.md` 第 55 条）。
 type ClassificationCatalogDimensionsMode string
 
 // ClassificationRef defines model for ClassificationRef.

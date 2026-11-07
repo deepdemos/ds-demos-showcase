@@ -23,9 +23,24 @@ const models = vi.hoisted(() => ({
 
 // 投稿页现在会读模型目录（`GET /api/v1/models`）。不 mock 的话 jsdom 会去打真 fetch，
 // 落进「目录读不到」那条分支——测试仍然是绿的，但测的已经不是正常路径了。
+const classificationCatalog = {
+  dimensions: [
+    { dimension: 'genre', label: '形态', mode: 'fixed' },
+    { dimension: 'technique', label: '技术', mode: 'fixed' },
+    { dimension: 'subject', label: '题材', mode: 'open' },
+  ],
+  items: [
+    { dimension: 'genre', slug: 'game', label: '小游戏', demoCount: 3 },
+    { dimension: 'technique', slug: '3D建模', label: '3D建模', demoCount: 1 },
+  ],
+};
+
+// 投稿页还会读分类目录（`GET /api/v1/classifications`）。不 mock 同样会打到真 fetch，
+// 落进「目录读不到」的分支——组件会把分类区渲染成一句提示，测试看着绿，但没测到选择器。
 vi.mock('@/api', () => ({
   submitDemo: vi.fn(),
   listModels: () => Promise.resolve({ status: 200, data: models }),
+  listClassifications: () => Promise.resolve({ status: 200, data: classificationCatalog }),
 }));
 
 function renderAt(path: string) {
@@ -100,6 +115,36 @@ describe('SubmitPage', () => {
     await waitFor(() => expect(submitDemo).toHaveBeenCalled());
     const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
     expect(body.modelSlugs).toEqual(['deepseek-reasoner']);
+  });
+
+  /**
+   * 勾选的分类必须真的进请求体。
+   *
+   * 分类是可选字段，漏传不会报错、不会有日志——只会让作者以为作品被归了类，
+   * 而库里什么都没有。所以断言落在请求体上，不是「界面上勾上了」。
+   */
+  test('勾选的分类跟着投稿一起提交', async () => {
+    auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+    auth.isLoading = false;
+    vi.mocked(submitDemo).mockResolvedValue({
+      status: 201,
+      data: { slug: 'demo-a', lifecycleState: 'draft', moderationState: 'pending' },
+    } as never);
+
+    renderAt('/submit');
+
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '我的作品' } });
+    pickFile();
+
+    const box = await screen.findByLabelText('小游戏');
+    fireEvent.click(box);
+    fireEvent.click(screen.getByLabelText('3D建模'));
+
+    fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
+
+    await waitFor(() => expect(submitDemo).toHaveBeenCalled());
+    const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(body.classificationSlugs).toEqual(['game', '3D建模']);
   });
 
   /**
