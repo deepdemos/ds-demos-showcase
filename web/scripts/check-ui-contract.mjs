@@ -286,13 +286,14 @@ for (const file of sourceFiles) {
 // 原生 `<button>` / `<textarea>` 一个都不导入，于是整条规则对它们完全隐形。三处裸
 // `<textarea>` 与七处裸 `<button>` 就是这么长出来的——门禁全绿，页面里却各有各的边框色。
 //
-// 扫描范围是**页面层与页面级组件**：`src/routes` 与 `src/components`（除控件库 ui/、
+// 扫描范围是**页面层与页面级组件**：`src/routes`、`src/components`、`src/features`（除控件库 ui/、
 // Dev Room 与测试）。只扫 routes 曾经放过一次：`src/components/model-picker.tsx`
 // 里就能写裸 `<button>` 而门禁全绿——AGENTS 的原话是「页面（含页面级组件）」，
 // 而页面级组件恰好住在 components/ 下。
 const nativeControls = new Set(['button', 'textarea', 'input', 'select']);
 const routesRoot = path.join(srcRoot, 'routes');
 const componentsRoot = path.join(srcRoot, 'components');
+const featuresRoot = path.join(srcRoot, 'features');
 // 控件库自己要用原生元素（它就是把原生控件包起来的），Dev Room 是演示场。
 //
 // Dev Room 的路径必须用 devRoomRoot：它住在 `src/dev-room`，不是 `src/components/dev-room`。
@@ -302,7 +303,10 @@ const nativeExempt = [uiRoot, devRoomRoot];
 for (const file of sourceFiles) {
   const inScope =
     isInside(file, routesRoot) ||
-    (isInside(file, componentsRoot) && !nativeExempt.some((dir) => isInside(file, dir)));
+    (isInside(file, componentsRoot) && !nativeExempt.some((dir) => isInside(file, dir))) ||
+    // 页面级组件也可能住在 `src/features/` 下（管理端那几个区块就是）。
+    // 只扫 routes + components 时它们完全不受约束——这正是上一轮 r5 的形状。
+    isInside(file, featuresRoot);
   if (!inScope) continue;
   // 测试里的合成触发器不是页面控件（例如「用 useNavigate 的按钮」验证 URL 变化后输入框跟随），
   // 它不出现在用户看到的界面上，套控件库只会让测试依赖一件与它无关的东西。

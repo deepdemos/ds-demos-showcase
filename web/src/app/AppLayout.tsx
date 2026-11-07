@@ -32,6 +32,13 @@ export function AppLayout() {
                   待审
                 </Link>
               ) : null}
+              {/* 模型导入只有 admin 有 `model.import`。这里同样只是入口可见性，
+                  不是权限判定——moderator 点进来会看到「没有导入权限」。 */}
+              {me.role === 'admin' ? (
+                <Link to="/admin/models" className="text-sm underline">
+                  模型
+                </Link>
+              ) : null}
               <span className="text-gray-500 dark:text-gray-400">
                 {me.displayName || me.username}
               </span>
