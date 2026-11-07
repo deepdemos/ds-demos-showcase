@@ -490,6 +490,18 @@
       "items": {
         "type": "[]ModelCatalogItem",
         "optional": false
+      },
+      "limit": {
+        "type": "int",
+        "optional": false
+      },
+      "offset": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
       }
     },
     "ModelImportApply": {
@@ -657,6 +669,32 @@
       },
       "syncedAt": {
         "type": "time.Time",
+        "optional": false
+      }
+    },
+    "ModelSyncStatus": {
+      "error": {
+        "type": "string",
+        "optional": true
+      },
+      "items": {
+        "type": "int",
+        "optional": false
+      },
+      "lastAttemptAt": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "lastSuccessAt": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "source": {
+        "type": "string",
+        "optional": false
+      },
+      "status": {
+        "type": "string",
         "optional": false
       }
     },
@@ -1070,6 +1108,11 @@
     },
     "POST /api/v1/admin/models/import/preview": {
       "method": "PreviewModelImport",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/admin/models/sync": {
+      "method": "GetModelSyncStatus",
       "pathParams": 0,
       "params": null
     },

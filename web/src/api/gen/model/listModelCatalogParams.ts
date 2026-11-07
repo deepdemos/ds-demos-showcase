@@ -8,7 +8,7 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 33 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 34 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -31,7 +31,8 @@
 
 export type ListModelCatalogParams = {
   /**
-   * 按名称 / 上游 id / canonical / 厂商名模糊匹配；不传表示不过滤
+   * 按名称 / 上游 id / canonical / 厂商名子串匹配；不传表示不过滤。
+   * `%` / `_` / `\` 按字面匹配（服务端转义），不当作通配符——与作品搜索同一口径。
    * @maxLength 100
    */
   q?: string;
@@ -42,4 +43,10 @@ export type ListModelCatalogParams = {
    * @maximum 200
    */
   limit?: number;
+  /**
+   * 跳过多少条。响应里的 `total` 是同一组筛选条件下的总数，
+   * 所以「第几页 / 共几页」由调用方自己算，接口不替它做除法。
+   * @minimum 0
+   */
+  offset?: number;
 };

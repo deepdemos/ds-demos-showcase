@@ -727,6 +727,15 @@ type ModelCatalogItem struct {
 // ModelCatalogList defines model for ModelCatalogList.
 type ModelCatalogList struct {
 	Items []ModelCatalogItem `json:"items"`
+
+	// Limit 本次请求的 limit，回显用
+	Limit int `json:"limit"`
+
+	// Offset 本次请求的 offset，回显用
+	Offset int `json:"offset"`
+
+	// Total 同一组筛选条件下的总条数（不受 limit / offset 影响）
+	Total int `json:"total"`
 }
 
 // ModelImportApply defines model for ModelImportApply.
@@ -880,6 +889,27 @@ type ModelSyncResult struct {
 
 	// SyncedAt 这次同步的完成时间（`skipped=true` 时是本次检查时间）
 	SyncedAt time.Time `json:"syncedAt"`
+}
+
+// ModelSyncStatus defines model for ModelSyncStatus.
+type ModelSyncStatus struct {
+	// Error 上次失败的原因；成功或从未同步时为 null
+	Error *string `json:"error"`
+
+	// Items 上一次成功同步落库的条目数；从未成功过是 0
+	Items int `json:"items"`
+
+	// LastAttemptAt 上一次**尝试**的时间（成功与失败都算）
+	LastAttemptAt *time.Time `json:"lastAttemptAt"`
+
+	// LastSuccessAt 上一次**成功**的时间。失败不会覆盖它——这是判断「镜像有多旧」的依据
+	LastSuccessAt *time.Time `json:"lastSuccessAt"`
+
+	// Source 来源标识，当前恒为 `models.dev`
+	Source string `json:"source"`
+
+	// Status `ok` / `stale` / `failed` / `never`。见端点描述——故意不是 enum。
+	Status string `json:"status"`
 }
 
 // PasswordResetCodeRequest defines model for PasswordResetCodeRequest.
@@ -1037,12 +1067,17 @@ type VerifyEmailResendRequest struct {
 
 // ListModelCatalogParams defines parameters for ListModelCatalog.
 type ListModelCatalogParams struct {
-	// Q 按名称 / 上游 id / canonical / 厂商名模糊匹配；不传表示不过滤
+	// Q 按名称 / 上游 id / canonical / 厂商名子串匹配；不传表示不过滤。
+	// `%` / `_` / `\` 按字面匹配（服务端转义），不当作通配符——与作品搜索同一口径。
 	Q *string `form:"q,omitempty" json:"q,omitempty"`
 
 	// IncludeDeprecated 是否包含上游已弃用的条目
 	IncludeDeprecated *bool `form:"includeDeprecated,omitempty" json:"includeDeprecated,omitempty"`
 	Limit             *int  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset 跳过多少条。响应里的 `total` 是同一组筛选条件下的总数，
+	// 所以「第几页 / 共几页」由调用方自己算，接口不替它做除法。
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // ListDemoReviewQueueParams defines parameters for ListDemoReviewQueue.

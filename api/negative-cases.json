@@ -410,6 +410,20 @@
           "file": "backend/internal/httpapi/model_import_integration_test.go",
           "name": "TestIntegrationModelCatalogSearch"
         }
+      },
+      {
+        "case": "搜索框里的 % 与 _ 按字面匹配，不当通配符",
+        "test": {
+          "file": "backend/internal/httpapi/model_admin_integration_test.go",
+          "name": "TestIntegrationCatalogSearchTreatsWildcardsLiterally"
+        }
+      },
+      {
+        "case": "翻页时 total 与列表用同一组筛选条件，最后一页不重复不少条",
+        "test": {
+          "file": "backend/internal/httpapi/model_admin_integration_test.go",
+          "name": "TestIntegrationCatalogPaging"
+        }
       }
     ],
     "POST /api/v1/admin/models/import/preview": [
@@ -526,6 +540,22 @@
         "test": {
           "file": "backend/internal/httpapi/rating_integration_test.go",
           "name": "TestIntegrationDeleteDemoRating"
+        }
+      }
+    ],
+    "GET /api/v1/admin/models/sync": [
+      {
+        "case": "从未同步过返回 status=never，不是 404",
+        "test": {
+          "file": "backend/internal/httpapi/model_admin_integration_test.go",
+          "name": "TestIntegrationModelSyncStatusNever"
+        }
+      },
+      {
+        "case": "失败之后 lastSuccessAt 不被覆盖（镜像有多旧仍可判断）",
+        "test": {
+          "file": "backend/internal/httpapi/model_admin_integration_test.go",
+          "name": "TestIntegrationModelSyncStatusReadsLedger"
         }
       }
     ]

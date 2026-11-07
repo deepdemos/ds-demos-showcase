@@ -10,7 +10,7 @@ info:
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 33 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 34 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1537,6 +1537,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+    get:
+      operationId: getModelSyncStatus
+      tags: [治理]
+      summary: 读目录同步状态
+      description: |
+        读 `model_source_sync` 里这一来源的记账。**从没同步过时不是 404**：那是
+        「从未同步」这个正常状态，返回 `status = never` 且时间为 null——管理页要能
+        因此显示「点上面的同步」而不是一条红色错误。
+
+        `status` 的四个取值（**故意不是 enum**：`ModelImportField.source` 与
+        `Model.source` 的取值几乎重叠，写 enum 会让 oapi-codegen 给全仓枚举常量
+        加类型前缀，那是为一个描述性字段付的全局代价）：
+
+        - `ok`：上次成功，且没到下一个间隔
+        - `stale`：上次成功，但已过间隔（定时器还没跑到 / 被关掉了）
+        - `failed`：上次失败，`error` 里有原因；`lastSuccessAt` 仍是上一次成功的时间
+        - `never`：一行都没有
+
+        需要 `model.import` 权限。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 同步状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSyncStatus'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有导入权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/models/catalog:
     get:
       operationId: listModelCatalog
@@ -1561,7 +1608,9 @@ paths:
         - name: q
           in: query
           schema: { type: string, maxLength: 100 }
-          description: 按名称 / 上游 id / canonical / 厂商名模糊匹配；不传表示不过滤
+          description: |
+            按名称 / 上游 id / canonical / 厂商名子串匹配；不传表示不过滤。
+            `%` / `_` / `\` 按字面匹配（服务端转义），不当作通配符——与作品搜索同一口径。
         - name: includeDeprecated
           in: query
           schema: { type: boolean, default: false }
@@ -1569,9 +1618,15 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: |
+            跳过多少条。响应里的 `total` 是同一组筛选条件下的总数，
+            所以「第几页 / 共几页」由调用方自己算，接口不替它做除法。
       responses:
         '200':
-          description: 目录条目
+          description: 目录条目（含 `total`）
           content:
             application/json:
               schema:
@@ -2175,12 +2230,55 @@ components:
     ModelCatalogList:
       type: object
       additionalProperties: false
-      required: [items]
+      required: [items, total, limit, offset]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/ModelCatalogItem'
+        total:
+          type: integer
+          minimum: 0
+          description: 同一组筛选条件下的总条数（不受 limit / offset 影响）
+        limit:
+          type: integer
+          minimum: 1
+          description: 本次请求的 limit，回显用
+        offset:
+          type: integer
+          minimum: 0
+          description: 本次请求的 offset，回显用
+
+    ModelSyncStatus:
+      type: object
+      additionalProperties: false
+      required: [source, status, items]
+      properties:
+        source:
+          type: string
+          description: 来源标识，当前恒为 `models.dev`
+        status:
+          type: string
+          description: |
+            `ok` / `stale` / `failed` / `never`。见端点描述——故意不是 enum。
+        items:
+          type: integer
+          minimum: 0
+          description: 上一次成功同步落库的条目数；从未成功过是 0
+        lastAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 上一次**尝试**的时间（成功与失败都算）
+        lastSuccessAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 上一次**成功**的时间。失败不会覆盖它——这是判断「镜像有多旧」的依据
+        error:
+          type: string
+          nullable: true
+          description: 上次失败的原因；成功或从未同步时为 null
     ModelSyncResult:
       type: object
       required: [source, status, items, skipped, syncedAt]

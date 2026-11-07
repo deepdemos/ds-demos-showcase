@@ -34,6 +34,36 @@ func (q *Queries) CopyRevisionModels(ctx context.Context, arg CopyRevisionModels
 	return err
 }
 
+const countCatalogItems = `-- name: CountCatalogItems :one
+SELECT count(*)::bigint
+FROM model_catalog_items i
+WHERE ($1::text IS NULL
+       OR i.name ILIKE '%' || $1::text || '%' ESCAPE '\'
+       OR i.external_id ILIKE '%' || $1::text || '%' ESCAPE '\'
+       OR COALESCE(i.canonical_id, '') ILIKE '%' || $1::text || '%' ESCAPE '\'
+       OR i.provider_name ILIKE '%' || $1::text || '%' ESCAPE '\')
+  AND ($2::boolean IS TRUE
+       OR COALESCE(i.upstream_status, '') <> 'deprecated')
+`
+
+type CountCatalogItemsParams struct {
+	Q                 pgtype.Text
+	IncludeDeprecated pgtype.Bool
+}
+
+// 与 `ListCatalogItems` 同一组筛选条件下的总数（分页要用）。
+//
+// 两条 SQL 的 WHERE 必须逐字一致，否则「共 N 条」与翻页到底的条数对不上——
+// 那种偏差在界面上表现为「最后一页少几条」，很难归因。
+//
+// `%` / `_` / `\` 由调用方先转义（与作品搜索同一口径），这里只负责 `ESCAPE '\'`。
+func (q *Queries) CountCatalogItems(ctx context.Context, arg CountCatalogItemsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCatalogItems, arg.Q, arg.IncludeDeprecated)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createCandidateModel = `-- name: CreateCandidateModel :one
 INSERT INTO models (slug, name, vendor, status, resolution, description)
 VALUES (
@@ -464,19 +494,21 @@ SELECT i.id,
        ) THEN true ELSE false END AS imported
 FROM model_catalog_items i
 WHERE ($1::text IS NULL
-       OR i.name ILIKE '%' || $1::text || '%'
-       OR i.external_id ILIKE '%' || $1::text || '%'
-       OR COALESCE(i.canonical_id, '') ILIKE '%' || $1::text || '%'
-       OR i.provider_name ILIKE '%' || $1::text || '%')
+       OR i.name ILIKE '%' || $1::text || '%' ESCAPE '\'
+       OR i.external_id ILIKE '%' || $1::text || '%' ESCAPE '\'
+       OR COALESCE(i.canonical_id, '') ILIKE '%' || $1::text || '%' ESCAPE '\'
+       OR i.provider_name ILIKE '%' || $1::text || '%' ESCAPE '\')
   AND ($2::boolean IS TRUE
        OR COALESCE(i.upstream_status, '') <> 'deprecated')
 ORDER BY i.provider_name, i.name, i.id
-LIMIT $3::int
+LIMIT $4::int
+OFFSET $3::int
 `
 
 type ListCatalogItemsParams struct {
 	Q                 pgtype.Text
 	IncludeDeprecated pgtype.Bool
+	RowOffset         int32
 	RowLimit          int32
 }
 
@@ -514,7 +546,12 @@ type ListCatalogItemsRow struct {
 // 这与我们的 `models.status='deprecated'`（合并退役）是两套语义，不可混用：
 // 上游弃用说的是「厂商不再维护」，我们弃用说的是「这条已经并到别人身上」。
 func (q *Queries) ListCatalogItems(ctx context.Context, arg ListCatalogItemsParams) ([]ListCatalogItemsRow, error) {
-	rows, err := q.db.Query(ctx, listCatalogItems, arg.Q, arg.IncludeDeprecated, arg.RowLimit)
+	rows, err := q.db.Query(ctx, listCatalogItems,
+		arg.Q,
+		arg.IncludeDeprecated,
+		arg.RowOffset,
+		arg.RowLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

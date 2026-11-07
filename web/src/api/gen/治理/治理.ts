@@ -8,7 +8,7 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 33 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 34 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -40,6 +40,7 @@ import type {
   ModelImportPreview,
   ModelImportRef,
   ModelSyncResult,
+  ModelSyncStatus,
   PublishRequest,
   PublishResult,
   ReviewDecision,
@@ -131,6 +132,79 @@ export const syncModelCatalog = async ( options?: RequestInit): Promise<syncMode
 
   const data: syncModelCatalogResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as syncModelCatalogResponse
+}
+
+
+export type getModelSyncStatusResponse200 = {
+  data: ModelSyncStatus
+  status: 200
+}
+
+export type getModelSyncStatusResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getModelSyncStatusResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getModelSyncStatusResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getModelSyncStatusResponseSuccess = (getModelSyncStatusResponse200) & {
+  headers: Headers;
+};
+export type getModelSyncStatusResponseError = (getModelSyncStatusResponse401 | getModelSyncStatusResponse403 | getModelSyncStatusResponse503) & {
+  headers: Headers;
+};
+
+export type getModelSyncStatusResponse = (getModelSyncStatusResponseSuccess | getModelSyncStatusResponseError)
+
+export const getGetModelSyncStatusUrl = () => {
+
+
+
+
+  return `/api/v1/admin/models/sync`
+}
+
+/**
+ * 读 `model_source_sync` 里这一来源的记账。**从没同步过时不是 404**：那是
+ * 「从未同步」这个正常状态，返回 `status = never` 且时间为 null——管理页要能
+ * 因此显示「点上面的同步」而不是一条红色错误。
+ *
+ * `status` 的四个取值（**故意不是 enum**：`ModelImportField.source` 与
+ * `Model.source` 的取值几乎重叠，写 enum 会让 oapi-codegen 给全仓枚举常量
+ * 加类型前缀，那是为一个描述性字段付的全局代价）：
+ *
+ * - `ok`：上次成功，且没到下一个间隔
+ * - `stale`：上次成功，但已过间隔（定时器还没跑到 / 被关掉了）
+ * - `failed`：上次失败，`error` 里有原因；`lastSuccessAt` 仍是上一次成功的时间
+ * - `never`：一行都没有
+ *
+ * 需要 `model.import` 权限。
+ * @summary 读目录同步状态
+ */
+export const getModelSyncStatus = async ( options?: RequestInit): Promise<getModelSyncStatusResponse> => {
+
+  const res = await fetch(getGetModelSyncStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getModelSyncStatusResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getModelSyncStatusResponse
 }
 
 
