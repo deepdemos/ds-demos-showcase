@@ -558,6 +558,43 @@
           "name": "TestIntegrationModelSyncStatusReadsLedger"
         }
       }
+    ],
+    "GET /api/v1/models/{slug}": [
+      {
+        "case": "只看公开作品：待审与下架都不计入作品数",
+        "test": {
+          "file": "backend/internal/httpapi/model_page_integration_test.go",
+          "name": "TestIntegrationModelPageCountsPublicOnly"
+        }
+      },
+      {
+        "case": "没有档案时 specs 是 null 而不是空对象",
+        "test": {
+          "file": "backend/internal/httpapi/model_page_integration_test.go",
+          "name": "TestIntegrationModelPageSpecsNullWhenMissing"
+        }
+      },
+      {
+        "case": "没人投票时 scored=false，界面不该显示 0 分",
+        "test": {
+          "file": "backend/internal/httpapi/model_page_integration_test.go",
+          "name": "TestIntegrationModelPageNotScoredWithoutVotes"
+        }
+      },
+      {
+        "case": "未知模型回 404",
+        "test": {
+          "file": "backend/internal/httpapi/model_page_integration_test.go",
+          "name": "TestIntegrationModelPageNotFound"
+        }
+      },
+      {
+        "case": "基准只列参与综合分资格的条目（参赛数 < 3、自报都排除）",
+        "test": {
+          "file": "backend/internal/httpapi/model_page_integration_test.go",
+          "name": "TestIntegrationModelPageBenchmarksFiltered"
+        }
+      }
     ]
   },
   "outsideContract": {

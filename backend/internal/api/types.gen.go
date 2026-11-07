@@ -666,6 +666,21 @@ type ModelSource string
 // 条目但来源可疑；`deprecated` 已退役。
 type ModelStatus string
 
+// ModelBenchmarkScore defines model for ModelBenchmarkScore.
+type ModelBenchmarkScore struct {
+	AsOf             openapi_types.Date `json:"asOf"`
+	BenchmarkName    string             `json:"benchmarkName"`
+	BenchmarkSlug    string             `json:"benchmarkSlug"`
+	MetricKey        string             `json:"metricKey"`
+	MetricLabel      string             `json:"metricLabel"`
+	ParticipantCount *int               `json:"participantCount"`
+	Rank             *int               `json:"rank"`
+	RawScore         float64            `json:"rawScore"`
+	SourceUrl        *string            `json:"sourceUrl,omitempty"`
+	Unit             *string            `json:"unit,omitempty"`
+	Version          string             `json:"version"`
+}
+
 // ModelCatalogItem defines model for ModelCatalogItem.
 type ModelCatalogItem struct {
 	// CanonicalId 上游 canonical 标识（如 `deepseek/deepseek-v4-flash`）；上游没有时为空串
@@ -736,6 +751,15 @@ type ModelCatalogList struct {
 
 	// Total 同一组筛选条件下的总条数（不受 limit / offset 影响）
 	Total int `json:"total"`
+}
+
+// ModelDemoRef defines model for ModelDemoRef.
+type ModelDemoRef struct {
+	CreatedAt     time.Time `json:"createdAt"`
+	RatingAverage float64   `json:"ratingAverage"`
+	RatingCount   int       `json:"ratingCount"`
+	Slug          string    `json:"slug"`
+	Title         string    `json:"title"`
 }
 
 // ModelImportApply defines model for ModelImportApply.
@@ -859,6 +883,35 @@ type ModelList struct {
 	Items []Model `json:"items"`
 }
 
+// ModelProfile defines model for ModelProfile.
+type ModelProfile struct {
+	// Benchmarks 第三方基准里**参与综合分资格**的条目（榜单与版本都 active、`coverage=full`、
+	// 非自报、有 primary 指标、有名次、参赛数 ≥ 3）。不满足的留在库里但不进这里。
+	Benchmarks []ModelBenchmarkScore `json:"benchmarks"`
+
+	// Demos 用了这个模型的**公开**作品，按创建时间倒序
+	Demos []ModelDemoRef `json:"demos"`
+	Model Model          `json:"model"`
+
+	// Providers provider 分布；`providerId` 为空的行是「来源未标注」，排在最后
+	Providers []ModelProviderSlice `json:"providers"`
+	Site      ModelSiteStats       `json:"site"`
+	Specs     *ModelSpecs          `json:"specs"`
+}
+
+// ModelProviderSlice defines model for ModelProviderSlice.
+type ModelProviderSlice struct {
+	// AvgRating 只做参考，**不参与**社区分；票数为 0 时为 null
+	AvgRating    *float64 `json:"avgRating"`
+	DemoCount    int      `json:"demoCount"`
+	ProviderId   *int     `json:"providerId"`
+	ProviderName string   `json:"providerName"`
+
+	// ProviderSlug 空串表示未标注
+	ProviderSlug string `json:"providerSlug"`
+	Votes        int    `json:"votes"`
+}
+
 // ModelRef defines model for ModelRef.
 type ModelRef struct {
 	// Name 给人看的模型名
@@ -869,6 +922,49 @@ type ModelRef struct {
 
 	// Vendor 厂商名；未知时为空串
 	Vendor string `json:"vendor"`
+}
+
+// ModelSiteStats defines model for ModelSiteStats.
+type ModelSiteStats struct {
+	// DemoCount 公开作品数（与作品库 `?model=<slug>` 的条数同源）
+	DemoCount int `json:"demoCount"`
+
+	// PriorWeight 收缩用的 `m`：各模型票数中位数，下限 1
+	PriorWeight float64 `json:"priorWeight"`
+
+	// Score 社区分（贝叶斯收缩）。见 `priorWeight`
+	Score float64 `json:"score"`
+
+	// Scored 有票才为 true。false 时 `score` 没有意义（仍给 0，界面不该显示）
+	Scored bool `json:"scored"`
+
+	// Votes 这些作品的评分票数合计
+	Votes int `json:"votes"`
+}
+
+// ModelSpecs 档案（`model_specs`）。**没有档案时整个字段是 null**，不是空对象——
+// 「还没录入」与「录了但每一栏都空」对读者的意义不同。
+// 有档案时逐字段可空：缺值由界面显示 `—`，不要显示 0。
+type ModelSpecs struct {
+	ContextWindow   *int                `json:"contextWindow"`
+	CostIn          *float64            `json:"costIn"`
+	CostOut         *float64            `json:"costOut"`
+	FetchedAt       *time.Time          `json:"fetchedAt"`
+	KnowledgeCutoff *string             `json:"knowledgeCutoff"`
+	License         *string             `json:"license"`
+	MaxOutput       *int                `json:"maxOutput"`
+	ModalitiesIn    *string             `json:"modalitiesIn,omitempty"`
+	ModalitiesOut   *string             `json:"modalitiesOut,omitempty"`
+	Note            *string             `json:"note,omitempty"`
+	OpenWeights     *int                `json:"openWeights"`
+	ParamActiveB    *float64            `json:"paramActiveB"`
+	ParamKind       *string             `json:"paramKind,omitempty"`
+	ParamNote       *string             `json:"paramNote,omitempty"`
+	ParamTotalB     *float64            `json:"paramTotalB"`
+	ReleaseDate     *openapi_types.Date `json:"releaseDate"`
+
+	// Source 档案来源（`models.dev` / `manual` 等）
+	Source *string `json:"source,omitempty"`
 }
 
 // ModelSyncResult defines model for ModelSyncResult.

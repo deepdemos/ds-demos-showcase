@@ -113,6 +113,9 @@ type ServerInterface interface {
 	// 模型目录（全部状态，可筛）
 	// (GET /api/v1/models)
 	ListModels(w http.ResponseWriter, r *http.Request, params ListModelsParams)
+	// 模型页
+	// (GET /api/v1/models/{slug})
+	GetModel(w http.ResponseWriter, r *http.Request, slug string)
 	// 站点可用性
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -317,6 +320,12 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 // 模型目录（全部状态，可筛）
 // (GET /api/v1/models)
 func (_ Unimplemented) ListModels(w http.ResponseWriter, r *http.Request, params ListModelsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 模型页
+// (GET /api/v1/models/{slug})
+func (_ Unimplemented) GetModel(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1191,6 +1200,37 @@ func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// GetModel operation middleware
+func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetModel(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealthz operation middleware
 func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Request) {
 
@@ -1416,6 +1456,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/models", wrapper.ListModels)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/models/{slug}", wrapper.GetModel)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.GetHealthz)

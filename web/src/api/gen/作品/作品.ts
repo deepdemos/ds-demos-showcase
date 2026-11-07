@@ -8,7 +8,7 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 34 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 35 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -41,6 +41,7 @@ import type {
   ListDemosParams,
   ListModelsParams,
   ModelList,
+  ModelProfile,
   RestoreResult,
   RevisionList,
   SubmissionResult,
@@ -107,6 +108,74 @@ export const listClassifications = async ( options?: RequestInit): Promise<listC
 
   const data: listClassificationsResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listClassificationsResponse
+}
+
+
+export type getModelResponse200 = {
+  data: ModelProfile
+  status: 200
+}
+
+export type getModelResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getModelResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getModelResponseSuccess = (getModelResponse200) & {
+  headers: Headers;
+};
+export type getModelResponseError = (getModelResponse404 | getModelResponse503) & {
+  headers: Headers;
+};
+
+export type getModelResponse = (getModelResponseSuccess | getModelResponseError)
+
+export const getGetModelUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/models/${slug}`
+}
+
+/**
+ * 一个模型的完整视图：**档案**（`specs`）、**站内表现**（`site` + `providers` +
+ * `demos`）、**第三方基准**（`benchmarks`）。三块独立口径，不合并成一个总分——
+ * 它们的置信度差得远。
+ *
+ * **站内表现一律按当前 revision**（模型域 §5.1 G18）：作品归属取
+ * `demos.current_revision_id` 对应的关联。作者改稿把模型从 A 换成 B，这里立刻跟着变，
+ * 即使线上展示的仍是 A 那一版。这是选定口径，不是 bug。
+ *
+ * `site.scored=false` 表示**还没有人给它投过票**，此时 `site.score` 没有意义
+ * （契约里仍给 0，但界面不该显示「0 分」）。`site.priorWeight` 是贝叶斯收缩的
+ * `m`（各模型票数中位数，下限 1），摆出来是为了让读者能自己复核分数，不是让人调。
+ *
+ * `providers` 里 `providerId` 为空的行表示「来源未标注」——它不是某个服务方，
+ * 而是我们不知道是谁，所以永远排在最后。
+ * @summary 模型页
+ */
+export const getModel = async (slug: string, options?: RequestInit): Promise<getModelResponse> => {
+
+  const res = await fetch(getGetModelUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getModelResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getModelResponse
 }
 
 

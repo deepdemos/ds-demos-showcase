@@ -412,6 +412,52 @@
         "optional": false
       }
     },
+    "ModelBenchmarkScore": {
+      "asOf": {
+        "type": "openapi_types.Date",
+        "optional": false
+      },
+      "benchmarkName": {
+        "type": "string",
+        "optional": false
+      },
+      "benchmarkSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "metricKey": {
+        "type": "string",
+        "optional": false
+      },
+      "metricLabel": {
+        "type": "string",
+        "optional": false
+      },
+      "participantCount": {
+        "type": "int",
+        "optional": true
+      },
+      "rank": {
+        "type": "int",
+        "optional": true
+      },
+      "rawScore": {
+        "type": "float64",
+        "optional": false
+      },
+      "sourceUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "unit": {
+        "type": "string",
+        "optional": true
+      },
+      "version": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "ModelCatalogItem": {
       "canonicalId": {
         "type": "string",
@@ -501,6 +547,28 @@
       },
       "total": {
         "type": "int",
+        "optional": false
+      }
+    },
+    "ModelDemoRef": {
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "ratingAverage": {
+        "type": "float64",
+        "optional": false
+      },
+      "ratingCount": {
+        "type": "int",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
         "optional": false
       }
     },
@@ -636,6 +704,58 @@
         "optional": false
       }
     },
+    "ModelProfile": {
+      "benchmarks": {
+        "type": "[]ModelBenchmarkScore",
+        "optional": false
+      },
+      "demos": {
+        "type": "[]ModelDemoRef",
+        "optional": false
+      },
+      "model": {
+        "type": "Model",
+        "optional": false
+      },
+      "providers": {
+        "type": "[]ModelProviderSlice",
+        "optional": false
+      },
+      "site": {
+        "type": "ModelSiteStats",
+        "optional": false
+      },
+      "specs": {
+        "type": "ModelSpecs",
+        "optional": true
+      }
+    },
+    "ModelProviderSlice": {
+      "avgRating": {
+        "type": "float64",
+        "optional": true
+      },
+      "demoCount": {
+        "type": "int",
+        "optional": false
+      },
+      "providerId": {
+        "type": "int",
+        "optional": true
+      },
+      "providerName": {
+        "type": "string",
+        "optional": false
+      },
+      "providerSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "votes": {
+        "type": "int",
+        "optional": false
+      }
+    },
     "ModelRef": {
       "name": {
         "type": "string",
@@ -648,6 +768,98 @@
       "vendor": {
         "type": "string",
         "optional": false
+      }
+    },
+    "ModelSiteStats": {
+      "demoCount": {
+        "type": "int",
+        "optional": false
+      },
+      "priorWeight": {
+        "type": "float64",
+        "optional": false
+      },
+      "score": {
+        "type": "float64",
+        "optional": false
+      },
+      "scored": {
+        "type": "bool",
+        "optional": false
+      },
+      "votes": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "ModelSpecs": {
+      "contextWindow": {
+        "type": "int",
+        "optional": true
+      },
+      "costIn": {
+        "type": "float64",
+        "optional": true
+      },
+      "costOut": {
+        "type": "float64",
+        "optional": true
+      },
+      "fetchedAt": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "knowledgeCutoff": {
+        "type": "string",
+        "optional": true
+      },
+      "license": {
+        "type": "string",
+        "optional": true
+      },
+      "maxOutput": {
+        "type": "int",
+        "optional": true
+      },
+      "modalitiesIn": {
+        "type": "string",
+        "optional": true
+      },
+      "modalitiesOut": {
+        "type": "string",
+        "optional": true
+      },
+      "note": {
+        "type": "string",
+        "optional": true
+      },
+      "openWeights": {
+        "type": "int",
+        "optional": true
+      },
+      "paramActiveB": {
+        "type": "float64",
+        "optional": true
+      },
+      "paramKind": {
+        "type": "string",
+        "optional": true
+      },
+      "paramNote": {
+        "type": "string",
+        "optional": true
+      },
+      "paramTotalB": {
+        "type": "float64",
+        "optional": true
+      },
+      "releaseDate": {
+        "type": "openapi_types.Date",
+        "optional": true
+      },
+      "source": {
+        "type": "string",
+        "optional": true
       }
     },
     "ModelSyncResult": {
@@ -1250,6 +1462,11 @@
       "method": "ListModels",
       "pathParams": 0,
       "params": "ListModelsParams"
+    },
+    "GET /api/v1/models/{slug}": {
+      "method": "GetModel",
+      "pathParams": 1,
+      "params": null
     },
     "GET /healthz": {
       "method": "GetHealthz",

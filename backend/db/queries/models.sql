@@ -431,6 +431,200 @@ WHERE m.id = $1;
 -- internal/domain/model/sync.go 里。
 -- ---------------------------------------------------------------------------
 
+-- ---------------------------------------------------------------------------
+-- 模型页读路径（模型域 §5.1）
+--
+-- 三块独立取数：档案（model_specs）、站内表现（demo_models + demo_stats）、
+-- 第三方基准（benchmark_*）。不合并成一个「总分」——三个口径的置信度差得远。
+--
+-- 站内表现一律**按当前 revision**（G18）：`demo_models` 视图就是
+-- `demos ⋈ demo_revision_models(current_revision_id)` 的投影。作者改稿换模型，
+-- 归属立刻跟着变，即使线上展示的还是上一版。
+-- ---------------------------------------------------------------------------
+
+-- name: GetModelBySlug :one
+-- 模型页的主对象。字段面与 `ListModels` 逐字一致，只是按 slug 取。
+SELECT m.id,
+       m.slug,
+       m.name,
+       COALESCE(m.vendor, '')::text AS vendor,
+       m.status,
+       m.resolution,
+       COALESCE(t.slug, '')::text AS merged_into_slug,
+       CASE
+           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = m.id) THEN 'models.dev'
+           ELSE 'manual'
+       END::text AS source,
+       m.description,
+       m.created_at,
+       m.updated_at
+FROM models m
+LEFT JOIN models t ON t.id = m.merged_into_id
+WHERE m.slug = $1;
+
+-- name: GetModelSpecs :one
+-- 档案区。没有行时返回 ErrNoRows——「没有档案」与「档案全是空」是两件事，
+-- 前者界面该说「还没有档案」，后者该显示一排「—」。
+SELECT model_id,
+       context_window,
+       max_output,
+       param_total_b,
+       param_active_b,
+       param_kind,
+       param_note,
+       release_date,
+       knowledge_cutoff,
+       open_weights,
+       cost_in,
+       cost_out,
+       license,
+       modalities_in,
+       modalities_out,
+       source,
+       fetched_at,
+       note
+FROM model_specs
+WHERE model_id = $1;
+
+-- name: ModelSiteStats :one
+-- 站内表现：作品数、票数、以及社区分。
+--
+-- 社区分口径（模型域 §5.2）：
+--   score = (wsum + m*C) / (votes + m)      # 贝叶斯收缩
+--   C     = 全站票加权均分
+--   m     = 各模型票数的中位数（≥1）
+--
+-- `m` 取中位数而不是固定常数：票数分布长尾时，固定常数会让「只有 1 票」的模型
+-- 分数几乎等于它那一票。
+--
+-- `m` 的下限是 1：所有模型都没票时，`m=0` 会让分母变成 0。
+-- 票数为 0 时返回 score = NULL 而不是 0——「没人投过票」与「平均 0 分」在界面上
+-- 是两种完全不同的意思，不能靠前端猜。
+WITH site AS (
+    SELECT COALESCE(SUM(s.rating_avg * s.rating_count), 0)::double precision AS wsum,
+           COALESCE(SUM(s.rating_count), 0)::bigint AS votes,
+           COUNT(DISTINCT dm.demo_id)::bigint AS demo_count
+      FROM demo_models dm
+      JOIN demo_public_demos pd ON pd.demo_id = dm.demo_id
+      LEFT JOIN demo_stats s ON s.demo_id = dm.demo_id
+     WHERE dm.model_id = sqlc.arg(model_id)::bigint
+),
+global_avg AS (
+    SELECT CASE
+               WHEN COALESCE(SUM(rating_count), 0) > 0
+                   THEN SUM(rating_avg * rating_count) / SUM(rating_count)
+               ELSE 0
+           END::double precision AS c
+      FROM demo_stats
+),
+per_model AS (
+    SELECT dm.model_id, COALESCE(SUM(s.rating_count), 0)::bigint AS votes
+      FROM demo_models dm
+      JOIN demo_public_demos pd ON pd.demo_id = dm.demo_id
+      LEFT JOIN demo_stats s ON s.demo_id = dm.demo_id
+     GROUP BY dm.model_id
+),
+m_prior AS (
+    SELECT GREATEST(
+               COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY votes), 1),
+               1
+           )::double precision AS m
+      FROM per_model
+)
+SELECT site.demo_count,
+       site.votes,
+       global_avg.c AS global_avg,
+       m_prior.m AS prior_weight,
+       -- 票数为 0 时 score 是「没有意义」而不是 0 分。契约里用 `scored` 布尔表达这件事：
+       -- 单靠 score = 0 分不清「没人投过」与「平均分为 0」。
+       (site.votes > 0) AS scored,
+       COALESCE(
+           CASE
+               WHEN site.votes = 0 THEN NULL
+               ELSE (site.wsum + m_prior.m * global_avg.c) / (site.votes + m_prior.m)
+           END,
+           0
+       )::double precision AS score
+  FROM site, global_avg, m_prior;
+
+-- name: ListModelDemos :many
+-- 用了这个模型的公开作品。判据与作品库同一份（demo_public_demos），保证
+-- 「模型页显示 6 件」与「作品库筛选该模型 6 条」永远一致。
+SELECT d.slug,
+       d.title,
+       d.created_at,
+       COALESCE(s.rating_avg, 0)::double precision AS rating_avg,
+       COALESCE(s.rating_count, 0)::bigint AS rating_count
+  FROM demo_models dm
+  JOIN demo_public_demos pd ON pd.demo_id = dm.demo_id
+  JOIN demos d ON d.id = dm.demo_id
+  LEFT JOIN demo_stats s ON s.demo_id = dm.demo_id
+ WHERE dm.model_id = sqlc.arg(model_id)::bigint
+ ORDER BY d.created_at DESC, d.id DESC;
+
+-- name: ListModelProviders :many
+-- provider 分布（模型域 §5.2.1）。只读展示，**不改变**上面的社区分。
+--
+-- `provider_id` 为空时归成一行「未标注」，界面上永远排最后：它不是「某个 provider」，
+-- 而是「我们不知道是谁」。混在中间会让人以为它是一个服务方。
+SELECT dm.provider_id,
+       COALESCE(p.slug, '')::text AS provider_slug,
+       COALESCE(p.name, '')::text AS provider_name,
+       COUNT(DISTINCT dm.demo_id)::bigint AS demo_count,
+       COALESCE(SUM(s.rating_count), 0)::bigint AS votes,
+       -- NULL 会被 pgx 直接扫描失败（`cannot scan NULL into *float64`），
+       -- 所以这里给 0，并在 Go 里按 votes > 0 决定要不要展示。
+       COALESCE(
+           CASE
+               WHEN SUM(s.rating_count) > 0
+                   THEN SUM(s.rating_avg * s.rating_count) / SUM(s.rating_count)
+               ELSE NULL
+           END,
+           0
+       )::double precision AS avg_rating
+  FROM demo_models dm
+  JOIN demo_public_demos pd ON pd.demo_id = dm.demo_id
+  LEFT JOIN demo_stats s ON s.demo_id = dm.demo_id
+  LEFT JOIN providers p ON p.id = dm.provider_id
+ WHERE dm.model_id = sqlc.arg(model_id)::bigint
+ GROUP BY dm.provider_id, p.slug, p.name
+ ORDER BY (dm.provider_id IS NULL), COUNT(DISTINCT dm.demo_id) DESC, provider_name;
+
+-- name: ListModelBenchmarks :many
+-- 第三方基准（模型域 §5.3/§5.4 的读取侧）。**只列参与综合分资格的条目**：
+-- 榜单与版本都 active、`coverage='full'`、非自报、有 primary 指标、`ranked` 且有名次、
+-- 参赛数 ≥ 3。不满足的留在库里但不进页面——把「不参与」的东西摆出来，
+-- 读者会以为它参与了。
+--
+-- 综合分与强弱标记本期不算：它要等归一化方案拍板（模型域 §5.3 明写待定）。
+-- 这一层先把「每张榜给了什么」如实摆出来。
+SELECT b.slug AS benchmark_slug,
+       b.name AS benchmark_name,
+       bv.version,
+       bv.as_of,
+       bv.participant_count,
+       bv.source_url,
+       bm.key AS metric_key,
+       bm.label AS metric_label,
+       bm.unit,
+       bs.raw_score,
+       bs.rank
+  FROM benchmark_scores bs
+  JOIN benchmark_metrics bm ON bm.id = bs.metric_id
+  JOIN benchmark_versions bv ON bv.id = bm.version_id
+  JOIN benchmarks b ON b.id = bv.benchmark_id
+ WHERE bs.model_id = sqlc.arg(model_id)::bigint
+   AND bs.ranked
+   AND bs.rank IS NOT NULL
+   AND bs.match_status = 'matched'
+   AND b.status = 'active'
+   AND bv.status = 'active'
+   AND bv.coverage = 'full'
+   AND bv.source_type <> 'self_reported'
+   AND bv.participant_count >= 3
+   AND bm.is_primary
+ ORDER BY b.name, bv.as_of DESC;
+
 -- name: DeleteCatalogItemsBySource :exec
 -- 整表快照的前半步：镜像是「上游现在有什么」，不是我们的数据。逐条 upsert 会把两个
 -- 时间点的行混在一张表里，「目录更新于什么时候」就答不出来。
