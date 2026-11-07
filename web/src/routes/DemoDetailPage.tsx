@@ -195,7 +195,15 @@ export function DemoDetailPage() {
               否则读者会把它当成「这个作品确实跑在这些模型上」的保证。 */}
           {data.demo.models.length > 0 ? (
             <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-              模型声明：{data.demo.models.map((m) => m.name).join('、')}
+              模型声明：
+              {data.demo.models.map((m, i) => (
+                <span key={m.slug}>
+                  {i > 0 ? '、' : ''}
+                  <Link className="underline" to={`/models/${m.slug}`}>
+                    {m.name}
+                  </Link>
+                </span>
+              ))}
               <span className="ml-2 text-xs text-gray-500 dark:text-gray-500">
                 （作者自述，未经核验）
               </span>

@@ -87,3 +87,28 @@ test('不存在的作品给出「作品不存在」而不是白屏', async ({ ap
 
   await expect(screen.getByText('作品不存在')).toBeVisible();
 });
+
+/**
+ * 模型页能打开，三块都在。
+ *
+ * 只断言「页面渲染出了三块」而不断言作品数：这条用例只依赖开发种子
+ * （`db/seeds/0002-dev-models.sql` 里的 6 个模型），种子作品**没有**模型声明，
+ * 所以「作品数」在干净的 CI 库里是 0——断言具体数字会与本地库耦合。
+ *
+ * 「详情页模型名是链接」这条由 `DemoDetailPage.test.tsx` 的用例钉住：它需要一件
+ * 声明了模型的作品，而种子没有，真浏览器里造一件就得投稿（那属于闭环用例的范围）。
+ */
+test('模型页三块都渲染出来', async ({ app, screen }) => {
+  await app.open('/models/deepseek-chat');
+
+  await expect(screen.getByRole('heading', { name: 'DeepSeek Chat' })).toBeVisible();
+  await expect(screen.getByRole('heading', { name: '档案' })).toBeVisible();
+  await expect(screen.getByRole('heading', { name: '站内表现' })).toBeVisible();
+  await expect(screen.getByRole('heading', { name: '第三方基准' })).toBeVisible();
+});
+
+test('不存在的模型给出「没有这个模型」而不是白屏', async ({ app, screen }) => {
+  await app.open('/models/e2e-no-such-model');
+
+  await expect(screen.getByText('没有这个模型')).toBeVisible();
+});
