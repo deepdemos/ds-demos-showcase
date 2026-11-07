@@ -10,7 +10,7 @@ info:
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 34 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 35 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -88,6 +88,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClassificationCatalog'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/models/{slug}:
+    get:
+      operationId: getModel
+      tags: [作品]
+      summary: 模型页
+      description: |
+        一个模型的完整视图：**档案**（`specs`）、**站内表现**（`site` + `providers` +
+        `demos`）、**第三方基准**（`benchmarks`）。三块独立口径，不合并成一个总分——
+        它们的置信度差得远。
+
+        **站内表现一律按当前 revision**（模型域 §5.1 G18）：作品归属取
+        `demos.current_revision_id` 对应的关联。作者改稿把模型从 A 换成 B，这里立刻跟着变，
+        即使线上展示的仍是 A 那一版。这是选定口径，不是 bug。
+
+        `site.scored=false` 表示**还没有人给它投过票**，此时 `site.score` 没有意义
+        （契约里仍给 0，但界面不该显示「0 分」）。`site.priorWeight` 是贝叶斯收缩的
+        `m`（各模型票数中位数，下限 1），摆出来是为了让读者能自己复核分数，不是让人调。
+
+        `providers` 里 `providerId` 为空的行表示「来源未标注」——它不是某个服务方，
+        而是我们不知道是谁，所以永远排在最后。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+          description: 模型标识（`models.slug`）
+      responses:
+        '200':
+          description: 模型页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelProfile'
+        '404':
+          description: 没有这个模型
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '503':
           description: 数据库不可用
           content:
@@ -2248,6 +2296,130 @@ components:
           type: integer
           minimum: 0
           description: 本次请求的 offset，回显用
+
+    ModelProfile:
+      type: object
+      additionalProperties: false
+      required: [model, specs, site, demos, providers, benchmarks]
+      properties:
+        model:
+          $ref: '#/components/schemas/Model'
+        specs:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModelSpecs'
+        site:
+          $ref: '#/components/schemas/ModelSiteStats'
+        demos:
+          type: array
+          description: 用了这个模型的**公开**作品，按创建时间倒序
+          items:
+            $ref: '#/components/schemas/ModelDemoRef'
+        providers:
+          type: array
+          description: provider 分布；`providerId` 为空的行是「来源未标注」，排在最后
+          items:
+            $ref: '#/components/schemas/ModelProviderSlice'
+        benchmarks:
+          type: array
+          description: |
+            第三方基准里**参与综合分资格**的条目（榜单与版本都 active、`coverage=full`、
+            非自报、有 primary 指标、有名次、参赛数 ≥ 3）。不满足的留在库里但不进这里。
+          items:
+            $ref: '#/components/schemas/ModelBenchmarkScore'
+
+    ModelSpecs:
+      type: object
+      additionalProperties: false
+      description: |
+        档案（`model_specs`）。**没有档案时整个字段是 null**，不是空对象——
+        「还没录入」与「录了但每一栏都空」对读者的意义不同。
+        有档案时逐字段可空：缺值由界面显示 `—`，不要显示 0。
+      properties:
+        contextWindow: { type: integer, nullable: true }
+        maxOutput: { type: integer, nullable: true }
+        paramTotalB: { type: number, format: double, nullable: true }
+        paramActiveB: { type: number, format: double, nullable: true }
+        paramKind: { type: string }
+        paramNote: { type: string }
+        releaseDate: { type: string, format: date, nullable: true }
+        knowledgeCutoff: { type: string, nullable: true }
+        openWeights: { type: integer, nullable: true }
+        costIn: { type: number, format: double, nullable: true }
+        costOut: { type: number, format: double, nullable: true }
+        license: { type: string, nullable: true }
+        modalitiesIn: { type: string }
+        modalitiesOut: { type: string }
+        source: { type: string, description: 档案来源（`models.dev` / `manual` 等） }
+        fetchedAt: { type: string, format: date-time, nullable: true }
+        note: { type: string }
+
+    ModelSiteStats:
+      type: object
+      additionalProperties: false
+      required: [demoCount, votes, scored, score, priorWeight]
+      properties:
+        demoCount:
+          type: integer
+          description: 公开作品数（与作品库 `?model=<slug>` 的条数同源）
+        votes:
+          type: integer
+          description: 这些作品的评分票数合计
+        scored:
+          type: boolean
+          description: 有票才为 true。false 时 `score` 没有意义（仍给 0，界面不该显示）
+        score:
+          type: number
+          format: double
+          description: 社区分（贝叶斯收缩）。见 `priorWeight`
+        priorWeight:
+          type: number
+          format: double
+          description: 收缩用的 `m`：各模型票数中位数，下限 1
+
+    ModelDemoRef:
+      type: object
+      additionalProperties: false
+      required: [slug, title, createdAt, ratingAverage, ratingCount]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        createdAt: { type: string, format: date-time }
+        ratingAverage: { type: number, format: double }
+        ratingCount: { type: integer }
+
+    ModelProviderSlice:
+      type: object
+      additionalProperties: false
+      required: [providerSlug, providerName, demoCount, votes]
+      properties:
+        providerId: { type: integer, nullable: true }
+        providerSlug: { type: string, description: 空串表示未标注 }
+        providerName: { type: string }
+        demoCount: { type: integer }
+        votes: { type: integer }
+        avgRating:
+          type: number
+          format: double
+          nullable: true
+          description: 只做参考，**不参与**社区分；票数为 0 时为 null
+
+    ModelBenchmarkScore:
+      type: object
+      additionalProperties: false
+      required: [benchmarkSlug, benchmarkName, version, asOf, metricKey, metricLabel, rawScore]
+      properties:
+        benchmarkSlug: { type: string }
+        benchmarkName: { type: string }
+        version: { type: string }
+        asOf: { type: string, format: date }
+        participantCount: { type: integer, nullable: true }
+        sourceUrl: { type: string }
+        metricKey: { type: string }
+        metricLabel: { type: string }
+        unit: { type: string }
+        rawScore: { type: number, format: double }
+        rank: { type: integer, nullable: true }
 
     ModelSyncStatus:
       type: object
