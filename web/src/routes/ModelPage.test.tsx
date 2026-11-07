@@ -123,12 +123,13 @@ describe('模型页', () => {
     await waitFor(() => expect(screen.getByText(/还没有接入任何基准榜/)).toBeInTheDocument());
   });
 
-  it('404 时显示「没有这个模型」并给出去目录的入口', async () => {
+  it('404 时显示「没有这个模型」并给出一条真能走的出口', async () => {
     getModel.mockResolvedValue({ status: 404, data: undefined });
     renderPage('nope');
 
     await waitFor(() => expect(screen.getByText('没有这个模型')).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: '看模型目录' })).toHaveAttribute('href', '/models');
+    // 出口是作品库：模型目录页还没做，指向 `/models` 会 404。
+    expect(screen.getByRole('link', { name: '去作品库' })).toHaveAttribute('href', '/demos');
   });
 
   it('接口失败时显示错误并允许重试', async () => {
