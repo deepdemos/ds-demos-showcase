@@ -157,7 +157,10 @@ test('详情显示作者、发布时间与模型声明', async () => {
   await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
   // createdAt 是 1 月、publishedAt 是 2 月：页面必须显示后者。
   expect(screen.getByText(/发布 2026\/2\/3/)).toBeInTheDocument();
-  expect(screen.getByText(/模型声明：DeepSeek Chat/)).toBeInTheDocument();
+  // 模型名现在是链接（点进模型页），所以「模型声明：」与模型名不在同一个文本节点里。
+  expect(screen.getByText(/模型声明：/)).toBeInTheDocument();
+  const modelLink = screen.getByRole('link', { name: 'DeepSeek Chat' });
+  expect(modelLink).toHaveAttribute('href', '/models/deepseek-chat');
   expect(screen.getByText(/作者自述，未经核验/)).toBeInTheDocument();
 });
 
