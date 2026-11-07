@@ -9,6 +9,7 @@ import { RegisterPage } from '@/routes/RegisterPage';
 import { PasswordResetPage } from '@/routes/PasswordResetPage';
 import { VerifyEmailPage } from '@/routes/VerifyEmailPage';
 import { SubmitPage } from '@/routes/SubmitPage';
+import { AdminModelsPage } from '@/routes/AdminModelsPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: 'password-reset', element: <PasswordResetPage /> },
       { path: 'submit', element: <SubmitPage /> },
       { path: 'admin/reviews', element: <AdminReviewPage /> },
+      { path: 'admin/models', element: <AdminModelsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
