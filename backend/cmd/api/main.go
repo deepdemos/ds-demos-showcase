@@ -90,13 +90,25 @@ func main() {
 		logger.Warn("DATABASE_URL 未配置：/healthz 仍可用，业务端点返回 503")
 	}
 
+	csrfMode, err := httpapi.ParseCSRFMode(cfg.CSRFMode)
+	if err != nil {
+		// 拼错就退出：静默降级会让人以为自己在拦，其实没有。
+		logger.Error("CSRF_MODE 不合法", "err", err)
+		os.Exit(1)
+	}
+
+	router := httpapi.NewRouter(
+		httpapi.New(pinger, queries, identitySvc, mail, demoSvc).WithModels(modelSvc),
+		httpapi.NewPreview(queries, files, identitySvc),
+		httpapi.NewDownload(queries, files),
+	)
+	if csrfMode == httpapi.CSRFLog {
+		logger.Info("跨站检查处于观察期（只记不拦）", "mode", string(csrfMode))
+	}
+
 	server := &http.Server{
-		Addr: cfg.Addr(),
-		Handler: httpapi.NewRouter(
-			httpapi.New(pinger, queries, identitySvc, mail, demoSvc).WithModels(modelSvc),
-			httpapi.NewPreview(queries, files, identitySvc),
-			httpapi.NewDownload(queries, files),
-		),
+		Addr:    cfg.Addr(),
+		Handler: httpapi.WithCSRF(router, csrfMode, logger),
 		// 头部读完就该有下文：慢读客户端拿着半截请求不吃不喝，
 		// 一个连接就是一个 goroutine 加一个文件句柄。
 		ReadHeaderTimeout: 5 * time.Second,
