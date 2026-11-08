@@ -182,6 +182,17 @@ export function DemosPage() {
     setSearchParams(params);
   };
 
+  // 「清除搜索」出现在两处：工具栏和搜不到时的空态。
+  // 写一份而不是两处各写一遍：空态那边的动作如果漏了 delete('page')，
+  // 用户会在第 3 页看到「没有匹配的作品」，点了清除还是空的。
+  const clearSearch = () => {
+    setDraft('');
+    const params = new URLSearchParams(searchParams);
+    params.delete('q');
+    params.delete('page');
+    setSearchParams(params);
+  };
+
   const goToPage = (next: number) => {
     const params = new URLSearchParams(searchParams);
     if (next <= 1) params.delete('page');
@@ -248,16 +259,7 @@ export function DemosPage() {
             搜索
           </Button>
           {q ? (
-            <Button
-              type="button"
-              onClick={() => {
-                setDraft('');
-                const params = new URLSearchParams(searchParams);
-                params.delete('q');
-                params.delete('page');
-                setSearchParams(params);
-              }}
-            >
+            <Button type="button" onClick={clearSearch}>
               清除
             </Button>
           ) : null}
@@ -353,6 +355,11 @@ export function DemosPage() {
           <EmptyState
             title="没有匹配的作品"
             description={`「${q}」没有匹配到任何作品。换个词，或者清除搜索看全部。`}
+            action={
+              <Button type="button" onClick={clearSearch}>
+                清除搜索
+              </Button>
+            }
           />
         ) : (
           <EmptyState

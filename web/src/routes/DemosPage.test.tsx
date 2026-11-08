@@ -76,6 +76,28 @@ test('搜不到时给出与「还没有作品」不同的空状态', async () =>
 });
 
 /**
+ * 搜不到时，空态自己带一个「清除搜索」。
+ *
+ * 事故现场：空态只说「换个词，或者清除搜索看全部」，而「清除」按钮在工具栏里，
+ * 用户在页面下方找不到它；空态本身连一个可点的动作都没有。
+ */
+test('搜不到时，空态里能直接清除搜索', async () => {
+  vi.mocked(listDemos).mockResolvedValue({ status: 200, data: emptyPage() } as never);
+
+  renderAt('/demos?q=不存在的词&page=3');
+
+  fireEvent.click(await screen.findByRole('button', { name: '清除搜索' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('还没有公开的作品')).toBeTruthy();
+  });
+  // 清的是 q 和 page 两个参数：只清 q 会停在第 3 页，用户看起来像「点了没反应」。
+  const last = vi.mocked(listDemos).mock.calls.at(-1)?.[0] as Record<string, unknown>;
+  expect('q' in last).toBe(false);
+  expect(last.page).toBe(1);
+});
+
+/**
  * 简介命中要标出来。
  *
  * 只有简介命中时，卡片标题里看不到搜索词——不标注，用户会以为结果不相关。
