@@ -42,3 +42,9 @@ test('一处都没引用：通过（空文档不该报错）', () => {
   const r = run([{ file: 'docs/a.md', text: '没有引用。' }], [])
   assert.equal(r.ok, true)
 })
+
+test('deploy/ 也算仓库路径（部署文档点名的配置必须存在）', () => {
+  const r = run([{ file: 'docs/部署.md', text: '拿 `deploy/nginx/deepdemos.conf` 覆盖过去' }], [])
+  assert.equal(r.ok, false)
+  assert.match(r.problems[0], /deploy\/nginx\/deepdemos\.conf/)
+})
