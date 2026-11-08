@@ -803,6 +803,14 @@ func (siw *ServerInterfaceWrapper) ListDemos(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// ------------- Optional query parameter "seed" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "seed", r.URL.Query(), &params.Seed)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "seed", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListDemos(w, r, params)
 	}))

@@ -1092,11 +1092,12 @@ const listPublishedDemos = `-- name: ListPublishedDemos :many
 
 SELECT d.id, d.slug, d.title, d.cover_url, d.created_at,
        CASE
-           WHEN $3::text = '' THEN 'title'
-           WHEN d.title ILIKE '%' || $3::text || '%' ESCAPE '\' THEN 'title'
+           WHEN $1::text = '' THEN 'title'
+           WHEN d.title ILIKE '%' || $1::text || '%' ESCAPE '\' THEN 'title'
            ELSE 'description'
        END::text AS matched_in
 FROM demos d
+LEFT JOIN demo_stats st ON st.demo_id = d.id
 WHERE d.published_revision_id IS NOT NULL
   AND d.lifecycle_state = 'published'
   AND d.deleted_at IS NULL
@@ -1108,58 +1109,66 @@ WHERE d.published_revision_id IS NOT NULL
       WHERE c.demo_id = d.id AND c.visibility = 'listed'
   )
   AND (
-      $3::text = ''
-      OR d.title ILIKE '%' || $3::text || '%' ESCAPE '\'
-      OR COALESCE(d.description, '') ILIKE '%' || $3::text || '%' ESCAPE '\'
+      $1::text = ''
+      OR d.title ILIKE '%' || $1::text || '%' ESCAPE '\'
+      OR COALESCE(d.description, '') ILIKE '%' || $1::text || '%' ESCAPE '\'
+  )
+  AND (
+      cardinality($2::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'genre'
+            AND cl.slug = ANY($2::text[])
+      )
+  )
+  AND (
+      cardinality($3::text[]) = 0
+      OR EXISTS (
+          SELECT 1 FROM demo_classifications dc
+          JOIN classifications cl ON cl.id = dc.classification_id
+          WHERE dc.demo_id = d.id AND cl.dimension = 'technique'
+            AND cl.slug = ANY($3::text[])
+      )
   )
   AND (
       cardinality($4::text[]) = 0
       OR EXISTS (
           SELECT 1 FROM demo_classifications dc
           JOIN classifications cl ON cl.id = dc.classification_id
-          WHERE dc.demo_id = d.id AND cl.dimension = 'genre'
+          WHERE dc.demo_id = d.id AND cl.dimension = 'subject'
             AND cl.slug = ANY($4::text[])
       )
   )
   AND (
       cardinality($5::text[]) = 0
       OR EXISTS (
-          SELECT 1 FROM demo_classifications dc
-          JOIN classifications cl ON cl.id = dc.classification_id
-          WHERE dc.demo_id = d.id AND cl.dimension = 'technique'
-            AND cl.slug = ANY($5::text[])
-      )
-  )
-  AND (
-      cardinality($6::text[]) = 0
-      OR EXISTS (
-          SELECT 1 FROM demo_classifications dc
-          JOIN classifications cl ON cl.id = dc.classification_id
-          WHERE dc.demo_id = d.id AND cl.dimension = 'subject'
-            AND cl.slug = ANY($6::text[])
-      )
-  )
-  AND (
-      cardinality($7::text[]) = 0
-      OR EXISTS (
           SELECT 1 FROM demo_revision_models rm
           JOIN models m ON m.id = rm.model_id
           WHERE rm.revision_id = d.current_revision_id
-            AND m.slug = ANY($7::text[])
+            AND m.slug = ANY($5::text[])
       )
   )
-ORDER BY d.created_at DESC, d.id DESC
-LIMIT $1 OFFSET $2
+ORDER BY
+    CASE WHEN $6::text = 'random' THEN md5(d.slug || ':' || $7::text) END,
+    CASE WHEN $6::text = 'hot'
+         THEN COALESCE(st.view_count, 0) + 2 * COALESCE(st.download_count, 0)
+              + COALESCE(st.rating_count, 0) END DESC NULLS LAST,
+    CASE WHEN $6::text = 'latest' THEN d.created_at END DESC NULLS LAST,
+    d.created_at DESC, d.id DESC
+LIMIT $9 OFFSET $8
 `
 
 type ListPublishedDemosParams struct {
-	Limit     int32
-	Offset    int32
 	Q         string
 	Genre     []string
 	Technique []string
 	Subject   []string
 	Model     []string
+	Sort      string
+	Seed      string
+	RowOffset int32
+	RowLimit  int32
 }
 
 type ListPublishedDemosRow struct {
@@ -1210,15 +1219,32 @@ type ListPublishedDemosRow struct {
 // 模型筛的是 `current_revision_id` 上的声明（不是已发布版本）：作者改稿换模型后
 // 按旧模型搜不到，这是版本分离的直接后果，与详情页「访客看已发布、作者看当前」
 // 是同一套规则的另一面。
+//
+// # 排序（SCH-006）
+//
+// `sort` 三个值：`latest`（登记时间新→旧）、`hot`（综合热度，SOC-015）、
+// `random`（按 `seed` 派生稳定随机序）。
+//
+// 三种排序写在同一条 ORDER BY 里，靠「不属于本模式的那个 CASE 全是 NULL」退让。
+// 每个 CASE 都显式 `NULLS LAST`：NULL 在 DESC 下默认排最前，
+// 不写就会让 `hot` 模式被 `latest` 的空值顶掉。
+//
+// 综合热度取 `demo_stats` 三列（浏览 + 2×下载 + 评分人数）。LEFT JOIN + COALESCE 0：
+// 缺统计行按 0 分算，不能因为「没有统计行」把作品挤出列表——准入条件是可见性。
+//
+// 并列按附录 D：热度并列取较晚登记的在前，最后按 id 倒序，保证翻页稳定。
+// `random` 用 `md5(slug:seed)`：同一 seed 下每行位置固定，所以翻页不重不漏（SCH-007）。
 func (q *Queries) ListPublishedDemos(ctx context.Context, arg ListPublishedDemosParams) ([]ListPublishedDemosRow, error) {
 	rows, err := q.db.Query(ctx, listPublishedDemos,
-		arg.Limit,
-		arg.Offset,
 		arg.Q,
 		arg.Genre,
 		arg.Technique,
 		arg.Subject,
 		arg.Model,
+		arg.Sort,
+		arg.Seed,
+		arg.RowOffset,
+		arg.RowLimit,
 	)
 	if err != nil {
 		return nil, err

@@ -70,6 +70,27 @@
           "file": "backend/internal/httpapi/search_integration_test.go",
           "name": "TestIntegrationSearchTreatsWildcardsLiterally"
         }
+      },
+      {
+        "case": "热度排序把浏览、下载、评分人数合成一个分，并列取较晚登记的",
+        "test": {
+          "file": "backend/internal/httpapi/list_sort_integration_test.go",
+          "name": "TestIntegrationListDemosSortHot"
+        }
+      },
+      {
+        "case": "随机发现在同一个 seed 下翻页不重不漏",
+        "test": {
+          "file": "backend/internal/httpapi/list_sort_integration_test.go",
+          "name": "TestIntegrationListDemosSortRandomStable"
+        }
+      },
+      {
+        "case": "排序取值不在契约枚举内回 400，不静默回落到 latest",
+        "test": {
+          "file": "backend/internal/httpapi/list_sort_integration_test.go",
+          "name": "TestIntegrationListDemosRejectsUnknownSort"
+        }
       }
     ],
     "GET /api/v1/demos/{slug}": [

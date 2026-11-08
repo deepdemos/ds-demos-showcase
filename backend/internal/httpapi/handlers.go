@@ -10,7 +10,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,8 +175,29 @@ func (h *Handler) ListDemos(w http.ResponseWriter, r *http.Request, params api.L
 	// 长度按**用户输入**判定（上面那行），转义放在判定之后：转义会改变字符数，
 	// 不该让「搜一串百分号」比「搜同样多的汉字」更容易被拒。
 	q = likeEscaper.Replace(q)
-	// sort 目前只有 latest 一个合法值，传别的也按 latest 处理：契约里是枚举，
-	// 生成物已经替我们挡掉了非法值，这里不需要再判。
+	// 排序：契约里是枚举，生成物已经替我们挡掉非法值，这里只做「有没有传」的默认。
+	// `seed` 只在 random 下有意义，但一律往下传（SQL 里按 sort 决定用不用它），
+	// 免得两个地方各判一次、迟早判得不一致。
+	sortBy := "latest"
+	if params.Sort != nil {
+		// 三种取值是契约里的枚举，但生成的绑定只把字符串塞进来、不校验取值。
+		// 静默回落到 latest 会让「传错参数」看起来像「排序没生效」，所以直接 400。
+		switch *params.Sort {
+		case api.Latest, api.Hot, api.Random:
+			sortBy = string(*params.Sort)
+		default:
+			writeError(w, http.StatusBadRequest, api.InvalidParam, "排序取值非法（latest / hot / random）")
+			return
+		}
+	}
+	seed := int64(0)
+	if params.Seed != nil {
+		seed = int64(*params.Seed)
+	}
+	if seed < 0 || seed > math.MaxInt32 {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "seed 超出范围（0 到 2147483647）")
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
@@ -211,14 +234,18 @@ func (h *Handler) ListDemos(w http.ResponseWriter, r *http.Request, params api.L
 		return
 	}
 
+	// seed 传成文本：SQL 里要拼进 md5(slug:seed)，用 text 省一次 cast。
+	// 它是 int64 转的十进制串，形状固定，不会被注入。
 	rows, err := h.queries.ListPublishedDemos(ctx, store.ListPublishedDemosParams{
-		Limit:     int32(pageSize),
-		Offset:    int32((page - 1) * pageSize),
 		Q:         q,
 		Genre:     genre,
 		Technique: technique,
 		Subject:   subject,
 		Model:     model,
+		Sort:      sortBy,
+		Seed:      strconv.FormatInt(seed, 10),
+		RowOffset: int32((page - 1) * pageSize),
+		RowLimit:  int32(pageSize),
 	})
 	if err != nil {
 		unavailable(w, err)

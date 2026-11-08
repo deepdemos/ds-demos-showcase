@@ -8,6 +8,7 @@ import {
   ErrorState,
   Input,
   Pagination,
+  Select,
   Skeleton,
 } from '@/components/ui';
 import {
@@ -56,10 +57,39 @@ function readPage(raw: string | null): number {
   return Number.isInteger(n) && n >= 1 ? n : 1;
 }
 
+// 排序口径写在标题下面：用户需要知道「为什么这几个排在最前」。
+const SORT_NOTES: Record<SortMode, string> = {
+  latest: '按发布时间从新到旧。',
+  hot: '按热度排序：浏览数 + 2 × 下载数 + 评分人数。',
+  random: '随机发现——同一轮里翻页不重复，换一批会重新抽。',
+};
+
+const SORTS = ['latest', 'hot', 'random'] as const;
+type SortMode = (typeof SORTS)[number];
+
+function readSort(raw: string | null): SortMode {
+  return (SORTS as readonly string[]).includes(raw ?? '') ? (raw as SortMode) : 'latest';
+}
+
+const SORT_OPTIONS = [
+  { value: 'latest', label: '最新发布' },
+  { value: 'hot', label: '热度' },
+  { value: 'random', label: '随机发现' },
+] as const;
+
+// seed 决定「这一轮随机」是哪一轮。它必须进 URL：翻页、刷新、后退都要落在同一轮上，
+// 否则下一页会与上一页重叠或漏项（SCH-007）。
+function readSeed(raw: string | null): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 2147483647 ? n : 1;
+}
+
 async function fetchDemos(
   page: number,
   q: string,
   facets: Record<Facet, string[]>,
+  sort: SortMode,
+  seed: number,
 ): Promise<DemoList> {
   const picked: Pick<ListDemosParams, Facet> = {};
   for (const facet of FACETS) {
@@ -69,7 +99,9 @@ async function fetchDemos(
   const response = await listDemos({
     page,
     pageSize: PAGE_SIZE,
-    sort: 'latest',
+    sort,
+    // seed 只在随机序下有意义；带上它才能让翻页接着同一轮抽样（SCH-007）。
+    ...(sort === 'random' ? { seed } : {}),
     // 空串不传：URL 里带一个空 q 会让缓存键多分出一份，也让「清空搜索」看起来没生效。
     ...(q ? { q } : {}),
     ...picked,
@@ -94,6 +126,8 @@ export function DemosPage() {
     model: readFacet(searchParams, 'model'),
   };
   const activeFacets = FACETS.reduce((n, f) => n + facets[f].length, 0);
+  const sort = readSort(searchParams.get('sort'));
+  const seed = readSeed(searchParams.get('seed'));
 
   // URL 变了（后退、点链接）就把输入框同步过来；否则输入框会停在旧词上，
   // 看起来像「搜索没生效」。
@@ -104,8 +138,18 @@ export function DemosPage() {
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     // 缓存键里带上筛选条件：不带的话，切换筛选会先显示上一组结果的缓存
     // （看起来像「点了没反应」），再闪成新结果。
-    queryKey: ['demos', page, q, facets.genre, facets.technique, facets.subject, facets.model],
-    queryFn: () => fetchDemos(page, q, facets),
+    queryKey: [
+      'demos',
+      page,
+      q,
+      sort,
+      seed,
+      facets.genre,
+      facets.technique,
+      facets.subject,
+      facets.model,
+    ],
+    queryFn: () => fetchDemos(page, q, facets, sort, seed),
   });
 
   const catalog = useQuery({
@@ -144,6 +188,18 @@ export function DemosPage() {
     setSearchParams(params);
   };
 
+  // 换排序必须回第 1 页（SCH-010）：停在第 3 页再换序，看到的是新一轮的第 3 页。
+  // 切到 random 时换一个新种子——「随机发现」要真的换一批，而不是同一批换个顺序。
+  const changeSort = (next: SortMode) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'latest') params.delete('sort');
+    else params.set('sort', next);
+    if (next === 'random') params.set('seed', String(Math.floor(Math.random() * 2147483647)));
+    else params.delete('seed');
+    params.delete('page');
+    setSearchParams(params);
+  };
+
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
     const params = new URLSearchParams(searchParams);
@@ -160,8 +216,20 @@ export function DemosPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold">作品库</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {q ? `搜索「${q}」，按发布时间从新到旧。` : '按发布时间从新到旧。'}
+          {q ? `搜索「${q}」，` : ''}
+          {SORT_NOTES[sort]}
         </p>
+
+        {/* 排序：三种口径（SCH-006）。放 URL 里，刷新/后退都保持同一个视角。 */}
+        <div className="mt-4 flex max-w-xs flex-col gap-1 text-sm">
+          <label htmlFor="demos-sort">排序</label>
+          <Select
+            id="demos-sort"
+            value={sort}
+            options={SORT_OPTIONS}
+            onChange={(next) => changeSort(next as SortMode)}
+          />
+        </div>
 
         <form className="mt-4 flex max-w-xl items-end gap-2" onSubmit={submitSearch} role="search">
           <label className="flex flex-1 flex-col gap-1 text-sm">

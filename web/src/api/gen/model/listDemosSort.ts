@@ -34,4 +34,6 @@ export type ListDemosSort = typeof ListDemosSort[keyof typeof ListDemosSort];
 
 export const ListDemosSort = {
   latest: 'latest',
+  hot: 'hot',
+  random: 'random',
 } as const;
