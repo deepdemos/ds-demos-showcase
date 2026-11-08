@@ -37,6 +37,21 @@
 -- 模型筛的是 `current_revision_id` 上的声明（不是已发布版本）：作者改稿换模型后
 -- 按旧模型搜不到，这是版本分离的直接后果，与详情页「访客看已发布、作者看当前」
 -- 是同一套规则的另一面。
+--
+-- # 排序（SCH-006）
+--
+-- `sort` 三个值：`latest`（登记时间新→旧）、`hot`（综合热度，SOC-015）、
+-- `random`（按 `seed` 派生稳定随机序）。
+--
+-- 三种排序写在同一条 ORDER BY 里，靠「不属于本模式的那个 CASE 全是 NULL」退让。
+-- 每个 CASE 都显式 `NULLS LAST`：NULL 在 DESC 下默认排最前，
+-- 不写就会让 `hot` 模式被 `latest` 的空值顶掉。
+--
+-- 综合热度取 `demo_stats` 三列（浏览 + 2×下载 + 评分人数）。LEFT JOIN + COALESCE 0：
+-- 缺统计行按 0 分算，不能因为「没有统计行」把作品挤出列表——准入条件是可见性。
+--
+-- 并列按附录 D：热度并列取较晚登记的在前，最后按 id 倒序，保证翻页稳定。
+-- `random` 用 `md5(slug:seed)`：同一 seed 下每行位置固定，所以翻页不重不漏（SCH-007）。
 SELECT d.id, d.slug, d.title, d.cover_url, d.created_at,
        CASE
            WHEN @q::text = '' THEN 'title'
@@ -44,6 +59,7 @@ SELECT d.id, d.slug, d.title, d.cover_url, d.created_at,
            ELSE 'description'
        END::text AS matched_in
 FROM demos d
+LEFT JOIN demo_stats st ON st.demo_id = d.id
 WHERE d.published_revision_id IS NOT NULL
   AND d.lifecycle_state = 'published'
   AND d.deleted_at IS NULL
@@ -95,8 +111,14 @@ WHERE d.published_revision_id IS NOT NULL
             AND m.slug = ANY(@model::text[])
       )
   )
-ORDER BY d.created_at DESC, d.id DESC
-LIMIT $1 OFFSET $2;
+ORDER BY
+    CASE WHEN @sort::text = 'random' THEN md5(d.slug || ':' || @seed::text) END,
+    CASE WHEN @sort::text = 'hot'
+         THEN COALESCE(st.view_count, 0) + 2 * COALESCE(st.download_count, 0)
+              + COALESCE(st.rating_count, 0) END DESC NULLS LAST,
+    CASE WHEN @sort::text = 'latest' THEN d.created_at END DESC NULLS LAST,
+    d.created_at DESC, d.id DESC
+LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
 
 -- name: CountPublishedDemos :one
 -- 与 ListPublishedDemos 的 WHERE 必须逐字一致（含 q 与四个筛选的全部条件），

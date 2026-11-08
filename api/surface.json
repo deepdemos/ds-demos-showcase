@@ -1316,7 +1316,9 @@
       "rejected"
     ],
     "ListDemosParamsSort": [
-      "latest"
+      "hot",
+      "latest",
+      "random"
     ],
     "ListModelsParamsStatus": [
       "active",

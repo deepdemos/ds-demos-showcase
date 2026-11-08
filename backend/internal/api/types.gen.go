@@ -186,7 +186,9 @@ const (
 
 // Defines values for ListDemosParamsSort.
 const (
+	Hot    ListDemosParamsSort = "hot"
 	Latest ListDemosParamsSort = "latest"
+	Random ListDemosParamsSort = "random"
 )
 
 // Defines values for ListModelsParamsStatus.
@@ -1255,9 +1257,23 @@ type ListDemosParams struct {
 	// PageSize 每页条数
 	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 
-	// Sort 排序口径。目前只有「最新」一种——`hot` 需要热度数据（浏览/收藏/评分），
-	// 那批指标还没落地，所以先不放进枚举：契约里有的值必须真能算出来。
+	// Sort 排序口径（SCH-006）：
+	//
+	// - `latest` 按作品登记时间新→旧
+	// - `hot` 按综合热度（SOC-015：浏览数 + 2 × 下载数 + 有效评分人数）高→低
+	// - `random` 按 `seed` 派生一个稳定随机序（SCH-007）
+	//
+	// 并列时按附录 D：热度并列取较晚登记的在前，最后按 `id` 倒序，保证稳定。
+	// `hot` 与 `random` 都只在公开可见的作品里排（与列表口径同一份）。
 	Sort *ListDemosParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Seed 随机序的种子，只在 `sort=random` 时有意义。
+	//
+	// **翻页必须带同一个 seed**：换 seed 等于重新抽样，同一轮的下一页就会
+	// 与前几页重叠或漏项（SCH-007 要求不重复）。缺省按 0 处理，因此
+	// 「不传 seed」也是稳定序——但客户端应当自己生成并写进 URL，
+	// 否则每轮的「随机」都长一样。
+	Seed *int `form:"seed,omitempty" json:"seed,omitempty"`
 }
 
 // ListDemosParamsSort defines parameters for ListDemos.
