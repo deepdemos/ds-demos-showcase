@@ -16,6 +16,12 @@ export function LoginPage() {
   const rawReturnTo = searchParams.get('return_to');
   const returnTo = readReturnTo(rawReturnTo);
 
+  // 验证邮箱、找回密码处理完都把回执带到这里，让用户在登录页看到「上一步成了」。
+  // 从前这两个参数写出去却没人读，用户验证完只看到一张干净的登录表单，
+  // 分不清是自己走错了还是刚发生过什么。
+  const verified = searchParams.get('verified') === '1';
+  const reset = searchParams.get('reset') === '1';
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [emailCode, setEmailCode] = useState('');
@@ -65,6 +71,17 @@ export function LoginPage() {
   return (
     <section className="mx-auto w-full max-w-sm px-4 py-12">
       <h1 className="text-2xl font-semibold">登录</h1>
+
+      {(verified || reset) && (
+        <p
+          className="mt-4 rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200"
+          role="status"
+        >
+          {reset
+            ? '密码已经重设，请用新密码登录。此前的登录设备都已退出。'
+            : '邮箱验证完成，现在可以登录了。'}
+        </p>
+      )}
 
       {/* 从投稿页被送到这里的人，需要知道登录不是终点。不说这一句，他就得靠
           「登录完居然回到了首页」自己猜出刚才那条路。 */}

@@ -106,3 +106,17 @@ test('带着脏值登录也不会被送出站', async () => {
   // 回落到站内首页：不跳外站，也不停在登录页自己转圈。
   expect(await screen.findByText('首页')).toBeInTheDocument();
 });
+
+// 验证邮箱 / 找回密码处理完会把回执带到登录页。这两个参数过去只被写、没人读，
+// 用户走完一整条验证流程，最后看到的是一张跟刚打开时一模一样的表单。
+test('验证邮箱回来时说明上一步成了', () => {
+  renderPage('/login?verified=1');
+  expect(screen.getByRole('status')).toHaveTextContent('邮箱验证完成');
+});
+
+test('重设密码回来时说明旧会话已退出', () => {
+  renderPage('/login?reset=1');
+  const notice = screen.getByRole('status');
+  expect(notice).toHaveTextContent('密码已经重设');
+  expect(notice).toHaveTextContent('此前的登录设备都已退出');
+});
