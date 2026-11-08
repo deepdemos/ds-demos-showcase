@@ -97,6 +97,21 @@ export const RULES = [
     hint: '收进 domain/demo/state.go 的单一过渡函数，SQL 只留一条由它调用的语句',
   },
   {
+    id: 'entry-name',
+    title: '投稿形态与入口文件名',
+    // 一次投稿落成什么形状（单文件还是 zip、入口叫什么）只能由 shapes.go 决定。
+    // 预览曾经自己推了一遍、推成 index.html，于是单文件 SVG「投稿成功、预览页 404」——
+    // 写侧与读侧各推一次同一个事实，推岔了。
+    //
+    // 只抓**代码里的字符串字面量**（双引号），注释里的反引号写法不算：
+    // 注释要能自由讨论这些名字，否则没人敢写解释。
+    pattern: /"(?:index\.(?:html|htm|svg))"/g,
+    include: [/\.go$/],
+    exclude: [/_test\.go$/],
+    allowed: ['backend/internal/domain/demo/shapes.go'],
+    hint: '入口文件名只由 shapes.go 的 singleFileKinds / stagedName / isRootIndex 决定，读侧从 entry_path 取',
+  },
+  {
     id: 'audit-write',
     title: '审计写入（INSERT INTO audit_log）',
     // 审计出口必须唯一：actor_type / entity_type 这些口径写死在不同语句里，
