@@ -14,6 +14,7 @@ import {
   type DemoDetail,
 } from '@/api';
 import { DemoTimeline } from '@/features/demo/timeline-section';
+import { RelatedSection } from '@/features/demo/related-section';
 
 type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
 
@@ -239,6 +240,9 @@ export function DemoDetailPage() {
           {data.demo.downloadable ? <DemoDownload slug={slug} /> : null}
 
           {data.demo.lifecycleState === 'published' ? <DemoPreview slug={slug} /> : null}
+
+          {/* 相关作品在读不到或为空时自己整块不渲染，所以这里不需要再判一次。 */}
+          <RelatedSection slug={slug} />
         </article>
       )}
     </section>

@@ -1174,6 +1174,13 @@ type RegisterRequest struct {
 	Username string `json:"username"`
 }
 
+// RelatedList defines model for RelatedList.
+type RelatedList struct {
+	// Items 按相关性从高到低。`score` 与共用信号的明细不返回：界面只用来排序，
+	// 而把「因为共用 3D建模」写出来会让读者以为这是审核结论。
+	Items []DemoSummary `json:"items"`
+}
+
 // RestoreResult 回滚的回执。回滚不是「撤销」，它追加了一个新版本，所以回执里同时有新版本号与来源版本号。
 type RestoreResult struct {
 	ModerationState RestoreResultModerationState `json:"moderationState"`
@@ -1431,6 +1438,12 @@ type UpdateDemoMultipartBody struct {
 	// Package 新的作品文件；不传表示只改文字
 	Package *openapi_types.File `json:"package,omitempty"`
 	Title   string              `json:"title"`
+}
+
+// ListRelatedDemosParams defines parameters for ListRelatedDemos.
+type ListRelatedDemosParams struct {
+	// Limit 返回几件，默认 6，上限 12。多给几件没有意义——详情页放不下。
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListModelsParams defines parameters for ListModels.

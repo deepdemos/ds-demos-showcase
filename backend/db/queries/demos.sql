@@ -724,3 +724,42 @@ WHERE (sqlc.arg(board)::text NOT IN ('avg', 'god', 'ghost', 'net')
        OR COALESCE(st.rating_count, 0) > 0)
   AND (sqlc.narg(created_after)::timestamptz IS NULL
        OR d.created_at >= sqlc.narg(created_after)::timestamptz);
+
+-- name: DemoIDForRelated :one
+-- 相关作品的入口：只认公开可见的作品。
+-- 与详情同一口径（404 而不是 403），不给「探测 slug 是否存在」的窗口。
+SELECT d.id, d.author_id, COALESCE(d.current_revision_id, 0)::bigint AS current_revision_id
+FROM demo_public_demos dv
+JOIN demos d ON d.id = dv.demo_id
+WHERE d.slug = $1;
+
+-- name: ListRelatedDemos :many
+-- 按内容信号找相关作品：共用分类 +3 / 共用模型 +2 / 同一作者 +1。
+--
+-- 为什么不用共同浏览：`demo_views` 是新表，迁移不搬旧浏览，站点越大越不准；
+-- 而分类与模型是作者投稿时就写下来的，回填一次就长期有效。
+--
+-- 为什么没有兜底：得分 0 的作品不返回。相关作品区空着比塞四件不相干的作品更诚实。
+--
+-- 打成一条语句而不是在 Go 里拼：候选集是「全部已上架作品」，逐个查关联会变成 N+1。
+SELECT d.slug,
+       COALESCE(d.title, '')::text AS title,
+       d.cover_url,
+       d.created_at,
+       ((SELECT count(*) FROM demo_classifications dc
+          WHERE dc.demo_id = d.id
+            AND dc.classification_id IN (
+                SELECT src.classification_id FROM demo_classifications src
+                 WHERE src.demo_id = sqlc.arg(source_id)::bigint)) * 3
+        + (SELECT count(*) FROM demo_revision_models rm
+            WHERE rm.revision_id = d.current_revision_id
+              AND rm.model_id IN (
+                  SELECT srm.model_id FROM demo_revision_models srm
+                   WHERE srm.revision_id = sqlc.arg(source_revision_id)::bigint)) * 2
+        + CASE WHEN d.author_id = sqlc.arg(source_author_id)::bigint THEN 1 ELSE 0 END
+       )::bigint AS score
+FROM demo_public_demos dv
+JOIN demos d ON d.id = dv.demo_id
+WHERE d.id <> sqlc.arg(source_id)::bigint
+ORDER BY score DESC, d.created_at DESC, d.id DESC
+LIMIT sqlc.arg(row_limit);

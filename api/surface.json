@@ -1050,6 +1050,12 @@
         "optional": false
       }
     },
+    "RelatedList": {
+      "items": {
+        "type": "[]DemoSummary",
+        "optional": false
+      }
+    },
     "RestoreResult": {
       "moderationState": {
         "type": "RestoreResultModerationState",
@@ -1515,6 +1521,11 @@
       "method": "PutDemoRating",
       "pathParams": 1,
       "params": null
+    },
+    "GET /api/v1/demos/{slug}/related": {
+      "method": "ListRelatedDemos",
+      "pathParams": 1,
+      "params": "ListRelatedDemosParams"
     },
     "POST /api/v1/demos/{slug}/restore": {
       "method": "RestoreDemo",

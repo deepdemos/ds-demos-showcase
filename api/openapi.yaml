@@ -10,7 +10,7 @@ info:
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 37 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 38 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1114,6 +1114,65 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: 没被删过 / 恢复窗口已过（`restore_window_closed`）/ 文件已被回收（`derivative_purged`）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/related:
+    get:
+      operationId: listRelatedDemos
+      tags: [作品]
+      summary: 相关作品
+      description: |
+        按**内容信号**找相关作品：共用分类、共用模型、同一作者。不看流量——
+        共同浏览要先有足够的浏览数据，而分类与模型是作者投稿时就写下来的。
+
+        权重：共用一项分类 +3、共用一项模型 +2、同一作者 +1。分类最重是因为它是
+        「这是什么」的直接描述；模型次之（同模型的作品往往同题材）；作者最轻——
+        「同一个人做的」相关性弱于「同一类作品」，但它能把没有分类的早期作品接上。
+
+        **只返回得分大于 0 的作品**，没有「随便凑几件」的兜底：相关作品区空着，
+        比塞四件不相干的作品更诚实。前端的空态就是不渲染这个区块。
+
+        **只含已上架作品**，且不含自己（`demo_public_demos` 视图，与作品库同源）。
+        源作品本身也必须公开可见，否则 404——与详情同一口径，不给「探测 slug 是否存在」的窗口。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+          description: 作品标识
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+            default: 6
+          description: 返回几件，默认 6，上限 12。多给几件没有意义——详情页放不下。
+      responses:
+        '200':
+          description: 相关作品（可能为空数组）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatedList'
+        '400':
+          description: limit 越界
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在或不可公开访问
           content:
             application/json:
               schema:
@@ -2454,6 +2513,19 @@ components:
           type: integer
           minimum: 0
           description: 本次请求的 offset，回显用
+
+    RelatedList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: |
+            按相关性从高到低。`score` 与共用信号的明细不返回：界面只用来排序，
+            而把「因为共用 3D建模」写出来会让读者以为这是审核结论。
+          items:
+            $ref: '#/components/schemas/DemoSummary'
 
     RankingEntry:
       type: object

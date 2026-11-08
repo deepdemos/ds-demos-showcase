@@ -8,7 +8,7 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 37 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 38 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -42,9 +42,11 @@ import type {
   ListDemosParams,
   ListModelsParams,
   ListRankingsParams,
+  ListRelatedDemosParams,
   ModelList,
   ModelProfile,
   RankingList,
+  RelatedList,
   RestoreResult,
   RevisionList,
   SubmissionResult,
@@ -1195,6 +1197,86 @@ export const restoreDemo = async (slug: string, options?: RequestInit): Promise<
 
   const data: restoreDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as restoreDemoResponse
+}
+
+
+export type listRelatedDemosResponse200 = {
+  data: RelatedList
+  status: 200
+}
+
+export type listRelatedDemosResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listRelatedDemosResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listRelatedDemosResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listRelatedDemosResponseSuccess = (listRelatedDemosResponse200) & {
+  headers: Headers;
+};
+export type listRelatedDemosResponseError = (listRelatedDemosResponse400 | listRelatedDemosResponse404 | listRelatedDemosResponse503) & {
+  headers: Headers;
+};
+
+export type listRelatedDemosResponse = (listRelatedDemosResponseSuccess | listRelatedDemosResponseError)
+
+export const getListRelatedDemosUrl = (slug: string,
+    params?: ListRelatedDemosParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/demos/${slug}/related?${stringifiedParams}` : `/api/v1/demos/${slug}/related`
+}
+
+/**
+ * 按**内容信号**找相关作品：共用分类、共用模型、同一作者。不看流量——
+ * 共同浏览要先有足够的浏览数据，而分类与模型是作者投稿时就写下来的。
+ *
+ * 权重：共用一项分类 +3、共用一项模型 +2、同一作者 +1。分类最重是因为它是
+ * 「这是什么」的直接描述；模型次之（同模型的作品往往同题材）；作者最轻——
+ * 「同一个人做的」相关性弱于「同一类作品」，但它能把没有分类的早期作品接上。
+ *
+ * **只返回得分大于 0 的作品**，没有「随便凑几件」的兜底：相关作品区空着，
+ * 比塞四件不相干的作品更诚实。前端的空态就是不渲染这个区块。
+ *
+ * **只含已上架作品**，且不含自己（`demo_public_demos` 视图，与作品库同源）。
+ * 源作品本身也必须公开可见，否则 404——与详情同一口径，不给「探测 slug 是否存在」的窗口。
+ * @summary 相关作品
+ */
+export const listRelatedDemos = async (slug: string,
+    params?: ListRelatedDemosParams, options?: RequestInit): Promise<listRelatedDemosResponse> => {
+
+  const res = await fetch(getListRelatedDemosUrl(slug,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listRelatedDemosResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listRelatedDemosResponse
 }
 
 

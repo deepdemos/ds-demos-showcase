@@ -34,6 +34,10 @@ func (s *stub) ListRankings(_ http.ResponseWriter, _ *http.Request, _ api.ListRa
 	s.hits = append(s.hits, "rankings")
 }
 
+func (s *stub) ListRelatedDemos(_ http.ResponseWriter, _ *http.Request, _ string, _ api.ListRelatedDemosParams) {
+	s.hits = append(s.hits, "related")
+}
+
 func (s *stub) PutDemoRating(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "rate:"+slug)
 }
