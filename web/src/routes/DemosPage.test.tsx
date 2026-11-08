@@ -176,3 +176,66 @@ test('换搜索词时回到第 1 页', async () => {
     expect(listDemos).toHaveBeenCalledWith(expect.objectContaining({ q: '新词', page: 1 }));
   });
 });
+
+/**
+ * 排序进 URL，切到热度会回到第 1 页（SCH-010）。
+ *
+ * 停在第 3 页再换排序，看到的是「新一轮的第 3 页」——空白或错位都可能，
+ * 看起来像换排序坏了。所以换排序必须与换搜索词、换筛选同等对待。
+ */
+test('切到热度排序时带上 sort 并回到第 1 页', async () => {
+  vi.mocked(listDemos).mockResolvedValue({ status: 200, data: emptyPage() } as never);
+
+  renderAt('/demos?page=3');
+
+  await waitFor(() => expect(listDemos).toHaveBeenCalled());
+  fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'hot' } });
+
+  await waitFor(() => {
+    expect(listDemos).toHaveBeenCalledWith(expect.objectContaining({ sort: 'hot' }));
+  });
+  const arg = vi.mocked(listDemos).mock.calls.at(-1)?.[0] as Record<string, unknown>;
+  expect(arg.page).toBe(1);
+});
+
+/**
+ * 随机发现的 seed 必须来自 URL，并且回写到请求里。
+ *
+ * seed 是「这一轮抽样」的标识：翻页、刷新、后退都要落在同一轮上，
+ * 否则下一页会与上一页重叠或漏项（SCH-007）。所以它不能只存在组件 state 里——
+ * 那样一刷新就换了一轮，第 2 页拿到的就是另一批。
+ */
+test('随机发现的 seed 从 URL 来，跟着请求走', async () => {
+  vi.mocked(listDemos).mockResolvedValue({ status: 200, data: emptyPage() } as never);
+
+  renderAt('/demos?sort=random&seed=12345&page=2');
+
+  await waitFor(() => {
+    expect(listDemos).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'random', seed: 12345, page: 2 }),
+    );
+  });
+});
+
+/**
+ * 切到随机发现时要换一个新种子，并回到第 1 页。
+ *
+ * 「随机发现」的语义是换一批，不是「同一批换个顺序」——切过去若沿用上一个种子，
+ * 用户点两次会看到同样的结果，会以为随机坏了。
+ */
+test('切到随机发现会写一个新 seed 并回到第 1 页', async () => {
+  vi.mocked(listDemos).mockResolvedValue({ status: 200, data: emptyPage() } as never);
+
+  renderAt('/demos?page=3&sort=latest');
+
+  await waitFor(() => expect(listDemos).toHaveBeenCalled());
+  fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'random' } });
+
+  await waitFor(() => {
+    expect(listDemos).toHaveBeenCalledWith(expect.objectContaining({ sort: 'random' }));
+  });
+  const arg = vi.mocked(listDemos).mock.calls.at(-1)?.[0] as Record<string, unknown>;
+  expect(arg.page).toBe(1);
+  expect(typeof arg.seed).toBe('number');
+  expect(arg.seed as number).toBeGreaterThanOrEqual(0);
+});
