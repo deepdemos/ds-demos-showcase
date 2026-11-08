@@ -125,6 +125,9 @@ type ServerInterface interface {
 	// 作品榜（六个口径）
 	// (GET /api/v1/rankings)
 	ListRankings(w http.ResponseWriter, r *http.Request, params ListRankingsParams)
+	// 为你推荐（登录后现算）
+	// (GET /api/v1/recommendations)
+	ListRecommendations(w http.ResponseWriter, r *http.Request, params ListRecommendationsParams)
 	// 站点可用性
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -353,6 +356,12 @@ func (_ Unimplemented) GetModel(w http.ResponseWriter, r *http.Request, slug str
 // 作品榜（六个口径）
 // (GET /api/v1/rankings)
 func (_ Unimplemented) ListRankings(w http.ResponseWriter, r *http.Request, params ListRankingsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 为你推荐（登录后现算）
+// (GET /api/v1/recommendations)
+func (_ Unimplemented) ListRecommendations(w http.ResponseWriter, r *http.Request, params ListRecommendationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1384,6 +1393,33 @@ func (siw *ServerInterfaceWrapper) ListRankings(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListRecommendations operation middleware
+func (siw *ServerInterfaceWrapper) ListRecommendations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRecommendationsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRecommendations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealthz operation middleware
 func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Request) {
 
@@ -1621,6 +1657,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/rankings", wrapper.ListRankings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/recommendations", wrapper.ListRecommendations)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.GetHealthz)

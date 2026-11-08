@@ -1430,6 +1430,101 @@ func (q *Queries) ListRankings(ctx context.Context, arg ListRankingsParams) ([]L
 	return items, nil
 }
 
+const listRecommendedDemos = `-- name: ListRecommendedDemos :many
+WITH seeds AS (
+    SELECT demo_id FROM demo_ratings WHERE rater_key = $3::text
+    UNION
+    SELECT demo_id FROM demo_views WHERE viewer_key = $3::text
+),
+seed_classes AS (
+    SELECT DISTINCT dc.classification_id
+      FROM demo_classifications dc
+      JOIN seeds s ON s.demo_id = dc.demo_id
+),
+seed_models AS (
+    SELECT DISTINCT rm.model_id
+      FROM demo_revision_models rm
+      JOIN demos d ON d.current_revision_id = rm.revision_id
+      JOIN seeds s ON s.demo_id = d.id
+),
+seed_authors AS (
+    SELECT DISTINCT d.author_id
+      FROM demos d
+      JOIN seeds s ON s.demo_id = d.id
+      WHERE d.author_id IS NOT NULL
+)
+SELECT d.id,
+       d.slug,
+       COALESCE(d.title, '')::text AS title,
+       d.cover_url,
+       d.created_at,
+       ((SELECT count(*) FROM demo_classifications dc
+          WHERE dc.demo_id = d.id
+            AND dc.classification_id IN (SELECT classification_id FROM seed_classes)) * 3
+        + (SELECT count(*) FROM demo_revision_models rm
+            WHERE rm.revision_id = d.current_revision_id
+              AND rm.model_id IN (SELECT model_id FROM seed_models)) * 2
+        + CASE WHEN d.author_id IN (SELECT author_id FROM seed_authors) THEN 1 ELSE 0 END
+       )::bigint AS score
+FROM demo_public_demos dv
+JOIN demos d ON d.id = dv.demo_id
+WHERE d.id NOT IN (SELECT demo_id FROM seeds)
+  AND (d.author_id IS NULL OR d.author_id <> $1::bigint)
+ORDER BY score DESC, d.created_at DESC, d.id DESC
+LIMIT $2
+`
+
+type ListRecommendedDemosParams struct {
+	AuthorID  int64
+	RowLimit  int32
+	ViewerKey string
+}
+
+type ListRecommendedDemosRow struct {
+	ID        int64
+	Slug      string
+	Title     string
+	CoverUrl  pgtype.Text
+	CreatedAt pgtype.Timestamptz
+	Score     int64
+}
+
+// 「为你推荐」：只用这个人自己的浏览与评分当种子，现算，不建画像表。
+//
+// 为什么现算：画像表一旦落库，就要回答「什么时候过期」「删作品时怎么清」
+// 这两个问题，而回答它们的成本比这个查询本身高得多。
+//
+// 为什么排除自己看过/打过分的：推荐里出现刚看完的那件，读者会觉得这系统没在听。
+// 为什么排除自己的作品：作者不需要系统告诉他自己的东西。
+//
+// 得分 0 不返回，与相关作品同一口径：空着比塞凑数的诚实。
+func (q *Queries) ListRecommendedDemos(ctx context.Context, arg ListRecommendedDemosParams) ([]ListRecommendedDemosRow, error) {
+	rows, err := q.db.Query(ctx, listRecommendedDemos, arg.AuthorID, arg.RowLimit, arg.ViewerKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecommendedDemosRow{}
+	for rows.Next() {
+		var i ListRecommendedDemosRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Title,
+			&i.CoverUrl,
+			&i.CreatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRelatedDemos = `-- name: ListRelatedDemos :many
 SELECT d.slug,
        COALESCE(d.title, '')::text AS title,
