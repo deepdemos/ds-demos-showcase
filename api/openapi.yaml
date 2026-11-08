@@ -10,7 +10,7 @@ info:
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 36 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 37 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -184,6 +184,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelList'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rankings:
+    get:
+      operationId: listRankings
+      tags: [作品]
+      summary: 作品榜（六个口径）
+      description: |
+        按六个口径之一排出作品榜，可按作品创建时间的范围过滤。
+
+        **六个口径**（SOC-013）：`avg` 平均分 / `god` 5 分票 / `ghost` 1 分票 /
+        `net` 5 分减 1 分 / `count` 评分人数 / `heat` 综合热度。
+
+        **零评分作品的去处不一样**（SOC-014）：前四个榜**排除**零评分作品——
+        没人投过票的作品在这个榜上没有可比的数；`count` 与 `heat` **包含**它们，
+        因为「还没人评分」本身就是评分人数榜的一个事实。所以同一批作品在
+        `count` 与 `avg` 两个榜上的条数通常不同，这不是分页错位。
+
+        **`range` 按作品创建时间过滤，不是按投票时间**（SOC-016）。一件 40 天前
+        创建、今天才被投票的作品不会出现在「近 7 天」榜里——需求的原文就是按
+        创建时间，所以「老作品新热度」进不了短周期榜是选择，不是缺陷。
+
+        **只纳入当前已上架作品**（SOC-017）：下架、软删、审核未通过的一律不出现，
+        判据与作品库同源（`demo_public_demos` 视图）。
+
+        **并列按附录 D**，最后一级是「较晚登记优先」（`created_at` 倒序），
+        所以同分作品的名次稳定、翻页不会跳来跳去。`rank` 是**连续名次**：
+        同分也按这个稳定序编号，不做「并列共享名次、后面跳号」——跳号会让
+        「第 21 名」这种链接指向一个不存在的页码。
+      parameters:
+        - name: board
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [avg, god, ghost, net, count, heat]
+          description: |
+            榜的口径，默认 `avg`。
+
+            `value` 的含意在六榜之间不同：`avg` 是平均分（0–5），`god` / `ghost` /
+            `count` 是票数，`net` 是净票（可为负），`heat` 是综合热度分。
+            界面要按 `board` 换单位文案，不能一律当成分数。
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, week, month]
+          description: |
+            时间范围，默认 `all`。`week` / `month` 是**近 7 / 30 天**（相对当前时间），
+            按 `demos.created_at` 过滤。
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: 一页多少名，默认 20，上限 100。超过上限直接 400，不静默截断。
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: 从第几名之后开始（0 基），与作品库的分页口径一致。
+      responses:
+        '200':
+          description: 榜单
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankingList'
+        '400':
+          description: 参数非法（未知 board / range、limit 越界）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '503':
           description: 数据库不可用
           content:
@@ -2368,6 +2454,49 @@ components:
           type: integer
           minimum: 0
           description: 本次请求的 offset，回显用
+
+    RankingEntry:
+      type: object
+      description: 榜单里的一个名次。
+      required: [rank, value, demo]
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+          description: |
+            连续名次（1 基）。同分也按附录 D 的稳定序编号，不跳号——
+            「第 21 名」这种链接必须总能翻到东西。
+        value:
+          type: number
+          format: double
+          description: |
+            这个榜用来排序的那个数，含意随 `board` 变（分数 / 票数 / 净票 / 热度分）。
+            摆出来是为了让读者能自己复核名次，不是让人改。
+        demo:
+          $ref: '#/components/schemas/DemoSummary'
+
+    RankingList:
+      type: object
+      required: [board, range, items, total]
+      properties:
+        board:
+          type: string
+          enum: [avg, god, ghost, net, count, heat]
+          description: 回显口径——前端据此决定单位文案，不用自己记请求参数。
+        range:
+          type: string
+          enum: [all, week, month]
+          description: 回显时间范围。
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingEntry'
+        total:
+          type: integer
+          minimum: 0
+          description: |
+            这个榜在这个范围里有多少件作品，与实际能翻到的条数一致；。
+            与 `items` 长度不同是因为分页，不是因为口径差异。
 
     ModelProfile:
       type: object

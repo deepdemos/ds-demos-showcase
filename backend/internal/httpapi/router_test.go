@@ -30,6 +30,10 @@ func (s *stub) ListModels(_ http.ResponseWriter, _ *http.Request, _ api.ListMode
 	s.hits = append(s.hits, "models")
 }
 
+func (s *stub) ListRankings(_ http.ResponseWriter, _ *http.Request, _ api.ListRankingsParams) {
+	s.hits = append(s.hits, "rankings")
+}
+
 func (s *stub) PutDemoRating(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "rate:"+slug)
 }

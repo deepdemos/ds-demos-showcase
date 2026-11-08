@@ -649,3 +649,78 @@ SET purge_after = EXCLUDED.purge_after,
 -- 设计里写明「恢复会删掉本行，故『删 → 恢复 → 再删』走 INSERT 不走 upsert」。
 DELETE FROM gc_queue
 WHERE kind = 'demo_dir' AND object_key = @object_key::text;
+
+-- name: ListRankings :many
+-- 作品榜（SOC-013 六口径）。
+--
+-- 一条语句覆盖六个榜：每一榜的一级 / 二级 / 三级排序键都算成 k1/k2/k3，
+-- 不属于当前榜的 CASE 全是 NULL，靠 NULLS LAST 退让。比六条查询分支少一份
+-- 「改了一个榜，另一个榜忘了同步」的可能。
+--
+-- ghost 榜的二级规则是「平均分**低**」优先（附录 D），所以那一格取负号，
+-- 其余键都取正号——这样外层统一 DESC，不必给某一榜单独写 ASC。
+--
+-- 零评分作品：前四个榜排除（SOC-014），count 与 heat 包含。
+-- 判据写在 WHERE 里而不是靠 LEFT JOIN 的空值，因为「没有统计行」与「有统计行但零票」
+-- 是同一件事，两者都该在 count 榜里出现。
+--
+-- 只纳入当前已上架作品：走 demo_public_demos 视图（0017/0019/0022 之后新代码
+-- 一律用它，不再各自抄可见性判据）。
+SELECT d.id,
+       d.slug,
+       COALESCE(d.title, '')::text AS title,
+       d.cover_url,
+       d.created_at,
+       CASE sqlc.arg(board)::text
+           WHEN 'avg'   THEN COALESCE(st.rating_avg, 0)::double precision
+           WHEN 'god'   THEN COALESCE(st.rating_god, 0)::double precision
+           WHEN 'ghost' THEN COALESCE(st.rating_ghost, 0)::double precision
+           WHEN 'net'   THEN (COALESCE(st.rating_god, 0) - COALESCE(st.rating_ghost, 0))::double precision
+           WHEN 'count' THEN COALESCE(st.rating_count, 0)::double precision
+           ELSE (COALESCE(st.view_count, 0) + 2 * COALESCE(st.download_count, 0)
+                 + COALESCE(st.rating_count, 0))::double precision
+       END AS value
+FROM demo_public_demos dv
+JOIN demos d ON d.id = dv.demo_id
+LEFT JOIN demo_stats st ON st.demo_id = d.id
+WHERE (sqlc.arg(board)::text NOT IN ('avg', 'god', 'ghost', 'net')
+       OR COALESCE(st.rating_count, 0) > 0)
+  AND (sqlc.narg(created_after)::timestamptz IS NULL
+       OR d.created_at >= sqlc.narg(created_after)::timestamptz)
+ORDER BY
+    CASE sqlc.arg(board)::text
+        WHEN 'avg'   THEN COALESCE(st.rating_avg, 0)::double precision
+        WHEN 'god'   THEN COALESCE(st.rating_god, 0)::double precision
+        WHEN 'ghost' THEN COALESCE(st.rating_ghost, 0)::double precision
+        WHEN 'net'   THEN (COALESCE(st.rating_god, 0) - COALESCE(st.rating_ghost, 0))::double precision
+        WHEN 'count' THEN COALESCE(st.rating_count, 0)::double precision
+        ELSE (COALESCE(st.view_count, 0) + 2 * COALESCE(st.download_count, 0)
+              + COALESCE(st.rating_count, 0))::double precision
+    END DESC NULLS LAST,
+    CASE sqlc.arg(board)::text
+        WHEN 'avg'   THEN COALESCE(st.rating_count, 0)::double precision
+        WHEN 'god'   THEN COALESCE(st.rating_avg, 0)::double precision
+        WHEN 'ghost' THEN -COALESCE(st.rating_avg, 0)::double precision
+        WHEN 'net'   THEN COALESCE(st.rating_count, 0)::double precision
+        WHEN 'count' THEN COALESCE(st.rating_avg, 0)::double precision
+        ELSE 0::double precision
+    END DESC NULLS LAST,
+    CASE sqlc.arg(board)::text
+        WHEN 'avg' THEN COALESCE(st.rating_god, 0)::double precision
+        ELSE 0::double precision
+    END DESC NULLS LAST,
+    d.created_at DESC,
+    d.id DESC
+LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
+
+-- name: CountRankings :one
+-- 与 ListRankings 的 WHERE 逐字一致：总数与实际能翻到的条数必须对得上，
+-- 否则分页页数会算错（第六页可能是空的）。
+SELECT count(*)::bigint AS total
+FROM demo_public_demos dv
+JOIN demos d ON d.id = dv.demo_id
+LEFT JOIN demo_stats st ON st.demo_id = d.id
+WHERE (sqlc.arg(board)::text NOT IN ('avg', 'god', 'ghost', 'net')
+       OR COALESCE(st.rating_count, 0) > 0)
+  AND (sqlc.narg(created_after)::timestamptz IS NULL
+       OR d.created_at >= sqlc.narg(created_after)::timestamptz);
