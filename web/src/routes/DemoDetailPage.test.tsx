@@ -2,7 +2,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { expect, test, vi } from 'vitest';
-import { deleteDemoRating, getDemo, listDemoTimeline, putDemoRating } from '@/api';
+import {
+  deleteDemoRating,
+  getDemo,
+  listDemoTimeline,
+  listRelatedDemos,
+  putDemoRating,
+} from '@/api';
 import { DemoDetailPage, DemoDownload, DemoPreview, tombstoneText } from './DemoDetailPage';
 
 vi.mock('@/api', async (importOriginal) => {
@@ -17,6 +23,8 @@ vi.mock('@/api', async (importOriginal) => {
     deleteDemoRating: vi.fn(),
     // 作品动态：作者视图会挂这个区块，不 mock 就会去发真请求。
     listDemoTimeline: vi.fn(),
+    // 相关作品同理：详情页尾部总会挂它。
+    listRelatedDemos: vi.fn(),
   };
 });
 
@@ -397,4 +405,44 @@ test('还没有动作时说明「这里会记录什么」而不是空白', async
   renderPage();
 
   await waitFor(() => expect(screen.getByText('还没有动作')).toBeTruthy());
+});
+
+test('相关作品与分类标签一起显示', async () => {
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({
+    status: 200,
+    data: {
+      items: [
+        {
+          slug: 'demo-b',
+          title: '同分类的邻居',
+          matchedIn: 'title',
+          createdAt: '2026-01-05T00:00:00.000Z',
+          lifecycleState: 'published',
+          classifications: [{ dimension: 'genre', slug: 'game', label: '小游戏' }],
+        },
+      ],
+    },
+  } as never);
+
+  renderPage();
+
+  // 列表是查出来的，标题要等一次渲染。
+  expect(await screen.findByText('相关作品')).toBeTruthy();
+  expect(screen.getByText('同分类的邻居')).toBeTruthy();
+  expect(screen.getByText('小游戏')).toBeTruthy();
+  expect(screen.getByRole('link', { name: /同分类的邻居/ }).getAttribute('href')).toBe(
+    '/demos/demo-b',
+  );
+});
+
+test('没有相关作品时不渲染那个区块', async () => {
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(vi.mocked(listRelatedDemos)).toHaveBeenCalled());
+  // 空区块比「暂无相关作品」更便宜：读者不该为一个空框付出注意力。
+  expect(screen.queryByText('相关作品')).toBeNull();
 });
