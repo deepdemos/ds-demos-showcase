@@ -667,6 +667,10 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	}
 	// 作者能不能接着改：作者本人 + 非墓碑 + 没被平台移除。
 	detail.CanEdit = viewerIsAuthor && !tombstone && state != api.LifecycleStateRemoved
+	// 与 canEdit 分开：canEdit 还要求「不是墓碑、没被移除」，
+	// 而「这是不是你的作品」只取决于会话与作者。作品动态按它决定要不要请求。
+	isAuthor := viewerIsAuthor
+	detail.IsAuthor = &isAuthor
 	// downloadable 的口径与 httpapi/download.go 必须一致，否则按钮点了 404：
 	// 有文件可给（不是 link）+ 渠道对外可见（listed 或 unlisted）。
 	// 这里不判存储里文件是否存在——那要多一次 Stat 往返，

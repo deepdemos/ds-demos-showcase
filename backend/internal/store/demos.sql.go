@@ -911,6 +911,34 @@ func (q *Queries) GetDemoForRestore(ctx context.Context, arg GetDemoForRestorePa
 	return i, err
 }
 
+const getDemoForTimeline = `-- name: GetDemoForTimeline :one
+SELECT d.id,
+       COALESCE(ac.sub, '')::text AS author_sub,
+       d.erased_at
+FROM demos d
+JOIN users u ON u.id = d.author_id
+LEFT JOIN accounts ac ON ac.sub = u.sub
+WHERE d.slug = $1::text
+`
+
+type GetDemoForTimelineRow struct {
+	ID        int64
+	AuthorSub string
+	ErasedAt  pgtype.Timestamptz
+}
+
+// 作品动态的可见性判定：谁能读、读的是哪一行。
+//
+// 只取「作者是谁」与「有没有被擦除」：动态的可见性判定**只**看这两件事
+// （按 D1 的裁决：审核员不给、墓碑页不给）——不掺 lifecycle 与渠道，
+// 因为那是「内容能不能看」的口径，与「你能否读到自己的改动史」不是同一个问题。
+func (q *Queries) GetDemoForTimeline(ctx context.Context, slug string) (GetDemoForTimelineRow, error) {
+	row := q.db.QueryRow(ctx, getDemoForTimeline, slug)
+	var i GetDemoForTimelineRow
+	err := row.Scan(&i.ID, &i.AuthorSub, &i.ErasedAt)
+	return i, err
+}
+
 const getDemoGcWindow = `-- name: GetDemoGcWindow :one
 SELECT q.purge_after, q.purged_at, q.abandoned_at
 FROM gc_queue q
@@ -996,6 +1024,59 @@ func (q *Queries) ListDemoRevisions(ctx context.Context, slug string) ([]ListDem
 			&i.Erased,
 			&i.IsCurrent,
 			&i.IsPublished,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDemoTimeline = `-- name: ListDemoTimeline :many
+SELECT t.kind,
+       COALESCE(t.message, '')::text AS message,
+       t.created_at,
+       COALESCE(pf.display_name, '')::text AS actor_name
+FROM demo_timeline t
+LEFT JOIN users u ON u.id = t.actor_id
+LEFT JOIN accounts a ON a.sub = u.sub
+LEFT JOIN profiles pf ON pf.account_id = a.id
+WHERE t.demo_id = $1::bigint
+ORDER BY t.created_at DESC, t.id DESC
+LIMIT 100
+`
+
+type ListDemoTimelineRow struct {
+	Kind      string
+	Message   string
+	CreatedAt pgtype.Timestamptz
+	ActorName string
+}
+
+// 写给人看的经过（Demo 域 §3.11）。`kind` 的取值见 `ck_timeline_kind`。
+//
+// 操作人显示名走 users → accounts.sub → profiles：`demo_timeline.actor_id` 存的是
+// users.id（外键指向 users），而显示名在 profiles 上、挂在 accounts 下。
+// 账号被删时显示名为空，那是事实，不要用「系统」掩盖。
+//
+// 限 100 条不分页：单件作品的动作数量级是几十（见契约描述）。
+func (q *Queries) ListDemoTimeline(ctx context.Context, demoID int64) ([]ListDemoTimelineRow, error) {
+	rows, err := q.db.Query(ctx, listDemoTimeline, demoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDemoTimelineRow{}
+	for rows.Next() {
+		var i ListDemoTimelineRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Message,
+			&i.CreatedAt,
+			&i.ActorName,
 		); err != nil {
 			return nil, err
 		}
