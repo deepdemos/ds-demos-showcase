@@ -332,6 +332,40 @@ WHERE id = $1;
 -- 也不妨碍删除。
 DELETE FROM demos WHERE id = $1;
 
+-- name: GetDemoForTimeline :one
+-- 作品动态的可见性判定：谁能读、读的是哪一行。
+--
+-- 只取「作者是谁」与「有没有被擦除」：动态的可见性判定**只**看这两件事
+--（按 D1 的裁决：审核员不给、墓碑页不给）——不掺 lifecycle 与渠道，
+-- 因为那是「内容能不能看」的口径，与「你能否读到自己的改动史」不是同一个问题。
+SELECT d.id,
+       COALESCE(ac.sub, '')::text AS author_sub,
+       d.erased_at
+FROM demos d
+JOIN users u ON u.id = d.author_id
+LEFT JOIN accounts ac ON ac.sub = u.sub
+WHERE d.slug = @slug::text;
+
+-- name: ListDemoTimeline :many
+-- 写给人看的经过（Demo 域 §3.11）。`kind` 的取值见 `ck_timeline_kind`。
+--
+-- 操作人显示名走 users → accounts.sub → profiles：`demo_timeline.actor_id` 存的是
+-- users.id（外键指向 users），而显示名在 profiles 上、挂在 accounts 下。
+-- 账号被删时显示名为空，那是事实，不要用「系统」掩盖。
+--
+-- 限 100 条不分页：单件作品的动作数量级是几十（见契约描述）。
+SELECT t.kind,
+       COALESCE(t.message, '')::text AS message,
+       t.created_at,
+       COALESCE(pf.display_name, '')::text AS actor_name
+FROM demo_timeline t
+LEFT JOIN users u ON u.id = t.actor_id
+LEFT JOIN accounts a ON a.sub = u.sub
+LEFT JOIN profiles pf ON pf.account_id = a.id
+WHERE t.demo_id = @demo_id::bigint
+ORDER BY t.created_at DESC, t.id DESC
+LIMIT 100;
+
 -- name: GetDemoForPreview :one
 -- 预览托管用：一次取到「这是什么状态、作者是谁、当前是第几版」。
 -- author_sub 用 LEFT JOIN + COALESCE 取空串：作者注销后 author_id 会被 SET NULL

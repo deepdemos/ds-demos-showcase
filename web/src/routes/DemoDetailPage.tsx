@@ -13,6 +13,7 @@ import {
   unarchiveDemo,
   type DemoDetail,
 } from '@/api';
+import { DemoTimeline } from '@/features/demo/timeline-section';
 
 type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
 
@@ -230,6 +231,10 @@ export function DemoDetailPage() {
               </Link>
             ) : null}
           </div>
+
+          {/* 作品动态只给作者：服务端对非作者一律 404，所以这里也只在作者视图挂载，
+              否则每个访客都会多一个必然 404 的请求。 */}
+          {data.demo.isAuthor ? <DemoTimeline slug={slug} /> : null}
 
           {data.demo.downloadable ? <DemoDownload slug={slug} /> : null}
 

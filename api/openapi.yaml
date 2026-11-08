@@ -10,7 +10,7 @@ info:
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 35 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 36 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1008,6 +1008,58 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: 没被删过 / 恢复窗口已过（`restore_window_closed`）/ 文件已被回收（`derivative_purged`）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/timeline:
+    get:
+      operationId: listDemoTimeline
+      tags: [作品]
+      summary: 作品动态（只有作者能看）
+      description: |
+        这张表是**写给人看的经过**（Demo 域 §3.11），不承担审计职责——审计在
+        `audit_log`。十种动作各留一行：投稿、通过、驳回、发布、编辑、回滚、
+        下架、恢复（`create` / `slug_change` / `merge` 是预留值，暂无写入点）。
+
+        **只给作者本人**：审核员看得到待审队列，但看不到别人作品的改动史；
+        对非作者一律 404 而不是 403——403 会承认「这个 slug 存在且你有权限问题」，
+        而能被作者以外的人看到的详情本来就只有对外那一版。
+
+        墓碑页不显示动态：作品已经被下架或删除，它的经历没有必要再展示。
+        作者在恢复窗口内仍能读到（那是他自己的记录）。
+
+        最多返回最近 100 条，按时间倒序。没有分页：单件作品的动作数量级是几十，
+        加游标只会多一个没人用的参数。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 作品动态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoTimeline'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在、已被擦除，或你不是作者
           content:
             application/json:
               schema:
@@ -2879,6 +2931,43 @@ components:
           type: string
           enum: [pending, approved, rejected]
 
+    DemoTimelineEntry:
+      type: object
+      additionalProperties: false
+      required: [kind, at]
+      properties:
+        kind:
+          type: string
+          description: |
+            动作类型，取值 `create` / `approve` / `reject` / `publish` / `edit` /
+            `rollback` / `archive` / `restore`（`slug_change` / `merge` 是预留值）。
+
+            **故意不是 enum**：这个列表会随功能增加而增，而写 enum 会让
+            oapi-codegen 给全仓枚举常量统一加类型前缀（`ModelImportField.source`
+            那次就踩过）。客户端的正确写法是按未知值兜底。
+        at:
+          type: string
+          format: date-time
+          description: 发生时刻
+        message:
+          type: string
+          nullable: true
+          description: 一句话说明（例如「发布到 deep」）；没有就省略
+        actorName:
+          type: string
+          nullable: true
+          description: 操作人的显示名；账号被删或系统动作时为 null
+
+    DemoTimeline:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DemoTimelineEntry'
+
     DemoDetail:
       allOf:
         - $ref: '#/components/schemas/DemoSummary'
@@ -2908,6 +2997,15 @@ components:
                 - 作者看得到自己还没过审的稿件（公开视图对 `draft`/`pending`/`rejected` 一律 404）
                 - 作者看到的 `title` / `description` / `demoType` 是**当前版本**的，
                   访客看到的是**对外版本**的——改稿期间两边内容不同是正常的
+            isAuthor:
+              type: boolean
+              description: |
+                当前调用者是不是作者本人。
+
+                与 `canEdit` 不是一回事：`canEdit` 还要求「不是墓碑、没被平台移除」，
+                而这个字段只回答「这是不是你的作品」——作品动态（
+                `GET /api/v1/demos/{slug}/timeline`）就按它决定要不要请求。
+                可选字段：老服务端不返回它时，前端按 `false` 处理。
             downloadable:
               type: boolean
               description: |

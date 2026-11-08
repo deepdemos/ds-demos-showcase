@@ -595,6 +595,29 @@
           "name": "TestIntegrationModelPageBenchmarksFiltered"
         }
       }
+    ],
+    "GET /api/v1/demos/{slug}/timeline": [
+      {
+        "case": "非作者与未登录一律 404（不是 403：403 会承认这个 slug 存在）",
+        "test": {
+          "file": "backend/internal/httpapi/timeline_integration_test.go",
+          "name": "TestIntegrationDemoTimelineAuthorOnly"
+        }
+      },
+      {
+        "case": "擦除之后连作者也读不到动态",
+        "test": {
+          "file": "backend/internal/httpapi/timeline_integration_test.go",
+          "name": "TestIntegrationDemoTimelineGoneAfterErase"
+        }
+      },
+      {
+        "case": "还没有动作时返回空数组而不是 null",
+        "test": {
+          "file": "backend/internal/httpapi/timeline_integration_test.go",
+          "name": "TestIntegrationDemoTimelineEmpty"
+        }
+      }
     ]
   },
   "outsideContract": {

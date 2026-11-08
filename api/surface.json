@@ -117,6 +117,10 @@
         "type": "bool",
         "optional": false
       },
+      "isAuthor": {
+        "type": "bool",
+        "optional": true
+      },
       "lifecycleActions": {
         "type": "DemoLifecycleActions",
         "optional": false
@@ -300,6 +304,30 @@
         "optional": false
       },
       "title": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "DemoTimeline": {
+      "items": {
+        "type": "[]DemoTimelineEntry",
+        "optional": false
+      }
+    },
+    "DemoTimelineEntry": {
+      "actorName": {
+        "type": "string",
+        "optional": true
+      },
+      "at": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "kind": {
+        "type": "string",
+        "optional": false
+      },
+      "message": {
         "type": "string",
         "optional": true
       }
@@ -1441,6 +1469,11 @@
     "POST /api/v1/demos/{slug}/revisions/{revNo}/restore": {
       "method": "RestoreDemoRevision",
       "pathParams": 2,
+      "params": null
+    },
+    "GET /api/v1/demos/{slug}/timeline": {
+      "method": "ListDemoTimeline",
+      "pathParams": 1,
       "params": null
     },
     "POST /api/v1/demos/{slug}/unarchive": {

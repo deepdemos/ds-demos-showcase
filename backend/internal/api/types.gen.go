@@ -353,6 +353,14 @@ type DemoDetail struct {
 	// 猜出来的按钮会点出 404。
 	Downloadable bool `json:"downloadable"`
 
+	// IsAuthor 当前调用者是不是作者本人。
+	//
+	// 与 `canEdit` 不是一回事：`canEdit` 还要求「不是墓碑、没被平台移除」，
+	// 而这个字段只回答「这是不是你的作品」——作品动态（
+	// `GET /api/v1/demos/{slug}/timeline`）就按它决定要不要请求。
+	// 可选字段：老服务端不返回它时，前端按 `false` 处理。
+	IsAuthor *bool `json:"isAuthor,omitempty"`
+
 	// LifecycleActions 当前调用者此刻能对这个作品做哪些生命周期动作。四个布尔全给，
 	// 前端不需要再按 `lifecycleState` 自己推——推错的后果是「按钮点了 409」。
 	//
@@ -547,6 +555,31 @@ type DemoSummary struct {
 // 没有搜索词时恒为 `title`。只匹配简介时，列表上显示的标题里看不到关键词，
 // 界面必须标出来——否则用户会以为「搜出来的东西不相关」。
 type DemoSummaryMatchedIn string
+
+// DemoTimeline defines model for DemoTimeline.
+type DemoTimeline struct {
+	Items []DemoTimelineEntry `json:"items"`
+}
+
+// DemoTimelineEntry defines model for DemoTimelineEntry.
+type DemoTimelineEntry struct {
+	// ActorName 操作人的显示名；账号被删或系统动作时为 null
+	ActorName *string `json:"actorName"`
+
+	// At 发生时刻
+	At time.Time `json:"at"`
+
+	// Kind 动作类型，取值 `create` / `approve` / `reject` / `publish` / `edit` /
+	// `rollback` / `archive` / `restore`（`slug_change` / `merge` 是预留值）。
+	//
+	// **故意不是 enum**：这个列表会随功能增加而增，而写 enum 会让
+	// oapi-codegen 给全仓枚举常量统一加类型前缀（`ModelImportField.source`
+	// 那次就踩过）。客户端的正确写法是按未知值兜底。
+	Kind string `json:"kind"`
+
+	// Message 一句话说明（例如「发布到 deep」）；没有就省略
+	Message *string `json:"message"`
+}
 
 // EmailCodeRequest defines model for EmailCodeRequest.
 type EmailCodeRequest struct {

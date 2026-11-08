@@ -101,6 +101,9 @@ type ServerInterface interface {
 	// 回滚到某一版
 	// (POST /api/v1/demos/{slug}/revisions/{revNo}/restore)
 	RestoreDemoRevision(w http.ResponseWriter, r *http.Request, slug string, revNo int)
+	// 作品动态（只有作者能看）
+	// (GET /api/v1/demos/{slug}/timeline)
+	ListDemoTimeline(w http.ResponseWriter, r *http.Request, slug string)
 	// 重新上架（作者本人）
 	// (POST /api/v1/demos/{slug}/unarchive)
 	UnarchiveDemo(w http.ResponseWriter, r *http.Request, slug string)
@@ -296,6 +299,12 @@ func (_ Unimplemented) ListDemoRevisions(w http.ResponseWriter, r *http.Request,
 // 回滚到某一版
 // (POST /api/v1/demos/{slug}/revisions/{revNo}/restore)
 func (_ Unimplemented) RestoreDemoRevision(w http.ResponseWriter, r *http.Request, slug string, revNo int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 作品动态（只有作者能看）
+// (GET /api/v1/demos/{slug}/timeline)
+func (_ Unimplemented) ListDemoTimeline(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1103,6 +1112,37 @@ func (siw *ServerInterfaceWrapper) RestoreDemoRevision(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListDemoTimeline operation middleware
+func (siw *ServerInterfaceWrapper) ListDemoTimeline(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDemoTimeline(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UnarchiveDemo operation middleware
 func (siw *ServerInterfaceWrapper) UnarchiveDemo(w http.ResponseWriter, r *http.Request) {
 
@@ -1444,6 +1484,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/demos/{slug}/revisions/{revNo}/restore", wrapper.RestoreDemoRevision)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/demos/{slug}/timeline", wrapper.ListDemoTimeline)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/demos/{slug}/unarchive", wrapper.UnarchiveDemo)
