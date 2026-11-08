@@ -1097,10 +1097,21 @@ removed）只有**作者本人**或持有 `demo.review` 权限的角色能看。
 | 单文件 | 原文件名，如 `index.svg` | 上传一张 SVG 就是这种；`single_file` 记类型 |
 | zip 包 | 恒为 `index.html` | `submit` 只认根目录 `index.html`/`index.htm`，否则 400 |
 
-写死 `index.html` 的后果是「投稿成功、预览页 404」——2026-11-08 的真实事故：
+形态由 `backend/internal/domain/demo/shapes.go` 一处决定（`singleFileKinds` /
+`stagedName` / `isRootIndex`），投稿校验与预览都从它取值，读侧**不再自己推导**。
+门禁 `check-single-source` 把这些文件名的字面量登记成一类判定：除该文件外出现即红。
+
+**不带文件名时一律 302，不直接回字节**：跳到
+`/preview/{slug}/v{n}/{entry_path}`。这样「猜入口」这个动作在代码里消失了——
+入口只从这一版的 `entry_path` 取一次，结果直接摆在地址里；带版本号的落点永久不变，
+可以给 `immutable` 长缓存，而 302 本身给 `no-store`（目标随改稿变化）。
+
+写死 `index.html` 的代价是「投稿成功、预览页 404」——2026-11-08 的真实事故：
 用户上传一张 SVG，打开预览就是 `404 page not found`，而库里一切正常。
 路径带版本号时读的是那一版的入口（不是当前版）：作者在 `/preview/{slug}/v{n}/`
-里看的就是第 n 版，用当前版的入口会读错文件。
+里看的就是第 n 版，用当前版的入口会读错文件。回归用例是
+`TestIntegrationSubmitShapeMatrix`（形态矩阵，数据源就是 `SubmitShapes()`）：
+新增一种格式只改 `shapes.go`，矩阵自动多一行。
 
 **同源渲染的隔离**：作品 HTML 跑在不透明源里，靠两道独立机制：
 

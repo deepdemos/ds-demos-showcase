@@ -219,19 +219,15 @@ func (s *Service) stage(ctx context.Context, in SubmitInput) (st staged, cleanup
 	//
 	// 扩展名只能从 PackageName 取：PackagePath 是 `os.CreateTemp` 的随机名，
 	// 没有扩展名。（踩过：这里原来读 PackagePath，于是单文件投稿一律 415。）
+	// 形态（接不接受、single_file 记什么、入口叫什么）全部由 shapes.go 决定：
+	// 这里再推导一遍就是「同一个事实两个出处」，预览那次 404 就是这么来的。
 	ext := strings.ToLower(filepath.Ext(in.PackageName))
-	switch ext {
-	case ".html", ".htm":
-		st.singleFile = "html"
-	case ".svg":
-		st.singleFile = "svg"
-	default:
+	kind, ok := singleFileKind(ext)
+	if !ok {
 		return st, cleanup, fmt.Errorf("%w: 只接受 zip 包或单个 .html / .svg 文件", ErrUnsupportedPackage)
 	}
-	name := "index" + ext
-	if ext == ".htm" {
-		name = "index.html" // 统一成 .html，避免预览时 MIME 判断分叉
-	}
+	st.singleFile = kind
+	name := stagedName(in.PackageName)
 	st.contentDir = dir
 	if err := copyFile(in.PackagePath, filepath.Join(dir, name)); err != nil {
 		return st, cleanup, fmt.Errorf("demo: 暂存文件失败: %w", err)
@@ -265,7 +261,7 @@ func (s *Service) collect(root string, st *staged) error {
 		}
 		rel = filepath.ToSlash(rel)
 		st.files = append(st.files, rel)
-		if rel == "index.html" || rel == "index.htm" {
+		if isRootIndex(rel) {
 			st.entryPath = rel
 		}
 		return nil

@@ -605,6 +605,20 @@
           "file": "backend/internal/httpapi/preview_integration_test.go",
           "name": "TestIntegrationPreviewVisibility"
         }
+      },
+      {
+        "case": "每一种投稿形态（zip / html / htm / svg）的入口都能被预览打开",
+        "test": {
+          "file": "backend/internal/httpapi/preview_shapes_integration_test.go",
+          "name": "TestIntegrationSubmitShapeMatrix"
+        }
+      },
+      {
+        "case": "不带文件名的预览 302 到带版本号与真实文件名的地址，且不给长缓存",
+        "test": {
+          "file": "backend/internal/httpapi/preview_shapes_integration_test.go",
+          "name": "TestIntegrationPreviewEntryRedirect"
+        }
       }
     ],
     "GET /download/{slug}": [
