@@ -15,8 +15,9 @@ export function Skeleton({ lines = 3, lineHeight = 'h-4' }: SkeletonProps) {
       {Array.from({ length: lines }, (_, i) => (
         <div
           key={i}
-          className={`animate-pulse rounded bg-gray-200 ${lineHeight} dark:bg-gray-700`}
-          style={{ width: i === lines - 1 ? '60%' : '100%' }}
+          className={`animate-pulse rounded bg-gray-200 ${lineHeight} dark:bg-gray-700 ${
+            i === lines - 1 ? 'w-3/5' : 'w-full'
+          }`}
         />
       ))}
     </div>

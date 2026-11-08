@@ -25,9 +25,9 @@ const DOCS = path.join(ROOT, 'docs')
 
 // 只认这几个顶层目录开头的引用：其余（`index.html`、`shapes.go` 这类裸文件名）
 // 是叙述里的简称，不是「这个仓库里的某个路径」，硬查会全是误报。
-const TOP_DIRS = ['backend/', 'web/', 'db/', 'api/', 'scripts/', '.github/']
+const TOP_DIRS = ['backend/', 'web/', 'db/', 'api/', 'scripts/', 'deploy/', '.github/']
 
-const FILE_TOKEN = /`([A-Za-z0-9_.\-/]+\.(?:go|ts|tsx|mjs|cjs|js|sql|yaml|yml|json|md|css|html))`/g
+const FILE_TOKEN = /`([A-Za-z0-9_.\-/]+\.(?:go|ts|tsx|mjs|cjs|js|sql|yaml|yml|json|md|css|html|conf|service))`/g
 
 /**
  * @param {{docs: {file: string, text: string}[], exists: (p: string) => boolean}} input

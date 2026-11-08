@@ -1,0 +1,51 @@
+# systemd 单元：DeepDemos API
+#
+# 安装：
+#   sudo useradd --system --home /srv/deepdemos --shell /usr/sbin/nologin deepdemos
+#   sudo install -m 0644 deploy/systemd/deepdemos-api.service /etc/systemd/system/
+#   sudo install -d -o deepdemos -g deepdemos /srv/deepdemos/storage
+#   sudo systemctl daemon-reload && sudo systemctl enable --now deepdemos-api
+#
+# 密钥不进单元文件：/etc/deepdemos/api.env（0640，root:deepdemos），内容见 docs/部署.md。
+# 启动时缺 VERIFICATION_SECRET 会直接退出——那是刻意的（多实例各发各的验证码最难查）。
+
+[Unit]
+Description=DeepDemos Showcase API
+Documentation=file:///srv/deepdemos/docs/部署.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deepdemos
+Group=deepdemos
+WorkingDirectory=/srv/deepdemos
+EnvironmentFile=/etc/deepdemos/api.env
+ExecStart=/usr/local/bin/deepdemos-api
+Restart=always
+RestartSec=2s
+# 优雅退出：给在途的 200 MiB 上传留时间
+TimeoutStopSec=30s
+
+# 日志进 journald（结构化字段可在 `journalctl -u deepdemos-api -f` 里跟）
+StandardOutput=journal
+StandardError=journal
+
+# 收敛权限：只写自己的 storage 与临时目录
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/deepdemos/storage
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+# 文件句柄：下载与预览会同时占若干条
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

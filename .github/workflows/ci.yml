@@ -265,9 +265,11 @@ jobs:
         run: node scripts/check-api-doc.mjs
       - name: 文档引用门禁（文档点名的仓库文件必须存在）
         run: node scripts/check-docs-refs.mjs
+      - name: 部署配置门禁（反代路径 / SPA 回退 / 上传上限 / 安全头 / 服务单元）
+        run: node scripts/check-deploy.mjs
       - name: 失败处理指引
         if: failure()
-        run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行 / 标准对象取值域出现重复或走样 / 单一出处出现新副本 / 端点缺反例 / 门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
+        run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行 / 标准对象取值域出现重复或走样 / 单一出处出现新副本 / 端点缺反例 / 部署配置缺项 / 门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
 
   # 契约门禁：目录表是唯一事实源——权限键、审计动作、审计实体类型、GC 对象类型，
   # 以及生命周期 registry.yaml 对它们的引用；表结构与可变常量两道静态门禁；

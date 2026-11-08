@@ -80,7 +80,7 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 ### 文档引用门禁（`check-docs-refs.mjs`）
 
 文档里用反引号点名的仓库文件（`backend/…` / `web/…` / `db/…` / `api/…` / `scripts/…` /
-`.github/…` 开头的路径）必须存在。拦的是这类形状：文件改名或拆开之后，文档还写着旧名字——
+`deploy/…` / `.github/…` 开头的路径）必须存在。拦的是这类形状：文件改名或拆开之后，文档还写着旧名字——
 `detailOf` 从 `handlers.go` 搬到 `demos_read.go`、`api.gen.go` 早拆成两份。
 
 **它能证明什么**：文档点到的路径真实存在。
@@ -89,6 +89,17 @@ file-size 扫描 git 跟踪的源码（.go .ts .tsx .js .jsx .mjs .cjs .css）�
 端点为什么不在它的管辖内：设计文档里大量引用**还没实现**的端点，那是正当的前瞻；
 硬查会产出上百条误报，把门禁变成噪音。端点侧交给 `check-api-doc`（描述里的端点数
 与契约一致）和 `check-negative-cases`（每个端点都要有反例）两道。
+
+### 部署配置门禁（`check-deploy.mjs`）
+
+`deploy/nginx/deepdemos.conf` 里四段反代（`/api/`、`/healthz`、`/preview/`、`/download/`）、
+SPA 回退 `try_files … /index.html`、上传上限（不小于契约允许的 200 MiB）都在，
+`deploy/nginx/security-headers.conf` 里有 CSP / nosniff / Referrer-Policy，
+`deploy/systemd/deepdemos-api.service` 有 `EnvironmentFile=` 与 `ExecStart=`。
+
+**它能证明什么**：这些块没有被整段删掉或改歪。
+**它不能证明什么**：语法正确、能启动、头真的发出去、上传真的能过——开发机上没有 nginx
+也没有 systemd，`nginx -t` 从未跑过。这些只在部署机按 `docs/部署.md` §7 的清单验。
 
 ### 单一出处门禁（`check-single-source.mjs`）
 
