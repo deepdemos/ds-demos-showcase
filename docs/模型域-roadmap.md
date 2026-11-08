@@ -263,7 +263,7 @@
 **I-20 (#40) `[refactor] 前端页面减重`**
 - 标签：`refactor` `frontend`
 - 依赖：I-17
-- 内容：`DemosView` / `UploadView` 逻辑下沉 composable；`api/index.ts` 按域拆。
+- 内容：`DemosView` / `UploadView` 逻辑下沉 composable；旧栈的 api 入口按域拆开。
 - 验收：视图行数下降 ≥ 40%；vitest 全绿。
 
 **I-21 (#41) `[tech-debt] 删除弃用 Worker 后端`**
