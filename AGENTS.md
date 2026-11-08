@@ -105,7 +105,7 @@ CI 必须自动拦截以下情况，不依赖人工 review：
 
 ## CI 与合并门槛
 
-- 所有 PR 必须 CI 全绿才能合并；`dev` / `main` / `release` 的 required checks：`backend`、`frontend`、`ui-contract`、`file-size`、`contract`、`pr-guard`（`contract` 自 2026-11-01 起为 required）。
+- 所有 PR 必须 CI 全绿才能合并；`dev` / `main` / `release` 的 required checks：`backend`、`frontend`、`ui-contract`、`file-size`、`contract`、`pr-guard`、`e2e`（`contract` 自 2026-11-01、`e2e` 自 2026-11-08 起为 required）。
 - CI 失败先读 `docs/development-workflow.md`，按 issue-first 处理，不得绕过。
 - 不允许以“跳过 CI”的方式合并，包括管理员；CI 自身坏了先修 CI。
 - 新逻辑必须带测试；修 bug 先补能复现的测试。
