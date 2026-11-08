@@ -6,9 +6,10 @@
  *
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
- * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
+ * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
+ * 作品榜与相关推荐，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 38 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 39 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -42,10 +43,12 @@ import type {
   ListDemosParams,
   ListModelsParams,
   ListRankingsParams,
+  ListRecommendationsParams,
   ListRelatedDemosParams,
   ModelList,
   ModelProfile,
   RankingList,
+  RecommendationList,
   RelatedList,
   RestoreResult,
   RevisionList,
@@ -253,6 +256,87 @@ export const listModels = async (params?: ListModelsParams, options?: RequestIni
 
   const data: listModelsResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listModelsResponse
+}
+
+
+export type listRecommendationsResponse200 = {
+  data: RecommendationList
+  status: 200
+}
+
+export type listRecommendationsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listRecommendationsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listRecommendationsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listRecommendationsResponseSuccess = (listRecommendationsResponse200) & {
+  headers: Headers;
+};
+export type listRecommendationsResponseError = (listRecommendationsResponse400 | listRecommendationsResponse401 | listRecommendationsResponse503) & {
+  headers: Headers;
+};
+
+export type listRecommendationsResponse = (listRecommendationsResponseSuccess | listRecommendationsResponseError)
+
+export const getListRecommendationsUrl = (params?: ListRecommendationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/recommendations?${stringifiedParams}` : `/api/v1/recommendations`
+}
+
+/**
+ * 给当前登录用户推荐几件作品，**每次现算、不落画像表**。
+ *
+ * 种子是这个人的浏览与评分：他用过的作品身上的分类、模型、作者，三者
+ * 与候选作品的重合度决定得分（共用分类 +3 / 共用模型 +2 / 同作者 +1），
+ * 权重与相关作品同一套——两处口径必须一致，否则「相关」与「推荐」
+ * 会给出两套不同的相似度。
+ *
+ * **排除自己看过或打过分的**：推荐里出现刚看完的那件，读者会以为系统
+ * 没在听。**排除自己的作品**：作者不需要系统介绍他自己的东西。
+ *
+ * 得分 0 不返回，哪怕结果为空。**没有种子时返回空数组**（新用户冷启动），
+ * 这不是错误：界面应当整块不渲染，而不是显示「暂无推荐」。
+ *
+ * 未登录一律 401——匿名访客的 `viewer_key` 是 `HMAC(ip)`，拿它做个性化
+ * 等于把同一个 NAT 后面的人当成一个人。
+ * @summary 为你推荐（登录后现算）
+ */
+export const listRecommendations = async (params?: ListRecommendationsParams, options?: RequestInit): Promise<listRecommendationsResponse> => {
+
+  const res = await fetch(getListRecommendationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listRecommendationsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listRecommendationsResponse
 }
 
 

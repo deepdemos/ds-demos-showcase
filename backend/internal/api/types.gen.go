@@ -1150,6 +1150,14 @@ type RankingListBoard string
 // RankingListRange 回显时间范围。
 type RankingListRange string
 
+// RecommendationList defines model for RecommendationList.
+type RecommendationList struct {
+	// Items 按推荐得分从高到低，最多 `limit` 条。空数组表示「还不知道推荐什么」——
+	// 没有种子（新用户）或候选全被排除了。界面应当整块不渲染，而不是显示空态文案：
+	// 「暂无推荐」会让读者以为这是坏掉的，而不是还没开始。
+	Items []DemoSummary `json:"items"`
+}
+
 // RegisterAccepted defines model for RegisterAccepted.
 type RegisterAccepted struct {
 	// Email 回显注册用的邮箱，前端直接带到验证页
@@ -1483,6 +1491,12 @@ type ListRankingsParamsBoard string
 
 // ListRankingsParamsRange defines parameters for ListRankings.
 type ListRankingsParamsRange string
+
+// ListRecommendationsParams defines parameters for ListRecommendations.
+type ListRecommendationsParams struct {
+	// Limit 返回条数，越界回 400，不静默截断。
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
 // PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
 type PublishDemoJSONRequestBody = PublishRequest

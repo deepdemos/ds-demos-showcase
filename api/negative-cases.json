@@ -713,6 +713,36 @@
           "name": "TestIntegrationRelatedLimit"
         }
       }
+    ],
+    "GET /api/v1/recommendations": [
+      {
+        "case": "未登录访问推荐回 401（匿名键是 HMAC(ip)，拿它做个性化等于把 NAT 后面的人当成一个人）",
+        "test": {
+          "file": "backend/internal/httpapi/recommendations_integration_test.go",
+          "name": "TestIntegrationRecommendationsRequireLogin"
+        }
+      },
+      {
+        "case": "没有种子时返回空数组而不是 null（冷启动不是错误）",
+        "test": {
+          "file": "backend/internal/httpapi/recommendations_integration_test.go",
+          "name": "TestIntegrationRecommendationsColdStart"
+        }
+      },
+      {
+        "case": "看过或打过分的作品不再出现在推荐里",
+        "test": {
+          "file": "backend/internal/httpapi/recommendations_integration_test.go",
+          "name": "TestIntegrationRecommendationsSkipSeen"
+        }
+      },
+      {
+        "case": "limit 越界回 400，不静默截断",
+        "test": {
+          "file": "backend/internal/httpapi/recommendations_integration_test.go",
+          "name": "TestIntegrationRecommendationsLimit"
+        }
+      }
     ]
   },
   "outsideContract": {

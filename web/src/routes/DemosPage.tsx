@@ -11,6 +11,7 @@ import {
   Select,
   Skeleton,
 } from '@/components/ui';
+import { RecommendationStrip } from '@/features/demo/recommendation-strip';
 import {
   listClassifications,
   listDemos,
@@ -261,6 +262,11 @@ export function DemosPage() {
             </Button>
           ) : null}
         </form>
+
+        {/* 推荐条自己决定渲不渲染：未登录、没有种子、读失败都整块不出。 */}
+        <div className="mt-6">
+          <RecommendationStrip />
+        </div>
 
         {/*
           筛选器只在目录读到之后出现：目录没来时给出一个空壳会让人以为「一个都筛不了」。

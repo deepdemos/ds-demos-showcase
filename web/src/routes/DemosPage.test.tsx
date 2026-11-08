@@ -2,16 +2,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router';
 import { expect, test, vi } from 'vitest';
-import { listDemos } from '@/api';
+import { listDemos, listRecommendations } from '@/api';
 import { DemosPage } from './DemosPage';
 
-vi.mock('@/api', () => ({ listDemos: vi.fn() }));
+vi.mock('@/api', () => ({ listDemos: vi.fn(), listRecommendations: vi.fn() }));
 
 function emptyPage() {
   return { items: [], page: 1, pageSize: 12, total: 0 };
 }
 
-function renderAt(initialPath: string) {
+function renderAt(initialPath: string, recommendation: unknown = { status: 401 }) {
+  // 默认按访客处理：推荐条整块不渲染，绝大多数用例关心的是列表本身。
+  // 需要推荐的用例把响应体当第二个参数传进来——不能在 renderAt 之后再 mock，
+  // 那样默认值已经把之前的设置覆盖掉了。
+  vi.mocked(listRecommendations).mockResolvedValue(recommendation as never);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -238,4 +242,41 @@ test('切到随机发现会写一个新 seed 并回到第 1 页', async () => {
   expect(arg.page).toBe(1);
   expect(typeof arg.seed).toBe('number');
   expect(arg.seed as number).toBeGreaterThanOrEqual(0);
+});
+
+test('登录后有推荐时在列表上方显示', async () => {
+  vi.mocked(listDemos).mockResolvedValue({ status: 200, data: emptyPage() } as never);
+
+  renderAt('/demos', {
+    status: 200,
+    data: {
+      items: [
+        {
+          slug: 'demo-rec',
+          title: '你可能想看这件',
+          matchedIn: 'title',
+          createdAt: '2026-01-05T00:00:00.000Z',
+          lifecycleState: 'published',
+          classifications: [{ dimension: 'genre', slug: 'game', label: '小游戏' }],
+        },
+      ],
+    },
+  });
+
+  expect(await screen.findByText('为你推荐')).toBeTruthy();
+  expect(screen.getByText('你可能想看这件')).toBeTruthy();
+  expect(screen.getByText('小游戏')).toBeTruthy();
+  expect(screen.getByRole('link', { name: /你可能想看这件/ }).getAttribute('href')).toBe(
+    '/demos/demo-rec',
+  );
+});
+
+test('访客不显示推荐条', async () => {
+  vi.mocked(listDemos).mockResolvedValue({ status: 200, data: emptyPage() } as never);
+
+  renderAt('/demos');
+
+  // 等列表本身落定，再断言推荐条不在——否则可能在推荐请求还没回来时就断言了。
+  await screen.findByText('还没有公开的作品');
+  expect(screen.queryByText('为你推荐')).toBeNull();
 });

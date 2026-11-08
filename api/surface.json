@@ -1022,6 +1022,12 @@
         "optional": false
       }
     },
+    "RecommendationList": {
+      "items": {
+        "type": "[]DemoSummary",
+        "optional": false
+      }
+    },
     "RegisterAccepted": {
       "email": {
         "type": "string",
@@ -1576,6 +1582,11 @@
       "method": "ListRankings",
       "pathParams": 0,
       "params": "ListRankingsParams"
+    },
+    "GET /api/v1/recommendations": {
+      "method": "ListRecommendations",
+      "pathParams": 0,
+      "params": "ListRecommendationsParams"
     },
     "GET /healthz": {
       "method": "GetHealthz",
