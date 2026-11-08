@@ -690,6 +690,29 @@
           "name": "TestIntegrationRankingsEmptyIsNotAnError"
         }
       }
+    ],
+    "GET /api/v1/demos/{slug}/related": [
+      {
+        "case": "没有相关信号时返回空数组，不用凑数作品填满",
+        "test": {
+          "file": "backend/internal/httpapi/related_integration_test.go",
+          "name": "TestIntegrationRelatedReturnsEmptyRatherThanFiller"
+        }
+      },
+      {
+        "case": "下架的作品既不出现在相关作品里，也不能作为源作品",
+        "test": {
+          "file": "backend/internal/httpapi/related_integration_test.go",
+          "name": "TestIntegrationRelatedSkipsUnlisted"
+        }
+      },
+      {
+        "case": "limit 超出范围回 400，不静默截断",
+        "test": {
+          "file": "backend/internal/httpapi/related_integration_test.go",
+          "name": "TestIntegrationRelatedLimit"
+        }
+      }
     ]
   },
   "outsideContract": {

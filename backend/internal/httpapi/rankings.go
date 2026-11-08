@@ -171,5 +171,12 @@ func (h *Handler) classificationsByIDs(ctx context.Context, ids []int64) map[int
 			Label:     c.Label,
 		})
 	}
+	// 每一行都要有非 nil 的数组：契约里 classifications 是 required，null 会让前端
+	// 多一条分支，而这条分支只在「这件作品没打分类」时才会被走到——最容易漏测的那一格。
+	for _, id := range ids {
+		if _, ok := out[id]; !ok {
+			out[id] = []api.ClassificationRef{}
+		}
+	}
 	return out
 }

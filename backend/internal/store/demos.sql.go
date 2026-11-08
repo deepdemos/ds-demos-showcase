@@ -385,6 +385,28 @@ func (q *Queries) DeleteDemoGcRow(ctx context.Context, objectKey string) error {
 	return err
 }
 
+const demoIDForRelated = `-- name: DemoIDForRelated :one
+SELECT d.id, d.author_id, COALESCE(d.current_revision_id, 0)::bigint AS current_revision_id
+FROM demo_public_demos dv
+JOIN demos d ON d.id = dv.demo_id
+WHERE d.slug = $1
+`
+
+type DemoIDForRelatedRow struct {
+	ID                int64
+	AuthorID          pgtype.Int8
+	CurrentRevisionID int64
+}
+
+// 相关作品的入口：只认公开可见的作品。
+// 与详情同一口径（404 而不是 403），不给「探测 slug 是否存在」的窗口。
+func (q *Queries) DemoIDForRelated(ctx context.Context, slug string) (DemoIDForRelatedRow, error) {
+	row := q.db.QueryRow(ctx, demoIDForRelated, slug)
+	var i DemoIDForRelatedRow
+	err := row.Scan(&i.ID, &i.AuthorID, &i.CurrentRevisionID)
+	return i, err
+}
+
 const enqueueDemoGc = `-- name: EnqueueDemoGc :exec
 INSERT INTO gc_queue (kind, object_key, entity_type, entity_id, reason, purge_after)
 VALUES ('demo_dir', $1::text, 'demo', $2::bigint, 'delete', $3::timestamptz)
@@ -1397,6 +1419,84 @@ func (q *Queries) ListRankings(ctx context.Context, arg ListRankingsParams) ([]L
 			&i.CoverUrl,
 			&i.CreatedAt,
 			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRelatedDemos = `-- name: ListRelatedDemos :many
+SELECT d.slug,
+       COALESCE(d.title, '')::text AS title,
+       d.cover_url,
+       d.created_at,
+       ((SELECT count(*) FROM demo_classifications dc
+          WHERE dc.demo_id = d.id
+            AND dc.classification_id IN (
+                SELECT src.classification_id FROM demo_classifications src
+                 WHERE src.demo_id = $1::bigint)) * 3
+        + (SELECT count(*) FROM demo_revision_models rm
+            WHERE rm.revision_id = d.current_revision_id
+              AND rm.model_id IN (
+                  SELECT srm.model_id FROM demo_revision_models srm
+                   WHERE srm.revision_id = $2::bigint)) * 2
+        + CASE WHEN d.author_id = $3::bigint THEN 1 ELSE 0 END
+       )::bigint AS score
+FROM demo_public_demos dv
+JOIN demos d ON d.id = dv.demo_id
+WHERE d.id <> $1::bigint
+ORDER BY score DESC, d.created_at DESC, d.id DESC
+LIMIT $4
+`
+
+type ListRelatedDemosParams struct {
+	SourceID         int64
+	SourceRevisionID int64
+	SourceAuthorID   int64
+	RowLimit         int32
+}
+
+type ListRelatedDemosRow struct {
+	Slug      string
+	Title     string
+	CoverUrl  pgtype.Text
+	CreatedAt pgtype.Timestamptz
+	Score     int64
+}
+
+// 按内容信号找相关作品：共用分类 +3 / 共用模型 +2 / 同一作者 +1。
+//
+// 为什么不用共同浏览：`demo_views` 是新表，迁移不搬旧浏览，站点越大越不准；
+// 而分类与模型是作者投稿时就写下来的，回填一次就长期有效。
+//
+// 为什么没有兜底：得分 0 的作品不返回。相关作品区空着比塞四件不相干的作品更诚实。
+//
+// 打成一条语句而不是在 Go 里拼：候选集是「全部已上架作品」，逐个查关联会变成 N+1。
+func (q *Queries) ListRelatedDemos(ctx context.Context, arg ListRelatedDemosParams) ([]ListRelatedDemosRow, error) {
+	rows, err := q.db.Query(ctx, listRelatedDemos,
+		arg.SourceID,
+		arg.SourceRevisionID,
+		arg.SourceAuthorID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRelatedDemosRow{}
+	for rows.Next() {
+		var i ListRelatedDemosRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Title,
+			&i.CoverUrl,
+			&i.CreatedAt,
+			&i.Score,
 		); err != nil {
 			return nil, err
 		}
