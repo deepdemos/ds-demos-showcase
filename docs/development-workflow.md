@@ -195,7 +195,7 @@ review 正文里必须有一段 `## 结论落地`：
 - [ ] 只有一类修改；无混入的无关重构/格式化。
 - [ ] 手写部分改动 ≤20 个文件（三个生成目录不计入）；行数不限，但单文件 >500 行会告警，>800 行直接失败。
 - [ ] file-size 警告文件是否被触碰；>800 行是否拆分。
-- [ ] CI 全绿：backend / frontend / ui-contract / file-size / contract / pr-guard。
+- [ ] CI 全绿：backend / frontend / ui-contract / file-size / contract / pr-guard / e2e。
 - [ ] review 评论晚于最新 commit；push 后已重新 review。
 - [ ] 不确定的问题已 ask 并记录；没有未经确认的假设。
 - [ ] 有测试；bug 修复有复现测试；无占位/未使用代码。
