@@ -15,6 +15,9 @@ export function AppLayout() {
           <Link to="/demos" className="text-gray-600 hover:underline dark:text-gray-300">
             作品库
           </Link>
+          <Link to="/rankings" className="text-gray-600 hover:underline dark:text-gray-300">
+            排行榜
+          </Link>
           {me && (
             <Link to="/submit" className="text-gray-600 hover:underline dark:text-gray-300">
               投稿
