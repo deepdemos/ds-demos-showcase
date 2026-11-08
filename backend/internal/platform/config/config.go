@@ -58,6 +58,10 @@ type Config struct {
 	// 它是**部署拓扑**（换镜像源、走内网代理）不是运营参数，所以不进设置域。
 	// 空字符串表示用默认地址——让「没配」与「配成本地文件」区分开。
 	ModelCatalogURL string
+	// CSRFMode 是跨站检查的档位：off / log / enforce。
+	// 默认 log（只记不拦）——先在真实流量上观察一轮，再切 enforce。
+	// 取值的解析在 httpapi.ParseCSRFMode，那里会对拼错的值报错而不是静默降级。
+	CSRFMode string
 
 	// UploadMaxPending 是一个作者同时能压多少条待审。默认 5。
 	// 投稿是全站最贵的写路径（200 MiB 包 + 最多 500 MiB 解压），
@@ -82,6 +86,7 @@ func Load() Config {
 		MailLogCodes:        os.Getenv("MAIL_LOG_CODES") == "1",
 		StorageRoot:         getenv("STORAGE_ROOT", "./var/storage"),
 		ModelCatalogURL:     os.Getenv("MODEL_CATALOG_URL"),
+		CSRFMode:            getenv("CSRF_MODE", "log"),
 		UploadMaxPackageMiB: intenv("UPLOAD_MAX_PACKAGE_MIB", 200),
 		UploadMaxPending:    int(intenv("UPLOAD_MAX_PENDING", 5)),
 	}
