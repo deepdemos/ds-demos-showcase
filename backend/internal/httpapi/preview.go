@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -191,21 +193,36 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rel == "" {
-		// 入口文件按这一版记录的 `entry_path` 来，不能硬编码 `index.html`：
-		// 单文件作品可能是 `index.svg`（上传一张 SVG 就是这么存的），
-		// zip 包的入口也可能是 `dist/index.html`。写死 `index.html` 的后果是
-		// 「投稿成功、预览页 404」——真实事故，见 PR 描述。
+		// 没有文件名时**不猜**入口，而是跳过去。
 		//
-		// 读的是**这一版**的入口而不是当前版的：作者在 `/preview/{slug}/v{n}/`
-		// 里看的就是第 n 版，用当前版的入口会读错文件。
+		// 以前这里直接回字节，入口靠一段代码推——推错了就是「投稿成功、预览页 404」
+		// （单文件作品的原件叫 index.svg，而代码推的是 index.html）。
+		// 改成 302 之后，「猜文件名」这个动作消失了：入口只从这一版的
+		// `entry_path` 取一次，结果直接摆在地址里。
+		//
+		// 跳过去而不是回字节，还顺手解决两件事：
+		//   - 地址可读：`/preview/111/v1/index.svg` 一眼看得出读的是哪个文件；
+		//   - 缓存：带版本号的地址永久不变，可以给 immutable。
+		//
+		// 读的是**这一版**的入口：作者在 `/preview/{slug}/v{n}/` 里看的就是第 n 版。
+		entry := ""
 		if privilegedView && int32(rev) == row.CurrentRevNo {
-			rel = row.CurrentEntryPath
+			entry = row.CurrentEntryPath
 		} else if int32(rev) == row.PublishedRevNo {
-			rel = row.PublishedEntryPath
+			entry = row.PublishedEntryPath
 		}
-		if rel == "" {
-			rel = "index.html"
+		if entry == "" {
+			// 这一版没记入口：数据坏了（写入侧一定写），不要用默认值掩盖它。
+			slog.Error("preview: 版本没有记录入口文件", "slug", slug, "rev", rev)
+			http.Error(w, "这一版缺少入口文件", http.StatusInternalServerError)
+			return
 		}
+		target := fmt.Sprintf("/preview/%s/v%d/%s", url.PathEscape(slug), rev, entry)
+		// 不带版本号的那种跳转目标会随改稿变化，只能 no-store；
+		// 带版本号的目标是确定值，交给下游那次请求给 immutable。
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, target, http.StatusFound)
+		return
 	}
 
 	key, err := p.resolveKey(ctx, slug, rev, rel)
@@ -327,9 +344,9 @@ func (p *Preview) mayPreviewDraft(ctx context.Context, r *http.Request, authorSu
 
 // splitPreviewPath 拆出「版本号 / 相对路径 / 是否版本化」。
 //
-// `v12/index.html` → (12, "index.html", true)
-// `index.html`    → (0,  "index.html", false)
-// `v12`           → (12, "",           true)
+// `v12/page.html`  → (12, `page.html`, true)
+// `page.html`      → (0,  `page.html`, false)
+// `v12`            → (12, "",          true)
 func splitPreviewPath(rest string) (rev int, rel string, versioned bool) {
 	if rest == "" {
 		return 0, "", false

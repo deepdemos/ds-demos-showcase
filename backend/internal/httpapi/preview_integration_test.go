@@ -104,9 +104,11 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 		}
 
 		var revID int64
+		// entry_path 必须写：真实投稿一定写它（`shapes.go` 决定叫什么），
+		// 而预览现在按它取值、不再自己猜——种子里留空会让预览直接报「缺少入口文件」。
 		if err := pool.QueryRow(ctx, `
-			INSERT INTO demo_revisions (demo_id, rev_no, source, manifest_hash, file_count)
-			VALUES ($1, 1, 'upload', repeat('a', 64), 1) RETURNING id`, demoID).Scan(&revID); err != nil {
+			INSERT INTO demo_revisions (demo_id, rev_no, source, manifest_hash, file_count, entry_path)
+			VALUES ($1, 1, 'upload', repeat('a', 64), 1, 'index.html') RETURNING id`, demoID).Scan(&revID); err != nil {
 			t.Fatalf("插入 %s 的版本失败: %v", s.slug, err)
 		}
 		// 已发布的作品要有一个对外版本指针（迁移 0014）：没它渠道上不去，
@@ -136,8 +138,8 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 		if s.slug == "pv-unapproved-new" {
 			var rev2 int64
 			if err := pool.QueryRow(ctx, `
-				INSERT INTO demo_revisions (demo_id, rev_no, source, manifest_hash, file_count)
-				VALUES ($1, 2, 'upload', repeat('b', 64), 1) RETURNING id`, demoID).Scan(&rev2); err != nil {
+				INSERT INTO demo_revisions (demo_id, rev_no, source, manifest_hash, file_count, entry_path)
+				VALUES ($1, 2, 'upload', repeat('b', 64), 1, 'index.html') RETURNING id`, demoID).Scan(&rev2); err != nil {
 				t.Fatalf("插入 %s 的 r2 失败: %v", s.slug, err)
 			}
 			if _, err := pool.Exec(ctx,
@@ -266,6 +268,23 @@ func previewGet(p *Preview, target, sessionID string) *httptest.ResponseRecorder
 	return w
 }
 
+// previewGetFollow 打一次预览地址，若是 302 就跟一次 Location。
+//
+// 「不带文件名」的预览现在一律 302 到带版本号与真实文件名的地址（入口不再由代码猜）。
+// 想断言内容的用例用这个，想断言跳转本身的用例仍用 previewGet。
+func previewGetFollow(t *testing.T, p *Preview, target, sessionID string) *httptest.ResponseRecorder {
+	t.Helper()
+	first := previewGet(p, target, sessionID)
+	if first.Code != http.StatusFound {
+		return first
+	}
+	loc := first.Header().Get("Location")
+	if loc == "" {
+		t.Fatalf("%s 回了 302 但没有 Location", target)
+	}
+	return previewGet(p, loc, sessionID)
+}
+
 func TestIntegrationPreviewVisibility(t *testing.T) {
 	pool := integrationPool(t)
 	dir := t.TempDir()
@@ -282,7 +301,10 @@ func TestIntegrationPreviewVisibility(t *testing.T) {
 		// 已发布：谁都能看，不需要会话。
 		{"已发布-匿名", "/preview/pv-published/v1/index.html", "", 200, "pv-published"},
 		{"已发布-当前版本别名", "/preview/pv-published/index.html", "", 200, "pv-published"},
-		{"已发布-无尾斜杠", "/preview/pv-published", "", 200, "pv-published"},
+		// 不带文件名 → 302 到带版本号与真实文件名的地址（入口不再由代码猜）。
+		// 状态码与 Location 由 TestIntegrationPreviewEntryRedirect 钉住，
+		// 这里只确认它不再是「直接回字节」。
+		{"已发布-无尾斜杠", "/preview/pv-published", "", 302, ""},
 		// 复审中：审核态 pending，但对外版本仍在 → 匿名照常看得到。
 		// 这条钉的是「审核不影响已发布内容」——迁移 0014 之前它是 404。
 		{"复审中-匿名仍可见", "/preview/pv-under-review/v1/index.html", "", 200, "pv-under-review"},
@@ -339,8 +361,8 @@ func TestIntegrationPreviewSingleFileEntry(t *testing.T) {
 	seedPreviewWorld(t, pool, dir)
 	p := newPreview(t, pool, dir)
 
-	// 作者看自己的草稿：不带文件名，靠 entry_path 兜底。
-	w := previewGet(p, "/preview/pv-svg/", pvAuthorSID)
+	// 作者看自己的草稿：不带文件名 → 302 到这一版的入口（index.svg）→ 跟过去是 200。
+	w := previewGetFollow(t, p, "/preview/pv-svg/", pvAuthorSID)
 	if w.Code != http.StatusOK {
 		t.Fatalf("单文件 SVG 的预览 = %d，想要 200；body=%q", w.Code, w.Body.String())
 	}
@@ -351,9 +373,13 @@ func TestIntegrationPreviewSingleFileEntry(t *testing.T) {
 		t.Fatalf("响应体不是这张 SVG：%q", w.Body.String())
 	}
 
-	// 带版本号的写法同样要能打开。
-	if w := previewGet(p, "/preview/pv-svg/v1/", pvAuthorSID); w.Code != http.StatusOK {
-		t.Fatalf("/preview/pv-svg/v1/ = %d，想要 200", w.Code)
+	// 带版本号的写法同样要能打开（同样是一次 302）。
+	wv := previewGetFollow(t, p, "/preview/pv-svg/v1/", pvAuthorSID)
+	if wv.Code != http.StatusOK {
+		t.Fatalf("/preview/pv-svg/v1/ = %d，想要 200", wv.Code)
+	}
+	if ct := wv.Header().Get("Content-Type"); !strings.HasPrefix(ct, "image/svg+xml") {
+		t.Fatalf("带版本号的 Content-Type = %q，想要 image/svg+xml", ct)
 	}
 
 	// 匿名仍然 404：入口修好了不等于草稿对谁都能看。
