@@ -352,6 +352,11 @@ SELECT d.id,
        COALESCE(pr.rev_no, 0)::int AS published_rev_no,
        pr.deleted_at AS published_deleted_at,
        pr.erased_at  AS published_erased_at,
+       -- 入口文件：单文件作品可能是 `index.svg`，zip 包也可能是 `dist/index.html`。
+       -- 预览在 `rel` 为空时**必须**用它；硬编码 `index.html` 会让这两类作品
+       -- 打开就是 404（真实事故：上传一张 SVG，预览页打不开）。
+       COALESCE(r.entry_path, '')::text AS current_entry_path,
+       COALESCE(pr.entry_path, '')::text AS published_entry_path,
        COALESCE(u.sub, '')::text AS author_sub,
        -- 渠道可见性：与 /download 同一口径（listed 或 unlisted 才算对外可见）。
        -- 之前预览完全不判这一列，导致 hidden 的作品「从列表里藏起来了，但知道直链的人

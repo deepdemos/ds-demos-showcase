@@ -180,6 +180,47 @@ func seedPreviewWorld(t *testing.T, pool *pgxpool.Pool, dir string) {
 			}
 		}
 	}
+
+	// 单文件 SVG 作品：`entry_path = 'index.svg'`，磁盘上只有 index.svg。
+	// 预览曾经把入口硬编码成 index.html，所以它打开就是 404
+	//（真实事故：用户上传一张 SVG，投稿成功但预览页打不开）。
+	seedSingleFileSVG(t, pool, dir, authorUserID)
+}
+
+// seedSingleFileSVG 造一条「单文件 SVG」草稿作品：入口是 index.svg，不是 index.html。
+//
+// 这条数据必须单独造而不能并进上面的循环：循环里每个作品的入口都是 index.html，
+// 而这里要钉的恰恰是「入口不叫 index.html 时预览仍要打开」。
+func seedSingleFileSVG(t *testing.T, pool *pgxpool.Pool, dir string, authorUserID int64) {
+	t.Helper()
+	ctx := context.Background()
+
+	var demoID, revID int64
+	if err := pool.QueryRow(ctx, `
+INSERT INTO demos (slug, title, description, moderation_state, lifecycle_state, author_id)
+VALUES ('pv-svg', '标题 pv-svg', '简介', 'pending', 'draft', $1)
+RETURNING id`, authorUserID).Scan(&demoID); err != nil {
+		t.Fatalf("插入 pv-svg 失败: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+INSERT INTO demo_revisions (demo_id, rev_no, source, manifest_hash, file_count, entry_path, single_file)
+VALUES ($1, 1, 'upload', repeat('c', 64), 1, 'index.svg', 'svg')
+RETURNING id`, demoID).Scan(&revID); err != nil {
+		t.Fatalf("插入 pv-svg 的版本失败: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE demos SET current_revision_id = $1 WHERE id = $2`, revID, demoID); err != nil {
+		t.Fatalf("设置 pv-svg 的当前版本失败: %v", err)
+	}
+
+	root := filepath.Join(dir, "demos", "pv-svg", "r1")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("建 pv-svg 目录失败: %v", err)
+	}
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>`
+	if err := os.WriteFile(filepath.Join(root, "index.svg"), []byte(svg), 0o644); err != nil {
+		t.Fatalf("写 pv-svg 的 index.svg 失败: %v", err)
+	}
 }
 
 // mkAccount 一次装好 accounts / profiles / account_emails / users / web_sessions。
@@ -287,6 +328,37 @@ func TestIntegrationPreviewVisibility(t *testing.T) {
 		if c.wantInBody != "" && !strings.Contains(w.Body.String(), c.wantInBody) {
 			t.Errorf("%s：响应体里没有 %q，实际 %q", c.name, c.wantInBody, w.Body.String())
 		}
+	}
+}
+
+// 单文件 SVG：不带文件名打开预览时，入口要按 `entry_path` 取（index.svg），
+// 而不是硬编码的 index.html。这条用例就是「上传一张 SVG，预览页 404」那次事故。
+func TestIntegrationPreviewSingleFileEntry(t *testing.T) {
+	pool := integrationPool(t)
+	dir := t.TempDir()
+	seedPreviewWorld(t, pool, dir)
+	p := newPreview(t, pool, dir)
+
+	// 作者看自己的草稿：不带文件名，靠 entry_path 兜底。
+	w := previewGet(p, "/preview/pv-svg/", pvAuthorSID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("单文件 SVG 的预览 = %d，想要 200；body=%q", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "image/svg+xml") {
+		t.Fatalf("Content-Type = %q，想要 image/svg+xml", ct)
+	}
+	if !strings.Contains(w.Body.String(), "<svg") {
+		t.Fatalf("响应体不是这张 SVG：%q", w.Body.String())
+	}
+
+	// 带版本号的写法同样要能打开。
+	if w := previewGet(p, "/preview/pv-svg/v1/", pvAuthorSID); w.Code != http.StatusOK {
+		t.Fatalf("/preview/pv-svg/v1/ = %d，想要 200", w.Code)
+	}
+
+	// 匿名仍然 404：入口修好了不等于草稿对谁都能看。
+	if w := previewGet(p, "/preview/pv-svg/", ""); w.Code != http.StatusNotFound {
+		t.Fatalf("匿名看草稿 = %d，想要 404", w.Code)
 	}
 }
 

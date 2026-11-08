@@ -1089,6 +1089,19 @@ removed）只有**作者本人**或持有 `demo.review` 权限的角色能看。
 `erased_at` 或 `deleted_at` 非空一律 404。判定顺序是先状态后文件——
 不先判定就返回 404 会把「这个 slug 存不存在」泄露出去。
 
+**入口文件**：地址里不带文件名时（`/preview/{slug}/`、`/preview/{slug}/v{n}/`），
+入口取**这一版** `demo_revisions.entry_path`，不是硬编码的 `index.html`。
+
+| 提交形态 | `entry_path` | 说明 |
+|---|---|---|
+| 单文件 | 原文件名，如 `index.svg` | 上传一张 SVG 就是这种；`single_file` 记类型 |
+| zip 包 | 恒为 `index.html` | `submit` 只认根目录 `index.html`/`index.htm`，否则 400 |
+
+写死 `index.html` 的后果是「投稿成功、预览页 404」——2026-11-08 的真实事故：
+用户上传一张 SVG，打开预览就是 `404 page not found`，而库里一切正常。
+路径带版本号时读的是那一版的入口（不是当前版）：作者在 `/preview/{slug}/v{n}/`
+里看的就是第 n 版，用当前版的入口会读错文件。
+
 **同源渲染的隔离**：作品 HTML 跑在不透明源里，靠两道独立机制：
 
 | 机制 | 在哪生效 |

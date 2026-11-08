@@ -191,7 +191,21 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rel == "" {
-		rel = "index.html"
+		// 入口文件按这一版记录的 `entry_path` 来，不能硬编码 `index.html`：
+		// 单文件作品可能是 `index.svg`（上传一张 SVG 就是这么存的），
+		// zip 包的入口也可能是 `dist/index.html`。写死 `index.html` 的后果是
+		// 「投稿成功、预览页 404」——真实事故，见 PR 描述。
+		//
+		// 读的是**这一版**的入口而不是当前版的：作者在 `/preview/{slug}/v{n}/`
+		// 里看的就是第 n 版，用当前版的入口会读错文件。
+		if privilegedView && int32(rev) == row.CurrentRevNo {
+			rel = row.CurrentEntryPath
+		} else if int32(rev) == row.PublishedRevNo {
+			rel = row.PublishedEntryPath
+		}
+		if rel == "" {
+			rel = "index.html"
+		}
 	}
 
 	key, err := p.resolveKey(ctx, slug, rev, rel)
