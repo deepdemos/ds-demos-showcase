@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { expect, test, vi } from 'vitest';
-import { deleteDemoRating, getDemo, putDemoRating } from '@/api';
+import { deleteDemoRating, getDemo, listDemoTimeline, putDemoRating } from '@/api';
 import { DemoDetailPage, DemoDownload, DemoPreview, tombstoneText } from './DemoDetailPage';
 
 vi.mock('@/api', async (importOriginal) => {
@@ -15,8 +15,14 @@ vi.mock('@/api', async (importOriginal) => {
     postDemoView: () => Promise.resolve({ status: 204 }),
     putDemoRating: vi.fn(),
     deleteDemoRating: vi.fn(),
+    // 作品动态：作者视图会挂这个区块，不 mock 就会去发真请求。
+    listDemoTimeline: vi.fn(),
   };
 });
+
+// 默认「没有任何动作」：绝大多数用例关心的是详情本身，不是动态。
+// 需要动作的用例自己 mockResolvedValue 覆盖。
+const timelineEmpty = { status: 200, data: { items: [] } };
 
 const detail = (over: Record<string, unknown> = {}) => ({
   slug: 'demo-a',
@@ -30,6 +36,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   demoType: 'web',
   downloadable: false,
   canEdit: false,
+  isAuthor: false,
   moderationState: 'approved',
   viewCount: 0,
   downloadCount: 0,
@@ -326,4 +333,68 @@ test('打分失败时把原因显示出来', async () => {
   await waitFor(() => expect(screen.getByText(/还没有人评分/)).toBeTruthy());
   screen.getByRole('radio', { name: '打 2 分' }).click();
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('打分失败'));
+});
+
+// 作品动态：服务端只给作者，所以这里要钉两件事——作者看得到，访客连请求都不发。
+test('作者能看到作品动态，按时间倒序显示动作与操作人', async () => {
+  vi.mocked(listDemoTimeline).mockResolvedValue({
+    status: 200,
+    data: {
+      items: [
+        {
+          kind: 'publish',
+          at: '2026-02-03T10:00:00Z',
+          message: '发布到 deep',
+          actorName: null,
+        },
+        {
+          kind: 'approve',
+          at: '2026-02-03T09:58:00Z',
+          message: '内容合格',
+          actorName: 'Alice',
+        },
+      ],
+    },
+  } as never);
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ isAuthor: true, canEdit: true }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText('作品动态')).toBeTruthy());
+  // 等动态本身渲染出来：标题在 isPending 时就已经在了，
+  // 只等标题会抢在列表渲染之前断言（第一版就红在这里）。
+  await waitFor(() => expect(screen.getByText('发布到 deep')).toBeTruthy());
+  // 已知动作给中文，未知动作显示原始 kind（不要显示「未知动作」）。
+  expect(screen.getByText('发布', { selector: 'span.font-medium' })).toBeTruthy();
+  expect(screen.getByText('审核通过')).toBeTruthy();
+  expect(screen.getByText('· Alice')).toBeTruthy();
+  expect(vi.mocked(listDemoTimeline)).toHaveBeenCalledWith('demo-a');
+});
+
+test('访客不发作品动态请求', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ isAuthor: false }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText('钢琴卷帘')).toBeTruthy());
+  expect(vi.mocked(listDemoTimeline)).not.toHaveBeenCalled();
+  expect(screen.queryByText('作品动态')).toBeNull();
+});
+
+test('还没有动作时说明「这里会记录什么」而不是空白', async () => {
+  vi.mocked(listDemoTimeline).mockResolvedValue(timelineEmpty as never);
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ isAuthor: true, canEdit: true }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText('还没有动作')).toBeTruthy());
 });

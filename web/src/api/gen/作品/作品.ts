@@ -8,7 +8,7 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 35 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 36 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -37,6 +37,7 @@ import type {
   DemoList,
   DemoRating,
   DemoRatingInput,
+  DemoTimeline,
   Error,
   ListDemosParams,
   ListModelsParams,
@@ -1110,6 +1111,78 @@ export const restoreDemo = async (slug: string, options?: RequestInit): Promise<
 
   const data: restoreDemoResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as restoreDemoResponse
+}
+
+
+export type listDemoTimelineResponse200 = {
+  data: DemoTimeline
+  status: 200
+}
+
+export type listDemoTimelineResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listDemoTimelineResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDemoTimelineResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listDemoTimelineResponseSuccess = (listDemoTimelineResponse200) & {
+  headers: Headers;
+};
+export type listDemoTimelineResponseError = (listDemoTimelineResponse401 | listDemoTimelineResponse404 | listDemoTimelineResponse503) & {
+  headers: Headers;
+};
+
+export type listDemoTimelineResponse = (listDemoTimelineResponseSuccess | listDemoTimelineResponseError)
+
+export const getListDemoTimelineUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/demos/${slug}/timeline`
+}
+
+/**
+ * 这张表是**写给人看的经过**（Demo 域 §3.11），不承担审计职责——审计在
+ * `audit_log`。十种动作各留一行：投稿、通过、驳回、发布、编辑、回滚、
+ * 下架、恢复（`create` / `slug_change` / `merge` 是预留值，暂无写入点）。
+ *
+ * **只给作者本人**：审核员看得到待审队列，但看不到别人作品的改动史；
+ * 对非作者一律 404 而不是 403——403 会承认「这个 slug 存在且你有权限问题」，
+ * 而能被作者以外的人看到的详情本来就只有对外那一版。
+ *
+ * 墓碑页不显示动态：作品已经被下架或删除，它的经历没有必要再展示。
+ * 作者在恢复窗口内仍能读到（那是他自己的记录）。
+ *
+ * 最多返回最近 100 条，按时间倒序。没有分页：单件作品的动作数量级是几十，
+ * 加游标只会多一个没人用的参数。
+ * @summary 作品动态（只有作者能看）
+ */
+export const listDemoTimeline = async (slug: string, options?: RequestInit): Promise<listDemoTimelineResponse> => {
+
+  const res = await fetch(getListDemoTimelineUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listDemoTimelineResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listDemoTimelineResponse
 }
 
 
