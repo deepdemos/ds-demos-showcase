@@ -990,6 +990,38 @@
         "optional": false
       }
     },
+    "RankingEntry": {
+      "demo": {
+        "type": "DemoSummary",
+        "optional": false
+      },
+      "rank": {
+        "type": "int",
+        "optional": false
+      },
+      "value": {
+        "type": "float64",
+        "optional": false
+      }
+    },
+    "RankingList": {
+      "board": {
+        "type": "RankingListBoard",
+        "optional": false
+      },
+      "items": {
+        "type": "[]RankingEntry",
+        "optional": false
+      },
+      "range": {
+        "type": "RankingListRange",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
     "RegisterAccepted": {
       "email": {
         "type": "string",
@@ -1294,6 +1326,19 @@
       "listed",
       "unlisted"
     ],
+    "RankingListBoard": [
+      "avg",
+      "count",
+      "ghost",
+      "god",
+      "heat",
+      "net"
+    ],
+    "RankingListRange": [
+      "all",
+      "month",
+      "week"
+    ],
     "RestoreResultModerationState": [
       "approved",
       "pending",
@@ -1325,6 +1370,19 @@
       "candidate",
       "deprecated",
       "unverified"
+    ],
+    "ListRankingsParamsBoard": [
+      "avg",
+      "count",
+      "ghost",
+      "god",
+      "heat",
+      "net"
+    ],
+    "ListRankingsParamsRange": [
+      "all",
+      "month",
+      "week"
     ]
   },
   "endpoints": {
@@ -1502,6 +1560,11 @@
       "method": "GetModel",
       "pathParams": 1,
       "params": null
+    },
+    "GET /api/v1/rankings": {
+      "method": "ListRankings",
+      "pathParams": 0,
+      "params": "ListRankingsParams"
     },
     "GET /healthz": {
       "method": "GetHealthz",

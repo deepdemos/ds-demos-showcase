@@ -639,6 +639,57 @@
           "name": "TestIntegrationDemoTimelineEmpty"
         }
       }
+    ],
+    "GET /api/v1/rankings": [
+      {
+        "case": "六个口径给出六种顺序，零评分作品只出现在 count / heat 榜",
+        "test": {
+          "file": "backend/internal/httpapi/rankings_integration_test.go",
+          "name": "TestIntegrationRankingsSixBoards"
+        }
+      },
+      {
+        "case": "时间范围按作品创建时间过滤，不是按投票时间",
+        "test": {
+          "file": "backend/internal/httpapi/rankings_integration_test.go",
+          "name": "TestIntegrationRankingsRangeUsesCreatedAt"
+        }
+      },
+      {
+        "case": "下架作品从所有榜消失",
+        "test": {
+          "file": "backend/internal/httpapi/rankings_integration_test.go",
+          "name": "TestIntegrationRankingsExcludesUnlisted"
+        }
+      },
+      {
+        "case": "并列时票多者在前，票也一样时较晚登记优先",
+        "test": {
+          "file": "backend/internal/httpapi/rankings_integration_test.go",
+          "name": "TestIntegrationRankingsTieBreak"
+        }
+      },
+      {
+        "case": "未知 board / range、越界 limit 回 400",
+        "test": {
+          "file": "backend/internal/httpapi/rankings_integration_test.go",
+          "name": "TestIntegrationRankingsRejectsBadParams"
+        }
+      },
+      {
+        "case": "分页第二页的名次接着数，不回到 1",
+        "test": {
+          "file": "backend/internal/httpapi/rankings_integration_test.go",
+          "name": "TestIntegrationRankingsRankContinuesAcrossPages"
+        }
+      },
+      {
+        "case": "空榜是 200 + 空数组，不是 404",
+        "test": {
+          "file": "backend/internal/httpapi/rankings_integration_test.go",
+          "name": "TestIntegrationRankingsEmptyIsNotAnError"
+        }
+      }
     ]
   },
   "outsideContract": {

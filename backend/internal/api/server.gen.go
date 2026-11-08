@@ -119,6 +119,9 @@ type ServerInterface interface {
 	// 模型页
 	// (GET /api/v1/models/{slug})
 	GetModel(w http.ResponseWriter, r *http.Request, slug string)
+	// 作品榜（六个口径）
+	// (GET /api/v1/rankings)
+	ListRankings(w http.ResponseWriter, r *http.Request, params ListRankingsParams)
 	// 站点可用性
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -335,6 +338,12 @@ func (_ Unimplemented) ListModels(w http.ResponseWriter, r *http.Request, params
 // 模型页
 // (GET /api/v1/models/{slug})
 func (_ Unimplemented) GetModel(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 作品榜（六个口径）
+// (GET /api/v1/rankings)
+func (_ Unimplemented) ListRankings(w http.ResponseWriter, r *http.Request, params ListRankingsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1279,6 +1288,57 @@ func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListRankings operation middleware
+func (siw *ServerInterfaceWrapper) ListRankings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRankingsParams
+
+	// ------------- Optional query parameter "board" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "board", r.URL.Query(), &params.Board)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "board", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "range" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "range", r.URL.Query(), &params.Range)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "range", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRankings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealthz operation middleware
 func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Request) {
 
@@ -1510,6 +1570,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/models/{slug}", wrapper.GetModel)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/rankings", wrapper.ListRankings)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.GetHealthz)

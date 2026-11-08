@@ -153,6 +153,23 @@ const (
 	PublishResultVisibilityUnlisted PublishResultVisibility = "unlisted"
 )
 
+// Defines values for RankingListBoard.
+const (
+	RankingListBoardAvg   RankingListBoard = "avg"
+	RankingListBoardCount RankingListBoard = "count"
+	RankingListBoardGhost RankingListBoard = "ghost"
+	RankingListBoardGod   RankingListBoard = "god"
+	RankingListBoardHeat  RankingListBoard = "heat"
+	RankingListBoardNet   RankingListBoard = "net"
+)
+
+// Defines values for RankingListRange.
+const (
+	RankingListRangeAll   RankingListRange = "all"
+	RankingListRangeMonth RankingListRange = "month"
+	RankingListRangeWeek  RankingListRange = "week"
+)
+
 // Defines values for RestoreResultModerationState.
 const (
 	RestoreResultModerationStateApproved RestoreResultModerationState = "approved"
@@ -197,6 +214,23 @@ const (
 	ListModelsParamsStatusCandidate  ListModelsParamsStatus = "candidate"
 	ListModelsParamsStatusDeprecated ListModelsParamsStatus = "deprecated"
 	ListModelsParamsStatusUnverified ListModelsParamsStatus = "unverified"
+)
+
+// Defines values for ListRankingsParamsBoard.
+const (
+	ListRankingsParamsBoardAvg   ListRankingsParamsBoard = "avg"
+	ListRankingsParamsBoardCount ListRankingsParamsBoard = "count"
+	ListRankingsParamsBoardGhost ListRankingsParamsBoard = "ghost"
+	ListRankingsParamsBoardGod   ListRankingsParamsBoard = "god"
+	ListRankingsParamsBoardHeat  ListRankingsParamsBoard = "heat"
+	ListRankingsParamsBoardNet   ListRankingsParamsBoard = "net"
+)
+
+// Defines values for ListRankingsParamsRange.
+const (
+	ListRankingsParamsRangeAll   ListRankingsParamsRange = "all"
+	ListRankingsParamsRangeMonth ListRankingsParamsRange = "month"
+	ListRankingsParamsRangeWeek  ListRankingsParamsRange = "week"
 )
 
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
@@ -1083,6 +1117,39 @@ type PublishResultLifecycleState string
 // PublishResultVisibility defines model for PublishResult.Visibility.
 type PublishResultVisibility string
 
+// RankingEntry 榜单里的一个名次。
+type RankingEntry struct {
+	Demo DemoSummary `json:"demo"`
+
+	// Rank 连续名次（1 基）。同分也按附录 D 的稳定序编号，不跳号——
+	// 「第 21 名」这种链接必须总能翻到东西。
+	Rank int `json:"rank"`
+
+	// Value 这个榜用来排序的那个数，含意随 `board` 变（分数 / 票数 / 净票 / 热度分）。
+	// 摆出来是为了让读者能自己复核名次，不是让人改。
+	Value float64 `json:"value"`
+}
+
+// RankingList defines model for RankingList.
+type RankingList struct {
+	// Board 回显口径——前端据此决定单位文案，不用自己记请求参数。
+	Board RankingListBoard `json:"board"`
+	Items []RankingEntry   `json:"items"`
+
+	// Range 回显时间范围。
+	Range RankingListRange `json:"range"`
+
+	// Total 这个榜在这个范围里有多少件作品，与实际能翻到的条数一致；。
+	// 与 `items` 长度不同是因为分页，不是因为口径差异。
+	Total int `json:"total"`
+}
+
+// RankingListBoard 回显口径——前端据此决定单位文案，不用自己记请求参数。
+type RankingListBoard string
+
+// RankingListRange 回显时间范围。
+type RankingListRange string
+
 // RegisterAccepted defines model for RegisterAccepted.
 type RegisterAccepted struct {
 	// Email 回显注册用的邮箱，前端直接带到验证页
@@ -1377,6 +1444,32 @@ type ListModelsParams struct {
 
 // ListModelsParamsStatus defines parameters for ListModels.
 type ListModelsParamsStatus string
+
+// ListRankingsParams defines parameters for ListRankings.
+type ListRankingsParams struct {
+	// Board 榜的口径，默认 `avg`。
+	//
+	// `value` 的含意在六榜之间不同：`avg` 是平均分（0–5），`god` / `ghost` /
+	// `count` 是票数，`net` 是净票（可为负），`heat` 是综合热度分。
+	// 界面要按 `board` 换单位文案，不能一律当成分数。
+	Board *ListRankingsParamsBoard `form:"board,omitempty" json:"board,omitempty"`
+
+	// Range 时间范围，默认 `all`。`week` / `month` 是**近 7 / 30 天**（相对当前时间），
+	// 按 `demos.created_at` 过滤。
+	Range *ListRankingsParamsRange `form:"range,omitempty" json:"range,omitempty"`
+
+	// Limit 一页多少名，默认 20，上限 100。超过上限直接 400，不静默截断。
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset 从第几名之后开始（0 基），与作品库的分页口径一致。
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListRankingsParamsBoard defines parameters for ListRankings.
+type ListRankingsParamsBoard string
+
+// ListRankingsParamsRange defines parameters for ListRankings.
+type ListRankingsParamsRange string
 
 // PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
 type PublishDemoJSONRequestBody = PublishRequest

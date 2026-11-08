@@ -8,7 +8,7 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤），
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 36 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 37 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -41,8 +41,10 @@ import type {
   Error,
   ListDemosParams,
   ListModelsParams,
+  ListRankingsParams,
   ModelList,
   ModelProfile,
+  RankingList,
   RestoreResult,
   RevisionList,
   SubmissionResult,
@@ -249,6 +251,88 @@ export const listModels = async (params?: ListModelsParams, options?: RequestIni
 
   const data: listModelsResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listModelsResponse
+}
+
+
+export type listRankingsResponse200 = {
+  data: RankingList
+  status: 200
+}
+
+export type listRankingsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listRankingsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listRankingsResponseSuccess = (listRankingsResponse200) & {
+  headers: Headers;
+};
+export type listRankingsResponseError = (listRankingsResponse400 | listRankingsResponse503) & {
+  headers: Headers;
+};
+
+export type listRankingsResponse = (listRankingsResponseSuccess | listRankingsResponseError)
+
+export const getListRankingsUrl = (params?: ListRankingsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/rankings?${stringifiedParams}` : `/api/v1/rankings`
+}
+
+/**
+ * 按六个口径之一排出作品榜，可按作品创建时间的范围过滤。
+ *
+ * **六个口径**（SOC-013）：`avg` 平均分 / `god` 5 分票 / `ghost` 1 分票 /
+ * `net` 5 分减 1 分 / `count` 评分人数 / `heat` 综合热度。
+ *
+ * **零评分作品的去处不一样**（SOC-014）：前四个榜**排除**零评分作品——
+ * 没人投过票的作品在这个榜上没有可比的数；`count` 与 `heat` **包含**它们，
+ * 因为「还没人评分」本身就是评分人数榜的一个事实。所以同一批作品在
+ * `count` 与 `avg` 两个榜上的条数通常不同，这不是分页错位。
+ *
+ * **`range` 按作品创建时间过滤，不是按投票时间**（SOC-016）。一件 40 天前
+ * 创建、今天才被投票的作品不会出现在「近 7 天」榜里——需求的原文就是按
+ * 创建时间，所以「老作品新热度」进不了短周期榜是选择，不是缺陷。
+ *
+ * **只纳入当前已上架作品**（SOC-017）：下架、软删、审核未通过的一律不出现，
+ * 判据与作品库同源（`demo_public_demos` 视图）。
+ *
+ * **并列按附录 D**，最后一级是「较晚登记优先」（`created_at` 倒序），
+ * 所以同分作品的名次稳定、翻页不会跳来跳去。`rank` 是**连续名次**：
+ * 同分也按这个稳定序编号，不做「并列共享名次、后面跳号」——跳号会让
+ * 「第 21 名」这种链接指向一个不存在的页码。
+ * @summary 作品榜（六个口径）
+ */
+export const listRankings = async (params?: ListRankingsParams, options?: RequestInit): Promise<listRankingsResponse> => {
+
+  const res = await fetch(getListRankingsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listRankingsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listRankingsResponse
 }
 
 
