@@ -1412,6 +1412,30 @@ func (siw *ServerInterfaceWrapper) ListMyDemos(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// ------------- Optional query parameter "lifecycle" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "lifecycle", r.URL.Query(), &params.Lifecycle)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lifecycle", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "moderation" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "moderation", r.URL.Query(), &params.Moderation)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "moderation", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "deleted" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "deleted", r.URL.Query(), &params.Deleted)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deleted", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListMyDemos(w, r, params)
 	}))

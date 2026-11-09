@@ -29,6 +29,8 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { LifecycleState } from './lifecycleState';
+import type { ListMyDemosModeration } from './listMyDemosModeration';
 
 export type ListMyDemosParams = {
   /**
@@ -42,4 +44,14 @@ export type ListMyDemosParams = {
    * @maximum 200
    */
   pageSize?: number;
+  /** 只看某个生命周期的作品（`draft` / `published` / `archived` / `removed`）。不传 = 全部 */
+  lifecycle?: LifecycleState;
+  /** 只看某个审核态的作品（`pending` / `approved` / `rejected`）。不传 = 全部。与 `lifecycle` 是**正交**的两个维度，可以一起用 */
+  moderation?: ListMyDemosModeration;
+  /**
+   * `true` = 只看软删的，`false` = 只看没删的，不传 = 全部。
+   * 单独一维的原因：软删与生命周期正交（软删不改 `lifecycle_state`），
+   * 所以「已删除」无法用一个生命周期取值表达。
+   */
+  deleted?: boolean;
 };

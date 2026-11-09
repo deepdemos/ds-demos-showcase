@@ -148,11 +148,26 @@ func (q *Queries) CopyRevisionFiles(ctx context.Context, arg CopyRevisionFilesPa
 const countMyDemos = `-- name: CountMyDemos :one
 SELECT count(*) FROM demos d
  WHERE d.author_id = $1::bigint AND d.erased_at IS NULL
+   AND ($2::text IS NULL OR d.lifecycle_state = $2::text)
+   AND ($3::text IS NULL OR d.moderation_state = $3::text)
+   AND ($4::boolean IS NULL OR (d.deleted_at IS NOT NULL) = $4::boolean)
 `
 
+type CountMyDemosParams struct {
+	AuthorID   int64
+	Lifecycle  pgtype.Text
+	Moderation pgtype.Text
+	Deleted    pgtype.Bool
+}
+
 // WHERE 与 ListMyDemos 逐字一致：两处不一致时 total 与列表条数会对不上，分页页数算错。
-func (q *Queries) CountMyDemos(ctx context.Context, authorID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countMyDemos, authorID)
+func (q *Queries) CountMyDemos(ctx context.Context, arg CountMyDemosParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMyDemos,
+		arg.AuthorID,
+		arg.Lifecycle,
+		arg.Moderation,
+		arg.Deleted,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1156,15 +1171,21 @@ SELECT d.slug, d.title, d.cover_url, d.created_at, d.updated_at,
   LEFT JOIN gc_queue g
          ON g.entity_type = 'demo' AND g.entity_id = d.id AND g.reason = 'delete'
  WHERE d.author_id = $1::bigint AND d.erased_at IS NULL
+   AND ($2::text IS NULL OR d.lifecycle_state = $2::text)
+   AND ($3::text IS NULL OR d.moderation_state = $3::text)
+   AND ($4::boolean IS NULL OR (d.deleted_at IS NOT NULL) = $4::boolean)
  GROUP BY d.id
  ORDER BY d.updated_at DESC, d.id DESC
- LIMIT $3 OFFSET $2
+ LIMIT $6 OFFSET $5
 `
 
 type ListMyDemosParams struct {
-	AuthorID  int64
-	RowOffset int32
-	RowLimit  int32
+	AuthorID   int64
+	Lifecycle  pgtype.Text
+	Moderation pgtype.Text
+	Deleted    pgtype.Bool
+	RowOffset  int32
+	RowLimit   int32
 }
 
 type ListMyDemosRow struct {
@@ -1180,13 +1201,22 @@ type ListMyDemosRow struct {
 }
 
 // 作者视角：不看可见性，只看归属与「是否已擦除」。
+// 三个筛选参数都是可空的：不传就是不过滤。它们正交（软删 × 生命周期 × 审核态），
+// 所以不做「状态桶」——桶是展示口径，会随界面变，接口给的是原始维度。
 // 擦除对外一律不存在，对作者也不留入口——所以判据是 erased_at IS NULL，
 // 而**不是** deleted_at IS NULL：软删的作品要列出来，作者才找得到「恢复」。
 // purge_after 取自 gc_queue（同一行内容真正的清掉时刻，删除那一刻定型）；
 // 一个作品理论上可能有多条清理行（目录与 blob 各自入队），取最小的那个：
 // 界面回答「还能恢复多久」时，该给最早消失的那个时刻。
 func (q *Queries) ListMyDemos(ctx context.Context, arg ListMyDemosParams) ([]ListMyDemosRow, error) {
-	rows, err := q.db.Query(ctx, listMyDemos, arg.AuthorID, arg.RowOffset, arg.RowLimit)
+	rows, err := q.db.Query(ctx, listMyDemos,
+		arg.AuthorID,
+		arg.Lifecycle,
+		arg.Moderation,
+		arg.Deleted,
+		arg.RowOffset,
+		arg.RowLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
@@ -32,15 +35,37 @@ func (h *Handler) ListMyDemos(w http.ResponseWriter, r *http.Request, params api
 		return
 	}
 
-	total, err := h.queries.CountMyDemos(ctx, account.UserID)
+	// 三个筛选都是可空的原始维度（生命周期 / 审核态 / 是否软删），不在这里折成
+	// 「状态桶」——桶是界面的说法，会随界面变；接口给的是能自由组合的那三维。
+	lifecycle, ok := optionalEnum(w, "lifecycle", enumText(params.Lifecycle),
+		[]string{"draft", "published", "archived", "removed"})
+	if !ok {
+		return
+	}
+	moderation, ok := optionalEnum(w, "moderation", enumText(params.Moderation),
+		[]string{"pending", "approved", "rejected"})
+	if !ok {
+		return
+	}
+	deleted := optionalBool(params.Deleted)
+
+	total, err := h.queries.CountMyDemos(ctx, store.CountMyDemosParams{
+		AuthorID:   account.UserID,
+		Lifecycle:  lifecycle,
+		Moderation: moderation,
+		Deleted:    deleted,
+	})
 	if err != nil {
 		unavailable(w, err)
 		return
 	}
 	rows, err := h.queries.ListMyDemos(ctx, store.ListMyDemosParams{
-		AuthorID:  account.UserID,
-		RowOffset: int32((page - 1) * pageSize),
-		RowLimit:  int32(pageSize),
+		AuthorID:   account.UserID,
+		Lifecycle:  lifecycle,
+		Moderation: moderation,
+		Deleted:    deleted,
+		RowOffset:  int32((page - 1) * pageSize),
+		RowLimit:   int32(pageSize),
 	})
 	if err != nil {
 		unavailable(w, err)
@@ -68,4 +93,40 @@ func (h *Handler) ListMyDemos(w http.ResponseWriter, r *http.Request, params api
 		PageSize: pageSize,
 		Total:    int(total),
 	})
+}
+
+// enumText 把生成的枚举指针转成字符串指针：校验逻辑只关心「有没有值、值合不合法」。
+func enumText[T ~string](v *T) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
+}
+
+// optionalEnum 把一个可空枚举参数转成 pgtype.Text。
+//
+// 取值校验放在这里而不是靠 SQL 兜底：拼错的 `lifecycle=draf` 如果不报错，
+// 会安静地返回空列表，作者会以为自己的作品没了。**空列表与筛选条件不匹配
+// 必须是两件事。**
+func optionalEnum(w http.ResponseWriter, name string, raw *string, allowed []string) (pgtype.Text, bool) {
+	if raw == nil || *raw == "" {
+		return pgtype.Text{}, true
+	}
+	for _, v := range allowed {
+		if *raw == v {
+			return pgtype.Text{String: *raw, Valid: true}, true
+		}
+	}
+	writeError(w, http.StatusBadRequest, api.InvalidParam,
+		"筛选条件 "+name+" 取值非法："+*raw+"（可选 "+strings.Join(allowed, " / ")+"）")
+	return pgtype.Text{}, false
+}
+
+// optionalBool 同理：指针为空 = 不过滤。
+func optionalBool(raw *bool) pgtype.Bool {
+	if raw == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *raw, Valid: true}
 }
