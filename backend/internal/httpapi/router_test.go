@@ -58,6 +58,10 @@ func (s *stub) AddDemoChannel(_ http.ResponseWriter, _ *http.Request, _ string) 
 	s.hits = append(s.hits, "addchannel")
 }
 
+func (s *stub) ListDemoChannels(_ http.ResponseWriter, _ *http.Request, _ string) {
+	s.hits = append(s.hits, "listchannels")
+}
+
 func (s *stub) RemoveDemoChannel(_ http.ResponseWriter, _ *http.Request, _ string, _ string) {
 	s.hits = append(s.hits, "removechannel")
 }

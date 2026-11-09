@@ -791,6 +791,22 @@
           "name": "TestIntegrationRemoveChannel"
         }
       }
+    ],
+    "GET /api/v1/admin/demos/{slug}/channels": [
+      {
+        "case": "没有 demo.publish 权限的账号读渠道列表回 403，不是空数组",
+        "test": {
+          "file": "backend/internal/httpapi/channels_integration_test.go",
+          "name": "TestIntegrationListDemoChannels"
+        }
+      },
+      {
+        "case": "不存在的作品读渠道列表回 404，而作品存在但没有渠道回 200 + []",
+        "test": {
+          "file": "backend/internal/httpapi/channels_integration_test.go",
+          "name": "TestIntegrationListDemoChannels"
+        }
+      }
     ]
   },
   "outsideContract": {

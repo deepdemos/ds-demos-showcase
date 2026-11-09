@@ -150,3 +150,13 @@ SET visibility = EXCLUDED.visibility,
     -- 与 demos 的时间字段同一口径：时钟回拨时现在这一刻可能早于这行的 created_at，
     -- demo_channels 上有 ck_channel_time，写回退后的值会把发布打成 503。
     updated_at = GREATEST(now(), demo_channels.created_at);
+
+-- name: ListDemoChannelsForSlug :many
+-- 管理端读渠道列表：按 slug 直接取，不用先换 id。
+-- 与 ListDemoChannels（按 demo_id）分开，是因为一个在 domain 内部用、一个在 handler
+-- 里用；共用一个查询会逼调用方先做一次「slug → id」的往返。
+SELECT c.channel, c.visibility, c.lang
+FROM demo_channels c
+JOIN demos d ON d.id = c.demo_id
+WHERE d.slug = $1 AND d.erased_at IS NULL
+ORDER BY c.channel;

@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
+	"github.com/jackc/pgx/v5"
 )
 
 // 渠道上架 / 撤下：给已经对外发布的作品追加或移除一个渠道。
@@ -100,4 +102,46 @@ func langPtrOf(v *api.DemoChannelRequestLang) string {
 		return ""
 	}
 	return string(*v)
+}
+
+// ListDemoChannels 返回作品挂在哪些渠道上（管理端读）。
+//
+// 不塞进详情：详情是公开读的出口，字段面讲的是「读者看到的这一件作品」，
+// 渠道是运营视角。混在一起要么让公开字段变胖，要么要按角色裁剪同一份 schema。
+func (h *Handler) ListDemoChannels(w http.ResponseWriter, r *http.Request, slug string) {
+	if _, err := h.publisher(r.Context(), r); err != nil {
+		writeChannelError(w, r, err)
+		return
+	}
+
+	rows, err := h.queries.ListDemoChannelsForSlug(r.Context(), slug)
+	if err != nil {
+		slog.Error("读渠道列表失败", "err", err)
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+
+	// 作品不存在与「没有渠道」必须分开：前者 404，后者是空数组。
+	// 列表查询在没有渠道时也返回 0 行，所以先单独确认作品存在。
+	if len(rows) == 0 {
+		if _, err := h.queries.GetDemoForChannel(r.Context(), slug); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeError(w, http.StatusNotFound, api.NotFound, "作品不存在")
+				return
+			}
+			slog.Error("读作品状态失败", "err", err)
+			writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+			return
+		}
+	}
+
+	items := make([]api.DemoChannel, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, api.DemoChannel{
+			Channel:    row.Channel,
+			Visibility: api.DemoChannelVisibility(row.Visibility),
+			Lang:       api.DemoChannelLang(row.Lang),
+		})
+	}
+	writeJSON(w, http.StatusOK, api.DemoChannelList{Items: items})
 }
