@@ -86,8 +86,11 @@ func NewPreview(queries *store.Queries, files storage.Store, identitySvc *identi
 // 的优先级变得依赖注册顺序，而这里的分支本来就只有一行。
 func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// `Allow` 必须留在响应头里：405 的语义一半在这个头（RFC 9110 §15.5.6）。
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "只支持 GET", http.StatusMethodNotAllowed)
+		// 但正文不该是 `http.Error` 的一行纯文本——它同样会出现在 iframe 里，
+		// 与另外三条失败页（404 / 500 / 502）并排时显得像坏掉了。
+		previewError(w, r, http.StatusMethodNotAllowed, previewMethodDetail)
 		return
 	}
 	if p.queries == nil || p.files == nil {

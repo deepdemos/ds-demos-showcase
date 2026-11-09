@@ -28,7 +28,10 @@ const (
 	previewMissingDetail      = "作品不存在、还没有公开，或者内容已经被移除。"
 	previewMissingEntryDetail = "这一版缺少入口文件，作者需要重新上传。"
 	previewReadFailedDetail   = "读取作品文件失败，请稍后再试。"
-	previewErrorHTMLFm        = `<!doctype html>
+	// 405 也是给人看的：这一条以前回的是 `http.Error` 的一行纯文本，
+	// 与其它三条失败页并排显得像坏掉了。
+	previewMethodDetail = "预览页面只支持直接用浏览器打开，不支持以这种方式访问。"
+	previewErrorHTMLFm  = `<!doctype html>
 <html lang="` + previewErrorLang + `">
 <head>
 <meta charset="utf-8">
