@@ -1147,6 +1147,17 @@ removed）只有**作者本人**或持有 `demo.review` 权限的角色能看。
 `TestIntegrationSubmitShapeMatrix`（形态矩阵，数据源就是 `SubmitShapes()`）：
 新增一种格式只改 `shapes.go`，矩阵自动多一行。
 
+**失败分支一律是给人看的 HTML**（`backend/internal/httpapi/preview_error.go`）：
+12 个出口（10 个 404、1 个 500「这一版缺少入口文件」、1 个 502「读取失败」）统一走
+`previewError`，返回 `text/html; charset=utf-8` + `no-store` + 同一套 `sandbox` CSP。
+理由是这条响应会渲染在详情页的 `<iframe>` 里，而 iframe 是跨源的、前端**读不到**
+它内部的状态，兜底只能在服务端做——以前这里是 `404 page not found` 一行英文。
+
+页面**不插值任何请求内容**（slug、路径都不进页面），所以注入面为零；状态码保持原语义：
+`entry_path` 为空是数据坏了，给 500 而不是 404——404 会让作者以为作品被删了。
+文件缺失仍走 404（`storage.ErrNotFound` 的既有语义），不为「看起来统一」改码。
+`HEAD` 与 GET 同码、无 body。
+
 **同源渲染的隔离**：作品 HTML 跑在不透明源里，靠两道独立机制：
 
 | 机制 | 在哪生效 |
