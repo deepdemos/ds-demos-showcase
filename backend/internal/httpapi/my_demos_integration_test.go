@@ -247,3 +247,77 @@ func mustAccountSub(t *testing.T, h *Handler, sid string) string {
 	}
 	return acc.Sub
 }
+
+// 三个筛选参数是正交的原始维度（生命周期 / 审核态 / 是否软删），不是「状态桶」。
+// 这一组用例钉住三件事：各自生效、可以叠加、拼错要报错而不是安静返回空列表。
+func TestIntegrationMyDemosFilters(t *testing.T) {
+	h, idSvc, pool := newMyDemosHandler(t)
+	acc, sid := mkAuthorWithDemos(t, h, idSvc, pool, "filter", 4)
+
+	var slugs []string
+	rows, err := pool.Query(context.Background(),
+		`SELECT d.slug FROM demos d WHERE d.author_id = $1 ORDER BY d.id`, acc.UserID)
+	if err != nil {
+		t.Fatalf("取 slug 失败: %v", err)
+	}
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			t.Fatalf("读 slug 失败: %v", err)
+		}
+		slugs = append(slugs, s)
+	}
+	rows.Close()
+
+	setDemoStates(t, pool, slugs[0], "draft", "rejected")
+	setDemoStates(t, pool, slugs[1], "published", "approved")
+	setDemoStates(t, pool, slugs[2], "published", "pending")
+
+	_, drafts := myDemos(t, h, sid, "?lifecycle=draft")
+	if drafts.Total != 2 {
+		t.Fatalf("lifecycle=draft 的 total = %d，想要 2（草稿两件）", drafts.Total)
+	}
+	_, rejected := myDemos(t, h, sid, "?moderation=rejected")
+	if rejected.Total != 1 || rejected.Items[0].Slug != slugs[0] {
+		t.Fatalf("moderation=rejected = %+v，想要只有 %s", rejected.Items, slugs[0])
+	}
+	// 叠加：已上线 + 待审 = 改稿复审中的那件。
+	_, reviewing := myDemos(t, h, sid, "?lifecycle=published&moderation=pending")
+	if reviewing.Total != 1 || reviewing.Items[0].Slug != slugs[2] {
+		t.Fatalf("published+pending = %+v，想要只有 %s", reviewing.Items, slugs[2])
+	}
+	// 软删是独立一维：软删之后 lifecycle 仍是 draft，但 deleted=true 只该出它。
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE demos SET deleted_at = now(), delete_reason = '作者删除' WHERE slug = $1`, slugs[3]); err != nil {
+		t.Fatalf("造软删失败: %v", err)
+	}
+	_, deleted := myDemos(t, h, sid, "?deleted=true")
+	if deleted.Total != 1 || deleted.Items[0].Slug != slugs[3] {
+		t.Fatalf("deleted=true = %+v，想要只有 %s", deleted.Items, slugs[3])
+	}
+	_, live := myDemos(t, h, sid, "?deleted=false")
+	if live.Total != 3 {
+		t.Fatalf("deleted=false 的 total = %d，想要 3（没删的三件）", live.Total)
+	}
+	// 组合：草稿 + 没删 + 被驳回 = 只有第一件。
+	_, combo := myDemos(t, h, sid, "?lifecycle=draft&deleted=false&moderation=rejected")
+	if combo.Total != 1 || combo.Items[0].Slug != slugs[0] {
+		t.Fatalf("三个条件叠加 = %+v，想要只有 %s", combo.Items, slugs[0])
+	}
+}
+
+// 拼错取值必须 400：安静返回空列表会让作者以为自己的作品没了。
+func TestIntegrationMyDemosRejectsBadFilter(t *testing.T) {
+	h, idSvc, pool := newMyDemosHandler(t)
+	_, sid := mkAuthorWithDemos(t, h, idSvc, pool, "badfilter", 1)
+
+	for _, path := range []string{
+		"/api/v1/me/demos?lifecycle=draf",
+		"/api/v1/me/demos?moderation=aprovd",
+	} {
+		rec := getWithSession(t, h, path, sid)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s = %d，想要 400；响应体：%s", path, rec.Code, rec.Body.String())
+		}
+	}
+}

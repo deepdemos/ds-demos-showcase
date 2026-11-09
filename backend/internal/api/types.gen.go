@@ -241,6 +241,13 @@ const (
 	Random ListDemosParamsSort = "random"
 )
 
+// Defines values for ListMyDemosParamsModeration.
+const (
+	Approved ListMyDemosParamsModeration = "approved"
+	Pending  ListMyDemosParamsModeration = "pending"
+	Rejected ListMyDemosParamsModeration = "rejected"
+)
+
 // Defines values for ListModelsParamsStatus.
 const (
 	ListModelsParamsStatusActive     ListModelsParamsStatus = "active"
@@ -1572,7 +1579,21 @@ type ListMyDemosParams struct {
 
 	// PageSize 每页条数，默认 50，上限 200（与 `listDemos` 同口径）；超过上限返回 400，不静默截断
 	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+
+	// Lifecycle 只看某个生命周期的作品（`draft` / `published` / `archived` / `removed`）。不传 = 全部
+	Lifecycle *LifecycleState `form:"lifecycle,omitempty" json:"lifecycle,omitempty"`
+
+	// Moderation 只看某个审核态的作品（`pending` / `approved` / `rejected`）。不传 = 全部。与 `lifecycle` 是**正交**的两个维度，可以一起用
+	Moderation *ListMyDemosParamsModeration `form:"moderation,omitempty" json:"moderation,omitempty"`
+
+	// Deleted `true` = 只看软删的，`false` = 只看没删的，不传 = 全部。
+	// 单独一维的原因：软删与生命周期正交（软删不改 `lifecycle_state`），
+	// 所以「已删除」无法用一个生命周期取值表达。
+	Deleted *bool `form:"deleted,omitempty" json:"deleted,omitempty"`
 }
+
+// ListMyDemosParamsModeration defines parameters for ListMyDemos.
+type ListMyDemosParamsModeration string
 
 // ListModelsParams defines parameters for ListModels.
 type ListModelsParams struct {

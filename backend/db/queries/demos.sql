@@ -634,6 +634,8 @@ LIMIT 1;
 
 -- name: ListMyDemos :many
 -- 作者视角：不看可见性，只看归属与「是否已擦除」。
+-- 三个筛选参数都是可空的：不传就是不过滤。它们正交（软删 × 生命周期 × 审核态），
+-- 所以不做「状态桶」——桶是展示口径，会随界面变，接口给的是原始维度。
 -- 擦除对外一律不存在，对作者也不留入口——所以判据是 erased_at IS NULL，
 -- 而**不是** deleted_at IS NULL：软删的作品要列出来，作者才找得到「恢复」。
 -- purge_after 取自 gc_queue（同一行内容真正的清掉时刻，删除那一刻定型）；
@@ -646,6 +648,9 @@ SELECT d.slug, d.title, d.cover_url, d.created_at, d.updated_at,
   LEFT JOIN gc_queue g
          ON g.entity_type = 'demo' AND g.entity_id = d.id AND g.reason = 'delete'
  WHERE d.author_id = @author_id::bigint AND d.erased_at IS NULL
+   AND (sqlc.narg('lifecycle')::text IS NULL OR d.lifecycle_state = sqlc.narg('lifecycle')::text)
+   AND (sqlc.narg('moderation')::text IS NULL OR d.moderation_state = sqlc.narg('moderation')::text)
+   AND (sqlc.narg('deleted')::boolean IS NULL OR (d.deleted_at IS NOT NULL) = sqlc.narg('deleted')::boolean)
  GROUP BY d.id
  ORDER BY d.updated_at DESC, d.id DESC
  LIMIT @row_limit OFFSET @row_offset;
@@ -653,7 +658,10 @@ SELECT d.slug, d.title, d.cover_url, d.created_at, d.updated_at,
 -- name: CountMyDemos :one
 -- WHERE 与 ListMyDemos 逐字一致：两处不一致时 total 与列表条数会对不上，分页页数算错。
 SELECT count(*) FROM demos d
- WHERE d.author_id = @author_id::bigint AND d.erased_at IS NULL;
+ WHERE d.author_id = @author_id::bigint AND d.erased_at IS NULL
+   AND (sqlc.narg('lifecycle')::text IS NULL OR d.lifecycle_state = sqlc.narg('lifecycle')::text)
+   AND (sqlc.narg('moderation')::text IS NULL OR d.moderation_state = sqlc.narg('moderation')::text)
+   AND (sqlc.narg('deleted')::boolean IS NULL OR (d.deleted_at IS NOT NULL) = sqlc.narg('deleted')::boolean);
 
 -- name: EnqueueDemoGc :exec
 -- kind 只能是 demo_dir（gc_kinds 三选一里唯一与作品目录对应的）。
