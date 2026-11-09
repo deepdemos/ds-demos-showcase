@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { VerifyEmailPage } from './VerifyEmailPage';
 
@@ -71,4 +71,42 @@ test('重发只说「已受理」，不承诺信真的到了', async () => {
   expect(notice).toHaveTextContent('如果这个邮箱还没验证过');
   // 没有「已发送到你的邮箱」这种承诺：不存在的邮箱也回 204。
   expect(notice).not.toHaveTextContent('已发送到');
+});
+
+// 回执链路：验证页是「注册 → 验证 → 登录 → 原页面」这条路上的一站，
+// 它如果把 return_to 丢了，前面三处拼得再对也白搭。
+function LoginProbe() {
+  const [params] = useSearchParams();
+  return (
+    <div data-testid="login-probe">
+      verified={params.get('verified')} return_to={params.get('return_to')}
+    </div>
+  );
+}
+
+test('验证成功后把落脚点带回登录页', async () => {
+  verifyMock.mockResolvedValue({ status: 204, data: undefined });
+  render(
+    <MemoryRouter initialEntries={['/verify-email?email=a%40b.co&return_to=%2Fsubmit']}>
+      <Routes>
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/login" element={<LoginProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+  fireEvent.change(screen.getByLabelText('验证码'), { target: { value: '123456' } });
+  fireEvent.click(screen.getByRole('button', { name: '完成验证' }));
+
+  expect(await screen.findByTestId('login-probe')).toHaveTextContent(
+    'verified=1 return_to=/submit',
+  );
+});
+
+test('页脚的「去登录」也带着落脚点', () => {
+  renderPage('/verify-email?email=a%40b.co&return_to=%2Fsubmit');
+  expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute(
+    'href',
+    '/login?return_to=%2Fsubmit',
+  );
 });

@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, Input } from '@/components/ui';
 import { postAuthRegister, type Error as ApiError } from '@/api';
 import { PASSWORD_MIN, passwordLengthError } from '@/lib/password';
+import { returnToParam } from '@/lib/return-to';
 
 // 与后端同口径的最小校验。前端校验只为省一次往返，真正的判定在服务端——
 // 这里放过的值服务端还会再拒一次，所以不必追求完备。
@@ -10,6 +11,10 @@ const USERNAME_RE = /^[A-Za-z0-9_-]{3,20}$/;
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // 从登录页一路带过来的落脚点。注册完不能把这条路丢掉：新用户的原始意图
+  // 通常就是投稿，验证完邮箱之后还得回到那儿。
+  const rawReturnTo = searchParams.get('return_to');
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -41,9 +46,10 @@ export function RegisterPage() {
         // `sent=0` 把「信没发出去」这个事实带到验证页——否则用户会对着一个
         // 永远不来的邮件等下去。
         const query = response.data.verificationSent ? '' : '&sent=0';
-        navigate(`/verify-email?email=${encodeURIComponent(response.data.email)}${query}`, {
-          replace: true,
-        });
+        navigate(
+          `/verify-email?email=${encodeURIComponent(response.data.email)}${query}${returnToParam(rawReturnTo, '&')}`,
+          { replace: true },
+        );
         return;
       }
       setError((response.data as ApiError).message);
@@ -114,7 +120,10 @@ export function RegisterPage() {
 
       <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
         已有账号？
-        <Link to="/login" className="text-blue-600 dark:text-blue-400">
+        <Link
+          to={`/login${returnToParam(rawReturnTo)}`}
+          className="text-blue-600 dark:text-blue-400"
+        >
           登录
         </Link>
       </p>

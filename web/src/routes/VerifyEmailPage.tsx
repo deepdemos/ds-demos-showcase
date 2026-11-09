@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, Input } from '@/components/ui';
 import { postAuthVerifyEmail, postAuthVerifyEmailResend, type Error as ApiError } from '@/api';
+import { returnToParam } from '@/lib/return-to';
 
 /**
  * 邮箱验证页。
@@ -19,6 +20,8 @@ import { postAuthVerifyEmail, postAuthVerifyEmailResend, type Error as ApiError 
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // 注册/登录那边带过来的落脚点，验证完继续往登录页传。
+  const rawReturnTo = searchParams.get('return_to');
 
   const [email, setEmail] = useState(searchParams.get('email') ?? '');
   const [code, setCode] = useState('');
@@ -39,7 +42,7 @@ export function VerifyEmailPage() {
     try {
       const response = await postAuthVerifyEmail({ email, code });
       if (response.status === 204) {
-        navigate('/login?verified=1', { replace: true });
+        navigate(`/login?verified=1${returnToParam(rawReturnTo, '&')}`, { replace: true });
         return;
       }
       setError((response.data as ApiError).message);
@@ -135,7 +138,10 @@ export function VerifyEmailPage() {
         >
           {resending ? '发送中…' : '重新发送验证码'}
         </Button>
-        <Link to="/login" className="text-gray-500 dark:text-gray-400">
+        <Link
+          to={`/login${returnToParam(rawReturnTo)}`}
+          className="text-gray-500 dark:text-gray-400"
+        >
           去登录
         </Link>
       </div>

@@ -20,9 +20,9 @@ vi.mock('@/api', () => ({
   postAuthPasswordReset: (...args: unknown[]) => reset(...args),
 }));
 
-function renderPage() {
+function renderPage(initialEntry = '/password-reset') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <PasswordResetPage />
     </MemoryRouter>,
   );
@@ -111,4 +111,12 @@ test('重设被拒时显示后端原话', async () => {
   await waitFor(() => {
     expect(screen.getByRole('alert').textContent).toContain('验证码不对或已过期');
   });
+});
+
+test('页脚的「去登录」保留原来的落脚点', () => {
+  renderPage('/password-reset?return_to=%2Fsubmit');
+  expect(screen.getByRole('link', { name: '想起来了，去登录' })).toHaveAttribute(
+    'href',
+    '/login?return_to=%2Fsubmit',
+  );
 });

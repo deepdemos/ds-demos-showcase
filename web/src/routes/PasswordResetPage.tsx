@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, Input } from '@/components/ui';
 import { postAuthPasswordReset, postAuthPasswordResetCode, type Error as ApiError } from '@/api';
 import { PASSWORD_MIN, passwordLengthError } from '@/lib/password';
+import { returnToParam } from '@/lib/return-to';
 
 /**
  * 找回密码。
@@ -16,6 +17,8 @@ import { PASSWORD_MIN, passwordLengthError } from '@/lib/password';
  */
 export function PasswordResetPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawReturnTo = searchParams.get('return_to');
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -66,7 +69,7 @@ export function PasswordResetPage() {
     try {
       const response = await postAuthPasswordReset({ email, code, newPassword: password });
       if (response.status === 204) {
-        navigate('/login?reset=1', { replace: true });
+        navigate(`/login?reset=1${returnToParam(rawReturnTo, '&')}`, { replace: true });
         return;
       }
       const body = response.data as ApiError;
@@ -148,7 +151,10 @@ export function PasswordResetPage() {
           <Button type="submit" primary disabled={busy || !codeSent}>
             {busy ? '处理中…' : '重设密码'}
           </Button>
-          <Link to="/login" className="text-sm text-gray-600 hover:underline dark:text-gray-400">
+          <Link
+            to={`/login${returnToParam(rawReturnTo)}`}
+            className="text-sm text-gray-600 hover:underline dark:text-gray-400"
+          >
             想起来了，去登录
           </Link>
         </div>
