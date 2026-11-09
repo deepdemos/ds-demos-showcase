@@ -78,6 +78,12 @@ export function ModelPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
+      <p className="mb-4">
+        <Link className="text-sm underline" to="/demos">
+          ← 返回作品库
+        </Link>
+      </p>
+
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{model.name}</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -111,7 +117,18 @@ export function ModelPage() {
 
       <Section title="站内表现">
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-          <Stat label="公开作品" value={`${site.demoCount} 件`} />
+          <Stat
+            label="公开作品"
+            value={
+              site.demoCount > 0 ? (
+                <Link className="underline" to={`/demos?model=${encodeURIComponent(model.slug)}`}>
+                  {site.demoCount} 件
+                </Link>
+              ) : (
+                `${site.demoCount} 件`
+              )
+            }
+          />
           <Stat label="评分票数" value={`${site.votes} 票`} />
           <Stat
             label="社区分"
@@ -245,7 +262,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
     <div>
       <dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt>
