@@ -1089,6 +1089,26 @@ sequenceDiagram
     R-->>Adm: 200
 ```
 
+**落地状态（2026-11-09）——渠道上架与撤下**
+
+松点 26 结案：以前 `publishDemo` 的 WHERE 里有 `lifecycle_state IN ('draft','archived')`，
+作品一旦变成 `published`，第二个渠道就永远发不出去——而本文档里那句「换渠道请走上架端点」
+指向的端点并不存在。现在补上两个：
+
+| 端点 | 做什么 | 关键判据 |
+|---|---|---|
+| `POST /admin/demos/{slug}/channels` | 追加渠道 / 改某渠道可见性 | 必须已有对外版本（否则 409）；内容 `approved`（否则 409）；渠道已登记且启用（否则 400）；`astra` 只收 `lang=en` |
+| `DELETE /admin/demos/{slug}/channels/{channel}` | 从某渠道撤下 | 作品可以仍有别的渠道；**仍是 `published` 却只剩这一个渠道 → 409** |
+
+- **同渠道重复 POST 不新增行**：返回 200 且 `created=false`，改的是可见性 / 语言。
+- **最后一个渠道不给撤**：`published` 却没有渠道行，会得到「状态说对外、列表里查不到」的作品。
+  想彻底撤下走下架（`archiveDemo`），那条路径有墓碑与恢复。
+- 两个动作都进时间线（上架 / 撤下用 `publish` / `archive`）与 `audit_log`（`attach` / `detach`）——
+  与首次发布同一套叙事，不新造动作键。
+- 状态判定的字面量收进了 `approvedContent` / `publishedLifecycle` 两个函数，
+  渠道「已登记且启用」收进 `activeChannel`：发布与上架两条路径共用，副本数从 4 降到 0
+  （`check-single-source` 的棘轮也跟着下拨）。
+
 ### 7.5 预览服务（版本化路径）
 
 ```mermaid
