@@ -3,7 +3,6 @@
     "backend/db/queries/demos.sql": 2
   },
   "visibility-go": {
-    "backend/internal/domain/demo/publish.go": 2,
     "backend/internal/httpapi/download.go": 1,
     "backend/internal/httpapi/preview.go": 1
   },

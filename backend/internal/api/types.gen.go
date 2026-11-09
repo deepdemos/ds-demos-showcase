@@ -49,6 +49,32 @@ const (
 	Technique ClassificationRefDimension = "technique"
 )
 
+// Defines values for DemoChannelRequestLang.
+const (
+	DemoChannelRequestLangEn DemoChannelRequestLang = "en"
+	DemoChannelRequestLangZh DemoChannelRequestLang = "zh"
+)
+
+// Defines values for DemoChannelRequestVisibility.
+const (
+	DemoChannelRequestVisibilityHidden   DemoChannelRequestVisibility = "hidden"
+	DemoChannelRequestVisibilityListed   DemoChannelRequestVisibility = "listed"
+	DemoChannelRequestVisibilityUnlisted DemoChannelRequestVisibility = "unlisted"
+)
+
+// Defines values for DemoChannelResultLang.
+const (
+	DemoChannelResultLangEn DemoChannelResultLang = "en"
+	DemoChannelResultLangZh DemoChannelResultLang = "zh"
+)
+
+// Defines values for DemoChannelResultVisibility.
+const (
+	DemoChannelResultVisibilityHidden   DemoChannelResultVisibility = "hidden"
+	DemoChannelResultVisibilityListed   DemoChannelResultVisibility = "listed"
+	DemoChannelResultVisibilityUnlisted DemoChannelResultVisibility = "unlisted"
+)
+
 // Defines values for DemoDetailMatchedIn.
 const (
 	DemoDetailMatchedInDescription DemoDetailMatchedIn = "description"
@@ -330,6 +356,43 @@ type DemoAuthor struct {
 	// 只是「谁写的」这个信息不再存在。
 	Username string `json:"username"`
 }
+
+// DemoChannelRequest defines model for DemoChannelRequest.
+type DemoChannelRequest struct {
+	// Channel 渠道 code，必须在 `channels` 里且启用
+	Channel string `json:"channel"`
+
+	// Lang 这个渠道上的语言。`astra` 只收 `en`。
+	Lang *DemoChannelRequestLang `json:"lang,omitempty"`
+
+	// Visibility `listed` 上列表、`unlisted` 可直链不上列表、`hidden` 不对读者可见。
+	// 只有 `listed` / `unlisted` 算「对外可见」。
+	Visibility DemoChannelRequestVisibility `json:"visibility"`
+}
+
+// DemoChannelRequestLang 这个渠道上的语言。`astra` 只收 `en`。
+type DemoChannelRequestLang string
+
+// DemoChannelRequestVisibility `listed` 上列表、`unlisted` 可直链不上列表、`hidden` 不对读者可见。
+// 只有 `listed` / `unlisted` 算「对外可见」。
+type DemoChannelRequestVisibility string
+
+// DemoChannelResult defines model for DemoChannelResult.
+type DemoChannelResult struct {
+	Channel string `json:"channel"`
+
+	// Created 这次调用是否新建了渠道行（false = 更新了已有渠道的可见性）
+	Created    bool                        `json:"created"`
+	Lang       DemoChannelResultLang       `json:"lang"`
+	Slug       string                      `json:"slug"`
+	Visibility DemoChannelResultVisibility `json:"visibility"`
+}
+
+// DemoChannelResultLang defines model for DemoChannelResult.Lang.
+type DemoChannelResultLang string
+
+// DemoChannelResultVisibility defines model for DemoChannelResult.Visibility.
+type DemoChannelResultVisibility string
 
 // DemoDeleteRequest defines model for DemoDeleteRequest.
 type DemoDeleteRequest struct {
@@ -1554,6 +1617,9 @@ type ListRecommendationsParams struct {
 	// Limit 返回条数，越界回 400，不静默截断。
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
+
+// AddDemoChannelJSONRequestBody defines body for AddDemoChannel for application/json ContentType.
+type AddDemoChannelJSONRequestBody = DemoChannelRequest
 
 // PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
 type PublishDemoJSONRequestBody = PublishRequest

@@ -11,6 +11,61 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteDemoChannel = `-- name: DeleteDemoChannel :execrows
+DELETE FROM demo_channels
+WHERE demo_id = $1 AND channel = $2
+`
+
+type DeleteDemoChannelParams struct {
+	DemoID  int64
+	Channel string
+}
+
+// 只删指定渠道。返回 0 行 = 这个作品本来就没有这个渠道（404），
+// 而不是「删成功了但你没看到」。
+func (q *Queries) DeleteDemoChannel(ctx context.Context, arg DeleteDemoChannelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDemoChannel, arg.DemoID, arg.Channel)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getDemoForChannel = `-- name: GetDemoForChannel :one
+SELECT d.id, d.slug, d.lifecycle_state, d.moderation_state,
+       d.published_revision_id, d.deleted_at, d.erased_at
+FROM demos d
+WHERE d.slug = $1
+`
+
+type GetDemoForChannelRow struct {
+	ID                  int64
+	Slug                string
+	LifecycleState      string
+	ModerationState     string
+	PublishedRevisionID pgtype.Int8
+	DeletedAt           pgtype.Timestamptz
+	ErasedAt            pgtype.Timestamptz
+}
+
+// 渠道上架/撤下前的状态检查。与 GetDemoForPublish 的区别：那个判的是
+// 「能不能从 draft 变成 published」，这里判的是「已经对外的作品还能不能
+// 再挂一个渠道」——所以要多取 published_revision_id（对外版本为空 = 从没发过）。
+func (q *Queries) GetDemoForChannel(ctx context.Context, slug string) (GetDemoForChannelRow, error) {
+	row := q.db.QueryRow(ctx, getDemoForChannel, slug)
+	var i GetDemoForChannelRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.LifecycleState,
+		&i.ModerationState,
+		&i.PublishedRevisionID,
+		&i.DeletedAt,
+		&i.ErasedAt,
+	)
+	return i, err
+}
+
 const getDemoForPublish = `-- name: GetDemoForPublish :one
 
 SELECT d.id, d.slug, d.lifecycle_state, d.moderation_state, d.deleted_at, d.erased_at
@@ -134,6 +189,41 @@ func (q *Queries) InsertDemoTimeline(ctx context.Context, arg InsertDemoTimeline
 		arg.ActorID,
 	)
 	return err
+}
+
+const listDemoChannels = `-- name: ListDemoChannels :many
+SELECT channel, visibility, lang
+FROM demo_channels
+WHERE demo_id = $1
+ORDER BY channel
+`
+
+type ListDemoChannelsRow struct {
+	Channel    string
+	Visibility string
+	Lang       string
+}
+
+// 一次取回这个作品的所有渠道行：上架要走 upsert（判断「新建还是改可见性」），
+// 撤下要判「是不是最后一个」。
+func (q *Queries) ListDemoChannels(ctx context.Context, demoID int64) ([]ListDemoChannelsRow, error) {
+	rows, err := q.db.Query(ctx, listDemoChannels, demoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDemoChannelsRow{}
+	for rows.Next() {
+		var i ListDemoChannelsRow
+		if err := rows.Scan(&i.Channel, &i.Visibility, &i.Lang); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPendingDemoReviews = `-- name: ListPendingDemoReviews :many

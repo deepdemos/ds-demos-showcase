@@ -91,6 +91,29 @@ SELECT d.id, d.slug, d.lifecycle_state, d.moderation_state, d.deleted_at, d.eras
 FROM demos d
 WHERE d.slug = $1;
 
+-- name: GetDemoForChannel :one
+-- 渠道上架/撤下前的状态检查。与 GetDemoForPublish 的区别：那个判的是
+-- 「能不能从 draft 变成 published」，这里判的是「已经对外的作品还能不能
+-- 再挂一个渠道」——所以要多取 published_revision_id（对外版本为空 = 从没发过）。
+SELECT d.id, d.slug, d.lifecycle_state, d.moderation_state,
+       d.published_revision_id, d.deleted_at, d.erased_at
+FROM demos d
+WHERE d.slug = $1;
+
+-- name: ListDemoChannels :many
+-- 一次取回这个作品的所有渠道行：上架要走 upsert（判断「新建还是改可见性」），
+-- 撤下要判「是不是最后一个」。
+SELECT channel, visibility, lang
+FROM demo_channels
+WHERE demo_id = $1
+ORDER BY channel;
+
+-- name: DeleteDemoChannel :execrows
+-- 只删指定渠道。返回 0 行 = 这个作品本来就没有这个渠道（404），
+-- 而不是「删成功了但你没看到」。
+DELETE FROM demo_channels
+WHERE demo_id = $1 AND channel = $2;
+
 -- name: PublishDemo :execrows
 -- 同一条语句里判状态并跃迁：并发两次发布只有一次能改走。
 -- 允许的来源状态写在 WHERE 里，`published` 不在其中 —— 重复发布返回 0 行，

@@ -123,25 +123,14 @@ func (s *Service) Publish(ctx context.Context, actor Actor, in PublishInput) (Pu
 		if row.LifecycleState == "removed" {
 			return ErrRemovedCannotPublish
 		}
-		if row.LifecycleState == "published" {
+		if publishedLifecycle(row.LifecycleState) {
 			return ErrAlreadyPublished
 		}
-		if row.ModerationState != "approved" {
+		if !approvedContent(row.ModerationState) {
 			return ErrNotApproved
 		}
-
-		// 渠道必须是已登记且启用的。外键只保证「在 channels 里」，
-		// 已停用的渠道仍能在表里存在，所以这里再判一次 status。
-		var channelStatus string
-		if err := tx.QueryRow(ctx,
-			`SELECT status FROM channels WHERE code = $1`, in.Channel).Scan(&channelStatus); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("%w: %q 未登记", ErrInvalidChannel, in.Channel)
-			}
-			return fmt.Errorf("demo: 查渠道失败: %w", err)
-		}
-		if channelStatus != "active" {
-			return fmt.Errorf("%w: %q 已停用", ErrInvalidChannel, in.Channel)
+		if err := activeChannel(ctx, tx, in.Channel); err != nil {
+			return err
 		}
 
 		n, err := q.PublishDemo(ctx, in.Slug)
@@ -211,4 +200,17 @@ func (s *Service) Publish(ctx context.Context, actor Actor, in PublishInput) (Pu
 		return PublishResult{}, err
 	}
 	return out, nil
+}
+
+// 状态判定的唯一出处。
+//
+// 这两条在发布、渠道上架两条路径上都要用（还要在别处判「对外可见」），
+// 所以收成函数：字面量只写一次，`check-single-source` 才不会把第 N 个入口
+// 当成第 N 份实现。渠道的「已登记且启用」同理，见 channels.go 的 activeChannel。
+func approvedContent(moderationState string) bool {
+	return moderationState == "approved"
+}
+
+func publishedLifecycle(lifecycleState string) bool {
+	return lifecycleState == "published"
 }
