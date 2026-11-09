@@ -14,6 +14,7 @@ import { AdminModelsPage } from '@/routes/AdminModelsPage';
 import { ModelPage } from '@/routes/ModelPage';
 import { RankingsPage } from '@/routes/RankingsPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
+import { MyDemosPage } from '@/routes/MyDemosPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
 import { RouteError } from './RouteError';
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
       page('verify-email', <VerifyEmailPage />),
       page('password-reset', <PasswordResetPage />),
       page('submit', <SubmitPage />),
+      page('my/demos', <MyDemosPage />),
       page('admin/reviews', <AdminReviewPage />),
       page('admin/models', <AdminModelsPage />),
       page('*', <NotFoundPage />),

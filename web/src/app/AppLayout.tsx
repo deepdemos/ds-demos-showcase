@@ -23,6 +23,12 @@ export function AppLayout() {
               投稿
             </Link>
           )}
+          {/* 「我的作品」同样只是入口可见性：真正的判定在 `GET /me/demos`（按作者过滤）。 */}
+          {me && (
+            <Link to="/my/demos" className="text-gray-600 hover:underline dark:text-gray-300">
+              我的作品
+            </Link>
+          )}
           {/* 会话还没读出来时不渲染任何登录相关按钮：先显示「登录」再换成用户名，
               会让已经登录的人在每次刷新时看到一次闪烁的错误状态。 */}
           {isLoading ? null : me ? (
