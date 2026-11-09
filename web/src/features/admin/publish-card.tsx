@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { publishDemo } from '@/api';
+import { ChannelPanel } from '@/features/admin/channel-panel';
 import type { PublishRequestLang, PublishRequestVisibility } from '@/api';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -103,6 +104,10 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
             查看作品页
           </Link>
         </p>
+        {/* 发布成功之后才有渠道行，所以面板放在这里：管理员发完主站就能顺手挂第二个渠道。 */}
+        <div className="mt-3 border-t border-green-200 pt-3 dark:border-green-900">
+          <ChannelPanel slug={slug} />
+        </div>
       </li>
     );
   }

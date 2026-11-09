@@ -49,6 +49,19 @@ const (
 	Technique ClassificationRefDimension = "technique"
 )
 
+// Defines values for DemoChannelLang.
+const (
+	DemoChannelLangEn DemoChannelLang = "en"
+	DemoChannelLangZh DemoChannelLang = "zh"
+)
+
+// Defines values for DemoChannelVisibility.
+const (
+	DemoChannelVisibilityHidden   DemoChannelVisibility = "hidden"
+	DemoChannelVisibilityListed   DemoChannelVisibility = "listed"
+	DemoChannelVisibilityUnlisted DemoChannelVisibility = "unlisted"
+)
+
 // Defines values for DemoChannelRequestLang.
 const (
 	DemoChannelRequestLangEn DemoChannelRequestLang = "en"
@@ -163,8 +176,8 @@ const (
 
 // Defines values for PublishRequestLang.
 const (
-	En PublishRequestLang = "en"
-	Zh PublishRequestLang = "zh"
+	PublishRequestLangEn PublishRequestLang = "en"
+	PublishRequestLangZh PublishRequestLang = "zh"
 )
 
 // Defines values for PublishRequestVisibility.
@@ -181,9 +194,9 @@ const (
 
 // Defines values for PublishResultVisibility.
 const (
-	PublishResultVisibilityHidden   PublishResultVisibility = "hidden"
-	PublishResultVisibilityListed   PublishResultVisibility = "listed"
-	PublishResultVisibilityUnlisted PublishResultVisibility = "unlisted"
+	Hidden   PublishResultVisibility = "hidden"
+	Listed   PublishResultVisibility = "listed"
+	Unlisted PublishResultVisibility = "unlisted"
 )
 
 // Defines values for RankingListBoard.
@@ -362,6 +375,24 @@ type DemoAuthor struct {
 	// Username 用户名（不可变的标识）。作者注销后为空串——那时作品本身还留着，
 	// 只是「谁写的」这个信息不再存在。
 	Username string `json:"username"`
+}
+
+// DemoChannel defines model for DemoChannel.
+type DemoChannel struct {
+	Channel    string                `json:"channel"`
+	Lang       DemoChannelLang       `json:"lang"`
+	Visibility DemoChannelVisibility `json:"visibility"`
+}
+
+// DemoChannelLang defines model for DemoChannel.Lang.
+type DemoChannelLang string
+
+// DemoChannelVisibility defines model for DemoChannel.Visibility.
+type DemoChannelVisibility string
+
+// DemoChannelList defines model for DemoChannelList.
+type DemoChannelList struct {
+	Items []DemoChannel `json:"items"`
 }
 
 // DemoChannelRequest defines model for DemoChannelRequest.

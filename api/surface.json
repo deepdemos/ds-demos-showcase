@@ -60,6 +60,26 @@
         "optional": false
       }
     },
+    "DemoChannel": {
+      "channel": {
+        "type": "string",
+        "optional": false
+      },
+      "lang": {
+        "type": "DemoChannelLang",
+        "optional": false
+      },
+      "visibility": {
+        "type": "DemoChannelVisibility",
+        "optional": false
+      }
+    },
+    "DemoChannelList": {
+      "items": {
+        "type": "[]DemoChannel",
+        "optional": false
+      }
+    },
     "DemoChannelRequest": {
       "channel": {
         "type": "string",
@@ -1354,6 +1374,15 @@
       "subject",
       "technique"
     ],
+    "DemoChannelLang": [
+      "en",
+      "zh"
+    ],
+    "DemoChannelVisibility": [
+      "hidden",
+      "listed",
+      "unlisted"
+    ],
     "DemoChannelRequestLang": [
       "en",
       "zh"
@@ -1518,6 +1547,11 @@
     ]
   },
   "endpoints": {
+    "GET /api/v1/admin/demos/{slug}/channels": {
+      "method": "ListDemoChannels",
+      "pathParams": 1,
+      "params": null
+    },
     "POST /api/v1/admin/demos/{slug}/channels": {
       "method": "AddDemoChannel",
       "pathParams": 1,

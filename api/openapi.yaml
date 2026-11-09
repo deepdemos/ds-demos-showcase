@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 42 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 43 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1881,6 +1881,57 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /api/v1/admin/demos/{slug}/channels:
+    get:
+      operationId: listDemoChannels
+      tags: [治理]
+      summary: 看这个作品挂在哪些渠道上
+      description: |
+        管理端专用：返回作品在 `demo_channels` 里的全部渠道行（渠道 / 可见性 / 语言）。
+
+        为什么单独一个端点而不是塞进详情：详情是公开读的出口，它的字段面讲的是
+        「读者看到的这一件作品」，渠道是运营视角。混在一起要么让公开字段变胖，
+        要么要按角色裁剪同一份 schema——两种都比多一个端点难维护。
+
+        `404` 与「作品不存在」同一个回答（不泄露存在性）；`erased` 的作品也算不存在。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: 这个作品的渠道行（没有渠道时是空数组，不是 404）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoChannelList'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有 demo.publish 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在或已擦除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     post:
       operationId: addDemoChannel
       tags: [治理]
@@ -3817,6 +3868,31 @@ components:
         created:
           type: boolean
           description: 这次调用是否新建了渠道行（false = 更新了已有渠道的可见性）
+
+    DemoChannel:
+      type: object
+      additionalProperties: false
+      required: [channel, visibility, lang]
+      properties:
+        channel:
+          type: string
+          maxLength: 32
+        visibility:
+          type: string
+          enum: [listed, unlisted, hidden]
+        lang:
+          type: string
+          enum: [zh, en]
+
+    DemoChannelList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DemoChannel'
 
     LifecycleState:
       type: string

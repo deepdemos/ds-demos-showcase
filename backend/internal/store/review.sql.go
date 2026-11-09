@@ -226,6 +226,43 @@ func (q *Queries) ListDemoChannels(ctx context.Context, demoID int64) ([]ListDem
 	return items, nil
 }
 
+const listDemoChannelsForSlug = `-- name: ListDemoChannelsForSlug :many
+SELECT c.channel, c.visibility, c.lang
+FROM demo_channels c
+JOIN demos d ON d.id = c.demo_id
+WHERE d.slug = $1 AND d.erased_at IS NULL
+ORDER BY c.channel
+`
+
+type ListDemoChannelsForSlugRow struct {
+	Channel    string
+	Visibility string
+	Lang       string
+}
+
+// 管理端读渠道列表：按 slug 直接取，不用先换 id。
+// 与 ListDemoChannels（按 demo_id）分开，是因为一个在 domain 内部用、一个在 handler
+// 里用；共用一个查询会逼调用方先做一次「slug → id」的往返。
+func (q *Queries) ListDemoChannelsForSlug(ctx context.Context, slug string) ([]ListDemoChannelsForSlugRow, error) {
+	rows, err := q.db.Query(ctx, listDemoChannelsForSlug, slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDemoChannelsForSlugRow{}
+	for rows.Next() {
+		var i ListDemoChannelsForSlugRow
+		if err := rows.Scan(&i.Channel, &i.Visibility, &i.Lang); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingDemoReviews = `-- name: ListPendingDemoReviews :many
 
 SELECT d.id,

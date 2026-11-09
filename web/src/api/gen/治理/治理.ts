@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 42 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 43 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,6 +30,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  DemoChannelList,
   DemoChannelRequest,
   DemoChannelResult,
   Error,
@@ -50,6 +51,77 @@ import type {
   ReviewQueue,
   ReviewResult
 } from '../model';
+
+
+export type listDemoChannelsResponse200 = {
+  data: DemoChannelList
+  status: 200
+}
+
+export type listDemoChannelsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listDemoChannelsResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listDemoChannelsResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDemoChannelsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listDemoChannelsResponseSuccess = (listDemoChannelsResponse200) & {
+  headers: Headers;
+};
+export type listDemoChannelsResponseError = (listDemoChannelsResponse401 | listDemoChannelsResponse403 | listDemoChannelsResponse404 | listDemoChannelsResponse503) & {
+  headers: Headers;
+};
+
+export type listDemoChannelsResponse = (listDemoChannelsResponseSuccess | listDemoChannelsResponseError)
+
+export const getListDemoChannelsUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/admin/demos/${slug}/channels`
+}
+
+/**
+ * 管理端专用：返回作品在 `demo_channels` 里的全部渠道行（渠道 / 可见性 / 语言）。
+ *
+ * 为什么单独一个端点而不是塞进详情：详情是公开读的出口，它的字段面讲的是
+ * 「读者看到的这一件作品」，渠道是运营视角。混在一起要么让公开字段变胖，
+ * 要么要按角色裁剪同一份 schema——两种都比多一个端点难维护。
+ *
+ * `404` 与「作品不存在」同一个回答（不泄露存在性）；`erased` 的作品也算不存在。
+ * @summary 看这个作品挂在哪些渠道上
+ */
+export const listDemoChannels = async (slug: string, options?: RequestInit): Promise<listDemoChannelsResponse> => {
+
+  const res = await fetch(getListDemoChannelsUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listDemoChannelsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listDemoChannelsResponse
+}
 
 
 export type addDemoChannelResponse200 = {

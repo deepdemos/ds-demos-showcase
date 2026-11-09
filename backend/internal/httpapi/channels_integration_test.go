@@ -215,3 +215,75 @@ func TestIntegrationAddChannelRequiresApproved(t *testing.T) {
 		t.Fatalf("内容没通过审核就追加渠道 = %d，想要 409：%s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestIntegrationListDemoChannels 管理端读渠道列表。
+//
+// 三种「空」必须分开：作品不存在（404）、作品存在但没渠道（200 + []）、
+// 没有任何渠道权限（403）。安静返回空数组会让界面把「读不到」画成「没有渠道」。
+func TestIntegrationListDemoChannels(t *testing.T) {
+	pool := integrationPool(t)
+	h, idSvc, _ := newChannelHandler(t)
+	author, sid := registerVerified(t, pool, idSvc, registerInputFor(t, "listch"))
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+
+	slug := publishedDemo(t, h, pool, sid, "渠道列表用例")
+	adminSid := mkAdmin(t, pool, idSvc, "chlist")
+
+	// 只有 publishDemo 落的那一个渠道。
+	rec := channelCall(t, h, http.MethodGet, "/api/v1/admin/demos/"+slug+"/channels", adminSid, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("读渠道列表 = %d，想要 200：%s", rec.Code, rec.Body.String())
+	}
+	var list api.DemoChannelList
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("解析渠道列表失败: %v", err)
+	}
+	if len(list.Items) != 1 || list.Items[0].Channel != "deep" {
+		t.Fatalf("渠道列表 = %+v，想要只有一个 deep", list.Items)
+	}
+
+	// 再加一个渠道：列表要能反映出来，并且按渠道名排序。
+	rec = channelCall(t, h, http.MethodPost, "/api/v1/admin/demos/"+slug+"/channels", adminSid,
+		map[string]any{"channel": "astra", "visibility": "unlisted", "lang": "en"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("上架 astra = %d，想要 201：%s", rec.Code, rec.Body.String())
+	}
+	rec = channelCall(t, h, http.MethodGet, "/api/v1/admin/demos/"+slug+"/channels", adminSid, nil)
+	list = api.DemoChannelList{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("解析渠道列表失败: %v", err)
+	}
+	if len(list.Items) != 2 || list.Items[0].Channel != "astra" || list.Items[1].Channel != "deep" {
+		t.Fatalf("渠道列表 = %+v，想要 [astra deep]（按渠道名排序）", list.Items)
+	}
+	if list.Items[0].Lang != api.DemoChannelLangEn || list.Items[0].Visibility != api.DemoChannelVisibilityUnlisted {
+		t.Fatalf("astra 那一行 = %+v，想要 unlisted/en", list.Items[0])
+	}
+
+	// 作品存在但没有渠道：空数组，不是 404。
+	bare := submitHTML(t, h, sid, "没有渠道的作品", `<!doctype html><p>还没发</p>`)
+	rec = channelCall(t, h, http.MethodGet, "/api/v1/admin/demos/"+bare+"/channels", adminSid, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("没有渠道的作品 = %d，想要 200（空数组）", rec.Code)
+	}
+	if got := rec.Body.String(); got != "{\"items\":[]}\n" {
+		t.Fatalf("没有渠道时的响应 = %s，想要 items 是空数组而不是 null", got)
+	}
+
+	// 不存在 → 404。
+	rec = channelCall(t, h, http.MethodGet, "/api/v1/admin/demos/no-such-demo/channels", adminSid, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("不存在的作品 = %d，想要 404", rec.Code)
+	}
+
+	// 没权限 → 403（作者没有 demo.publish）。
+	rec = channelCall(t, h, http.MethodGet, "/api/v1/admin/demos/"+slug+"/channels", sid, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("作者读渠道列表 = %d，想要 403", rec.Code)
+	}
+	// 未登录 → 401。
+	rec = channelCall(t, h, http.MethodGet, "/api/v1/admin/demos/"+slug+"/channels", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("匿名读渠道列表 = %d，想要 401", rec.Code)
+	}
+}
