@@ -145,6 +145,19 @@ func (q *Queries) CopyRevisionFiles(ctx context.Context, arg CopyRevisionFilesPa
 	return err
 }
 
+const countMyDemos = `-- name: CountMyDemos :one
+SELECT count(*) FROM demos d
+ WHERE d.author_id = $1::bigint AND d.erased_at IS NULL
+`
+
+// WHERE 与 ListMyDemos 逐字一致：两处不一致时 total 与列表条数会对不上，分页页数算错。
+func (q *Queries) CountMyDemos(ctx context.Context, authorID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countMyDemos, authorID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPendingDemosByAuthor = `-- name: CountPendingDemosByAuthor :one
 SELECT count(*)::int
 FROM demos
@@ -1124,6 +1137,73 @@ func (q *Queries) ListDemoTimeline(ctx context.Context, demoID int64) ([]ListDem
 			&i.Message,
 			&i.CreatedAt,
 			&i.ActorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMyDemos = `-- name: ListMyDemos :many
+SELECT d.slug, d.title, d.cover_url, d.created_at, d.updated_at,
+       d.lifecycle_state, d.moderation_state, d.deleted_at,
+       MIN(g.purge_after)::timestamptz AS purge_after
+  FROM demos d
+  LEFT JOIN gc_queue g
+         ON g.entity_type = 'demo' AND g.entity_id = d.id AND g.reason = 'delete'
+ WHERE d.author_id = $1::bigint AND d.erased_at IS NULL
+ GROUP BY d.id
+ ORDER BY d.updated_at DESC, d.id DESC
+ LIMIT $3 OFFSET $2
+`
+
+type ListMyDemosParams struct {
+	AuthorID  int64
+	RowOffset int32
+	RowLimit  int32
+}
+
+type ListMyDemosRow struct {
+	Slug            string
+	Title           pgtype.Text
+	CoverUrl        pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	LifecycleState  string
+	ModerationState string
+	DeletedAt       pgtype.Timestamptz
+	PurgeAfter      pgtype.Timestamptz
+}
+
+// 作者视角：不看可见性，只看归属与「是否已擦除」。
+// 擦除对外一律不存在，对作者也不留入口——所以判据是 erased_at IS NULL，
+// 而**不是** deleted_at IS NULL：软删的作品要列出来，作者才找得到「恢复」。
+// purge_after 取自 gc_queue（同一行内容真正的清掉时刻，删除那一刻定型）；
+// 一个作品理论上可能有多条清理行（目录与 blob 各自入队），取最小的那个：
+// 界面回答「还能恢复多久」时，该给最早消失的那个时刻。
+func (q *Queries) ListMyDemos(ctx context.Context, arg ListMyDemosParams) ([]ListMyDemosRow, error) {
+	rows, err := q.db.Query(ctx, listMyDemos, arg.AuthorID, arg.RowOffset, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMyDemosRow{}
+	for rows.Next() {
+		var i ListMyDemosRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Title,
+			&i.CoverUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LifecycleState,
+			&i.ModerationState,
+			&i.DeletedAt,
+			&i.PurgeAfter,
 		); err != nil {
 			return nil, err
 		}

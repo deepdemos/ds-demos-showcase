@@ -9,9 +9,9 @@ info:
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
-    作品榜与相关推荐，
+    作品榜与相关推荐、我的作品，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 39 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 40 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1797,6 +1797,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/me/demos:
+    get:
+      operationId: listMyDemos
+      tags: [作品]
+      summary: 我的作品
+      description: |
+        当前登录用户自己的全部作品，按最近改动排序。
+
+        与 `GET /api/v1/demos` 的差别只有**可见性口径**：公开列表只含已上架作品，
+        这里返回作者视角的全部——草稿、待审、已驳回、已发布、已归档、已移除（软删）。
+        作者必须能看见「我投的那份稿子去哪了」，这是投稿后不失联的前提。
+
+        **擦除（erased）的作品不在其中**：擦除对外一律不存在，对作者也不留入口。
+
+        `moderationState` 给作者真实值（与 `GET /api/v1/demos/{slug}` 的作者视图一致），
+        不与 `lifecycleState` 合并：审核态说的是内容过没过，生命周期说的是对外哪种档位。
+
+        `deletedAt` 非空表示 **作者自己删掉的**（软删）——它与 `lifecycleState` 正交，
+        所以不能靠生命周期列判断「能不能恢复」。`purgeAfter` 是那一行内容被真正清掉的
+        时刻，取自 `gc_queue`：恢复窗口在删除那一刻定型，这里只读它，不按当前配置现算。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          description: 页码，从 1 开始
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每页条数，默认 50，上限 200（与 `listDemos` 同口径）；超过上限返回 400，不静默截断
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: 我的作品
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyDemoList'
+        '400':
+          description: 分页参数越界
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录或会话已失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/models/sync:
     post:
       operationId: syncModelCatalog
@@ -3477,6 +3541,76 @@ components:
           enum: [pending, approved, rejected]
         lifecycleState:
           $ref: '#/components/schemas/LifecycleState'
+
+    MyDemoSummary:
+      type: object
+      additionalProperties: false
+      description: |
+        作者视角的一条作品。刻意不带简介 / 分类 / 浏览数：列表只需要回答
+        「哪一件、什么状态、什么时候动过」，多取要 join 三张表，收益不大。
+      required:
+        [slug, title, coverUrl, createdAt, updatedAt, lifecycleState, moderationState, deletedAt, purgeAfter]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+          maxLength: 200
+        coverUrl:
+          type: string
+          nullable: true
+          maxLength: 500
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          description: 最近一次改动时间；列表按它倒序排
+        lifecycleState:
+          $ref: '#/components/schemas/LifecycleState'
+        moderationState:
+          type: string
+          enum: [pending, approved, rejected]
+          description: |
+            当前版本的审核态，作者视角给真实值。
+            与 `lifecycleState` 正交：`published` + `pending` = 复审中的已上线作品。
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            作者软删的时刻（`null` = 没删）。它与 `lifecycleState` 正交，
+            所以判断「这条现在点不进去、但还能恢复」要看这一列而不是生命周期列。
+        purgeAfter:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            这一行的内容被真正清掉的时刻（来自 `gc_queue`，删除那一刻定型）。
+            `deletedAt` 为空时它一定为空；有它才说明恢复有期限。
+
+    MyDemoList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyDemoSummary'
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          minimum: 0
 
     LifecycleState:
       type: string

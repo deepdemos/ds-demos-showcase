@@ -743,6 +743,36 @@
           "name": "TestIntegrationRecommendationsLimit"
         }
       }
+    ],
+    "GET /api/v1/me/demos": [
+      {
+        "case": "未登录返回 401，而不是 403",
+        "test": {
+          "file": "backend/internal/httpapi/my_demos_integration_test.go",
+          "name": "TestIntegrationMyDemosRequiresLogin"
+        }
+      },
+      {
+        "case": "pageSize 超上限返回 400，不静默截断",
+        "test": {
+          "file": "backend/internal/httpapi/my_demos_integration_test.go",
+          "name": "TestIntegrationMyDemosRejectsOversizedPage"
+        }
+      },
+      {
+        "case": "看不到别人的作品",
+        "test": {
+          "file": "backend/internal/httpapi/my_demos_integration_test.go",
+          "name": "TestIntegrationMyDemosHidesOtherAuthors"
+        }
+      },
+      {
+        "case": "已擦除的作品不出现",
+        "test": {
+          "file": "backend/internal/httpapi/my_demos_integration_test.go",
+          "name": "TestIntegrationMyDemosHidesErased"
+        }
+      }
     ]
   },
   "outsideContract": {

@@ -25,18 +25,8 @@ func (h *Handler) ListDemos(w http.ResponseWriter, r *http.Request, params api.L
 		return
 	}
 
-	page := 1
-	pageSize := defaultPageSize
-	if params.Page != nil {
-		page = *params.Page
-	}
-	if params.PageSize != nil {
-		pageSize = *params.PageSize
-	}
-	// 契约里 pageSize 有 maximum: 200，超上限应当是 400 而不是静默截断——
-	// 静默截断会让调用方以为拿到了全部。
-	if pageSize < 1 || pageSize > maxPageSize || page < 1 {
-		writeError(w, http.StatusBadRequest, api.InvalidParam, "分页参数超出允许范围")
+	page, pageSize, ok := paginate(w, params.Page, params.PageSize)
+	if !ok {
 		return
 	}
 	// 关键词：空与全空格等同没传（用户清空搜索框时不该得到 400）；

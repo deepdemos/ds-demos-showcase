@@ -7,9 +7,9 @@
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
- * 作品榜与相关推荐，
+ * 作品榜与相关推荐、我的作品，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 39 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 40 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -42,11 +42,13 @@ import type {
   Error,
   ListDemosParams,
   ListModelsParams,
+  ListMyDemosParams,
   ListRankingsParams,
   ListRecommendationsParams,
   ListRelatedDemosParams,
   ModelList,
   ModelProfile,
+  MyDemoList,
   RankingList,
   RecommendationList,
   RelatedList,
@@ -1581,6 +1583,86 @@ export const restoreDemoRevision = async (slug: string,
 
   const data: restoreDemoRevisionResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as restoreDemoRevisionResponse
+}
+
+
+export type listMyDemosResponse200 = {
+  data: MyDemoList
+  status: 200
+}
+
+export type listMyDemosResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listMyDemosResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listMyDemosResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listMyDemosResponseSuccess = (listMyDemosResponse200) & {
+  headers: Headers;
+};
+export type listMyDemosResponseError = (listMyDemosResponse400 | listMyDemosResponse401 | listMyDemosResponse503) & {
+  headers: Headers;
+};
+
+export type listMyDemosResponse = (listMyDemosResponseSuccess | listMyDemosResponseError)
+
+export const getListMyDemosUrl = (params?: ListMyDemosParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/me/demos?${stringifiedParams}` : `/api/v1/me/demos`
+}
+
+/**
+ * 当前登录用户自己的全部作品，按最近改动排序。
+ *
+ * 与 `GET /api/v1/demos` 的差别只有**可见性口径**：公开列表只含已上架作品，
+ * 这里返回作者视角的全部——草稿、待审、已驳回、已发布、已归档、已移除（软删）。
+ * 作者必须能看见「我投的那份稿子去哪了」，这是投稿后不失联的前提。
+ *
+ * **擦除（erased）的作品不在其中**：擦除对外一律不存在，对作者也不留入口。
+ *
+ * `moderationState` 给作者真实值（与 `GET /api/v1/demos/{slug}` 的作者视图一致），
+ * 不与 `lifecycleState` 合并：审核态说的是内容过没过，生命周期说的是对外哪种档位。
+ *
+ * `deletedAt` 非空表示 **作者自己删掉的**（软删）——它与 `lifecycleState` 正交，
+ * 所以不能靠生命周期列判断「能不能恢复」。`purgeAfter` 是那一行内容被真正清掉的
+ * 时刻，取自 `gc_queue`：恢复窗口在删除那一刻定型，这里只读它，不按当前配置现算。
+ * @summary 我的作品
+ */
+export const listMyDemos = async (params?: ListMyDemosParams, options?: RequestInit): Promise<listMyDemosResponse> => {
+
+  const res = await fetch(getListMyDemosUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listMyDemosResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listMyDemosResponse
 }
 
 
