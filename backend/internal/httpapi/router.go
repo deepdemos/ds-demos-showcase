@@ -28,10 +28,11 @@ func NewRouter(si api.ServerInterface, preview *Preview, download *Download) htt
 
 	// 预览托管不是契约端点（见 httpapi/preview.go 顶部注释），直接挂在 chi 上。
 	// 契约路径都在 /api/v1 与 /healthz 下，与 /preview 不冲突。
-	router.Method("GET", "/preview/{slug}/*", previewOrNotFound(preview))
-	router.Method("HEAD", "/preview/{slug}/*", previewOrNotFound(preview))
-	router.Method("GET", "/preview/{slug}", previewOrNotFound(preview))
-	router.Method("HEAD", "/preview/{slug}", previewOrNotFound(preview))
+	// 用 Handle 而不是逐方法注册：`ServeHTTP` 自己判方法并回 405 兜底页
+	// （405 的正文同样是渲染在 iframe 里的页面，不该是 `http.Error` 的一行纯文本）。
+	// 逐方法注册的话 chi 会先一步拦下 POST/PUT，那个分支就永远走不到。
+	router.Handle("/preview/{slug}/*", previewOrNotFound(preview))
+	router.Handle("/preview/{slug}", previewOrNotFound(preview))
 
 	// 下载同样不是契约端点（响应体是 zip / html 字节，不是 JSON），理由见 download.go 顶部。
 	// 两个处理器各占一个路径段，不冲突。

@@ -139,3 +139,29 @@ VALUES ($1, 'deep', 'listed', now())`, demoID); err != nil {
 		t.Fatalf("正文里没有 500 的说明：%s", rec.Body.String())
 	}
 }
+
+// 405 也是给人看的：这一条以前回的是 `http.Error` 的一行纯文本，与另外三条
+// 失败页并排时像坏掉了。状态码与 `Allow` 头都不能丢——405 的语义一半在头上。
+func TestPreviewErrorMethodNotAllowedIsHTML(t *testing.T) {
+	p := newPreview(t, integrationPool(t), t.TempDir())
+	req := httptest.NewRequest(http.MethodPost, "/preview/does-not-exist-xyz/", nil)
+	rec := httptest.NewRecorder()
+	NewRouter(&stub{}, p, nil).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST 预览 = %d，想要 405", rec.Code)
+	}
+	if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
+		t.Fatalf("Allow = %q，想要 GET, HEAD", got)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Fatalf("Content-Type = %q，想要 text/html", ct)
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "sandbox") {
+		t.Fatalf("CSP = %q，想要带 sandbox", csp)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "这个作品现在打不开") {
+		t.Fatalf("正文没有兜底页标题：%q", body)
+	}
+}
