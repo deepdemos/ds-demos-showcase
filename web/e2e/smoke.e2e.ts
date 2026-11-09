@@ -60,8 +60,12 @@ test('未登录访问投稿页会被送回登录页', async ({ app, screen }) =>
 /**
  * 这一条钉的是 PR #218 那类缺陷：vite 只代理了 `/api` 没代理 `/preview`，
  * 于是预览请求落回 SPA 的 index.html（200 + text/html）——页面看不出来，
- * iframe 里却是前端自己的壳。Go 的静态响应一定带 `X-Content-Type-Options: nosniff`，
- * 用它分辨请求到底被谁接住了。
+ * iframe 里却是前端自己的壳。
+ *
+ * 判据用两个只有 Go 的预览会带的东西：`X-Content-Type-Options: nosniff` 与
+ * `Content-Security-Policy: sandbox …`。**不能再用「不是 text/html」**：
+ * 预览的失败分支从 2026-11-09 起返回的是自己的中文 HTML 页（PR #359），
+ * 那是后端答的，不是 SPA 兜的。
  */
 test('dev 代理把 /preview 交给后端，而不是落回前端 SPA', async ({ app, browser }) => {
   await app.open('/');
@@ -72,11 +76,17 @@ test('dev 代理把 /preview 交给后端，而不是落回前端 SPA', async ({
       status: res.status,
       contentType: res.headers.get('content-type') ?? '',
       nosniff: res.headers.get('x-content-type-options') ?? '',
+      csp: res.headers.get('content-security-policy') ?? '',
+      body: (await res.text()).slice(0, 2000),
     };
   });
 
   expect(response.nosniff).toBe('nosniff');
-  expect(response.contentType).not.toContain('text/html');
+  // 只有后端会带 sandbox 这条 CSP；SPA 的 index.html 不带。
+  expect(response.csp).toContain('sandbox');
+  // 后端答的是自己那张失败页，不是前端壳（SPA 的 index.html 里有 id="root"）。
+  expect(response.body).toContain('这个作品现在打不开');
+  expect(response.body).not.toContain('id="root"');
   expect(response.status).toBe(404);
 });
 
