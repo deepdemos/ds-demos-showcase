@@ -91,7 +91,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p.queries == nil || p.files == nil {
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 
@@ -108,7 +108,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			slog.Error("preview: 查作品失败", "slug", slug, "err", err)
 		}
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 
@@ -119,20 +119,20 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// （数据生命周期 §6 的文件轴）。只判 demos 的话，擦掉一版之后磁盘上的
 	// `demos/{slug}/r{n}/` 还在（没有 purge 代码），预览照常 200。
 	if row.ErasedAt.Valid || row.DeletedAt.Valid {
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 	// 版本级的擦除：当前版本与对外版本各自的行状态都能从作品行上读出来，
 	// 所以这两种都要拦；更早的历史版本查不到行状态，磁盘上的 r{n} 目录仍在。
 	if rev > 0 && int32(rev) == row.CurrentRevNo {
 		if row.RevisionErasedAt.Valid || row.RevisionDeletedAt.Valid {
-			http.NotFound(w, r)
+			previewError(w, r, http.StatusNotFound, previewMissingDetail)
 			return
 		}
 	}
 	if rev > 0 && int32(rev) == row.PublishedRevNo {
 		if row.PublishedErasedAt.Valid || row.PublishedDeletedAt.Valid {
-			http.NotFound(w, r)
+			previewError(w, r, http.StatusNotFound, previewMissingDetail)
 			return
 		}
 	}
@@ -159,7 +159,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !published && !p.mayPreviewDraft(ctx, r, row.AuthorSub) {
 		// 作者视图不受渠道影响：作者要能在发布到 hidden 之后仍然检查自己的作品，
 		// 审核员同理（他们看的是「还没对外」的东西，本来就该绕过渠道判定）。
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 
@@ -179,7 +179,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if rev <= 0 {
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 	// 明确指定版本号时，非作者**只能看对外版本**。
@@ -189,7 +189,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 而路径里的版本号是调用方自己填的。作者的「预览新版」按钮走的正是显式版本，
 	// 所以不能一刀切禁掉，只能对非作者收紧。
 	if rev > 0 && !privilegedView && int32(rev) != row.PublishedRevNo {
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 	if rel == "" {
@@ -214,7 +214,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if entry == "" {
 			// 这一版没记入口：数据坏了（写入侧一定写），不要用默认值掩盖它。
 			slog.Error("preview: 版本没有记录入口文件", "slug", slug, "rev", rev)
-			http.Error(w, "这一版缺少入口文件", http.StatusInternalServerError)
+			previewError(w, r, http.StatusInternalServerError, previewMissingEntryDetail)
 			return
 		}
 		target := fmt.Sprintf("/preview/%s/v%d/%s", url.PathEscape(slug), rev, entry)
@@ -227,7 +227,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	key, err := p.resolveKey(ctx, slug, rev, rel)
 	if err != nil {
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 	f, err := p.files.Get(ctx, key)
@@ -235,7 +235,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !errors.Is(err, storage.ErrNotFound) && !errors.Is(err, storage.ErrUnsafeKey) {
 			slog.Error("preview: 读文件失败", "key", key, "err", err)
 		}
-		http.NotFound(w, r)
+		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
 	defer f.Close()
@@ -253,7 +253,7 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(f, previewMaxHTMLBytes+1))
 		if err != nil {
 			slog.Error("preview: 读 HTML 失败", "key", key, "err", err)
-			http.Error(w, "读取失败", http.StatusBadGateway)
+			previewError(w, r, http.StatusBadGateway, previewReadFailedDetail)
 			return
 		}
 		// 超过上限：不注入 <base>，但**必须把剩下的字节原样送出去**。
