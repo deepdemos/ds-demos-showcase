@@ -1492,6 +1492,11 @@
       "latest",
       "random"
     ],
+    "ListMyDemosParamsModeration": [
+      "approved",
+      "pending",
+      "rejected"
+    ],
     "ListModelsParamsStatus": [
       "active",
       "candidate",

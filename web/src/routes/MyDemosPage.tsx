@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, Navigate, useSearchParams } from 'react-router';
-import { EmptyState, ErrorState, Pagination, Skeleton } from '@/components/ui';
-import { listMyDemos, type MyDemoList, type MyDemoSummary } from '@/api';
+import { EmptyState, ErrorState, Pagination, Select, Skeleton } from '@/components/ui';
+import { listMyDemos, type ListMyDemosParams, type MyDemoList, type MyDemoSummary } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
 /**
@@ -29,8 +29,48 @@ function readPage(raw: string | null): number {
   return Number.isInteger(n) && n >= 1 ? n : 1;
 }
 
-async function fetchMyDemos(page: number): Promise<MyDemoList> {
-  const response = await listMyDemos({ page, pageSize: PAGE_SIZE });
+/**
+ * 状态筛选取值 → 请求参数。
+ *
+ * 接口给的是三个**正交**维度（生命周期 / 审核态 / 是否软删），而界面上一句
+ * 「待审核」其实是三者的一个组合。把组合留在前端：接口不替界面决定「状态桶」，
+ * 否则每加一个界面口径就要改一次契约。
+ */
+const FILTERS = {
+  all: {},
+  pending: { lifecycle: 'draft', moderation: 'pending' },
+  rejected: { lifecycle: 'draft', moderation: 'rejected' },
+  ready: { lifecycle: 'draft', moderation: 'approved' },
+  published: { lifecycle: 'published', moderation: 'approved' },
+  reviewing: { lifecycle: 'published', moderation: 'pending' },
+  archived: { lifecycle: 'archived' },
+  deleted: { deleted: true },
+} as const;
+
+type FilterKey = keyof typeof FILTERS;
+
+const FILTER_OPTIONS = [
+  { value: 'all', label: '全部状态' },
+  { value: 'pending', label: '待审核' },
+  { value: 'rejected', label: '被驳回' },
+  { value: 'ready', label: '已通过 · 待发布' },
+  { value: 'published', label: '已上线' },
+  { value: 'reviewing', label: '已上线 · 新版待审' },
+  { value: 'archived', label: '已下架' },
+  { value: 'deleted', label: '已删除' },
+] as const;
+
+/** 非法值回落「全部」：URL 是用户能改的，不能假设它干净。 */
+function readFilter(raw: string | null): FilterKey {
+  return raw && raw in FILTERS ? (raw as FilterKey) : 'all';
+}
+
+async function fetchMyDemos(page: number, filter: FilterKey): Promise<MyDemoList> {
+  const response = await listMyDemos({
+    page,
+    pageSize: PAGE_SIZE,
+    ...(FILTERS[filter] as Partial<ListMyDemosParams>),
+  });
   if (response.status === 200) return response.data;
   throw new Error(`我的作品加载失败（HTTP ${response.status}）`);
 }
@@ -123,10 +163,11 @@ export function MyDemosPage() {
   const { me, isLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = readPage(searchParams.get('page'));
+  const filter = readFilter(searchParams.get('state'));
 
   const query = useQuery({
-    queryKey: ['my-demos', page],
-    queryFn: () => fetchMyDemos(page),
+    queryKey: ['my-demos', page, filter],
+    queryFn: () => fetchMyDemos(page, filter),
     // 未登录不发请求：否则每次进页面都白打一次 401。
     enabled: Boolean(me),
     staleTime: 30 * 1000,
@@ -155,6 +196,25 @@ export function MyDemosPage() {
         </Link>
       </div>
 
+      <div className="flex items-center gap-2">
+        <label htmlFor="my-demos-state" className="text-sm text-gray-600 dark:text-gray-300">
+          状态
+        </label>
+        <Select
+          id="my-demos-state"
+          value={filter}
+          options={FILTER_OPTIONS.map((o) => ({ ...o }))}
+          onChange={(next) => {
+            const params = new URLSearchParams(searchParams);
+            // 换筛选必须回第 1 页：停在第 3 页会看到空白，而作品其实有。
+            params.delete('page');
+            if (next === 'all') params.delete('state');
+            else params.set('state', next);
+            setSearchParams(params, { replace: true });
+          }}
+        />
+      </div>
+
       {query.isPending ? <Skeleton lines={5} /> : null}
 
       {query.isError ? (
@@ -166,7 +226,11 @@ export function MyDemosPage() {
         />
       ) : null}
 
-      {data && data.items.length === 0 ? (
+      {data && data.items.length === 0 && filter !== 'all' ? (
+        <EmptyState title="这个状态下没有作品" description="换个状态看看，或者清掉筛选。" />
+      ) : null}
+
+      {data && data.items.length === 0 && filter === 'all' ? (
         <EmptyState
           title="还没有投稿过作品"
           description="投一件试试：支持 zip 包（根目录要有 index.html）或单个 HTML / SVG 文件。"

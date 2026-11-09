@@ -71,6 +71,7 @@ export * from './listDemosSort';
 export * from './listModelCatalogParams';
 export * from './listModelsParams';
 export * from './listModelsStatus';
+export * from './listMyDemosModeration';
 export * from './listMyDemosParams';
 export * from './listRankingsBoard';
 export * from './listRankingsParams';
