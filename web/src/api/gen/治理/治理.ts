@@ -7,9 +7,9 @@
  * 当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
- * 作品榜与相关推荐、我的作品，
+ * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 40 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 42 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,6 +30,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  DemoChannelRequest,
+  DemoChannelResult,
   Error,
   ListDemoReviewQueueParams,
   ListModelCatalogParams,
@@ -48,6 +50,195 @@ import type {
   ReviewQueue,
   ReviewResult
 } from '../model';
+
+
+export type addDemoChannelResponse200 = {
+  data: DemoChannelResult
+  status: 200
+}
+
+export type addDemoChannelResponse201 = {
+  data: DemoChannelResult
+  status: 201
+}
+
+export type addDemoChannelResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type addDemoChannelResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type addDemoChannelResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type addDemoChannelResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type addDemoChannelResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type addDemoChannelResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type addDemoChannelResponseSuccess = (addDemoChannelResponse200 | addDemoChannelResponse201) & {
+  headers: Headers;
+};
+export type addDemoChannelResponseError = (addDemoChannelResponse400 | addDemoChannelResponse401 | addDemoChannelResponse403 | addDemoChannelResponse404 | addDemoChannelResponse409 | addDemoChannelResponse503) & {
+  headers: Headers;
+};
+
+export type addDemoChannelResponse = (addDemoChannelResponseSuccess | addDemoChannelResponseError)
+
+export const getAddDemoChannelUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/admin/demos/${slug}/channels`
+}
+
+/**
+ * 给**已经对外**的作品追加一个渠道，或改某个渠道的可见性。
+ *
+ * 与 `publishDemo` 的分工：那个做的是状态跃迁（`draft`/`archived` → `published`），
+ * 只在第一次对外时成立；这个只做「再挂一处」。松点 26 记的就是以前做不到的情况：
+ * 作品一旦变成 `published`，第二个渠道永远发不出去。
+ *
+ * 要求：
+ * - 作品必须已有对外版本（`published_revision_id` 非空），否则 409——先从 `publishDemo` 发布；
+ * - 内容必须 `approved`，否则 409；
+ * - 渠道必须在 `channels` 里且 `status='active'`，否则 400；
+ * - `astra` 只收 `lang='en'`，与 `publishDemo` 同一张表判定。
+ *
+ * 同渠道重复调用不会新增行，而是改可见性（返回 200 且 `created=false`）；
+ * 新建渠道返回 201 且 `created=true`。
+ * @summary 上架到一个渠道
+ */
+export const addDemoChannel = async (slug: string,
+    demoChannelRequest: DemoChannelRequest, options?: RequestInit): Promise<addDemoChannelResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getAddDemoChannelUrl(slug),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(demoChannelRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: addDemoChannelResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as addDemoChannelResponse
+}
+
+
+export type removeDemoChannelResponse204 = {
+  data: void
+  status: 204
+}
+
+export type removeDemoChannelResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type removeDemoChannelResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type removeDemoChannelResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type removeDemoChannelResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type removeDemoChannelResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type removeDemoChannelResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type removeDemoChannelResponseSuccess = (removeDemoChannelResponse204) & {
+  headers: Headers;
+};
+export type removeDemoChannelResponseError = (removeDemoChannelResponse400 | removeDemoChannelResponse401 | removeDemoChannelResponse403 | removeDemoChannelResponse404 | removeDemoChannelResponse409 | removeDemoChannelResponse503) & {
+  headers: Headers;
+};
+
+export type removeDemoChannelResponse = (removeDemoChannelResponseSuccess | removeDemoChannelResponseError)
+
+export const getRemoveDemoChannelUrl = (slug: string,
+    channel: string,) => {
+
+
+
+
+  return `/api/v1/admin/demos/${slug}/channels/${channel}`
+}
+
+/**
+ * 删掉这个作品在该渠道的行。**作品可以仍有别的渠道**——那正是多渠道的意义。
+ *
+ * 最后一个渠道不能这样撤：仍是 `published` 却没有渠道行，会得到
+ * 「状态说对外、列表里查不到」的作品。想彻底撤下请用下架（`archiveDemo`），
+ * 那条路径有墓碑与恢复。所以这种情况返回 409。
+ * @summary 从一个渠道撤下
+ */
+export const removeDemoChannel = async (slug: string,
+    channel: string, options?: RequestInit): Promise<removeDemoChannelResponse> => {
+
+  const res = await fetch(getRemoveDemoChannelUrl(slug,channel),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: removeDemoChannelResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as removeDemoChannelResponse
+}
 
 
 export type syncModelCatalogResponse200 = {

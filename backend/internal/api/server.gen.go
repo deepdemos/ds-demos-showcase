@@ -14,6 +14,12 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// 上架到一个渠道
+	// (POST /api/v1/admin/demos/{slug}/channels)
+	AddDemoChannel(w http.ResponseWriter, r *http.Request, slug string)
+	// 从一个渠道撤下
+	// (DELETE /api/v1/admin/demos/{slug}/channels/{channel})
+	RemoveDemoChannel(w http.ResponseWriter, r *http.Request, slug string, channel string)
 	// 发布作品
 	// (POST /api/v1/admin/demos/{slug}/publish)
 	PublishDemo(w http.ResponseWriter, r *http.Request, slug string)
@@ -139,6 +145,18 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// 上架到一个渠道
+// (POST /api/v1/admin/demos/{slug}/channels)
+func (_ Unimplemented) AddDemoChannel(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 从一个渠道撤下
+// (DELETE /api/v1/admin/demos/{slug}/channels/{channel})
+func (_ Unimplemented) RemoveDemoChannel(w http.ResponseWriter, r *http.Request, slug string, channel string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // 发布作品
 // (POST /api/v1/admin/demos/{slug}/publish)
@@ -388,6 +406,77 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// AddDemoChannel operation middleware
+func (siw *ServerInterfaceWrapper) AddDemoChannel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddDemoChannel(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveDemoChannel operation middleware
+func (siw *ServerInterfaceWrapper) RemoveDemoChannel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "channel" -------------
+	var channel string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "channel", chi.URLParam(r, "channel"), &channel, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "channel", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveDemoChannel(w, r, slug, channel)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // PublishDemo operation middleware
 func (siw *ServerInterfaceWrapper) PublishDemo(w http.ResponseWriter, r *http.Request) {
@@ -1597,6 +1686,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/demos/{slug}/channels", wrapper.AddDemoChannel)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/admin/demos/{slug}/channels/{channel}", wrapper.RemoveDemoChannel)
+	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/demos/{slug}/publish", wrapper.PublishDemo)
 	})

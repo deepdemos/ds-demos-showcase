@@ -60,6 +60,42 @@
         "optional": false
       }
     },
+    "DemoChannelRequest": {
+      "channel": {
+        "type": "string",
+        "optional": false
+      },
+      "lang": {
+        "type": "DemoChannelRequestLang",
+        "optional": true
+      },
+      "visibility": {
+        "type": "DemoChannelRequestVisibility",
+        "optional": false
+      }
+    },
+    "DemoChannelResult": {
+      "channel": {
+        "type": "string",
+        "optional": false
+      },
+      "created": {
+        "type": "bool",
+        "optional": false
+      },
+      "lang": {
+        "type": "DemoChannelResultLang",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "visibility": {
+        "type": "DemoChannelResultVisibility",
+        "optional": false
+      }
+    },
     "DemoDeleteRequest": {
       "reason": {
         "type": "string",
@@ -1318,6 +1354,24 @@
       "subject",
       "technique"
     ],
+    "DemoChannelRequestLang": [
+      "en",
+      "zh"
+    ],
+    "DemoChannelRequestVisibility": [
+      "hidden",
+      "listed",
+      "unlisted"
+    ],
+    "DemoChannelResultLang": [
+      "en",
+      "zh"
+    ],
+    "DemoChannelResultVisibility": [
+      "hidden",
+      "listed",
+      "unlisted"
+    ],
     "DemoDetailMatchedIn": [
       "description",
       "title"
@@ -1459,6 +1513,16 @@
     ]
   },
   "endpoints": {
+    "POST /api/v1/admin/demos/{slug}/channels": {
+      "method": "AddDemoChannel",
+      "pathParams": 1,
+      "params": null
+    },
+    "DELETE /api/v1/admin/demos/{slug}/channels/{channel}": {
+      "method": "RemoveDemoChannel",
+      "pathParams": 2,
+      "params": null
+    },
     "POST /api/v1/admin/demos/{slug}/publish": {
       "method": "PublishDemo",
       "pathParams": 1,

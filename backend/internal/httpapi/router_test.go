@@ -54,6 +54,14 @@ func (s *stub) DeleteDemoRating(_ http.ResponseWriter, _ *http.Request, slug str
 	s.hits = append(s.hits, "unrate:"+slug)
 }
 
+func (s *stub) AddDemoChannel(_ http.ResponseWriter, _ *http.Request, _ string) {
+	s.hits = append(s.hits, "addchannel")
+}
+
+func (s *stub) RemoveDemoChannel(_ http.ResponseWriter, _ *http.Request, _ string, _ string) {
+	s.hits = append(s.hits, "removechannel")
+}
+
 func (s *stub) ListClassifications(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "classifications")
 }

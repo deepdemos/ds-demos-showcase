@@ -773,6 +773,24 @@
           "name": "TestIntegrationMyDemosHidesErased"
         }
       }
+    ],
+    "POST /api/v1/admin/demos/{slug}/channels": [
+      {
+        "case": "作品还没对外过就追加渠道 409",
+        "test": {
+          "file": "backend/internal/httpapi/channels_integration_test.go",
+          "name": "TestIntegrationAddChannelRequiresPublished"
+        }
+      }
+    ],
+    "DELETE /api/v1/admin/demos/{slug}/channels/{channel}": [
+      {
+        "case": "撤最后一个渠道 409（published 却没有出口）",
+        "test": {
+          "file": "backend/internal/httpapi/channels_integration_test.go",
+          "name": "TestIntegrationRemoveChannel"
+        }
+      }
     ]
   },
   "outsideContract": {

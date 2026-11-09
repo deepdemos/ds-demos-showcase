@@ -9,9 +9,9 @@ info:
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
-    作品榜与相关推荐、我的作品，
+    作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 40 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 42 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1861,6 +1861,151 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/demos/{slug}/channels:
+    post:
+      operationId: addDemoChannel
+      tags: [治理]
+      summary: 上架到一个渠道
+      description: |
+        给**已经对外**的作品追加一个渠道，或改某个渠道的可见性。
+
+        与 `publishDemo` 的分工：那个做的是状态跃迁（`draft`/`archived` → `published`），
+        只在第一次对外时成立；这个只做「再挂一处」。松点 26 记的就是以前做不到的情况：
+        作品一旦变成 `published`，第二个渠道永远发不出去。
+
+        要求：
+        - 作品必须已有对外版本（`published_revision_id` 非空），否则 409——先从 `publishDemo` 发布；
+        - 内容必须 `approved`，否则 409；
+        - 渠道必须在 `channels` 里且 `status='active'`，否则 400；
+        - `astra` 只收 `lang='en'`，与 `publishDemo` 同一张表判定。
+
+        同渠道重复调用不会新增行，而是改可见性（返回 200 且 `created=false`）；
+        新建渠道返回 201 且 `created=true`。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoChannelRequest'
+      responses:
+        '201':
+          description: 新建了渠道行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoChannelResult'
+        '200':
+          description: 已有该渠道，可见性 / 语言被更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoChannelResult'
+        '400':
+          description: 渠道为空 / 可见性不在枚举内 / lang 不在枚举内 / 渠道未登记或已停用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有发布权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在（含软删、擦除）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 作品还没对外过 / 内容没通过审核
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/demos/{slug}/channels/{channel}:
+    delete:
+      operationId: removeDemoChannel
+      tags: [治理]
+      summary: 从一个渠道撤下
+      description: |
+        删掉这个作品在该渠道的行。**作品可以仍有别的渠道**——那正是多渠道的意义。
+
+        最后一个渠道不能这样撤：仍是 `published` 却没有渠道行，会得到
+        「状态说对外、列表里查不到」的作品。想彻底撤下请用下架（`archiveDemo`），
+        那条路径有墓碑与恢复。所以这种情况返回 409。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - name: channel
+          in: path
+          required: true
+          schema: { type: string, maxLength: 32 }
+      responses:
+        '204':
+          description: 已撤下
+        '400':
+          description: 渠道为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有发布权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或这个作品没有这个渠道
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 这是最后一个渠道
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/models/sync:
     post:
       operationId: syncModelCatalog
@@ -3611,6 +3756,48 @@ components:
         total:
           type: integer
           minimum: 0
+
+    DemoChannelRequest:
+      type: object
+      additionalProperties: false
+      required: [channel, visibility]
+      properties:
+        channel:
+          type: string
+          maxLength: 32
+          description: 渠道 code，必须在 `channels` 里且启用
+        visibility:
+          type: string
+          enum: [listed, unlisted, hidden]
+          description: |
+            `listed` 上列表、`unlisted` 可直链不上列表、`hidden` 不对读者可见。
+            只有 `listed` / `unlisted` 算「对外可见」。
+        lang:
+          type: string
+          enum: [zh, en]
+          default: zh
+          description: 这个渠道上的语言。`astra` 只收 `en`。
+
+    DemoChannelResult:
+      type: object
+      additionalProperties: false
+      required: [slug, channel, visibility, lang, created]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        channel:
+          type: string
+          maxLength: 32
+        visibility:
+          type: string
+          enum: [listed, unlisted, hidden]
+        lang:
+          type: string
+          enum: [zh, en]
+        created:
+          type: boolean
+          description: 这次调用是否新建了渠道行（false = 更新了已有渠道的可见性）
 
     LifecycleState:
       type: string
