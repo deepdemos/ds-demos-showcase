@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   deleteDemoRating,
   getDemo,
@@ -9,7 +9,13 @@ import {
   listRelatedDemos,
   putDemoRating,
 } from '@/api';
-import { DemoDetailPage, DemoDownload, DemoPreview, tombstoneText } from './DemoDetailPage';
+import {
+  DemoDetailPage,
+  DemoDownload,
+  DemoPreview,
+  hasInAppHistory,
+  tombstoneText,
+} from './DemoDetailPage';
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
@@ -445,4 +451,38 @@ test('没有相关作品时不渲染那个区块', async () => {
   await waitFor(() => expect(vi.mocked(listRelatedDemos)).toHaveBeenCalled());
   // 空区块比「暂无相关作品」更便宜：读者不该为一个空框付出注意力。
   expect(screen.queryByText('相关作品')).toBeNull();
+});
+
+describe('返回上一页', () => {
+  // 事故现场：从排行榜点进详情，点「← 返回作品库」被送去作品库，来路丢了。
+  test('只有站内有上一层时才退，站外与直达都算没有', () => {
+    expect(hasInAppHistory({ idx: 2 })).toBe(true);
+    expect(hasInAppHistory({ idx: 0 })).toBe(false);
+    expect(hasInAppHistory({})).toBe(false);
+    expect(hasInAppHistory(null)).toBe(false);
+    expect(hasInAppHistory(undefined)).toBe(false);
+  });
+
+  test('直达详情页（无站内历史）时兜底回作品库', async () => {
+    vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+    vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+    // jsdom 里 history.state 默认为 null，等价于从地址栏打开这一页。
+    window.history.replaceState(null, '');
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/demos/demo-a']}>
+          <Routes>
+            <Route path="/demos/:slug" element={<DemoDetailPage />} />
+            <Route path="/demos" element={<div>作品库列表</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /返回上一页/ }));
+
+    expect(await screen.findByText('作品库列表')).toBeTruthy();
+  });
 });

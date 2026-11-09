@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { Button, EmptyState, ErrorState, Rating, Skeleton } from '@/components/ui';
 import {
   archiveDemo,
@@ -66,8 +66,34 @@ export function isTombstone(demo: Pick<DemoDetail, 'lifecycleState'>): boolean {
   return demo.lifecycleState === 'archived' || demo.lifecycleState === 'removed';
 }
 
+/**
+ * 站内还有上一层可以退吗。
+ *
+ * React Router 把「这是本次会话第几步」记在 history.state.idx 里：从别处点进来
+ * 是 1、2、3…，直接在地址栏打开或从外链进来是 0。用它判断，比查 history.length
+ * 可靠——后者把站外的历史也算进去了，退一次可能把人送出站。
+ */
+export function hasInAppHistory(state: unknown): boolean {
+  const idx = (state as { idx?: number } | null)?.idx ?? 0;
+  return idx > 0;
+}
+
 export function DemoDetailPage() {
   const { slug = '' } = useParams();
+  const navigate = useNavigate();
+
+  // 「返回」退的是来路，不是写死的作品库。
+  //
+  // 从排行榜 / 模型页 / 搜索页点进来的读者，本来想回的是那一页；把所有人送回
+  // 作品库，等于每点一次详情就丢一次上下文。没有站内上一层时兜底回作品库——
+  // 那种情况下 navigate(-1) 会把人送出站。
+  const goBack = () => {
+    if (hasInAppHistory(window.history.state)) {
+      navigate(-1);
+      return;
+    }
+    navigate('/demos');
+  };
 
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['demo', slug],
@@ -92,9 +118,9 @@ export function DemoDetailPage() {
   return (
     <section className="mx-auto w-full max-w-3xl px-4 py-8">
       <p className="mb-4">
-        <Link to="/demos" className="text-sm text-gray-500 hover:underline dark:text-gray-400">
-          ← 返回作品库
-        </Link>
+        <Button type="button" inline onClick={goBack}>
+          ← 返回上一页
+        </Button>
       </p>
 
       {isPending && <Skeleton lines={4} lineHeight="h-8" />}
