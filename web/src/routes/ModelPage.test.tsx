@@ -97,6 +97,37 @@ describe('模型页', () => {
     expect(screen.getByRole('link', { name: '钢琴卷帘' })).toHaveAttribute('href', '/demos/demo-a');
   });
 
+  it('页面顶部给出回作品库的出口', async () => {
+    getModel.mockResolvedValue({ status: 200, data: profile() });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('DeepSeek Chat')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: '← 返回作品库' })).toHaveAttribute('href', '/demos');
+  });
+
+  it('作品数链到作品库的模型筛选，而不是一个死数字', async () => {
+    getModel.mockResolvedValue({ status: 200, data: profile() });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('DeepSeek Chat')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: '2 件' })).toHaveAttribute(
+      'href',
+      '/demos?model=deepseek-chat',
+    );
+  });
+
+  it('没有公开作品时作品数保持纯文本，不给空列表入口', async () => {
+    getModel.mockResolvedValue({
+      status: 200,
+      data: profile({ site: { demoCount: 0, votes: 0, scored: false, score: 0, priorWeight: 1 } }),
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('0 件')).toBeInTheDocument());
+    // 关键断言：0 件时不能变成链接——点进去只会看到「没有匹配的作品」。
+    expect(screen.queryByRole('link', { name: '0 件' })).not.toBeInTheDocument();
+  });
+
   it('没有票时说「还没有人评分」，不显示 0 分', async () => {
     getModel.mockResolvedValue({
       status: 200,
