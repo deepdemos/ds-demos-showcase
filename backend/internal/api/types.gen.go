@@ -128,6 +128,13 @@ const (
 	ModelStatusUnverified ModelStatus = "unverified"
 )
 
+// Defines values for MyDemoSummaryModerationState.
+const (
+	MyDemoSummaryModerationStateApproved MyDemoSummaryModerationState = "approved"
+	MyDemoSummaryModerationStatePending  MyDemoSummaryModerationState = "pending"
+	MyDemoSummaryModerationStateRejected MyDemoSummaryModerationState = "rejected"
+)
+
 // Defines values for PublishRequestLang.
 const (
 	En PublishRequestLang = "en"
@@ -143,7 +150,7 @@ const (
 
 // Defines values for PublishResultLifecycleState.
 const (
-	PublishResultLifecycleStatePublished PublishResultLifecycleState = "published"
+	Published PublishResultLifecycleState = "published"
 )
 
 // Defines values for PublishResultVisibility.
@@ -1077,6 +1084,47 @@ type ModelSyncStatus struct {
 	Status string `json:"status"`
 }
 
+// MyDemoList defines model for MyDemoList.
+type MyDemoList struct {
+	Items    []MyDemoSummary `json:"items"`
+	Page     int             `json:"page"`
+	PageSize int             `json:"pageSize"`
+	Total    int             `json:"total"`
+}
+
+// MyDemoSummary 作者视角的一条作品。刻意不带简介 / 分类 / 浏览数：列表只需要回答
+// 「哪一件、什么状态、什么时候动过」，多取要 join 三张表，收益不大。
+type MyDemoSummary struct {
+	CoverUrl  *string   `json:"coverUrl"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// DeletedAt 作者软删的时刻（`null` = 没删）。它与 `lifecycleState` 正交，
+	// 所以判断「这条现在点不进去、但还能恢复」要看这一列而不是生命周期列。
+	DeletedAt *time.Time `json:"deletedAt"`
+
+	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
+	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
+	// `archived` / `removed` 可见但为墓碑态。
+	LifecycleState LifecycleState `json:"lifecycleState"`
+
+	// ModerationState 当前版本的审核态，作者视角给真实值。
+	// 与 `lifecycleState` 正交：`published` + `pending` = 复审中的已上线作品。
+	ModerationState MyDemoSummaryModerationState `json:"moderationState"`
+
+	// PurgeAfter 这一行的内容被真正清掉的时刻（来自 `gc_queue`，删除那一刻定型）。
+	// `deletedAt` 为空时它一定为空；有它才说明恢复有期限。
+	PurgeAfter *time.Time `json:"purgeAfter"`
+	Slug       string     `json:"slug"`
+	Title      *string    `json:"title"`
+
+	// UpdatedAt 最近一次改动时间；列表按它倒序排
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// MyDemoSummaryModerationState 当前版本的审核态，作者视角给真实值。
+// 与 `lifecycleState` 正交：`published` + `pending` = 复审中的已上线作品。
+type MyDemoSummaryModerationState string
+
 // PasswordResetCodeRequest defines model for PasswordResetCodeRequest.
 type PasswordResetCodeRequest struct {
 	Email openapi_types.Email `json:"email"`
@@ -1452,6 +1500,15 @@ type UpdateDemoMultipartBody struct {
 type ListRelatedDemosParams struct {
 	// Limit 返回几件，默认 6，上限 12。多给几件没有意义——详情页放不下。
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListMyDemosParams defines parameters for ListMyDemos.
+type ListMyDemosParams struct {
+	// Page 页码，从 1 开始
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// PageSize 每页条数，默认 50，上限 200（与 `listDemos` 同口径）；超过上限返回 400，不静默截断
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 }
 
 // ListModelsParams defines parameters for ListModels.

@@ -938,6 +938,62 @@
         "optional": false
       }
     },
+    "MyDemoList": {
+      "items": {
+        "type": "[]MyDemoSummary",
+        "optional": false
+      },
+      "page": {
+        "type": "int",
+        "optional": false
+      },
+      "pageSize": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "MyDemoSummary": {
+      "coverUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "deletedAt": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "lifecycleState": {
+        "type": "LifecycleState",
+        "optional": false
+      },
+      "moderationState": {
+        "type": "MyDemoSummaryModerationState",
+        "optional": false
+      },
+      "purgeAfter": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
+      },
+      "updatedAt": {
+        "type": "time.Time",
+        "optional": false
+      }
+    },
     "PasswordResetCodeRequest": {
       "email": {
         "type": "openapi_types.Email",
@@ -1321,6 +1377,11 @@
       "deprecated",
       "unverified"
     ],
+    "MyDemoSummaryModerationState": [
+      "approved",
+      "pending",
+      "rejected"
+    ],
     "PublishRequestLang": [
       "en",
       "zh"
@@ -1567,6 +1628,11 @@
       "method": "GetMe",
       "pathParams": 0,
       "params": null
+    },
+    "GET /api/v1/me/demos": {
+      "method": "ListMyDemos",
+      "pathParams": 0,
+      "params": "ListMyDemosParams"
     },
     "GET /api/v1/models": {
       "method": "ListModels",

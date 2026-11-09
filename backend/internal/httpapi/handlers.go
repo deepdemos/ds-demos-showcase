@@ -178,6 +178,25 @@ func formValues(r *http.Request, key string) []string {
 	return out
 }
 
+// paginate 把契约里的 page / pageSize 落成一对可用值。
+//
+// 上限越界回 400 而不是静默截断：静默截断会让调用方以为拿到了全部。
+// 两个列表端点共用这一处，免得各判一次、迟早判得不一致。
+func paginate(w http.ResponseWriter, page, pageSize *int) (int, int, bool) {
+	p, size := 1, defaultPageSize
+	if page != nil {
+		p = *page
+	}
+	if pageSize != nil {
+		size = *pageSize
+	}
+	if size < 1 || size > maxPageSize || p < 1 {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "分页参数超出允许范围")
+		return 0, 0, false
+	}
+	return p, size, true
+}
+
 func textPtr(t pgtype.Text) *string {
 	if !t.Valid {
 		return nil
