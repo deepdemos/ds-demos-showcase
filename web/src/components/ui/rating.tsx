@@ -98,7 +98,9 @@ export function Rating({ value, onChange, disabled, label, showValueText }: Rati
       </div>
       {showValueText ? (
         <span className="text-sm tabular-nums text-gray-600 dark:text-gray-400">
-          {value > 0 ? `${value} 分` : '未评分'}
+          {/* 「你还没评分」说的是我自己的票；页面旁边那句「还没有人评分」说的是全站。
+              两句话原本都写成「未评分」，看起来像自相矛盾（issue #377）。 */}
+          {value > 0 ? `${value} 分` : '你还没评分'}
         </span>
       ) : null}
     </div>
