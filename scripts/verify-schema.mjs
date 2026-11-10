@@ -211,9 +211,9 @@ await ok('删账号级联删偏好',
 
 // ---------- 5. 作品类型主数据（DEMO-001：外键而非 CHECK）----------
 console.log('--- 作品类型 ---');
-await ok('demo_types 行数', 'SELECT count(*) FROM demo_types', 4);
+await ok('demo_types 行数', 'SELECT count(*) FROM demo_types', 5);
 await ok('demo_types 码值',
-  "SELECT string_agg(code, ',' ORDER BY sort) FROM demo_types", 'web,zip,link,image');
+  "SELECT string_agg(code, ',' ORDER BY sort) FROM demo_types", 'web,zip,link,godot,image');
 await db.exec("INSERT INTO demos (slug, title, moderation_state, lifecycle_state) VALUES ('verify-demo-1','驗證','approved','published')");
 const did = (await db.query("SELECT id FROM demos WHERE slug='verify-demo-1'")).rows[0].id;
 await rejects('非法 demo_type 被外键拒',
