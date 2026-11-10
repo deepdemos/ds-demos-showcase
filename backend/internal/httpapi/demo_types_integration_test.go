@@ -111,16 +111,22 @@ func TestIntegrationListDemoTypes(t *testing.T) {
 		t.Fatalf("godot 允许的形态 = %v，想要 [zip:godot]", godot.Formats)
 	}
 	// 还没有上传路径的类型必须给空数组而不是 null：界面据此标「不可选」。
-	for _, code := range []string{"image", "link"} {
-		item, ok := byCode[code]
-		if !ok {
-			continue
+	if link, ok := byCode["link"]; ok {
+		if link.Formats == nil {
+			t.Fatal("link 的 formats 是 null，想要空数组")
 		}
-		if item.Formats == nil {
-			t.Fatalf("%s 的 formats 是 null，想要空数组", code)
+		if len(link.Formats) != 0 {
+			t.Fatalf("link 的 formats = %v，还没有上传路径应当是空的", link.Formats)
 		}
-		if len(item.Formats) != 0 {
-			t.Fatalf("%s 的 formats = %v，还没有上传路径应当是空的", code, item.Formats)
+	}
+	if image, ok := byCode["image"]; ok {
+		if !slices.Equal(image.Formats, []string{"single:png", "single:jpg", "single:webp"}) {
+			t.Fatalf("image 允许的形态 = %v，想要 [single:png single:jpg single:webp]", image.Formats)
+		}
+	}
+	if model, ok := byCode["model"]; ok {
+		if !slices.Equal(model.Formats, []string{"single:glb"}) {
+			t.Fatalf("model 允许的形态 = %v，想要 [single:glb]", model.Formats)
 		}
 	}
 }
