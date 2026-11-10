@@ -136,6 +136,21 @@ test('预览 iframe 指向该作品的预览路径', () => {
   expect(screen.getByTitle('作品预览')).toHaveAttribute('src', '/preview/demo-abc/');
 });
 
+test('外链作品不嵌 iframe，只给一个跳出去的入口', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ demoType: 'link', lifecycleState: 'published', downloadable: false }),
+  } as never);
+  renderPage();
+
+  // 外部站点自己的 X-Frame-Options / frame-ancestors 不归我们决定，嵌进去只会白屏。
+  expect(screen.queryByTitle('作品预览')).toBeNull();
+  const link = await screen.findByRole('link', { name: '打开作品' });
+  expect(link).toHaveAttribute('href', '/preview/demo-a/');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link.getAttribute('rel')).toContain('noreferrer');
+});
+
 /**
  * 下载入口的 href 必须是 /download/{slug}。
  *

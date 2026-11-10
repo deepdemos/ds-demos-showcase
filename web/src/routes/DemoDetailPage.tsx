@@ -279,7 +279,28 @@ export function DemoDetailPage() {
 
           {data.demo.downloadable ? <DemoDownload slug={slug} /> : null}
 
-          {data.demo.lifecycleState === 'published' ? <DemoPreview slug={slug} /> : null}
+          {/* 外链作品没有本站内容：预览会 302 到作者给的地址，塞进 iframe 大概率被
+              对方的 X-Frame-Options 拦成白屏。这里给一个明确的出口，而不是嵌。 */}
+          {data.demo.lifecycleState === 'published' ? (
+            data.demo.demoType === 'link' ? (
+              <section className="mt-6 space-y-2">
+                <h2 className="text-base font-semibold">作品在外部站点</h2>
+                <p className="m-0 text-sm text-gray-600 dark:text-gray-300">
+                  这类作品的内容不在本站，点下面的按钮会跳转到作者提供的地址。
+                </p>
+                <Link
+                  to={`/preview/${encodeURIComponent(slug)}/`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  打开作品
+                </Link>
+              </section>
+            ) : (
+              <DemoPreview slug={slug} />
+            )
+          ) : null}
 
           {/* 相关作品在读不到或为空时自己整块不渲染，所以这里不需要再判一次。 */}
           <RelatedSection slug={slug} />
