@@ -7,6 +7,12 @@ import { ModelPage } from './ModelPage';
 
 const getModel = vi.hoisted(() => vi.fn());
 
+const auth = vi.hoisted(() => ({ me: null as { role: string } | null }));
+
+vi.mock('@/features/auth/AuthContext', () => ({
+  useAuth: () => ({ me: auth.me, isLoading: false }),
+}));
+
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
   return { ...actual, getModel };
@@ -84,6 +90,7 @@ function renderPage(slug = 'deepseek-chat') {
 describe('模型页', () => {
   beforeEach(() => {
     getModel.mockReset();
+    auth.me = null;
   });
 
   it('显示档案、站内表现与作品链接', async () => {
@@ -184,5 +191,29 @@ describe('模型页', () => {
         '/models/deepseek-chat-v2',
       ),
     );
+  });
+
+  // 档案为空时原本文案是「管理员可以从导入页补录」：管理员读了还得手敲地址，
+  // 普通用户读到的是一句他自己无从来执行的指示（issue #374）。
+  it('档案为空时，管理员拿到带模型名的导入页链接', async () => {
+    auth.me = { role: 'admin' };
+    getModel.mockResolvedValue({ status: 200, data: profile({ specs: null }) });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('DeepSeek Chat')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: '导入页' })).toHaveAttribute(
+      'href',
+      '/admin/models?q=deepseek-chat',
+    );
+    expect(screen.queryByText(/管理员可以从导入页补录/)).toBeNull();
+  });
+
+  it('档案为空时，普通访客不看到管理员才有的指示', async () => {
+    getModel.mockResolvedValue({ status: 200, data: profile({ specs: null }) });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/等它被收录/)).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: '导入页' })).toBeNull();
+    expect(screen.queryByText(/管理员可以从导入页补录/)).toBeNull();
   });
 });
