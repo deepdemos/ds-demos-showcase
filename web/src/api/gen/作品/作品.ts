@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 43 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 44 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -39,6 +39,7 @@ import type {
   DemoRating,
   DemoRatingInput,
   DemoTimeline,
+  DemoTypeList,
   Error,
   ListDemosParams,
   ListModelsParams,
@@ -118,6 +119,64 @@ export const listClassifications = async ( options?: RequestInit): Promise<listC
 
   const data: listClassificationsResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listClassificationsResponse
+}
+
+
+export type listDemoTypesResponse200 = {
+  data: DemoTypeList
+  status: 200
+}
+
+export type listDemoTypesResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listDemoTypesResponseSuccess = (listDemoTypesResponse200) & {
+  headers: Headers;
+};
+export type listDemoTypesResponseError = (listDemoTypesResponse503) & {
+  headers: Headers;
+};
+
+export type listDemoTypesResponse = (listDemoTypesResponseSuccess | listDemoTypesResponseError)
+
+export const getListDemoTypesUrl = () => {
+
+
+
+
+  return `/api/v1/demo-types`
+}
+
+/**
+ * 投稿页要「选类型」，而每个类型收什么文件不是界面的自由，是平台的规矩。
+ * 这个端点把规矩一次给全，界面就不用自己写死一份。
+ *
+ * `formats` 是允许的上传形态，取值集合由服务端定义（`single:html` /
+ * `zip:godot` / `url` ……）。**空数组的含义是「这个类型还不收文件」**，
+ * 不是「任意都收」——把它当「任意」会让界面给出一个必然失败的选择。
+ *
+ * 在此之前类型与形态毫无关系：选「压缩包作品」投一个 `.html` 也能通过，
+ * 因为校验只看文件。现在投稿时服务端会检测真实格式并与类型比对。
+ * @summary 作品类型目录（含允许的上传形态）
+ */
+export const listDemoTypes = async ( options?: RequestInit): Promise<listDemoTypesResponse> => {
+
+  const res = await fetch(getListDemoTypesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listDemoTypesResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listDemoTypesResponse
 }
 
 
