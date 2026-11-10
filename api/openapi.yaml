@@ -556,7 +556,9 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [title, demoType, package]
+              # package 不再是必填：外链作品只交 externalUrl。
+              # 「两者恰好给一个」这条 OpenAPI 表达不了，由服务端判（都给或都不给都是 400）。
+              required: [title, demoType]
               properties:
                 title:
                   type: string

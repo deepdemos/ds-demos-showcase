@@ -1331,7 +1331,7 @@
       },
       "package": {
         "type": "openapi_types.File",
-        "optional": false
+        "optional": true
       },
       "title": {
         "type": "string",

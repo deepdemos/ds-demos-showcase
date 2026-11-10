@@ -1582,8 +1582,8 @@ type SubmitDemoMultipartBody struct {
 	// Package 作品文件（zip 或单个 html/svg/glb/png/jpg/webp）。
 	//
 	// 与 `externalUrl` **互斥**：两者都给或都不给都是 400。
-	Package openapi_types.File `json:"package"`
-	Title   string             `json:"title"`
+	Package *openapi_types.File `json:"package,omitempty"`
+	Title   string              `json:"title"`
 }
 
 // SubmitDemoParams defines parameters for SubmitDemo.

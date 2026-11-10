@@ -49,7 +49,7 @@ export type SubmitDemoBody = {
      *
      * 与 `externalUrl` **互斥**：两者都给或都不给都是 400。
      */
-  package: Blob | File;
+  package?: Blob | File;
   /**
      * 外链作品的地址（只收 `http://` 与 `https://`）。
      *
