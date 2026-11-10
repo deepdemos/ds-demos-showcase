@@ -51,6 +51,11 @@ type UpdateInput struct {
 	// DemoType 只在同时上传了新包时才允许变——类型是内容决定的，
 	// 只改文字却把 web 改成 zip，会让下载与预览指着不同的事实。
 	DemoType string
+	// ExternalURL 是外链作品的新地址（空串表示沿用上一版）。
+	//
+	// 不传就沿用：编辑外链作品时改个标题不该把链接清空，而 multipart 里
+	// 「没传」与「传空」在浏览器侧无法区分——沿用是唯一安全的方向。
+	ExternalURL string
 	// PackagePath 为空表示只改文字。
 	PackagePath string
 	PackageName string
@@ -150,6 +155,17 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 		TotalBytes:   pgtype.Int8{Int64: cur.TotalBytes, Valid: true},
 	}
 
+	// 外链地址：请求里给了就用新的，没给就沿用上一版。
+	externalURL := strings.TrimSpace(in.ExternalURL)
+	if externalURL == "" {
+		externalURL = strings.TrimSpace(cur.ExternalUrl)
+	}
+	if externalURL != "" {
+		if err := validateExternalURL(externalURL); err != nil {
+			return out, err
+		}
+	}
+
 	var files []blobFile
 	if hasPackage {
 		st, cleanup, err := s.stage(ctx, SubmitInput{
@@ -204,7 +220,9 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 			ManifestHash: meta.ManifestHash,
 			FileCount:    meta.FileCount,
 			TotalBytes:   meta.TotalBytes,
-			CreatedBy:    pgtype.Int8{Int64: in.AuthorID, Valid: true},
+			// 外链作品的地址随版本走；上传作品这里恒为空（NULL）。
+			ExternalUrl: text(externalURL),
+			CreatedBy:   pgtype.Int8{Int64: in.AuthorID, Valid: true},
 		})
 		if err != nil {
 			if isForeignKeyViolation(err) {

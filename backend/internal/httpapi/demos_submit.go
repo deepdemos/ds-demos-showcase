@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strconv"
@@ -72,29 +73,62 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.
 	modelIDs := formValues(r, "modelSlugs")
 	classificationSlugs := formValues(r, "classificationSlugs")
 
-	file, header, err := r.FormFile("package")
-	if err != nil {
+	// 外链作品没有文件，只有一个地址：这两者互斥，由领域层判。
+	// 在这里分支是因为「有没有文件」决定了后面要不要落临时文件——外链走那条路
+	// 会被 FormFile 直接挡成 400「缺少作品文件」。
+	externalURL := strings.TrimSpace(r.FormValue("externalUrl"))
+
+	var (
+		file    io.ReadCloser
+		header  *multipart.FileHeader
+		pkgPath string
+		pkgSize int64
+	)
+	// 有没有文件要单独探一次：externalUrl 存在时也要知道作者是不是两边都给了。
+	// FormFile 可以重复调用（multipart 解析结果被缓存），每次给一个新的 reader。
+	_, probe, probeErr := r.FormFile("package")
+	hasFile := probeErr == nil
+	switch {
+	case hasFile && externalURL != "":
+		writeError(w, http.StatusBadRequest, api.InvalidParam,
+			"要么上传作品文件，要么给一个外部地址（只能给一个）")
+		return
+	case !hasFile && externalURL == "":
 		writeError(w, http.StatusBadRequest, api.InvalidParam, "缺少作品文件 package")
 		return
 	}
-	defer func() { _ = file.Close() }()
+	_ = probe
+
+	if externalURL == "" {
+		var err error
+		file, header, err = r.FormFile("package")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, api.InvalidParam, "缺少作品文件 package")
+			return
+		}
+		defer func() { _ = file.Close() }()
+	}
 
 	// 3) 把上传包落到本机临时文件。domain 需要随机读、多次读，reader 做不到。
 	//    边写边数：不信 Content-Length，也不信 multipart 头部声明的长度。
-	pkgPath, pkgSize, err := spillToTemp(file, maxBytes)
-	if err != nil {
-		var tooLarge *spillTooLarge
-		if errors.As(err, &tooLarge) {
-			writeError(w, http.StatusRequestEntityTooLarge, api.PayloadTooLarge, "作品包超过体积上限")
+	var pkgName string
+	if file != nil {
+		var err error
+		pkgPath, pkgSize, err = spillToTemp(file, maxBytes)
+		if err != nil {
+			var tooLarge *spillTooLarge
+			if errors.As(err, &tooLarge) {
+				writeError(w, http.StatusRequestEntityTooLarge, api.PayloadTooLarge, "作品包超过体积上限")
+				return
+			}
+			slog.Error("save upload failed", "err", err)
+			writeError(w, http.StatusInternalServerError, api.Unavailable, "服务暂时不可用")
 			return
 		}
-		slog.Error("save upload failed", "err", err)
-		writeError(w, http.StatusInternalServerError, api.Unavailable, "服务暂时不可用")
-		return
+		defer func() { _ = os.Remove(pkgPath) }()
+		// header.Filename 只用来取扩展名；不参与任何路径拼接。
+		pkgName = header.Filename
 	}
-	defer func() { _ = os.Remove(pkgPath) }()
-
-	// header.Filename 只用来取扩展名；不参与任何路径拼接。
 	ctx, cancel := context.WithTimeout(r.Context(), demo.SubmitTimeout)
 	defer cancel()
 
@@ -109,7 +143,8 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.
 		Description:         description,
 		DemoType:            demoType,
 		PackagePath:         pkgPath,
-		PackageName:         header.Filename,
+		PackageName:         pkgName,
+		ExternalURL:         externalURL,
 		PackageSize:         pkgSize,
 		ModelSlugs:          modelIDs,
 		ClassificationSlugs: classificationSlugs,

@@ -1552,6 +1552,12 @@ type SubmitDemoMultipartBody struct {
 	DemoType    string  `json:"demoType"`
 	Description *string `json:"description,omitempty"`
 
+	// ExternalUrl 外链作品的地址（只收 `http://` 与 `https://`）。
+	//
+	// 给了它就不要上传 `package`。收录之后预览会 **302** 到这个地址：
+	// 外部站点能不能被 iframe 嵌不归我们决定，硬嵌的结果是白屏。
+	ExternalUrl *string `json:"externalUrl,omitempty"`
+
 	// ModelSlugs 这一版用到的模型。每一项是一个**模型指称**：`slug`、展示名或别名
 	// 都可以（大小写不敏感），由服务端统一解析。从 `GET /api/v1/models`
 	// 选一个是最常见的情形，但不是唯一写法——作者在表单里手打的名字
@@ -1573,7 +1579,9 @@ type SubmitDemoMultipartBody struct {
 	// 没有条数上限：多少由作品的事实决定；重复的 slug 会被去重。
 	ModelSlugs *[]string `json:"modelSlugs,omitempty"`
 
-	// Package 作品文件（zip 或单个 html/svg）
+	// Package 作品文件（zip 或单个 html/svg/glb/png/jpg/webp）。
+	//
+	// 与 `externalUrl` **互斥**：两者都给或都不给都是 400。
 	Package openapi_types.File `json:"package"`
 	Title   string             `json:"title"`
 }
@@ -1602,6 +1610,10 @@ type UpdateDemoMultipartBody struct {
 	// DemoType 作品类型。**只有同时上传 `package` 时才能改**。
 	DemoType    *string `json:"demoType,omitempty"`
 	Description *string `json:"description,omitempty"`
+
+	// ExternalUrl 外链作品的新地址。**不传表示沿用上一版**——multipart 里
+	// 「没传」与「传空」在浏览器侧无法区分，沿用是唯一安全的方向。
+	ExternalUrl *string `json:"externalUrl,omitempty"`
 
 	// ModelSlugs 这一版声明的模型，语义是**整体替换**。每一项是模型指称
 	// （slug / 展示名 / 别名），解析不到时自动建候选项，

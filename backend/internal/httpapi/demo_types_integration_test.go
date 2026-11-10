@@ -110,13 +110,11 @@ func TestIntegrationListDemoTypes(t *testing.T) {
 	if !slices.Equal(godot.Formats, []string{"zip:godot"}) {
 		t.Fatalf("godot 允许的形态 = %v，想要 [zip:godot]", godot.Formats)
 	}
-	// 还没有上传路径的类型必须给空数组而不是 null：界面据此标「不可选」。
+	// 外链类型在迁移 0026 之后收 `url`：不上传文件，只交地址。
+	// 它曾经是「空清单 = 界面上不可选」的唯一例子，现在清单非空。
 	if link, ok := byCode["link"]; ok {
-		if link.Formats == nil {
-			t.Fatal("link 的 formats 是 null，想要空数组")
-		}
-		if len(link.Formats) != 0 {
-			t.Fatalf("link 的 formats = %v，还没有上传路径应当是空的", link.Formats)
+		if !slices.Equal(link.Formats, []string{"url"}) {
+			t.Fatalf("link 允许的形态 = %v，想要 [url]", link.Formats)
 		}
 	}
 	if image, ok := byCode["image"]; ok {

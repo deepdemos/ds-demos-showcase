@@ -273,6 +273,14 @@ FROM demos d
 LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
 WHERE d.author_id = $1 AND d.idempotency_key = $2;
 
+-- name: CreateURLRevision :one
+-- 外链作品没有文件：entry_path / single_file / 清单统计全为 NULL，
+-- 地址落在 external_url。source 用 url_import——CHECK 里给它留了位置。
+INSERT INTO demo_revisions (
+    demo_id, rev_no, title, description, demo_type, external_url, source, created_by
+) VALUES ($1, 1, $2, $3, $4, $5, 'url_import', $6)
+RETURNING id, rev_no;
+
 -- name: CreateRevision :one
 -- rev_no 写死 1：这是新作品的第一版。追加版本是 updateDemo 的事。
 INSERT INTO demo_revisions (
@@ -304,7 +312,9 @@ SELECT d.id,
        COALESCE(r.entry_path, '')::text AS entry_path,
        COALESCE(r.manifest_hash, '')::text AS manifest_hash,
        COALESCE(r.file_count, 0)::bigint AS file_count,
-       COALESCE(r.total_bytes, 0)::bigint AS total_bytes
+       COALESCE(r.total_bytes, 0)::bigint AS total_bytes,
+       -- 外链作品的地址要跟着版本走：编辑时新版本要继承它，否则改个标题就把链接弄丢了。
+       COALESCE(r.external_url, '')::text AS external_url
 FROM demos d
 LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
 WHERE d.slug = $1;
@@ -322,8 +332,9 @@ WHERE demo_id = $1;
 -- 而「这是编辑」这件事由 demo_timeline.kind='edit' 记，不靠这一列区分。
 INSERT INTO demo_revisions (
     demo_id, rev_no, title, description, demo_type,
-    entry_path, single_file, manifest_hash, file_count, total_bytes, source, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'upload', $11)
+    entry_path, single_file, manifest_hash, file_count, total_bytes,
+    external_url, source, created_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, sqlc.narg('external_url'), 'upload', $11)
 RETURNING id, rev_no;
 
 -- name: CopyRevisionFiles :exec
@@ -413,6 +424,9 @@ SELECT d.id,
        -- 打开就是 404（真实事故：上传一张 SVG，预览页打不开）。
        COALESCE(r.entry_path, '')::text AS current_entry_path,
        COALESCE(pr.entry_path, '')::text AS published_entry_path,
+       -- 外链作品没有文件，只有一个地址：预览直接 302 过去。
+       COALESCE(r.external_url, '')::text AS current_external_url,
+       COALESCE(pr.external_url, '')::text AS published_external_url,
        COALESCE(u.sub, '')::text AS author_sub,
        -- 渠道可见性：与 /download 同一口径（listed 或 unlisted 才算对外可见）。
        -- 之前预览完全不判这一列，导致 hidden 的作品「从列表里藏起来了，但知道直链的人

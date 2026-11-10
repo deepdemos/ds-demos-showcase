@@ -33,5 +33,6 @@
   "db/migrations/0022_demo_public_demos.sql": "0c0665a3180af4f11c51c64e46b2f7629288dfc8566dfd919c8d3534dde20919",
   "db/migrations/0023_demo_type_formats.sql": "dca4e7eb7c57904d2c4d5543f729434896c5ebc319cee3070dc1eae15e45ee50",
   "db/migrations/0024_model_and_image_formats.sql": "2962de3682673983e751d19b8168b6aa76877f3cd34b69cde046326fa7a875d0",
-  "db/migrations/0025_single_file_kinds.sql": "19405970cd8e521cf8409308ec7a73cf448c888f543ae63e7e614b3fbada1063"
+  "db/migrations/0025_single_file_kinds.sql": "19405970cd8e521cf8409308ec7a73cf448c888f543ae63e7e614b3fbada1063",
+  "db/migrations/0026_link_type.sql": "3a126789d1311616e85e965a703a3a751956a56631ad93249b850f3b92007b51"
 }

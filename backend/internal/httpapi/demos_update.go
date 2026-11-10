@@ -50,6 +50,7 @@ func (h *Handler) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string
 	}()
 
 	in := demo.UpdateInput{
+		ExternalURL: strings.TrimSpace(r.FormValue("externalUrl")),
 		AuthorID:    account.UserID,
 		Slug:        slug,
 		Title:       strings.TrimSpace(r.FormValue("title")),
