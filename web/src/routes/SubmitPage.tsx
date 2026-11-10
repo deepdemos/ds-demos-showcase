@@ -1,23 +1,65 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, FileInput, Input, Select, Textarea } from '@/components/ui';
 import { ClassificationPicker } from '@/components/classification-picker';
 import { ModelPicker } from '@/components/model-picker';
-import { submitDemo, type Error as ApiError } from '@/api';
+import { listDemoTypes, submitDemo, type DemoType, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
 const MAX_PACKAGE_BYTES = 200 * 1024 * 1024;
 
-const DEMO_TYPES = [
-  { value: 'web', label: '网页作品（单个 HTML/SVG，或一个含 index.html 的 zip）' },
-  { value: 'zip', label: '压缩包作品（zip）' },
+/** 目录读不到时的退路：只留最常用的两种，别让投稿页整页不可用。 */
+const FALLBACK_TYPES: DemoType[] = [
+  { code: 'web', name: '网页作品', formats: ['single:html', 'single:svg', 'zip:html'] },
+  { code: 'zip', name: '压缩包作品', formats: ['zip:html'] },
 ];
 
-/** 按类型给 accept：选错文件时浏览器会先挡一道。 */
-function acceptFor(demoType: string): string {
-  return demoType === 'zip'
-    ? '.zip,application/zip'
-    : '.zip,.html,.htm,.svg,text/html,image/svg+xml';
+// 格式串 → 给作者看的说法 + 浏览器 accept 里的扩展名。
+// 这张表只在「怎么显示」这一侧用：能不能投由服务端判，这里只管别让作者白等一次上传。
+const FORMAT_INFO: Record<string, { text: string; accept: string[] }> = {
+  'single:html': { text: 'HTML', accept: ['.html', '.htm'] },
+  'single:svg': { text: 'SVG', accept: ['.svg'] },
+  'single:png': { text: 'PNG', accept: ['.png'] },
+  'single:jpg': { text: 'JPG', accept: ['.jpg', '.jpeg'] },
+  'single:webp': { text: 'WebP', accept: ['.webp'] },
+  'single:glb': { text: 'GLB 三维模型', accept: ['.glb'] },
+  'zip:html': { text: '含 index.html 的 zip', accept: ['.zip'] },
+  'zip:godot': { text: 'Godot 导出的 zip', accept: ['.zip'] },
+  url: { text: '外部链接', accept: [] },
+};
+
+function formatsText(formats: string[]): string {
+  return formats.map((f) => FORMAT_INFO[f]?.text ?? f).join(' / ');
+}
+
+/** 把类型的格式清单拼成浏览器 accept；空清单返回空串（不限制）。 */
+function acceptFor(formats: string[]): string {
+  const exts = formats.flatMap((f) => FORMAT_INFO[f]?.accept ?? []);
+  return [...new Set(exts)].join(',');
+}
+
+/**
+ * 本地挡一道「扩展名不在这个类型里」。
+ *
+ * 服务端会拦（这是权威判据），但让作者等完一次上传再看到 400 是没必要的。
+ * 这里只比扩展名，判据与服务端同一份清单，措辞不同。
+ */
+function extensionProblem(fileName: string, formats: string[]): string | null {
+  const exts = formats.flatMap((f) => FORMAT_INFO[f]?.accept ?? []);
+  if (exts.length === 0) return null;
+  const dot = fileName.lastIndexOf('.');
+  const ext = dot >= 0 ? fileName.slice(dot).toLowerCase() : '';
+  if (exts.includes(ext)) return null;
+  return `这个类型收 ${formatsText(formats)}，你选的是 ${ext || '没有扩展名的文件'}`;
+}
+
+async function fetchDemoTypes(): Promise<DemoType[]> {
+  const response = await listDemoTypes();
+  if (response.status !== 200) {
+    throw new Error(`类型目录加载失败（HTTP ${response.status}）`);
+  }
+  return response.data.items;
 }
 
 export function SubmitPage() {
@@ -26,6 +68,19 @@ export function SubmitPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [demoType, setDemoType] = useState('web');
+  // 类型与它收的形态是主数据（`demo_types` + `demo_type_formats`），页面不再写死。
+  // 读不到时退回两种最常用的，而不是把投稿页变成错误页。
+  const typesQuery = useQuery({
+    queryKey: ['demo-types'],
+    queryFn: fetchDemoTypes,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+  const types = typesQuery.data ?? FALLBACK_TYPES;
+  const usableTypes = types.filter((t) => t.formats.length > 0);
+  const closedTypes = types.filter((t) => t.formats.length === 0);
+  const current = usableTypes.find((t) => t.code === demoType) ?? usableTypes[0];
+  const currentFormats = current?.formats ?? [];
   const [modelSlugs, setModelSlugs] = useState<string[]>([]);
   const [classificationSlugs, setClassificationSlugs] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -43,6 +98,11 @@ export function SubmitPage() {
     event.preventDefault();
     if (!file) {
       setFileError('请选择要上传的作品文件');
+      return;
+    }
+    const problem = extensionProblem(file.name, currentFormats);
+    if (problem) {
+      setFileError(problem);
       return;
     }
     setFileError(undefined);
@@ -138,12 +198,40 @@ export function SubmitPage() {
         <label className="flex flex-col gap-1 text-sm">
           作品类型
           <Select
-            value={demoType}
-            options={DEMO_TYPES}
-            onChange={setDemoType}
+            value={current?.code ?? demoType}
+            options={usableTypes.map((t) => ({
+              value: t.code,
+              label: `${t.name}（收 ${formatsText(t.formats)}）`,
+            }))}
+            onChange={(code) => {
+              setDemoType(code);
+              setFile(null);
+              setFileError(undefined);
+            }}
             ariaLabel="作品类型"
+            disabled={busy}
           />
         </label>
+
+        {current && (
+          <p className="m-0 text-xs text-gray-500 dark:text-gray-400">
+            这一类收 {formatsText(current.formats)}
+            {current.code === 'image' || current.code === 'model'
+              ? '；不收压缩包，一张图或一个模型就是一个作品'
+              : ''}
+          </p>
+        )}
+        {closedTypes.length > 0 && (
+          <p className="m-0 text-xs text-gray-400 dark:text-gray-500">
+            暂未开放投稿：
+            {closedTypes.map((t) => t.name).join('、')}
+          </p>
+        )}
+        {typesQuery.isError && (
+          <p className="m-0 text-xs text-amber-600 dark:text-amber-400">
+            类型目录暂时读不到，先按常用的两种显示。
+          </p>
+        )}
 
         <ClassificationPicker
           value={classificationSlugs}
@@ -154,8 +242,8 @@ export function SubmitPage() {
         <ModelPicker value={modelSlugs} onChange={setModelSlugs} disabled={busy} />
 
         <FileInput
-          label="选择作品文件（zip，或单个 html/svg）"
-          accept={acceptFor(demoType)}
+          label={`选择作品文件（收 ${formatsText(currentFormats)}）`}
+          accept={acceptFor(currentFormats)}
           file={file}
           onFileChange={setFile}
           maxBytes={MAX_PACKAGE_BYTES}
