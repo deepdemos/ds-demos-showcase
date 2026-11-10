@@ -34,6 +34,11 @@ var singleFileKinds = map[string]string{
 	".html": "html",
 	".htm":  "html",
 	".svg":  "svg",
+	".glb":  "glb",
+	".png":  "png",
+	".jpg":  "jpg",
+	".jpeg": "jpg",
+	".webp": "webp",
 }
 
 // zipEntry 是 zip 包的入口文件名：`submit` 只认根目录下的它（或 `stagedName`

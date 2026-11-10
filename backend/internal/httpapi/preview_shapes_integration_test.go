@@ -53,9 +53,23 @@ func newShapeHandler(t *testing.T) (*Handler, *Preview, *identity.Service, *pgxp
 // submitShape 按给定形态投稿，返回 slug。
 func submitShape(t *testing.T, h *Handler, sid, title, fileName string, content []byte) string {
 	t.Helper()
+	return submitShapeAs(t, h, sid, title, "web", fileName, content)
+}
+
+// submitShapeAs 与 submitShape 同，但指定作品类型。
+//
+// 形态与类型绑定之后（`demo_type_formats`），图片只能投 `image`、三维只能投
+// `model`——用错类型会被 400 顶回来，所以形态矩阵必须按形态挑类型。
+func submitShapeAs(
+	t *testing.T,
+	h *Handler,
+	sid, title, demoType, fileName string,
+	content []byte,
+) string {
+	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	for k, v := range map[string]string{"title": title, "description": "简介", "demoType": "web"} {
+	for k, v := range map[string]string{"title": title, "description": "简介", "demoType": demoType} {
 		if err := mw.WriteField(k, v); err != nil {
 			t.Fatalf("写字段 %s 失败: %v", k, err)
 		}
@@ -100,6 +114,18 @@ func shapeContent(t *testing.T, shape demo.SubmitShape) []byte {
 		return []byte("<!doctype html><html><head><title>形态矩阵</title></head><body>hi " + nonce + "</body></html>")
 	case "svg":
 		return []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><desc>` + nonce + `</desc><rect width="8" height="8"/></svg>`)
+	case "glb":
+		// 12 字节头 + 一个 JSON chunk；内容不需要是合法模型——这一格钉的是
+		// 「这类字节能不能被上传、能不能被读回」，渲染交给专门的查看页用例。
+		body := []byte(`{"asset":{"version":"2.0"},"extras":{"nonce":"` + nonce + `"}}`)
+		head := []byte{'g', 'l', 'T', 'F', 2, 0, 0, 0, 0, 0, 0, 0}
+		return append(head, body...)
+	case "png":
+		return append([]byte("\x89PNG\r\n\x1a\n"), []byte(nonce)...)
+	case "jpg", "jpeg":
+		return append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, []byte(nonce)...)
+	case "webp":
+		return append([]byte("RIFF\x00\x00\x00\x00WEBPVP8 "), []byte(nonce)...)
 	case "":
 		// zip 包：根目录一个入口 + 一个静态资源，确认多文件也能打开。
 		var buf bytes.Buffer
@@ -128,10 +154,36 @@ func shapeContent(t *testing.T, shape demo.SubmitShape) []byte {
 	}
 }
 
+// demoTypeFor 返回能收下这种形态的作品类型。
+//
+// 与 `demo_type_formats` 保持一致：网页作品收 html/htm/svg/zip，图片作品收
+// png/jpg/jpeg/webp，三维作品收 glb。新增格式时两处都要改——这条对应关系
+// 由 `TestIntegrationSubmitShapeRequiresMatchingType` 与数据库清单共同钉住。
+func demoTypeFor(shape demo.SubmitShape) string {
+	switch shape.SingleFile {
+	case "glb":
+		return "model"
+	case "png", "jpg", "jpeg", "webp":
+		return "image"
+	}
+	return "web"
+}
+
 // wantContentType 是这种形态落库后入口文件应有的 Content-Type。
 func wantContentType(shape demo.SubmitShape) string {
-	if shape.SingleFile == "svg" {
+	switch shape.SingleFile {
+	case "svg":
 		return "image/svg+xml"
+	case "glb":
+		// 三维入口默认包一层查看页（`text/html`）；字节在 `?raw=1` 上，由
+		// TestIntegrationPreviewGLBServesViewer 单独钉。
+		return "text/html"
+	case "png":
+		return "image/png"
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "webp":
+		return "image/webp"
 	}
 	return "text/html"
 }
@@ -156,7 +208,9 @@ func TestIntegrationSubmitShapeMatrix(t *testing.T) {
 	for _, shape := range shapes {
 		t.Run(shape.Kind, func(t *testing.T) {
 			title := "形态-" + shape.Kind
-			slug := submitShape(t, h, sid, title, shape.FileName, shapeContent(t, shape))
+			slug := submitShapeAs(
+				t, h, sid, title, demoTypeFor(shape), shape.FileName, shapeContent(t, shape),
+			)
 			t.Cleanup(func() {
 				ctx := context.Background()
 				for _, q := range []string{
