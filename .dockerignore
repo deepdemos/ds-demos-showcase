@@ -1,0 +1,40 @@
+# 构建上下文排除：决定「拷进 builder 什么」，不是「提交什么」。
+#
+# 不排除 node_modules / dist 的代价很直接：上下文几十万个小文件，每次构建都要
+# 打包传输一遍，比编译本身慢一个数量级。
+
+.git
+.dsh
+node_modules
+**/node_modules
+web/dist
+web/.e2e
+web/src/api/gen/**/*.ts.map
+
+# Go 构建产物与本地产物
+backend/*.exe
+backend/api
+backend/migrate
+backend/admin-grant
+**/*.test
+**/*.out
+
+# 数据库与本地存储
+var
+**/*.log
+tmp
+tmp-*
+
+# 编辑器与系统噪音
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# 文档与门禁脚本不进镜像（镜像里跑不了 CI，带上只是变大）
+docs
+scripts
+api
+.github
+e2e
+*.md

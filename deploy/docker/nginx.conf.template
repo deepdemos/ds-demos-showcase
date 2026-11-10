@@ -1,0 +1,93 @@
+# 容器版 nginx：80 明文 + 反代 api 容器。
+#
+# 与 deploy/nginx/deepdemos.conf 的关系：那份是「宿主机装 nginx、自己管证书」的写法，
+# 这份是「所有东西都在 compose 里」的写法。两份的路由分工、缓存策略、安全头必须一致，
+# 差别只有两处：上游是容器名而不是 127.0.0.1，TLS 交给外层（反代 / LB / Cloudflare）。
+#
+# 上游地址是运行时变量：官方 nginx 镜像会用 envsubst 渲染 /etc/nginx/templates/*.template，
+# 所以镜像本身与部署环境无关。
+
+upstream deepdemos_api {
+    server ${API_UPSTREAM};
+    keepalive 16;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    # 上传上限：契约允许 200 MiB 的压缩包，留一点余量给 multipart 头
+    client_max_body_size 220m;
+    client_body_timeout  300s;
+
+    root  /usr/share/nginx/html;
+    index index.html;
+
+    gzip              on;
+    gzip_comp_level   5;
+    gzip_min_length   1024;
+    gzip_types        text/plain text/css application/javascript application/json
+                      image/svg+xml application/xml;
+
+    # 安全响应头单独成文件：add_header 在 location 里会整体覆盖 server 级，
+    # 所以每个自己加了 Cache-Control 的 location 都必须再 include 一次。
+    include /etc/nginx/snippets/security-headers.conf;
+
+    location /api/ {
+        proxy_pass http://deepdemos_api;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_request_buffering off;
+        proxy_read_timeout      300s;
+        proxy_send_timeout      300s;
+    }
+
+    location = /healthz {
+        proxy_pass http://deepdemos_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+
+    # 预览要给 iframe 用，不能套 frame-ancestors 'none'；预览响应自带 sandbox CSP。
+    location /preview/ {
+        proxy_pass http://deepdemos_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host            $host;
+        proxy_set_header X-Real-IP       $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_request_buffering off;
+    }
+
+    location /download/ {
+        proxy_pass http://deepdemos_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host            $host;
+        proxy_set_header X-Real-IP       $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+    }
+
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location = /index.html {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

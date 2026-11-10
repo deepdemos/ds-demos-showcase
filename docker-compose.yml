@@ -1,0 +1,86 @@
+# DeepDemos Showcase —— 一份 compose 把整套东西跑起来
+#
+#   cp deploy/docker/env.example .env   # 改掉里面的口令
+#   docker compose up -d --build
+#   open http://localhost:8080          # 前端 + /api 反代都在这个口
+#
+# 为什么 api 不对外发布端口：反代与 API 在同一个 compose 网络里，把 8080 暴露到
+# 宿主机等于绕过 nginx 的安全头与限流。要直连调试时用
+# `docker compose exec api wget -qO- localhost:8080/healthz`，或者临时加 ports。
+
+name: deepdemos
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-deepdemos}
+      POSTGRES_USER: ${POSTGRES_USER:-deepdemos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须设置}
+      # 中文标题、模型名都靠这个；镜像默认 C 会让排序与 LIKE 与生产不一致
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    volumes:
+      # postgres 18 起，数据目录是 /var/lib/postgresql/<major>/，官方镜像要求把
+      # **父目录**挂进来（挂 .../data 会被判成「旧版本残留的数据」而拒绝启动）。
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      # 用 pg_isready 而不是 psql：不需要口令，也不会在日志里留下连接串
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deepdemos} -d ${POSTGRES_DB:-deepdemos}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # 生产里数据库不该对公网开放；这里也不发布端口。
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-deepdemos}?sslmode=disable
+      PORT: "8080"
+      STORAGE_ROOT: /app/var/storage
+      # 这两个必须自己生成：缺了 VERIFICATION_SECRET 且配了库时 API 会直接退出
+      IP_HASH_SECRET: ${IP_HASH_SECRET:?IP_HASH_SECRET 必须设置}
+      VERIFICATION_SECRET: ${VERIFICATION_SECRET:?VERIFICATION_SECRET 必须设置}
+      # CSRF 默认观察；观察期内核对日志里没有跨站写请求，再改成 enforce
+      CSRF_MODE: ${CSRF_MODE:-log}
+      MODEL_CATALOG_URL: ${MODEL_CATALOG_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      MAIL_LOG_CODES: ${MAIL_LOG_CODES:-0}
+    volumes:
+      # 作品文件：容器可重建，这份数据不能丢
+      - storage:/app/var/storage
+    healthcheck:
+      # alpine 里没有 curl，用 busybox 的 wget
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: api:8080
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  db-data:
+  storage:
+
