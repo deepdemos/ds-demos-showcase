@@ -118,3 +118,59 @@ test('web 镜像没把模板放进 templates → 红（上游地址会写死）'
     r.problems.join('; '),
   );
 });
+
+// ── TLS 侧车（可选服务，但一旦存在就必须分档） ──────────────────────────────
+
+const withCaddy = goodCompose.replace(
+  `  web:
+    ports:
+      - "8080:80"
+`,
+  `  caddy:
+    image: caddy:2.10-alpine
+    profiles: ["tls"]
+    ports:
+      - "\${TLS_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+
+  web:
+    ports:
+      - "8080:80"
+`,
+);
+
+test('有 caddy 侧车且写法正确 → 绿', () => {
+  const r = run({ compose: withCaddy });
+  assert.equal(r.ok, true, r.problems.join('; '));
+});
+
+test('caddy 侧车没分档 → 红（否则每个部署都被强制要域名）', () => {
+  const compose = withCaddy.replace('    profiles: ["tls"]\n', '');
+  const r = run({ compose });
+  assert.equal(r.ok, false);
+  assert.ok(
+    r.problems.some((p) => p.includes('profiles: ["tls"]')),
+    r.problems.join('; '),
+  );
+});
+
+test('caddy 侧车没挂 Caddyfile → 红（站点与反代会全空）', () => {
+  const compose = withCaddy.replace('      - ./deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro\n', '');
+  const r = run({ compose });
+  assert.equal(r.ok, false);
+  assert.ok(
+    r.problems.some((p) => p.includes('Caddyfile')),
+    r.problems.join('; '),
+  );
+});
+
+test('caddy 侧车没发布 443 → 红（__Host- cookie 只认 443）', () => {
+  const compose = withCaddy.replace('      - "\${TLS_HTTPS_PORT:-443}:443"\n', '');
+  const r = run({ compose });
+  assert.equal(r.ok, false);
+  assert.ok(
+    r.problems.some((p) => p.includes('443')),
+    r.problems.join('; '),
+  );
+});
