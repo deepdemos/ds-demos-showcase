@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, Navigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, Pagination, Select, Skeleton } from '@/components/ui';
 import { listMyDemos, type ListMyDemosParams, type MyDemoList, type MyDemoSummary } from '@/api';
+import { returnToParam } from '@/lib/return-to';
 import { useAuth } from '@/features/auth/AuthContext';
 
 /**
@@ -78,7 +79,7 @@ async function fetchMyDemos(page: number, filter: FilterKey): Promise<MyDemoList
 /** 一条作品「现在是什么状态、该往哪儿点」。 */
 export interface RowState {
   label: string;
-  /** 有链接才可点；软删的作品没有目的地。 */
+  /** 有链接才可点；软删的作品仍可打开详情（恢复按钮在那边）。 */
   href: string | null;
   /** 附在标签下面的一句解释，没有就不渲染。 */
   note: string | null;
@@ -135,13 +136,17 @@ const DETAIL_OR_PREVIEW: Record<string, string> = {
  *
  * 顺序是有意的：软删最先判——它压过其它三个字段（软删不改 lifecycle_state，
  * 只写 deleted_at），先判生命周期会得出「已上线」这种会误导人的结论。
+ *
+ * 软删也要给详情链接：作者点进去看到的是「已删除 · 恢复期内可以恢复」加
+ * 一个「恢复作品」按钮。早先这里给的是 `null`，结果是删掉之后界面上再没有
+ * 路回到那个能恢复的页面（issue #370）。
  */
 export function rowState(demo: MyDemoSummary): RowState {
   if (demo.deletedAt) {
     const until = demo.purgeAfter
       ? `内容将在 ${formatDate(demo.purgeAfter)} 清空，之前可以恢复。`
       : '内容将在恢复期结束后清空。';
-    return { label: '已删除', href: null, note: until };
+    return { label: '已删除', href: `/demos/${demo.slug}`, note: until };
   }
 
   const text = STATE_TEXT[`${demo.lifecycleState}:${demo.moderationState}`] ?? {
@@ -161,6 +166,7 @@ function formatDate(iso: string): string {
 
 export function MyDemosPage() {
   const { me, isLoading } = useAuth();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = readPage(searchParams.get('page'));
   const filter = readFilter(searchParams.get('state'));
@@ -174,7 +180,11 @@ export function MyDemosPage() {
   });
 
   if (isLoading) return <Skeleton lines={5} />;
-  if (!me) return <Navigate to="/login" replace />;
+  if (!me) {
+    // 带上来路：登录后回到「我的作品」，而不是被丢回首页（issue #371）。
+    const returnTo = returnToParam(`${location.pathname}${location.search}`);
+    return <Navigate to={`/login${returnTo}`} replace />;
+  }
 
   const data = query.data;
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;

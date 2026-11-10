@@ -37,5 +37,6 @@ test('常去的落脚点给人话名字，其余原样显示路径', () => {
   expect(returnToLabel('/submit')).toBe('投稿页');
   expect(returnToLabel('/demos/abc-123/edit')).toBe('这个作品的编辑页');
   expect(returnToLabel('/demos')).toBe('作品库');
+  expect(returnToLabel('/my/demos')).toBe('我的作品');
   expect(returnToLabel('/some/deep/path')).toBe('/some/deep/path');
 });

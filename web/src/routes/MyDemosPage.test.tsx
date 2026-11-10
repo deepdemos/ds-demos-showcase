@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { listMyDemos } from '@/api';
@@ -41,6 +41,12 @@ function demo(over: Partial<MyDemoSummary> = {}): MyDemoSummary {
   } as MyDemoSummary;
 }
 
+// 登录页把 return_to 读出来显示，断言登录后落回「我的作品」而不是首页。
+function LoginProbe() {
+  const [params] = useSearchParams();
+  return <p>登录页 {params.get('return_to') ?? '无来路'}</p>;
+}
+
 function renderPage(entry = '/my/demos') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -50,7 +56,7 @@ function renderPage(entry = '/my/demos') {
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route path="/my/demos" element={<MyDemosPage />} />
-          <Route path="/login" element={<p>登录页</p>} />
+          <Route path="/login" element={<LoginProbe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -93,7 +99,8 @@ test('草稿链到预览，而不是详情', async () => {
 });
 
 // 软删不改 lifecycle_state（只写 deleted_at），先判生命周期会得出「已上线」这种误导结论。
-test('软删优先于生命周期：显示已删除、没有链接、带清空时间', async () => {
+// 但软删行必须有详情链接：恢复按钮就在那个页面里（issue #370）。
+test('软删优先于生命周期：显示已删除、仍可进详情、带清空时间', async () => {
   vi.mocked(listMyDemos).mockResolvedValue({
     status: 200,
     data: {
@@ -111,9 +118,9 @@ test('软删优先于生命周期：显示已删除、没有链接、带清空�
   } as never);
 
   renderPage();
-  await screen.findByRole('list');
+  const link = await screen.findByRole('link', { name: '一件作品' });
+  expect(link).toHaveAttribute('href', '/demos/demo-a');
   expect(within(screen.getByRole('list')).getByText('已删除')).toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: '一件作品' })).toBeNull();
   expect(screen.getByText(/2026\/12\/5 清空/)).toBeInTheDocument();
 });
 
@@ -144,10 +151,10 @@ test('没有作品时给投稿入口', async () => {
   expect(screen.getByRole('link', { name: '去投稿' })).toHaveAttribute('href', '/submit');
 });
 
-test('未登录时跳登录页，且不发请求', async () => {
+test('未登录时跳登录页，带上当前路径作为来路，且不发请求', async () => {
   auth.me = null;
-  renderPage();
-  expect(await screen.findByText('登录页')).toBeInTheDocument();
+  renderPage('/my/demos?state=deleted');
+  expect(await screen.findByText(/登录页 \/my\/demos\?state=deleted/)).toBeInTheDocument();
   expect(vi.mocked(listMyDemos)).not.toHaveBeenCalled();
 });
 
