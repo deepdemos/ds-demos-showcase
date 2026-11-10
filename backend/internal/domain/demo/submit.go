@@ -86,6 +86,8 @@ type staged struct {
 	entryPath string
 	// singleFile 非空表示这是单文件作品（`html` / `svg`）。
 	singleFile string
+	// format 是「类型允许什么」里用的格式串（见 shapes.go）。
+	format string
 	// sourcePath 是原始上传包（zip 才有；单文件不额外存一份）。
 	// 它会被当成清单里的 `source.zip` 一行，与站内文件走同一条内容寻址。
 	sourcePath string
@@ -151,6 +153,10 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	}
 	defer cleanup()
 
+	if err := s.checkFormat(ctx, in.DemoType, st.format); err != nil {
+		return out, err
+	}
+
 	slug, revID, replay, err := s.createRow(ctx, in, &st)
 	if err != nil {
 		return out, err
@@ -171,6 +177,30 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 		return SubmitResult{}, err
 	}
 	return out, nil
+}
+
+// checkFormat 判断「作者声明的类型」收不收「实际传上来的东西」。
+//
+// 在此之前这两件事互不相干：选「压缩包作品」投一个 .html 也能过，类型只是个
+// 标签。判在解压之后、落库之前——格式必须来自真实内容，不能听作者说。
+func (s *Service) checkFormat(ctx context.Context, demoType, format string) error {
+	row, err := s.q.GetDemoTypeFormats(ctx, demoType)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%w: 作品类型不存在：%s", ErrInvalidInput, demoType)
+	}
+	if err != nil {
+		return fmt.Errorf("demo: 读作品类型失败: %w", err)
+	}
+	for _, f := range row.Formats {
+		if f == format {
+			return nil
+		}
+	}
+	if len(row.Formats) == 0 {
+		return fmt.Errorf("%w: 「%s」这个类型还不收作品文件，请换一个类型", ErrInvalidInput, row.Name)
+	}
+	return fmt.Errorf("%w: 「%s」不收这种文件（检测到 %s）；它可以收：%s",
+		ErrInvalidInput, row.Name, format, strings.Join(row.Formats, "、"))
 }
 
 // stage 把上传包变成一份「即将上传的文件清单」。
@@ -211,6 +241,7 @@ func (s *Service) stage(ctx context.Context, in SubmitInput) (st staged, cleanup
 		}
 		st.sourcePath = srcCopy
 		st.singleFile = ""
+		st.format = ZipFormatOf(st.files)
 		return st, cleanup, nil
 	}
 
@@ -227,6 +258,7 @@ func (s *Service) stage(ctx context.Context, in SubmitInput) (st staged, cleanup
 		return st, cleanup, fmt.Errorf("%w: 只接受 zip 包或单个 .html / .svg 文件", ErrUnsupportedPackage)
 	}
 	st.singleFile = kind
+	st.format = FormatOfSingleFile(kind)
 	name := stagedName(in.PackageName)
 	st.contentDir = dir
 	if err := copyFile(in.PackagePath, filepath.Join(dir, name)); err != nil {

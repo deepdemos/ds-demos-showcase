@@ -725,6 +725,26 @@ type DemoTimelineEntry struct {
 	Message *string `json:"message"`
 }
 
+// DemoType 一个作品类型，以及它允许的上传形态。
+//
+// `formats` 里每一项都是「容器:入口」形式：`single:html` 是单文件 HTML，
+// `zip:godot` 是 Godot 导出的 zip 包，`url` 表示不需要上传文件。
+type DemoType struct {
+	// Code 稳定标识，投稿时回传给服务端
+	Code string `json:"code"`
+
+	// Formats 允许的上传形态；空数组表示这个类型还不收文件
+	Formats []string `json:"formats"`
+
+	// Name 界面上的中文名
+	Name string `json:"name"`
+}
+
+// DemoTypeList defines model for DemoTypeList.
+type DemoTypeList struct {
+	Items []DemoType `json:"items"`
+}
+
 // EmailCodeRequest defines model for EmailCodeRequest.
 type EmailCodeRequest struct {
 	// Identifier 邮箱或用户名，不区分大小写

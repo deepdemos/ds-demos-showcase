@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 43 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 44 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -89,6 +89,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClassificationCatalog'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demo-types:
+    get:
+      operationId: listDemoTypes
+      tags: [作品]
+      summary: 作品类型目录（含允许的上传形态）
+      description: |
+        投稿页要「选类型」，而每个类型收什么文件不是界面的自由，是平台的规矩。
+        这个端点把规矩一次给全，界面就不用自己写死一份。
+
+        `formats` 是允许的上传形态，取值集合由服务端定义（`single:html` /
+        `zip:godot` / `url` ……）。**空数组的含义是「这个类型还不收文件」**，
+        不是「任意都收」——把它当「任意」会让界面给出一个必然失败的选择。
+
+        在此之前类型与形态毫无关系：选「压缩包作品」投一个 `.html` 也能通过，
+        因为校验只看文件。现在投稿时服务端会检测真实格式并与类型比对。
+      responses:
+        '200':
+          description: 作品类型目录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoTypeList'
         '503':
           description: 数据库不可用
           content:
@@ -2718,6 +2747,36 @@ components:
               items:
                 type: string
               description: 别名，只有 `subject` 会有（「魔方」有「魔方模拟器」「三阶魔方」）
+
+    DemoType:
+      type: object
+      description: |
+        一个作品类型，以及它允许的上传形态。
+
+        `formats` 里每一项都是「容器:入口」形式：`single:html` 是单文件 HTML，
+        `zip:godot` 是 Godot 导出的 zip 包，`url` 表示不需要上传文件。
+      required: [code, name, formats]
+      properties:
+        code:
+          type: string
+          description: 稳定标识，投稿时回传给服务端
+        name:
+          type: string
+          description: 界面上的中文名
+        formats:
+          type: array
+          description: 允许的上传形态；空数组表示这个类型还不收文件
+          items:
+            type: string
+
+    DemoTypeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DemoType'
 
     ClassificationCatalog:
       type: object

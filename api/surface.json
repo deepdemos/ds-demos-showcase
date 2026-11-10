@@ -388,6 +388,26 @@
         "optional": true
       }
     },
+    "DemoType": {
+      "code": {
+        "type": "string",
+        "optional": false
+      },
+      "formats": {
+        "type": "[]string",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "DemoTypeList": {
+      "items": {
+        "type": "[]DemoType",
+        "optional": false
+      }
+    },
     "EmailCodeRequest": {
       "identifier": {
         "type": "string",
@@ -1649,6 +1669,11 @@
     },
     "GET /api/v1/classifications": {
       "method": "ListClassifications",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/demo-types": {
+      "method": "ListDemoTypes",
       "pathParams": 0,
       "params": null
     },

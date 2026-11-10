@@ -77,6 +77,9 @@ type ServerInterface interface {
 	// 分类目录
 	// (GET /api/v1/classifications)
 	ListClassifications(w http.ResponseWriter, r *http.Request)
+	// 作品类型目录（含允许的上传形态）
+	// (GET /api/v1/demo-types)
+	ListDemoTypes(w http.ResponseWriter, r *http.Request)
 	// 作品列表
 	// (GET /api/v1/demos)
 	ListDemos(w http.ResponseWriter, r *http.Request, params ListDemosParams)
@@ -272,6 +275,12 @@ func (_ Unimplemented) PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.
 // 分类目录
 // (GET /api/v1/classifications)
 func (_ Unimplemented) ListClassifications(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 作品类型目录（含允许的上传形态）
+// (GET /api/v1/demo-types)
+func (_ Unimplemented) ListDemoTypes(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -887,6 +896,20 @@ func (siw *ServerInterfaceWrapper) ListClassifications(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListClassifications(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDemoTypes operation middleware
+func (siw *ServerInterfaceWrapper) ListDemoTypes(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDemoTypes(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1812,6 +1835,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/classifications", wrapper.ListClassifications)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/demo-types", wrapper.ListDemoTypes)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demos", wrapper.ListDemos)
