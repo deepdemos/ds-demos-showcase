@@ -1,0 +1,16 @@
+# 本地 / 内网验证用的 Caddyfile：`tls internal` 用 Caddy 自己的 CA 签证书。
+#
+# 用途只有一个：**在没有真域名、也不想把 80/443 开到公网时，验证 https 那条路是通的**。
+# 浏览器第一次访问会提示证书不受信任（点继续即可）；要让 curl 认，导出 Caddy 的根证书：
+#   docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
+#
+# 生产请用 deploy/docker/Caddyfile（自动 ACME，需要真域名 + 80/443 可达）。
+
+{$DOMAIN} {
+	tls internal
+	reverse_proxy web:80
+	encode gzip
+	log {
+		level ERROR
+	}
+}

@@ -1,0 +1,22 @@
+# Caddy：给 compose 补上 TLS（自动申请证书）。
+#
+# 为什么用 Caddy 而不是在 nginx 里配证书：证书申请与续期是需要长期盯的活
+# （ACME 挑战、到期提醒、失败回退），Caddy 把这件事收进一条 reverse_proxy。
+# nginx 那一层保持「只做静态站与反代」，不掺证书。
+#
+# 域名与邮箱走环境变量：DOMAIN 必填，ACME_EMAIL 可选（Let's Encrypt 用它发到期提醒）。
+{$DOMAIN} {
+	email {$ACME_EMAIL}
+
+	# 反代到 web 容器（nginx，80 端口）：静态产物与 /api /preview /download 都在那里已经分好。
+	reverse_proxy web:80
+
+	# gzip 在 Caddy 这层也开着：Docker 内网上再压一遍的成本可以忽略，
+	# 但对外省带宽（nginx 那层只压它自己的响应）。
+	encode gzip
+
+	# 只记录错误日志：访问日志里带完整 URL（详情页 URL 含 slug），默认不落盘更省心。
+	log {
+		level ERROR
+	}
+}
