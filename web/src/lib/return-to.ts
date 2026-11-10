@@ -31,6 +31,7 @@ const RETURN_LABELS: Record<string, string> = {
   '/submit': '投稿页',
   '/demos': '作品库',
   '/rankings': '排行榜',
+  '/my/demos': '我的作品',
   '/admin/reviews': '待审队列',
   '/admin/models': '模型导入',
 };
