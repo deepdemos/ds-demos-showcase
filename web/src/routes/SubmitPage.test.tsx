@@ -37,8 +37,24 @@ const classificationCatalog = {
 
 // 投稿页还会读分类目录（`GET /api/v1/classifications`）。不 mock 同样会打到真 fetch，
 // 落进「目录读不到」的分支——组件会把分类区渲染成一句提示，测试看着绿，但没测到选择器。
+// 类型与它收的形态是主数据，投稿页从 `/demo-types` 读。这里给全六种，
+// 让「可选的按清单渲染、暂未开放的只做提示」这两条都被覆盖到。
+const demoTypes = vi.hoisted(() => ({
+  items: [
+    { code: 'web', name: '网页作品', formats: ['single:html', 'single:svg', 'zip:html'] },
+    { code: 'zip', name: '压缩包作品', formats: ['zip:html'] },
+    { code: 'godot', name: 'Godot 游戏', formats: ['zip:godot'] },
+    { code: 'image', name: '图片', formats: ['single:png', 'single:jpg', 'single:webp'] },
+    { code: 'model', name: '三维模型', formats: ['single:glb'] },
+    { code: 'link', name: '外链', formats: [] },
+  ],
+}));
+
+const listDemoTypesMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@/api', () => ({
   submitDemo: vi.fn(),
+  listDemoTypes: listDemoTypesMock,
   listModels: () => Promise.resolve({ status: 200, data: models }),
   listClassifications: () => Promise.resolve({ status: 200, data: classificationCatalog }),
 }));
@@ -65,6 +81,8 @@ function pickFile() {
 
 beforeEach(() => {
   vi.mocked(submitDemo).mockReset();
+  listDemoTypesMock.mockReset();
+  listDemoTypesMock.mockResolvedValue({ status: 200, data: demoTypes });
 });
 
 describe('SubmitPage', () => {
@@ -218,4 +236,67 @@ describe('SubmitPage', () => {
     const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
     expect(body.modelSlugs).toBeUndefined();
   });
+});
+
+/**
+ * 类型清单是主数据，页面不能自己写死一份。
+ *
+ * 这条钉的是「加了一个类型，投稿页还是只给两种」：界面选项必须来自清单，
+ * 空清单的类型只能出现在「暂未开放」的提示里，不能进下拉。
+ */
+test('类型选项按目录渲染，暂未开放的类型只做提示', async () => {
+  auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+  auth.isLoading = false;
+  renderAt('/submit');
+
+  const select = screen.getByLabelText('作品类型') as HTMLSelectElement;
+  await waitFor(() =>
+    expect([...select.options].map((o) => o.value)).toEqual([
+      'web',
+      'zip',
+      'godot',
+      'image',
+      'model',
+    ]),
+  );
+  expect(screen.getByText(/暂未开放投稿：外链/)).toBeInTheDocument();
+  expect(select.options[3].textContent).toContain('图片');
+  expect(select.options[3].textContent).toContain('PNG');
+});
+
+/**
+ * 扩展名不符时本地就挡住。
+ *
+ * 服务端会拦（那是权威判据），但让作者等完一次上传再看到 400 是白等。
+ * 断言落在「没发请求」上：只显示错误文案但照发请求，等于没挡住。
+ */
+test('选图片类型却传了 html，本地就挡住，不发请求', async () => {
+  auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+  auth.isLoading = false;
+  renderAt('/submit');
+
+  fireEvent.change(screen.getByLabelText('标题'), { target: { value: '一张图' } });
+  await screen.findByText(/暂未开放投稿/);
+  fireEvent.change(screen.getByLabelText('作品类型'), { target: { value: 'image' } });
+  pickFile();
+  fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
+
+  expect(await screen.findByText(/这个类型收 PNG \/ JPG \/ WebP/)).toBeInTheDocument();
+  expect(submitDemo).not.toHaveBeenCalled();
+});
+
+/**
+ * 目录读不到时不能把投稿页变成错误页。
+ *
+ * 退路只留最常用的两种：投稿这条路不能因为一个辅助清单挂了就整页不可用。
+ */
+test('类型目录读不到时退回两种常用类型并说明', async () => {
+  auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+  auth.isLoading = false;
+  listDemoTypesMock.mockResolvedValue({ status: 503, data: { code: 'unavailable' } });
+  renderAt('/submit');
+
+  expect(await screen.findByText(/类型目录暂时读不到/)).toBeInTheDocument();
+  const select = screen.getByLabelText('作品类型') as HTMLSelectElement;
+  expect([...select.options].map((o) => o.value)).toEqual(['web', 'zip']);
 });
