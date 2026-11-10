@@ -39,6 +39,11 @@ func NewRouter(si api.ServerInterface, preview *Preview, download *Download) htt
 	router.Method("GET", "/download/{slug}", downloadOrNotFound(download))
 	router.Method("HEAD", "/download/{slug}", downloadOrNotFound(download))
 
+	// 预览用的静态资产（三维播放器）不是契约端点：它是一份随二进制走的只读文件，
+	// 预览页与它必须同源。
+	router.Method("GET", modelViewerPath, http.HandlerFunc(servePreviewAssets))
+	router.Method("HEAD", modelViewerPath, http.HandlerFunc(servePreviewAssets))
+
 	return api.HandlerFromMux(si, router)
 }
 
