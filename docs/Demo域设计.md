@@ -1194,6 +1194,22 @@ removed）只有**作者本人**或持有 `demo.review` 权限的角色能看。
 这一行。换存储根（测试里每轮一个临时目录、而库共用）或从只备份了数据库的快照恢复之后，
 行全在、对象全没，于是后续每次上传都跳过写盘，预览与下载永远 404，错误却只是
 「对象不存在」。现在命中行时会多一次 `Stat`：对象不在就照常写一遍把它补回来。
+### 落地状态（2026-11-10）——三维模型与图片，以及「谁来渲染」
+
+`glb` 与 `png/jpg/webp` 是第二批单文件形态。投稿侧只多了一件事：把扩展名放进
+`singleFileKinds`，并让 `ck_rev_single_file` 认出新的取值（约束是词汇的另一半，
+只改代码会在落库那一刻被 23514 顶回来，而错误只说「落库失败」）。
+
+**播放器放在服务端，不放在前端产物里。** `model-viewer` 打进 API 二进制
+（`backend/internal/httpapi/previewassets/`，1 MB），由 `/preview-assets/model-viewer.min.js`
+发出。理由三条：预览 iframe 与它必须同源；离线/内网部署不能白屏；同一份作品不该
+「今天能看明天不能看」取决于别人的 CDN。
+
+**查看页不加 sandbox。** `previewCSP` 里的 sandbox 是给作者写的 HTML 用的；三维查看页是
+我们生成的静态骨架、只引用同源资产，给它加 sandbox 反而挡住模块脚本（不透明源下的 CORS）。
+
+**地址只差一个参数**：`/preview/{slug}/v{n}/index.glb` 返回查看页，同一地址加 `?raw=1`
+返回字节（`model/gltf-binary`）。这样「作者看到什么」与「下载到什么」不会各判一次可见性。
 **入口文件**：地址里不带文件名时（`/preview/{slug}/`、`/preview/{slug}/v{n}/`），
 入口取**这一版** `demo_revisions.entry_path`，不是硬编码的 `index.html`。
 
