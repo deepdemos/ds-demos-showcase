@@ -84,16 +84,29 @@ func (s *Service) storeBlob(ctx context.Context, localPath string) (storedBlob, 
 	existing, err := s.q.GetBlob(ctx, sum)
 	switch {
 	case err == nil:
-		// 命中：字节已经在存储里，只需要把引用时间往前推一下。
-		if err := s.q.InsertBlob(ctx, store.InsertBlobParams{
-			Sha256:     sum,
-			Size:       size,
-			Mime:       contentType,
-			StorageKey: existing.StorageKey,
-		}); err != nil {
-			return out, fmt.Errorf("demo: 更新 blob 引用失败: %w", err)
+		// 行在，但**不能据此断定字节也在**。
+		//
+		// 这里的判断曾经只有「数据库里有没有这一行」，理由是「上传与存储的一致性
+		// 由上传保证」。它漏掉两种真会发生的情况：换过存储根（测试里每轮一个临时
+		// 目录、而库是共用的），以及从只备份了数据库的快照恢复。两种情况下这一行
+		// 都在、对象却不在，于是后面每一次上传都跳过写盘，预览与下载永远 404，
+		// 而错误信息是「对象不存在」——看起来像存储坏了。
+		//
+		// 一次 Stat 就能分辨，代价可以忽略：命中的路径本来就要写一次数据库。
+		if _, statErr := s.files.Stat(ctx, existing.StorageKey); statErr == nil {
+			if err := s.q.InsertBlob(ctx, store.InsertBlobParams{
+				Sha256:     sum,
+				Size:       size,
+				Mime:       contentType,
+				StorageKey: existing.StorageKey,
+			}); err != nil {
+				return out, fmt.Errorf("demo: 登记 blob 失败: %w", err)
+			}
+			return out, nil
+		} else if !errors.Is(statErr, backend.ErrNotFound) {
+			return out, fmt.Errorf("demo: 检查存储对象失败: %w", statErr)
 		}
-		return out, nil
+		// 行在、对象不在：往下走一遍正常写入，把它补回来。
 	case !errors.Is(err, pgx.ErrNoRows):
 		return out, fmt.Errorf("demo: 查 blob 失败: %w", err)
 	}
