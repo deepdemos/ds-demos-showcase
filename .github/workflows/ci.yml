@@ -267,6 +267,10 @@ jobs:
         run: node scripts/check-docs-refs.mjs
       - name: 部署配置门禁（反代路径 / SPA 回退 / 上传上限 / 安全头 / 服务单元）
         run: node scripts/check-deploy.mjs
+
+      # 容器化那条路：compose 与两个 Dockerfile 的关键约束（端口、健康依赖、数据卷、非 root）
+      - name: 容器部署门禁（三个服务 / 端口不泄露 / 健康依赖 / 两处数据卷 / 非 root）
+        run: node scripts/check-docker-deploy.mjs
       - name: 失败处理指引
         if: failure()
         run: echo "::error title=CI 门禁::file-size 失败（有文件超过 800 行 / 标准对象取值域出现重复或走样 / 单一出处出现新副本 / 端点缺反例 / 部署配置缺项 / 门禁脚本自检失败）。先读 docs/development-workflow.md：先建 issue，再拆分修复，PR 关联 issue。"
