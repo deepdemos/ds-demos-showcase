@@ -7,6 +7,7 @@ package demo
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"unicode/utf8"
 )
@@ -69,7 +70,12 @@ type SubmitInput struct {
 	// 用 slug 而不是 id：id 是库内主键，前端拿到的模型清单来自
 	// `GET /api/v1/models`，它给的就是 slug；把 id 放进请求体等于让客户端
 	// 依赖一个会随主数据重建而变的数字。
-	ModelSlugs []string
+	// ExternalURL 是外链作品的地址：给了它就不该再有上传文件。
+	//
+	// 两种输入形态互斥——外链作品没有字节可交付，上传了文件反而说明作者选错了类型。
+	// 「只能给一个」这条判在 validate 里，因为它同时是契约（400）与领域不变量。
+	ExternalURL string
+	ModelSlugs  []string
 	// ClassificationSlugs 是这件作品的内容分类（取 classifications.slug）。
 	//
 	// 与 ModelSlugs 的关键区别：分类挂在**作品**上，模型挂在**版本**上
@@ -99,6 +105,37 @@ type SubmitResult struct {
 // 然后这条错误一路落到 writeDemoError 的 default，回给作者 503
 // 「服务暂时不可用」——输入问题被说成了我们这边坏了（真栈复现过：
 // Windows 上的 curl 传中文会按 GBK 发出去）。
+// maxExternalURLLen 与 `demo_revisions.ck_rev_external_url_len` 对齐。
+//
+// 两处都挡：库约束是最后一道（绕过领域层也进不去），这里挡是为了给出
+// 「外部地址最长 2000 个字符」而不是一句 23514。
+const maxExternalURLLen = 2000
+
+// validateExternalURL 只放行 http / https。
+//
+// 为什么不做更细的校验：地址由作者提供，平台只负责 302 过去；放行 javascript:
+// 这类协议会把「点一个作品」变成执行脚本。判断 scheme 是这里唯一值得做的事。
+func validateExternalURL(raw string) error {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return nil
+	}
+	if len([]rune(v)) > maxExternalURLLen {
+		return fmt.Errorf("%w: 外部地址最长 %d 个字符", ErrInvalidInput, maxExternalURLLen)
+	}
+	u, err := url.Parse(v)
+	if err != nil {
+		return fmt.Errorf("%w: 外部地址不是合法的 URL", ErrInvalidInput)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%w: 外部地址只能以 http:// 或 https:// 开头", ErrInvalidInput)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%w: 外部地址缺少域名", ErrInvalidInput)
+	}
+	return nil
+}
+
 func validateText(field, v string) error {
 	if !utf8.ValidString(v) {
 		return fmt.Errorf("%w: %s 不是合法的 UTF-8 文本", ErrInvalidInput, field)
@@ -135,6 +172,19 @@ func (in SubmitInput) validate() error {
 	if err := validateMetaTexts(in.Title, in.Description, in.DemoType, in.ModelSlugs); err != nil {
 		return err
 	}
+	if err := validateText("外部地址", in.ExternalURL); err != nil {
+		return err
+	}
+	if err := validateExternalURL(in.ExternalURL); err != nil {
+		return err
+	}
+	// 文件与地址互斥：外链作品没有字节，传了文件说明类型选错了；反过来，
+	// 要给地址却没给文件也不算上传——那会建出一条「有版本、没内容」的作品。
+	hasFile := strings.TrimSpace(in.PackagePath) != ""
+	hasURL := strings.TrimSpace(in.ExternalURL) != ""
+	if hasFile == hasURL {
+		return fmt.Errorf("%w: 要么上传作品文件，要么给一个外部地址（只能给一个）", ErrInvalidInput)
+	}
 
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
@@ -164,7 +214,10 @@ func (in SubmitInput) validate() error {
 	if in.AuthorID == 0 {
 		return fmt.Errorf("%w: 缺少作者", ErrInvalidInput)
 	}
-	if in.PackagePath == "" || in.PackageSize <= 0 {
+	// 外链作品没有包：这条判据只对「有文件的那条路」成立。
+	// 互斥关系在 validate 开头已经判过，这里再判一次只是防御——
+	// 但不能再要求「必须有包」，否则外链投稿永远过不来。
+	if strings.TrimSpace(in.ExternalURL) == "" && (in.PackagePath == "" || in.PackageSize <= 0) {
 		return fmt.Errorf("%w: 作品包为空", ErrInvalidInput)
 	}
 	return nil

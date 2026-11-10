@@ -14,8 +14,9 @@ import (
 const appendRevision = `-- name: AppendRevision :one
 INSERT INTO demo_revisions (
     demo_id, rev_no, title, description, demo_type,
-    entry_path, single_file, manifest_hash, file_count, total_bytes, source, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'upload', $11)
+    entry_path, single_file, manifest_hash, file_count, total_bytes,
+    external_url, source, created_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, 'upload', $11)
 RETURNING id, rev_no
 `
 
@@ -31,6 +32,7 @@ type AppendRevisionParams struct {
 	FileCount    pgtype.Int8
 	TotalBytes   pgtype.Int8
 	CreatedBy    pgtype.Int8
+	ExternalUrl  pgtype.Text
 }
 
 type AppendRevisionRow struct {
@@ -54,6 +56,7 @@ func (q *Queries) AppendRevision(ctx context.Context, arg AppendRevisionParams) 
 		arg.FileCount,
 		arg.TotalBytes,
 		arg.CreatedBy,
+		arg.ExternalUrl,
 	)
 	var i AppendRevisionRow
 	err := row.Scan(&i.ID, &i.RevNo)
@@ -382,6 +385,43 @@ func (q *Queries) CreateRevision(ctx context.Context, arg CreateRevisionParams) 
 		arg.CreatedBy,
 	)
 	var i CreateRevisionRow
+	err := row.Scan(&i.ID, &i.RevNo)
+	return i, err
+}
+
+const createURLRevision = `-- name: CreateURLRevision :one
+INSERT INTO demo_revisions (
+    demo_id, rev_no, title, description, demo_type, external_url, source, created_by
+) VALUES ($1, 1, $2, $3, $4, $5, 'url_import', $6)
+RETURNING id, rev_no
+`
+
+type CreateURLRevisionParams struct {
+	DemoID      int64
+	Title       pgtype.Text
+	Description pgtype.Text
+	DemoType    string
+	ExternalUrl pgtype.Text
+	CreatedBy   pgtype.Int8
+}
+
+type CreateURLRevisionRow struct {
+	ID    int64
+	RevNo int32
+}
+
+// 外链作品没有文件：entry_path / single_file / 清单统计全为 NULL，
+// 地址落在 external_url。source 用 url_import——CHECK 里给它留了位置。
+func (q *Queries) CreateURLRevision(ctx context.Context, arg CreateURLRevisionParams) (CreateURLRevisionRow, error) {
+	row := q.db.QueryRow(ctx, createURLRevision,
+		arg.DemoID,
+		arg.Title,
+		arg.Description,
+		arg.DemoType,
+		arg.ExternalUrl,
+		arg.CreatedBy,
+	)
+	var i CreateURLRevisionRow
 	err := row.Scan(&i.ID, &i.RevNo)
 	return i, err
 }
@@ -715,7 +755,9 @@ SELECT d.id,
        COALESCE(r.entry_path, '')::text AS entry_path,
        COALESCE(r.manifest_hash, '')::text AS manifest_hash,
        COALESCE(r.file_count, 0)::bigint AS file_count,
-       COALESCE(r.total_bytes, 0)::bigint AS total_bytes
+       COALESCE(r.total_bytes, 0)::bigint AS total_bytes,
+       -- 外链作品的地址要跟着版本走：编辑时新版本要继承它，否则改个标题就把链接弄丢了。
+       COALESCE(r.external_url, '')::text AS external_url
 FROM demos d
 LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
 WHERE d.slug = $1
@@ -738,6 +780,7 @@ type GetDemoForEditRow struct {
 	ManifestHash         string
 	FileCount            int64
 	TotalBytes           int64
+	ExternalUrl          string
 }
 
 // ===== 更新作品（追加版本）=====
@@ -763,6 +806,7 @@ func (q *Queries) GetDemoForEdit(ctx context.Context, slug string) (GetDemoForEd
 		&i.ManifestHash,
 		&i.FileCount,
 		&i.TotalBytes,
+		&i.ExternalUrl,
 	)
 	return i, err
 }
@@ -836,6 +880,9 @@ SELECT d.id,
        -- 打开就是 404（真实事故：上传一张 SVG，预览页打不开）。
        COALESCE(r.entry_path, '')::text AS current_entry_path,
        COALESCE(pr.entry_path, '')::text AS published_entry_path,
+       -- 外链作品没有文件，只有一个地址：预览直接 302 过去。
+       COALESCE(r.external_url, '')::text AS current_external_url,
+       COALESCE(pr.external_url, '')::text AS published_external_url,
        COALESCE(u.sub, '')::text AS author_sub,
        -- 渠道可见性：与 /download 同一口径（listed 或 unlisted 才算对外可见）。
        -- 之前预览完全不判这一列，导致 hidden 的作品「从列表里藏起来了，但知道直链的人
@@ -869,6 +916,8 @@ type GetDemoForPreviewRow struct {
 	PublishedErasedAt    pgtype.Timestamptz
 	CurrentEntryPath     string
 	PublishedEntryPath   string
+	CurrentExternalUrl   string
+	PublishedExternalUrl string
 	AuthorSub            string
 	HasVisibleChannel    bool
 }
@@ -896,6 +945,8 @@ func (q *Queries) GetDemoForPreview(ctx context.Context, slug string) (GetDemoFo
 		&i.PublishedErasedAt,
 		&i.CurrentEntryPath,
 		&i.PublishedEntryPath,
+		&i.CurrentExternalUrl,
+		&i.PublishedExternalUrl,
 		&i.AuthorSub,
 		&i.HasVisibleChannel,
 	)

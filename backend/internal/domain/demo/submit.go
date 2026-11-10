@@ -147,6 +147,12 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	ctx, cancel := context.WithTimeout(ctx, submitTimeout)
 	defer cancel()
 
+	// 外链作品没有字节可交付：不走解压、不落盘，只建一条「有地址的版本」。
+	// 它仍要过类型校验——`link` 收的是 `url`，别的类型给地址一样是 400。
+	if strings.TrimSpace(in.ExternalURL) != "" {
+		return s.submitURL(ctx, in)
+	}
+
 	st, cleanup, err := s.stage(ctx, in)
 	if err != nil {
 		return out, err
@@ -177,6 +183,30 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 		return SubmitResult{}, err
 	}
 	return out, nil
+}
+
+// submitURL 处理外链作品：校验类型收不收 `url`，然后建一条只有地址的版本。
+//
+// 与普通投稿共用 createRow（slug 唯一冲突重试、模型声明、分类、幂等键都在里面），
+// 只是版本里没有文件清单、事后也没有上传这一步。
+func (s *Service) submitURL(ctx context.Context, in SubmitInput) (SubmitResult, error) {
+	var out SubmitResult
+	if err := s.checkFormat(ctx, in.DemoType, FormatURL); err != nil {
+		return out, err
+	}
+	slug, _, replay, err := s.createRow(ctx, in, nil)
+	if err != nil {
+		return out, err
+	}
+	if replay != nil {
+		return *replay, nil
+	}
+	return SubmitResult{
+		Slug:            slug,
+		RevisionNo:      1,
+		ModerationState: "pending",
+		LifecycleState:  "draft",
+	}, nil
 }
 
 // checkFormat 判断「作者声明的类型」收不收「实际传上来的东西」。
@@ -352,22 +382,40 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			if err != nil {
 				return err
 			}
-			rev, err := q.CreateRevision(ctx, store.CreateRevisionParams{
-				DemoID:       d.ID,
-				Title:        text(strings.TrimSpace(in.Title)),
-				Description:  text(strings.TrimSpace(in.Description)),
-				DemoType:     in.DemoType,
-				EntryPath:    text(st.entryPath),
-				SingleFile:   text(st.singleFile),
-				ManifestHash: text(st.manifest),
-				FileCount:    int8(int64(len(st.files))),
-				TotalBytes:   int8(st.totalBytes),
-				CreatedBy:    int8(in.AuthorID),
-			})
-			if err != nil {
-				return err
+			// st 为 nil = 外链作品：没有入口文件、没有清单，只有地址。
+			var revIDFromCreate int64
+			if st == nil {
+				urlRev, urlErr := q.CreateURLRevision(ctx, store.CreateURLRevisionParams{
+					DemoID:      d.ID,
+					Title:       text(strings.TrimSpace(in.Title)),
+					Description: text(strings.TrimSpace(in.Description)),
+					DemoType:    in.DemoType,
+					ExternalUrl: text(strings.TrimSpace(in.ExternalURL)),
+					CreatedBy:   int8(in.AuthorID),
+				})
+				if urlErr != nil {
+					return urlErr
+				}
+				revIDFromCreate = urlRev.ID
+			} else {
+				rev, revErr := q.CreateRevision(ctx, store.CreateRevisionParams{
+					DemoID:       d.ID,
+					Title:        text(strings.TrimSpace(in.Title)),
+					Description:  text(strings.TrimSpace(in.Description)),
+					DemoType:     in.DemoType,
+					EntryPath:    text(st.entryPath),
+					SingleFile:   text(st.singleFile),
+					ManifestHash: text(st.manifest),
+					FileCount:    int8(int64(len(st.files))),
+					TotalBytes:   int8(st.totalBytes),
+					CreatedBy:    int8(in.AuthorID),
+				})
+				if revErr != nil {
+					return revErr
+				}
+				revIDFromCreate = rev.ID
 			}
-			revID = rev.ID
+			revID = revIDFromCreate
 
 			// 模型声明挂在**这一版**上（MODEL-007）。放在同一事务里：
 			// 声明写失败就等于这次投稿失败，不能出现「作品建好了、声明丢了」。
@@ -375,7 +423,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			if err != nil {
 				return err
 			}
-			if err := attachModels(ctx, q, rev.ID, modelIDs); err != nil {
+			if err := attachModels(ctx, q, revID, modelIDs); err != nil {
 				return err
 			}
 
@@ -392,7 +440,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 
 			return q.SetCurrentRevision(ctx, store.SetCurrentRevisionParams{
 				ID:                d.ID,
-				CurrentRevisionID: int8(rev.ID),
+				CurrentRevisionID: int8(revID),
 			})
 		})
 		if err == nil {

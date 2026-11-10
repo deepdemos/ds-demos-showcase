@@ -46,6 +46,12 @@ export type UpdateDemoBody = {
   /** 新的作品文件；不传表示只改文字 */
   package?: Blob | File;
   /**
+     * 外链作品的新地址。**不传表示沿用上一版**——multipart 里
+     * 「没传」与「传空」在浏览器侧无法区分，沿用是唯一安全的方向。
+     * @maxLength 2000
+     */
+  externalUrl?: string;
+  /**
      * 这一版声明的模型，语义是**整体替换**。每一项是模型指称
      * （slug / 展示名 / 别名），解析不到时自动建候选项，
      * 规则与 `POST /api/v1/demos` 完全相同。

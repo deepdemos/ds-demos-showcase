@@ -574,7 +574,18 @@ paths:
                 package:
                   type: string
                   format: binary
-                  description: 作品文件（zip 或单个 html/svg）
+                  description: |
+                    作品文件（zip 或单个 html/svg/glb/png/jpg/webp）。
+
+                    与 `externalUrl` **互斥**：两者都给或都不给都是 400。
+                externalUrl:
+                  type: string
+                  maxLength: 2000
+                  description: |
+                    外链作品的地址（只收 `http://` 与 `https://`）。
+
+                    给了它就不要上传 `package`。收录之后预览会 **302** 到这个地址：
+                    外部站点能不能被 iframe 嵌不归我们决定，硬嵌的结果是白屏。
                 modelSlugs:
                   type: array
                   description: |
@@ -914,6 +925,12 @@ paths:
                   type: string
                   format: binary
                   description: 新的作品文件；不传表示只改文字
+                externalUrl:
+                  type: string
+                  maxLength: 2000
+                  description: |
+                    外链作品的新地址。**不传表示沿用上一版**——multipart 里
+                    「没传」与「传空」在浏览器侧无法区分，沿用是唯一安全的方向。
                 modelSlugs:
                   type: array
                   description: |

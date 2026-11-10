@@ -647,6 +647,9 @@ if(submitDemoBody.description !== undefined) {
  }
 formData.append(`demoType`, submitDemoBody.demoType);
 formData.append(`package`, submitDemoBody.package);
+if(submitDemoBody.externalUrl !== undefined) {
+ formData.append(`externalUrl`, submitDemoBody.externalUrl);
+ }
 if(submitDemoBody.modelSlugs !== undefined) {
  submitDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));
  }
@@ -1021,6 +1024,9 @@ if(updateDemoBody.demoType !== undefined) {
  }
 if(updateDemoBody.package !== undefined) {
  formData.append(`package`, updateDemoBody.package);
+ }
+if(updateDemoBody.externalUrl !== undefined) {
+ formData.append(`externalUrl`, updateDemoBody.externalUrl);
  }
 if(updateDemoBody.modelSlugs !== undefined) {
  updateDemoBody.modelSlugs.forEach(value => formData.append(`modelSlugs`, value));

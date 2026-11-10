@@ -44,8 +44,20 @@ export type SubmitDemoBody = {
      * @maxLength 32
      */
   demoType: string;
-  /** 作品文件（zip 或单个 html/svg） */
+  /**
+     * 作品文件（zip 或单个 html/svg/glb/png/jpg/webp）。
+     *
+     * 与 `externalUrl` **互斥**：两者都给或都不给都是 400。
+     */
   package: Blob | File;
+  /**
+     * 外链作品的地址（只收 `http://` 与 `https://`）。
+     *
+     * 给了它就不要上传 `package`。收录之后预览会 **302** 到这个地址：
+     * 外部站点能不能被 iframe 嵌不归我们决定，硬嵌的结果是白屏。
+     * @maxLength 2000
+     */
+  externalUrl?: string;
   /**
      * 这一版用到的模型。每一项是一个**模型指称**：`slug`、展示名或别名
      * 都可以（大小写不敏感），由服务端统一解析。从 `GET /api/v1/models`

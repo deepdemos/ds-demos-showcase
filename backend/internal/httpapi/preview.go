@@ -195,6 +195,24 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
+	// 外链作品没有文件：预览就是「去这个作品的真实地址」。
+	//
+	// 302 而不是把外部页面嵌进 iframe：外部站点能不能嵌（X-Frame-Options / CSP）
+	// 不归我们决定，硬嵌的结果是白屏。跳过去至少作者看到的是真实页面。
+	if rel == "" {
+		external := ""
+		if privilegedView && int32(rev) == row.CurrentRevNo {
+			external = row.CurrentExternalUrl
+		} else if int32(rev) == row.PublishedRevNo {
+			external = row.PublishedExternalUrl
+		}
+		if external != "" {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Redirect(w, r, external, http.StatusFound)
+			return
+		}
+	}
+
 	if rel == "" {
 		// 没有文件名时**不猜**入口，而是跳过去。
 		//
