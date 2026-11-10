@@ -87,13 +87,19 @@ func submitShape(t *testing.T, h *Handler, sid, title, fileName string, content 
 }
 
 // shapeContent 造出这种形态的字节内容。
+//
+// **每次都要带一个唯一标记**：投稿走内容寻址（零拷贝），它按 `blobs` 表里
+// 有没有这个 sha256 判断「已经在库里了」。测试库是跨轮共用的，而存储根是
+// 每轮一个临时目录——上一轮写下的 blob 行还在，这一轮就会认为「已存在」
+// 而跳过落盘，于是预览 404。唯一标记让同一份夹具在每一轮都是新内容。
 func shapeContent(t *testing.T, shape demo.SubmitShape) []byte {
 	t.Helper()
+	nonce := uniq()
 	switch shape.SingleFile {
 	case "html":
-		return []byte("<!doctype html><html><head><title>形态矩阵</title></head><body>hi</body></html>")
+		return []byte("<!doctype html><html><head><title>形态矩阵</title></head><body>hi " + nonce + "</body></html>")
 	case "svg":
-		return []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>`)
+		return []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><desc>` + nonce + `</desc><rect width="8" height="8"/></svg>`)
 	case "":
 		// zip 包：根目录一个入口 + 一个静态资源，确认多文件也能打开。
 		var buf bytes.Buffer
