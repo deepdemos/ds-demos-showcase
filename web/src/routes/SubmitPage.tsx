@@ -81,9 +81,13 @@ export function SubmitPage() {
   const closedTypes = types.filter((t) => t.formats.length === 0);
   const current = usableTypes.find((t) => t.code === demoType) ?? usableTypes[0];
   const currentFormats = current?.formats ?? [];
+  // 只收 url 的类型（外链）：不传文件，只填地址。判据用清单而不是类型码——
+  // 将来多一个「只收链接」的类型时这里不用改。
+  const urlOnly = currentFormats.length === 1 && currentFormats[0] === 'url';
   const [modelSlugs, setModelSlugs] = useState<string[]>([]);
   const [classificationSlugs, setClassificationSlugs] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [externalUrl, setExternalUrl] = useState('');
   const [fileError, setFileError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,14 +100,26 @@ export function SubmitPage() {
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!file) {
-      setFileError('请选择要上传的作品文件');
-      return;
-    }
-    const problem = extensionProblem(file.name, currentFormats);
-    if (problem) {
-      setFileError(problem);
-      return;
+    if (urlOnly) {
+      const trimmed = externalUrl.trim();
+      if (trimmed === '') {
+        setFileError('请填写作品地址');
+        return;
+      }
+      if (!/^https?:\/\//i.test(trimmed)) {
+        setFileError('作品地址只能以 http:// 或 https:// 开头');
+        return;
+      }
+    } else {
+      if (!file) {
+        setFileError('请选择要上传的作品文件');
+        return;
+      }
+      const problem = extensionProblem(file.name, currentFormats);
+      if (problem) {
+        setFileError(problem);
+        return;
+      }
     }
     setFileError(undefined);
     setBusy(true);
@@ -118,7 +134,8 @@ export function SubmitPage() {
         ...(modelSlugs.length > 0 ? { modelSlugs: modelSlugs } : {}),
         // 分类同理：空数组与不传在服务端都是「没打分类」，省略少一个字段。
         ...(classificationSlugs.length > 0 ? { classificationSlugs: classificationSlugs } : {}),
-        package: file,
+        // 外链作品交地址，普通作品交文件：两者互斥，服务端两个都拒。
+        ...(urlOnly ? { externalUrl: externalUrl.trim() } : { package: file as File }),
       });
       // 201 = 新建；200 = 重放（同一个 Idempotency-Key 已经建过）。
       // 浏览器这一侧目前不发这个头，但重放一旦能发生，它就该被当成成功——
@@ -206,6 +223,7 @@ export function SubmitPage() {
             onChange={(code) => {
               setDemoType(code);
               setFile(null);
+              setExternalUrl('');
               setFileError(undefined);
             }}
             ariaLabel="作品类型"
@@ -241,16 +259,34 @@ export function SubmitPage() {
 
         <ModelPicker value={modelSlugs} onChange={setModelSlugs} disabled={busy} />
 
-        <FileInput
-          label={`选择作品文件（收 ${formatsText(currentFormats)}）`}
-          accept={acceptFor(currentFormats)}
-          file={file}
-          onFileChange={setFile}
-          maxBytes={MAX_PACKAGE_BYTES}
-          onReject={setFileError}
-          error={fileError}
-          disabled={busy}
-        />
+        {urlOnly ? (
+          <label className="flex flex-col gap-1 text-sm">
+            作品地址（http:// 或 https://）
+            <Input
+              type="url"
+              value={externalUrl}
+              onChange={(e) => setExternalUrl(e.target.value)}
+              placeholder="https://example.com/your-demo"
+              disabled={busy}
+            />
+            {fileError && (
+              <span className="text-xs text-red-600 dark:text-red-400" role="alert">
+                {fileError}
+              </span>
+            )}
+          </label>
+        ) : (
+          <FileInput
+            label={`选择作品文件（收 ${formatsText(currentFormats)}）`}
+            accept={acceptFor(currentFormats)}
+            file={file}
+            onFileChange={setFile}
+            maxBytes={MAX_PACKAGE_BYTES}
+            onReject={setFileError}
+            error={fileError}
+            disabled={busy}
+          />
+        )}
 
         {error && (
           <p className="m-0 text-sm text-red-600 dark:text-red-400" role="alert">

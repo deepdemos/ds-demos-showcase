@@ -46,7 +46,7 @@ const demoTypes = vi.hoisted(() => ({
     { code: 'godot', name: 'Godot 游戏', formats: ['zip:godot'] },
     { code: 'image', name: '图片', formats: ['single:png', 'single:jpg', 'single:webp'] },
     { code: 'model', name: '三维模型', formats: ['single:glb'] },
-    { code: 'link', name: '外链', formats: [] },
+    { code: 'link', name: '外链', formats: ['url'] },
   ],
 }));
 
@@ -58,6 +58,15 @@ vi.mock('@/api', () => ({
   listModels: () => Promise.resolve({ status: 200, data: models }),
   listClassifications: () => Promise.resolve({ status: 200, data: classificationCatalog }),
 }));
+
+// 等类型目录真的渲染出来。目录没到之前下拉里只有退路的两种类型，
+// 这时 fireEvent.change 选一个不存在的值会把 select 的 value 变成空串，
+// 于是「改了类型」这件事根本没发生——测试会照常往下走，测的是 web。
+async function waitForType(code: string) {
+  const select = screen.getByLabelText('作品类型') as HTMLSelectElement;
+  await waitFor(() => expect([...select.options].map((o) => o.value)).toContain(code));
+  return select;
+}
 
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -257,11 +266,13 @@ test('类型选项按目录渲染，暂未开放的类型只做提示', async ()
       'godot',
       'image',
       'model',
+      'link',
     ]),
   );
-  expect(screen.getByText(/暂未开放投稿：外链/)).toBeInTheDocument();
   expect(select.options[3].textContent).toContain('图片');
   expect(select.options[3].textContent).toContain('PNG');
+  // 空清单的类型（本夹具里没有）才进「暂未开放」，外链现在收 url，应当可选。
+  expect(select.options[5].textContent).toContain('外链');
 });
 
 /**
@@ -276,12 +287,13 @@ test('选图片类型却传了 html，本地就挡住，不发请求', async () 
   renderAt('/submit');
 
   fireEvent.change(screen.getByLabelText('标题'), { target: { value: '一张图' } });
-  await screen.findByText(/暂未开放投稿/);
-  fireEvent.change(screen.getByLabelText('作品类型'), { target: { value: 'image' } });
+  const select = await waitForType('image');
+  fireEvent.change(select, { target: { value: 'image' } });
+  await screen.findByText(/这一类收 PNG/);
   pickFile();
   fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
 
-  expect(await screen.findByText(/这个类型收 PNG \/ JPG \/ WebP/)).toBeInTheDocument();
+  expect(await screen.findByText(/这个类型收/)).toBeInTheDocument();
   expect(submitDemo).not.toHaveBeenCalled();
 });
 
@@ -299,4 +311,57 @@ test('类型目录读不到时退回两种常用类型并说明', async () => {
   expect(await screen.findByText(/类型目录暂时读不到/)).toBeInTheDocument();
   const select = screen.getByLabelText('作品类型') as HTMLSelectElement;
   expect([...select.options].map((o) => o.value)).toEqual(['web', 'zip']);
+});
+
+/**
+ * 外链类型：不选文件，填地址。
+ *
+ * 这条钉的是「界面上有外链，但提交还是走文件那条路」——那种情况下请求会 400，
+ * 而作者看到的是「缺少作品文件」，完全对不上他刚做的事。
+ */
+test('外链类型填地址就能投，请求里带 externalUrl', async () => {
+  auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+  auth.isLoading = false;
+  vi.mocked(submitDemo).mockResolvedValue({
+    status: 201,
+    data: { slug: 'demo-link', lifecycleState: 'draft', moderationState: 'pending' },
+  } as never);
+  renderAt('/submit');
+
+  fireEvent.change(screen.getByLabelText('标题'), { target: { value: '外链作品' } });
+  const select = await waitForType('link');
+  fireEvent.change(select, { target: { value: 'link' } });
+  const url = await screen.findByLabelText(/作品地址/);
+  fireEvent.change(url, { target: { value: 'https://example.com/demo' } });
+  fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
+
+  await waitFor(() => expect(submitDemo).toHaveBeenCalled());
+  const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
+  expect(body.externalUrl).toBe('https://example.com/demo');
+  expect(body.package).toBeUndefined();
+});
+
+/**
+ * 地址不合规时本地挡住。
+ *
+ * 服务端只收 http/https（javascript: 会把「点一个作品」变成执行脚本），
+ * 这里挡的是「明明写了协议却被放过」这一类。
+ */
+test('外链地址不是 http(s) 时本地就挡住，不发请求', async () => {
+  auth.me = { sub: 'x', username: 'u', displayName: 'U' };
+  auth.isLoading = false;
+  renderAt('/submit');
+
+  fireEvent.change(screen.getByLabelText('标题'), { target: { value: '危险地址' } });
+  const select = await waitForType('link');
+  fireEvent.change(select, { target: { value: 'link' } });
+  // 用 ftp://：它对 <input type="url"> 是合法绝对地址（不会被原生校验拦下），
+  // 但我们的白名单只收 http/https——这样测的是我们的守卫，不是浏览器的。
+  fireEvent.change(await screen.findByLabelText(/作品地址/), {
+    target: { value: 'ftp://example.com/x' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
+
+  expect(await screen.findByText(/只能以 http/)).toBeInTheDocument();
+  expect(submitDemo).not.toHaveBeenCalled();
 });

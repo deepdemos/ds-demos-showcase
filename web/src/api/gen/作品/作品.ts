@@ -646,7 +646,9 @@ if(submitDemoBody.description !== undefined) {
  formData.append(`description`, submitDemoBody.description);
  }
 formData.append(`demoType`, submitDemoBody.demoType);
-formData.append(`package`, submitDemoBody.package);
+if(submitDemoBody.package !== undefined) {
+ formData.append(`package`, submitDemoBody.package);
+ }
 if(submitDemoBody.externalUrl !== undefined) {
  formData.append(`externalUrl`, submitDemoBody.externalUrl);
  }
