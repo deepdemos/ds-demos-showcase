@@ -31,8 +31,9 @@ describe('Rating', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  test('没打过分时显示「未评分」', () => {
+  // 「你还没评分」说的是我自己的票，与页面上的「还没有人评分」（全站聚合）分开（issue #377）。
+  test('没打过分时显示「你还没评分」', () => {
     render(<Rating label="打分" value={0} onChange={() => undefined} showValueText />);
-    expect(screen.getByText('未评分')).toBeTruthy();
+    expect(screen.getByText('你还没评分')).toBeTruthy();
   });
 });

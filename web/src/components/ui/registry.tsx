@@ -238,7 +238,7 @@ export const controls: ControlSpec[] = [
   {
     id: 'rating/empty',
     component: 'Rating',
-    name: '未评分',
+    name: '你还没评分',
     category: 'input',
     description: '还没打分时的样子。',
     Demo: RatingEmptyDemo,

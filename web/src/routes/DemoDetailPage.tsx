@@ -18,6 +18,19 @@ import { RelatedSection } from '@/features/demo/related-section';
 
 type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
 
+/**
+ * 软删之后服务端不再返回标题（`title` 是空串），页面上就只剩一段说明，
+ * 作者只能凭 URL 认人。给一个占位，恢复后标题自然回来（issue #372）。
+ */
+function displayTitle(demo: Pick<DemoDetail, 'title' | 'lifecycleActions'>): string {
+  if (demo.title?.trim()) return demo.title;
+  return demo.lifecycleActions.restore ? '已删除的作品' : '未命名作品';
+}
+
+function formatDay(iso: string): string {
+  return new Date(iso).toLocaleDateString('zh-CN');
+}
+
 async function fetchDemo(slug: string): Promise<Loaded> {
   const response = await getDemo(slug);
   if (response.status === 200) return { kind: 'ok', demo: response.data };
@@ -153,7 +166,7 @@ export function DemoDetailPage() {
       {data?.kind === 'ok' && !isTombstone(data.demo) && (
         <article>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-            {data.demo.title}
+            {displayTitle(data.demo)}
           </h1>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             作者 {data.demo.author.displayName || data.demo.author.username}
@@ -161,14 +174,15 @@ export function DemoDetailPage() {
           {/*
             发布时间取渠道最早的那一次（publishedAt），不是 demos.created_at：
             「什么时候投的稿」和「什么时候对外能看」是两件事，读者关心后者。
-            未发布的作品 publishedAt 为 null，退回 created_at——这种情况下页面
-            本来也不对访客开放，只有作者看得到。
+            所以 publishedAt 为空时不能把 created_at 写成「发布」——那是创建时间，
+            草稿页上会变成「未发布却写着发布日」（issue #375）。
           */}
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            发布{' '}
-            {new Date(data.demo.publishedAt ?? data.demo.createdAt).toLocaleDateString('zh-CN')}
+            {data.demo.publishedAt
+              ? `发布 ${formatDay(data.demo.publishedAt)}`
+              : `创建于 ${formatDay(data.demo.createdAt)}`}
             {data.demo.updatedAt !== data.demo.createdAt &&
-              ` · 更新 ${new Date(data.demo.updatedAt).toLocaleDateString('zh-CN')}`}
+              ` · 更新 ${formatDay(data.demo.updatedAt)}`}
           </p>
 
           {/* 业务统计：服务端只在「已发布且有对外版本」时给这两个数，

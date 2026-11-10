@@ -186,6 +186,49 @@ test('详情显示作者、发布时间与模型声明', async () => {
 });
 
 /**
+ * 没有对外版本时 `publishedAt` 是 null。拿 `createdAt` 顶上却仍写「发布」，
+ * 草稿页就成了「未发布却标着发布日」（issue #375）。
+ */
+test('未发布的作品显示创建时间，不写「发布」', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({
+      publishedAt: null,
+      lifecycleState: 'draft',
+      moderationState: 'pending',
+      isAuthor: true,
+      canEdit: true,
+      lifecycleActions: { edit: true, archive: false, restore: false, delete: true },
+    }),
+  } as never);
+
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  expect(screen.getByText(/创建于 2026\/1\/1/)).toBeInTheDocument();
+  expect(screen.queryByText(/发布 2026/)).toBeNull();
+});
+
+/**
+ * 软删之后服务端不再返回标题，`h1` 会整个空掉——作者只能凭 URL 认人（issue #372）。
+ * 占位只在 `restore` 动作存在时启用，别把普通缺标题的作品也说成已删除。
+ */
+test('已删除的作品有标题占位，作者还能认出来', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({
+      title: '',
+      isAuthor: true,
+      lifecycleActions: { edit: false, archive: false, restore: true, delete: false },
+    }),
+  } as never);
+
+  renderPage();
+
+  expect(await screen.findByRole('heading', { name: '已删除的作品' })).toBeInTheDocument();
+});
+
+/**
  * 没有声明时不出现「模型声明：」这一行。
  *
  * 空数组还渲染的话，页面会出现一行「模型声明：」后面什么都没有——
