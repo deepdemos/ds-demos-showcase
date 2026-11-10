@@ -233,6 +233,13 @@ func (p *Preview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		previewError(w, r, http.StatusNotFound, previewMissingDetail)
 		return
 	}
+	// 三维模型：包一层查看页。字节本身走同一地址的 `?raw=1`，
+	// 这样「作者看到什么」与「下载到什么」只差一个参数，不会各判一次可见性。
+	if isGLB(rel) && r.URL.Query().Get("raw") != "1" {
+		p.serveGLBViewer(w, r, rel, glbViewerCSP)
+		return
+	}
+
 	f, err := p.files.Get(ctx, key)
 	if err != nil {
 		if !errors.Is(err, storage.ErrNotFound) && !errors.Is(err, storage.ErrUnsafeKey) {
@@ -425,6 +432,8 @@ func contentTypeOf(rel string) string {
 		return "application/json; charset=utf-8"
 	case ".svg":
 		return "image/svg+xml"
+	case ".glb":
+		return "model/gltf-binary"
 	case ".png":
 		return "image/png"
 	case ".jpg", ".jpeg":
