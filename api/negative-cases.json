@@ -277,6 +277,20 @@
           "file": "backend/internal/httpapi/classifications_integration_test.go",
           "name": "TestIntegrationSubmitDeclaresClassifications"
         }
+      },
+      {
+        "case": "类型与真实形态不符时拒绝，并说明它可以收什么",
+        "test": {
+          "file": "backend/internal/httpapi/demo_types_integration_test.go",
+          "name": "TestIntegrationSubmitRejectsMismatchedShape"
+        }
+      },
+      {
+        "case": "编一个不存在的类型不会被默默落库",
+        "test": {
+          "file": "backend/internal/httpapi/demo_types_integration_test.go",
+          "name": "TestIntegrationSubmitRejectsUnknownType"
+        }
       }
     ],
     "POST /api/v1/demos/{slug}/archive": [
@@ -805,6 +819,22 @@
         "test": {
           "file": "backend/internal/httpapi/channels_integration_test.go",
           "name": "TestIntegrationListDemoChannels"
+        }
+      }
+    ],
+    "GET /api/v1/demo-types": [
+      {
+        "case": "编码不认识的上传形态不会进目录（代码与数据不许漂）",
+        "test": {
+          "file": "backend/internal/httpapi/demo_types_integration_test.go",
+          "name": "TestIntegrationKnownFormatsMatchDatabase"
+        }
+      },
+      {
+        "case": "还没有上传路径的类型给空数组，界面据此标不可选",
+        "test": {
+          "file": "backend/internal/httpapi/demo_types_integration_test.go",
+          "name": "TestIntegrationListDemoTypes"
         }
       }
     ]

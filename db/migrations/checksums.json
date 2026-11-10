@@ -30,5 +30,6 @@
   "db/migrations/0019_demo_listed_channels.sql": "bee85578f314f6be19d366081af431a607d2301f2241a329ea46c4fda7284973",
   "db/migrations/0020_model_import_permission.sql": "a8244ddb3e4ee31d291be53dbdab8545e72665cdab50e62eb2b1acfcd044b9c1",
   "db/migrations/0021_models_sync_default_on.sql": "f7852369b6041ce938293ae3647cadd2ace1d68c0a1bfcaffa0f066229666176",
-  "db/migrations/0022_demo_public_demos.sql": "0c0665a3180af4f11c51c64e46b2f7629288dfc8566dfd919c8d3534dde20919"
+  "db/migrations/0022_demo_public_demos.sql": "0c0665a3180af4f11c51c64e46b2f7629288dfc8566dfd919c8d3534dde20919",
+  "db/migrations/0023_demo_type_formats.sql": "dca4e7eb7c57904d2c4d5543f729434896c5ebc319cee3070dc1eae15e45ee50"
 }

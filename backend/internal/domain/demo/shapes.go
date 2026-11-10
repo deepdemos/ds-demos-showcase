@@ -112,3 +112,60 @@ func isRootIndex(rel string) bool {
 	}
 	return false
 }
+
+// 格式串是「类型允许什么」与「这份上传到底是什么」之间的对接词汇。
+//
+// 真相只在这个文件里：`demo_type_formats.format` 存的是这些字符串（那是数据），
+// 词汇本身是代码。加一种形态要改这里；加「某个类型收哪些格式」只加一行数据。
+const (
+	// FormatURL 表示没有上传文件，作者给一个外部地址。
+	FormatURL = "url"
+
+	formatSingle = "single:"
+	formatZip    = "zip:"
+)
+
+// FormatOfSingleFile 把 `demo_revisions.single_file` 的取值转成格式串。
+func FormatOfSingleFile(kind string) string { return formatSingle + kind }
+
+// ZipFormatOf 判断这个 zip 是哪一种包。
+//
+// Godot 导出的 Web 包一定带 `.pck`（4.x 另有 `.wasm`，3.x 是 `.asm.js`）。
+// 只看扩展名、不看内容：判错形态的代价是作者拿到一句可读的提示，
+// 而猜内容的代价是「上传成功、打开白屏」。
+func ZipFormatOf(files []string) string {
+	hasScript, hasPack := false, false
+	for _, f := range files {
+		switch strings.ToLower(filepath.Ext(f)) {
+		case ".wasm", ".asm.js":
+			hasScript = true
+		case ".pck":
+			hasPack = true
+		}
+	}
+	if hasScript && hasPack {
+		return formatZip + "godot"
+	}
+	return formatZip + "html"
+}
+
+// KnownFormats 列出代码认识的格式串。
+//
+// `demo_type_formats` 里出现别的值说明代码与数据漂了：集成测试会拿这份清单
+// 与库里的行做差集，漂了就红。
+func KnownFormats() []string {
+	out := []string{FormatURL, ZipFormatOf([]string{"a.wasm", "a.pck"}), ZipFormatOf([]string{"index.html"})}
+	kinds := make([]string, 0, len(singleFileKinds))
+	seen := map[string]bool{}
+	for _, kind := range singleFileKinds {
+		if !seen[kind] {
+			seen[kind] = true
+			kinds = append(kinds, kind)
+		}
+	}
+	sort.Strings(kinds)
+	for _, kind := range kinds {
+		out = append(out, FormatOfSingleFile(kind))
+	}
+	return out
+}

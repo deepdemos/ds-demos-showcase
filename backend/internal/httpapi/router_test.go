@@ -30,6 +30,10 @@ func (s *stub) SyncModelCatalog(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "sync")
 }
 
+func (s *stub) ListDemoTypes(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "demo-types")
+}
+
 func (s *stub) ListModels(_ http.ResponseWriter, _ *http.Request, _ api.ListModelsParams) {
 	s.hits = append(s.hits, "models")
 }
