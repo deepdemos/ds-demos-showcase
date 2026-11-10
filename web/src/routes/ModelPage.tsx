@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 
 import { getModel, type ModelProfile, type ModelSpecs } from '@/api';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
+import { useAuth } from '@/features/auth/AuthContext';
 
 /**
  * 模型页（模型域 §5.1）。
@@ -24,6 +25,7 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
  */
 export function ModelPage() {
   const { slug = '' } = useParams();
+  const { me } = useAuth();
 
   const query = useQuery({
     queryKey: ['model', slug],
@@ -107,8 +109,25 @@ export function ModelPage() {
 
       <Section title="档案">
         {specs === null ? (
+          // 「管理员可以从导入页补录」是对着管理员说的；普通用户读到的是一句
+          // 自己无从来执行的指示（issue #374）。所以按角色分开写，并给管理员一个
+          // 带模型名的搜索入口，省得再手敲一遍。
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            还没有这个模型的档案。上游目录里可能有，管理员可以从导入页补录。
+            还没有这个模型的档案。
+            {me?.role === 'admin' ? (
+              <>
+                上游目录里可能有，去{' '}
+                <Link
+                  className="underline"
+                  to={`/admin/models?q=${encodeURIComponent(model.slug)}`}
+                >
+                  导入页
+                </Link>{' '}
+                补录。
+              </>
+            ) : (
+              '上游目录里可能有，等它被收录。'
+            )}
           </p>
         ) : (
           <SpecTable specs={specs} />
