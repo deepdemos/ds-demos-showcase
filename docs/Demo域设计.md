@@ -1370,7 +1370,7 @@ sequenceDiagram
 同一个理由把 `DemoDetail.author` 的 schema 从 `ModelAuthor` 改成 `DemoAuthor`——它跟模型域
 没有任何关系，同前缀只会让人以为它是「模型的作者」。
 
-主数据来源与它的边界：`db/seeds/0002-dev-models.sql` 提供 6 个 DeepSeek 模型（全 `status='active'`、`resolution='exact'`），`cmd/migrate -mode seed` 与 CI 各跑一次。**`models` 是外部目录表，它的权威不在本仓库**——生产正式导入与日常维护还没有工具，见《已知松点》第 44 条。
+主数据来源与它的边界：`db/seeds/0002-dev-models.sql` 提供 6 个 DeepSeek 模型（全 `status='active'`、`resolution='exact'`），`cmd/migrate seed` 与 CI 各跑一次。**`models` 是外部目录表，它的权威不在本仓库**——生产正式导入与日常维护还没有工具，见《已知松点》第 44 条。
 
 **落地状态（2026-11-06）——可见性判据收进视图，发布时间改口径**
 

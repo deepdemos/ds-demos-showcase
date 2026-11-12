@@ -4,6 +4,12 @@
 //
 //	DATABASE_URL=postgres://... go run ./cmd/migrate status
 //	DATABASE_URL=postgres://... go run ./cmd/migrate up
+//	DATABASE_URL=postgres://... go run ./cmd/migrate seed
+//
+// 模式写在位置参数上（上面三行就是推荐写法）；`-mode status` 这种标志写法也认，
+// 但两者同时给出时必须说同一件事，矛盾直接报错。
+//
+// **没有默认模式**：一个都不写就是错误，不会替你选 up。见 resolveMode 的注释。
 //
 // 为什么用 Go 写而不是 node 脚本：这里已经有 pgx，而 node 侧唯一的依赖是 WASM 版 PGlite
 // （连不了真库）。再加一个 `pg` 依赖只为了跑迁移，不划算。
@@ -19,6 +25,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -38,13 +45,14 @@ const (
 )
 
 func main() {
-	var (
-		mode       = flag.String("mode", "up", "up | status | seed")
-		schemaDir  = flag.String("schema", "../db/schema", "冻结基线目录")
-		migrateDir = flag.String("migrations", "../db/migrations", "增量迁移目录")
-		seedDir    = flag.String("seeds", "../db/seeds", "开发种子目录")
-	)
-	flag.Parse()
+	opt, err := parseArgs(os.Args[1:])
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		// flag 已经把选项打出来了，正常退出。
+		return
+	case err != nil:
+		fail("%v", err)
+	}
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -60,16 +68,91 @@ func main() {
 	}
 	defer conn.Close(context.Background())
 
-	switch *mode {
-	case "status":
-		status(ctx, conn, *schemaDir, *migrateDir)
-	case "up":
-		applyUp(ctx, conn, *schemaDir, *migrateDir)
-	case "seed":
-		applySeeds(ctx, conn, *seedDir)
+	switch opt.mode {
+	case modeStatus:
+		status(ctx, conn, opt.schemaDir, opt.migrateDir)
+	case modeUp:
+		applyUp(ctx, conn, opt.schemaDir, opt.migrateDir)
+	case modeSeed:
+		applySeeds(ctx, conn, opt.seedDir)
 	default:
-		fail("未知 mode %q（只支持 up / status / seed）", *mode)
+		fail("未知 mode %q（只支持 up / status / seed）", opt.mode)
 	}
+}
+
+// options 是解析完的命令行。字段与顺序无关，只看内容。
+type options struct {
+	mode       string
+	schemaDir  string
+	migrateDir string
+	seedDir    string
+}
+
+const (
+	modeUp     = "up"
+	modeStatus = "status"
+	modeSeed   = "seed"
+)
+
+// resolveMode 决定这次跑哪个模式。这是本命令唯一会「改库」的分岔点，所以规则写得比需要的更死：
+//
+//  1. 位置参数与 -mode 都认，但**必须一致**；不一致直接报错。原先只读 -mode，位置参数被
+//     flag.Parse 静默丢掉 —— `migrate status` 于是按默认值 up 执行，一次「查一下跑到第几版」
+//     就变成了推迁移。（本仓库的 package.json / README / 容器 entrypoint 都写过这种调用。）
+//  2. 一个都不给 = 错误，**没有默认模式**。默认值只在「省略也无害」时才安全；这里省略的代价
+//     是 DDL 已经落库、回滚要自己写反向 SQL。宁可打一行用法，也不替人挑一个模式。
+func resolveMode(positional []string, flagMode string) (string, error) {
+	if len(positional) > 1 {
+		return "", fmt.Errorf("最多一个模式参数，收到 %d 个：%v", len(positional), positional)
+	}
+	var pos string
+	if len(positional) == 1 {
+		pos = positional[0]
+	}
+	switch {
+	case pos != "" && flagMode != "":
+		if pos != flagMode {
+			return "", fmt.Errorf("模式参数矛盾：位置参数是 %q，-mode 是 %q", pos, flagMode)
+		}
+		return pos, nil
+	case pos != "":
+		return pos, nil
+	case flagMode != "":
+		return flagMode, nil
+	default:
+		return "", errors.New("必须给出模式：migrate <up | status | seed>，例如 migrate status")
+	}
+}
+
+// parseArgs 解析命令行。抽成函数是为了能测：main 里的 os.Exit 让参数规则无法断言，
+// 而这次的缺陷恰好就出在参数上。
+func parseArgs(argv []string) (options, error) {
+	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	flagMode := fs.String("mode", "", "up | status | seed（与位置参数等价；两者都给时必须一致）")
+	schemaDir := fs.String("schema", "../db/schema", "冻结基线目录")
+	migrateDir := fs.String("migrations", "../db/migrations", "增量迁移目录")
+	seedDir := fs.String("seeds", "../db/seeds", "开发种子目录")
+	if err := fs.Parse(argv); err != nil {
+		return options{}, err
+	}
+	positional := fs.Args()
+	// flag 解析到**第一个非选项**就停：`migrate seed -seeds X` 里的 -seeds 根本不会被看见，
+	// 于是它既不生效也不报错。静默忽略正是这次事故的形状，所以这里明确要求选项写在前面。
+	for _, tok := range positional {
+		if strings.HasPrefix(tok, "-") {
+			return options{}, fmt.Errorf("选项必须写在模式之前：`migrate -seeds <目录> seed`，不是 `migrate seed -seeds <目录>`（看到 %q）", tok)
+		}
+	}
+	mode, err := resolveMode(positional, *flagMode)
+	if err != nil {
+		return options{}, err
+	}
+	switch mode {
+	case modeUp, modeStatus, modeSeed:
+	default:
+		return options{}, fmt.Errorf("未知 mode %q（只支持 up / status / seed）", mode)
+	}
+	return options{mode: mode, schemaDir: *schemaDir, migrateDir: *migrateDir, seedDir: *seedDir}, nil
 }
 
 func fail(format string, args ...any) {

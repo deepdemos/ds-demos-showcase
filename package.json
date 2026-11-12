@@ -17,7 +17,7 @@
     "seal:api-compat": "node scripts/check-api-compat.mjs --update",
     "db:up": "cd backend && go run ./cmd/migrate up",
     "db:status": "cd backend && go run ./cmd/migrate status",
-    "db:seed": "cd backend && go run ./cmd/migrate -mode seed",
+    "db:seed": "cd backend && go run ./cmd/migrate seed",
     "db:seal": "node scripts/check-migrations.mjs --seal",
     "check:migrations": "node scripts/check-migrations.mjs",
     "check:layering": "node scripts/check-layering.mjs",
