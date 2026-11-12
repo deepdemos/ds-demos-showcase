@@ -2,9 +2,11 @@ package demo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
@@ -116,7 +118,9 @@ func cleanModelRefs(refs []string) ([]string, error) {
 // createCandidateModel 建一个候选项，并把作者这次的写法记成别名。
 //
 // 并发时两个请求可能同时建同名模型：`CreateCandidateModel` 的 `ON CONFLICT DO NOTHING`
-// 不返回行，于是回查名字拿现成的那条——把并发冲突当成成功，而不是报错。
+// 冲突时**不报错**（不是 23505），而是返回 0 行——sqlc 的 `:one` 于是让 Scan 返回
+// `pgx.ErrNoRows`。所以「并发撞上」这件事在这里的形状是 ErrNoRows，不是唯一约束冲突：
+// 回查名字拿现成的那条，把冲突当成成功，而不是把这名作者整次投稿判死。
 func createCandidateModel(ctx context.Context, q *store.Queries, ref string) (int64, error) {
 	slug, err := uniqueModelSlug(ctx, q, ref)
 	if err != nil {
@@ -135,8 +139,11 @@ func createCandidateModel(ctx context.Context, q *store.Queries, ref string) (in
 			return 0, fmt.Errorf("记模型别名失败: %w", err)
 		}
 		return row, nil
-	case isUniqueViolation(err):
-		// 撞的是 `models.name`（同一个名字已存在，可能刚被并发的那次建好）。
+	case errors.Is(err, pgx.ErrNoRows), isUniqueViolation(err):
+		// 两条路都归到这里，因为「同名已经存在」有两种形状：
+		//   - `ON CONFLICT DO NOTHING` 命中 → 0 行 → ErrNoRows（并发下的常态，见上）；
+		//   - 未来若有人把查询改成会报错的形状（比如去掉 ON CONFLICT）→ 23505。
+		// 名字是作者给的、slug 才是机器生成的，所以按名字回查更准。
 		existing, findErr := q.FindModelByName(ctx, ref)
 		if findErr != nil {
 			return 0, fmt.Errorf("回查同名模型失败: %w", findErr)
