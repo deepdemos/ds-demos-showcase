@@ -200,6 +200,45 @@ ON CONFLICT (alias, model_id) DO NOTHING;
 -- slug 是公开 URL 的一部分、创建后不可变，生成时先查一遍再落库。
 SELECT EXISTS (SELECT 1 FROM models WHERE slug = $1)::bool AS taken;
 
+-- ===== 模型版本（checkpoint）=====
+
+-- name: InsertModelCheckpoint :one
+-- 给一个模型登记一版快照（「v4.1-flash 的 1017 那版」）。
+--
+-- 为什么版本是模型的子表而不是一张独立的模型：版本与模型是同一个东西的两层粒度，
+-- 拉平成两个模型会让「合并 / 去重 / 对比」把版本差异当成模型差异（见 0029 迁移头）。
+-- `(model_id, label)` 唯一：同一个模型下同名版本只该有一行；不同模型下同名版本互不相干。
+--
+-- `ON CONFLICT DO NOTHING` 不带条件地让「同一个版本登记两次」变成无害操作：
+-- 冲突时不返回行，调用方据此回查（与 `CreateCandidateModel` 同一套路），不把它当失败。
+-- `released_on` 走 `sqlc.narg`：上游日期常常只知道月份，空着比编一个准，NULL 就是「日期不明」。
+INSERT INTO model_checkpoints (model_id, label, released_on, notes)
+VALUES (
+    sqlc.arg(model_id),
+    sqlc.arg(label),
+    sqlc.narg(released_on),
+    sqlc.arg(notes)
+)
+ON CONFLICT (model_id, label) DO NOTHING
+RETURNING id;
+
+-- name: FindModelCheckpoint :one
+-- 登记撞唯一键后回查：拿到已存在那版的行 id，让调用方不必区分「刚建的」与「早就有的」。
+SELECT id
+FROM model_checkpoints
+WHERE model_id = sqlc.arg(model_id)
+  AND label = sqlc.arg(label);
+
+-- name: ListModelCheckpoints :many
+-- 列某个模型的全部版本：新的在前，日期不明（NULL）排最后，同一天按 label 定序。
+--
+-- NULLS LAST 要显式写：Postgres 的 DESC 默认是 NULLS FIRST，不写会让「日期不明」顶到最前面，
+-- 给人的印象是「最新的那版不知道什么时候发的」。
+SELECT id, model_id, label, released_on, notes, created_at
+FROM model_checkpoints
+WHERE model_id = sqlc.arg(model_id)
+ORDER BY released_on DESC NULLS LAST, label;
+
 -- ===== 目录导入（models.dev 镜像 → 本地实体）=====
 
 -- name: ListCatalogItems :many

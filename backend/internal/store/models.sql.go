@@ -179,6 +179,26 @@ func (q *Queries) FindModelByName(ctx context.Context, name string) (int64, erro
 	return id, err
 }
 
+const findModelCheckpoint = `-- name: FindModelCheckpoint :one
+SELECT id
+FROM model_checkpoints
+WHERE model_id = $1
+  AND label = $2
+`
+
+type FindModelCheckpointParams struct {
+	ModelID int64
+	Label   string
+}
+
+// 登记撞唯一键后回查：拿到已存在那版的行 id，让调用方不必区分「刚建的」与「早就有的」。
+func (q *Queries) FindModelCheckpoint(ctx context.Context, arg FindModelCheckpointParams) (int64, error) {
+	row := q.db.QueryRow(ctx, findModelCheckpoint, arg.ModelID, arg.Label)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getCatalogItem = `-- name: GetCatalogItem :one
 SELECT id,
        source,
@@ -572,6 +592,48 @@ func (q *Queries) InsertModelAlias(ctx context.Context, arg InsertModelAliasPara
 	return err
 }
 
+const insertModelCheckpoint = `-- name: InsertModelCheckpoint :one
+
+INSERT INTO model_checkpoints (model_id, label, released_on, notes)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (model_id, label) DO NOTHING
+RETURNING id
+`
+
+type InsertModelCheckpointParams struct {
+	ModelID    int64
+	Label      string
+	ReleasedOn pgtype.Date
+	Notes      string
+}
+
+// ===== 模型版本（checkpoint）=====
+// 给一个模型登记一版快照（「v4.1-flash 的 1017 那版」）。
+//
+// 为什么版本是模型的子表而不是一张独立的模型：版本与模型是同一个东西的两层粒度，
+// 拉平成两个模型会让「合并 / 去重 / 对比」把版本差异当成模型差异（见 0029 迁移头）。
+// `(model_id, label)` 唯一：同一个模型下同名版本只该有一行；不同模型下同名版本互不相干。
+//
+// `ON CONFLICT DO NOTHING` 不带条件地让「同一个版本登记两次」变成无害操作：
+// 冲突时不返回行，调用方据此回查（与 `CreateCandidateModel` 同一套路），不把它当失败。
+// `released_on` 走 `sqlc.narg`：上游日期常常只知道月份，空着比编一个准，NULL 就是「日期不明」。
+func (q *Queries) InsertModelCheckpoint(ctx context.Context, arg InsertModelCheckpointParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertModelCheckpoint,
+		arg.ModelID,
+		arg.Label,
+		arg.ReleasedOn,
+		arg.Notes,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertRevisionModel = `-- name: InsertRevisionModel :exec
 INSERT INTO demo_revision_models (revision_id, model_id, provider_id, serving_note, source)
 VALUES ($1, $2, NULL, '', 'api')
@@ -857,6 +919,44 @@ func (q *Queries) ListModelBenchmarks(ctx context.Context, modelID int64) ([]Lis
 			&i.Unit,
 			&i.RawScore,
 			&i.Rank,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModelCheckpoints = `-- name: ListModelCheckpoints :many
+SELECT id, model_id, label, released_on, notes, created_at
+FROM model_checkpoints
+WHERE model_id = $1
+ORDER BY released_on DESC NULLS LAST, label
+`
+
+// 列某个模型的全部版本：新的在前，日期不明（NULL）排最后，同一天按 label 定序。
+//
+// NULLS LAST 要显式写：Postgres 的 DESC 默认是 NULLS FIRST，不写会让「日期不明」顶到最前面，
+// 给人的印象是「最新的那版不知道什么时候发的」。
+func (q *Queries) ListModelCheckpoints(ctx context.Context, modelID int64) ([]ModelCheckpoint, error) {
+	rows, err := q.db.Query(ctx, listModelCheckpoints, modelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelCheckpoint{}
+	for rows.Next() {
+		var i ModelCheckpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ModelID,
+			&i.Label,
+			&i.ReleasedOn,
+			&i.Notes,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
