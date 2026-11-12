@@ -28,12 +28,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -44,46 +44,9 @@ const (
 	advisoryLockKey = 4815162342
 )
 
+// main 只剩一件事：把退出码从 cli 搬到进程。真正的逻辑在 run.go —— 那里能测。
 func main() {
-	opt, err := parseArgs(os.Args[1:])
-	switch {
-	case errors.Is(err, flag.ErrHelp):
-		// flag 已经把选项打出来了，正常退出。
-		return
-	case err != nil:
-		var reported alreadyReported
-		if errors.As(err, &reported) {
-			// flag.ContinueOnError 自己已经把「错误 + 用法」打到 stderr 了，
-			// 这里再打一遍会让同一个错误在终端里出现两次。
-			os.Exit(1)
-		}
-		fail("%v", err)
-	}
-
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		fail("DATABASE_URL 未设置")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	conn, err := pgx.Connect(ctx, dsn)
-	if err != nil {
-		fail("连接数据库失败: %v", err)
-	}
-	defer conn.Close(context.Background())
-
-	switch opt.mode {
-	case modeStatus:
-		status(ctx, conn, opt.schemaDir, opt.migrateDir)
-	case modeUp:
-		applyUp(ctx, conn, opt.schemaDir, opt.migrateDir)
-	case modeSeed:
-		applySeeds(ctx, conn, opt.seedDir)
-	default:
-		fail("未知 mode %q（只支持 up / status / seed）", opt.mode)
-	}
+	os.Exit(cli(os.Args[1:], os.Stderr))
 }
 
 // options 是解析完的命令行。字段与顺序无关，只看内容。
@@ -132,8 +95,20 @@ func resolveMode(positional []string, flagMode string) (string, error) {
 
 // parseArgs 解析命令行。抽成函数是为了能测：main 里的 os.Exit 让参数规则无法断言，
 // 而这次的缺陷恰好就出在参数上。
+//
+// 它只把 flag 自己的输出丢掉（用例不关心用法文本长什么样），
+// 真机上用 parseArgsTo 把它接到 os.Stderr —— 见 run.go 的 cli()。
 func parseArgs(argv []string) (options, error) {
+	return parseArgsTo(argv, io.Discard)
+}
+
+// parseArgsTo 同 parseArgs，但把 flag 的错误与用法写进给定的 writer。
+//
+// 「同一个错误只打印一次」这件事，只有把 flag 的输出和调用方自己的输出接到**同一个**
+// writer 上才断言得出来。分成两个流时，用例数到的次数与人在终端里看到的不是一回事。
+func parseArgsTo(argv []string, stderr io.Writer) (options, error) {
 	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	flagMode := fs.String("mode", "", "up | status | seed（与位置参数等价；两者都给时必须一致）")
 	schemaDir := fs.String("schema", "../db/schema", "冻结基线目录")
 	migrateDir := fs.String("migrations", "../db/migrations", "增量迁移目录")
