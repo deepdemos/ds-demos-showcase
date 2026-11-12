@@ -2,8 +2,10 @@ package demo
 
 import (
 	"context"
+	"regexp"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -266,5 +268,120 @@ func TestIntegrationCreateCandidateModelConcurrentSameName(t *testing.T) {
 	}
 	if aliases != 1 {
 		t.Fatalf("别名有 %d 行，想要 1（同一对 (alias, model_id) 只该有一行）", aliases)
+	}
+}
+
+// waitForBlockedInsert 等到有别的连接卡在锁上——说明另一个调用方已经走进 INSERT、
+// 正等这笔未提交的事务放开唯一索引。等不到就是用例前提不成立：直接失败，而不是继续跑
+// 出一个「碰巧过了」的结果。
+func waitForBlockedInsert(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity
+			WHERE datname = current_database() AND wait_event_type = 'Lock'
+			  AND query ILIKE '%INSERT INTO models%'`).Scan(&n); err != nil {
+			t.Fatalf("查等锁连接数失败: %v", err)
+		}
+		if n > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("另一个调用方 5 秒内没有卡在唯一索引上，用例前提不成立")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// slugRetrySuffix 是「撞车之后该拿到的 slug」的形状：基座 + 8 位十六进制
+// （randomSuffix(4) 用 hex.EncodeToString，4 字节变 8 个字符）。
+var slugRetrySuffix = regexp.MustCompile(`^qwen-2-5-[0-9a-f]{8}$`)
+
+// TestIntegrationCreateCandidateModelRetriesWhenSlugTaken 钉住「slug 撞车时换一个 slug 重来」。
+//
+// 形状：两个**不同**的名字折出同一个基座（「Qwen-2.5」与「Qwen 2.5」都折成 qwen-2-5）。
+// uniqueModelSlug 是「先查再插」，两边都可能查到「没被占用」，后插的那条撞 models.slug
+// 的唯一约束 → ON CONFLICT DO NOTHING 返回 0 行 → 按名字回查也查不到（名字确实不同）
+// → 修之前作者会看到「回查同名模型失败: no rows in result set」（issue #442）。
+//
+// 这条用例不靠调度时序：先用一个**未提交**的事务占住 slug，另一个调用方查
+// ModelSlugTaken 时还看不见它，走到 INSERT 必然卡在唯一索引上；等它真的卡住了再提交，
+// 撞车是造出来的，不是赌出来的。
+func TestIntegrationCreateCandidateModelRetriesWhenSlugTaken(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	q := store.New(pool)
+
+	const name = "Qwen-2.5"  // 折成 qwen-2-5
+	const rival = "Qwen 2.5" // 同一个基座，但名字不同
+	t.Cleanup(func() { cleanupRaceTest(t, pool, []string{name, rival}) })
+	cleanupRaceTest(t, pool, []string{name, rival})
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("开事务失败: %v", err)
+	}
+	committed := false
+	t.Cleanup(func() {
+		if !committed {
+			_ = tx.Rollback(ctx)
+		}
+	})
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO models (slug, name, vendor, status) VALUES ('qwen-2-5', $1, '', 'candidate')`, rival); err != nil {
+		t.Fatalf("占住 slug 失败: %v", err)
+	}
+
+	type result struct {
+		id  int64
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		id, err := createCandidateModel(ctx, q, name)
+		done <- result{id: id, err: err}
+	}()
+
+	waitForBlockedInsert(t, pool)
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("提交占位事务失败: %v", err)
+	}
+	committed = true
+
+	got := <-done
+	if got.err != nil {
+		t.Fatalf("slug 撞车不该让作者失败，实际: %v", got.err)
+	}
+
+	var slug, storedName string
+	if err := pool.QueryRow(ctx, `SELECT slug, name FROM models WHERE id = $1`, got.id).Scan(&slug, &storedName); err != nil {
+		t.Fatalf("回查新模型失败: %v", err)
+	}
+	if storedName != name {
+		t.Fatalf("落库名字 = %q，想要 %q", storedName, name)
+	}
+	if !slugRetrySuffix.MatchString(slug) {
+		t.Fatalf("slug = %q，想要 qwen-2-5-<8 位十六进制>（撞车后应当换一个带后缀的 slug）", slug)
+	}
+
+	// 占位那条不该被顶掉：撞车只该让后到者换 slug，不该动别人。
+	var rivalSlug string
+	if err := pool.QueryRow(ctx, `SELECT slug FROM models WHERE name = $1`, rival).Scan(&rivalSlug); err != nil {
+		t.Fatalf("占位模型不见了: %v", err)
+	}
+	if rivalSlug != "qwen-2-5" {
+		t.Fatalf("占位模型的 slug = %q，想要 qwen-2-5（不该被顶掉）", rivalSlug)
+	}
+
+	// 别名要记在这次的新模型上：重试不能把别名漏掉。
+	var aliasModel int64
+	if err := pool.QueryRow(ctx, `SELECT model_id FROM model_aliases WHERE alias = $1`, name).Scan(&aliasModel); err != nil {
+		t.Fatalf("别名没记上: %v", err)
+	}
+	if aliasModel != got.id {
+		t.Fatalf("别名指向 %d，想要 %d", aliasModel, got.id)
 	}
 }
