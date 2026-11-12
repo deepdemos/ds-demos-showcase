@@ -8,6 +8,7 @@ package demo
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -78,11 +79,10 @@ func TestIntegrationResolveModelRefsSurvivesCycle(t *testing.T) {
 	setMerged(t, pool, first, second)
 	setMerged(t, pool, second, first)
 
-	// 20 层上限下终点是两条之一，取小的那个 id——与「同 rank 取小 id」同一条规则。
+	// 起点的 depth 是 0，环上偶数层回到 first，所以 20 层上限下的终点**恒为 first**——
+	// 不是「同 rank 取小 id」（那条规则只在同一 rank 有多行候选时才用得上）。
+	// 这里断言的是「有界、且每次一样」，与两个 id 谁大谁小无关。
 	want := first
-	if second < first {
-		want = second
-	}
 	for i := 0; i < 3; i++ {
 		done := make(chan []int64, 1)
 		errCh := make(chan error, 1)
@@ -149,6 +149,43 @@ func TestIntegrationModelSelfMergeIsRejectedBySchema(t *testing.T) {
 	if _, err := pool.Exec(ctx,
 		"UPDATE models SET merged_into_id = id WHERE id = $1", row); err == nil {
 		t.Fatalf("自指写进去了：ck_models_no_self 没起作用")
+	}
+}
+
+// 超过上限的长链：20 层就停，不等于「跟到尽头」。
+//
+// 为什么要有：递归项带 `depth < 20`，那是兜住环的手段，但它对**非环的长链**同样生效。
+// 真实数据里合并不该有 20 跳（合并是人工动作，链一般一跳），可既然上限是写死的，就要有
+// 用例说清「超过 20 跳时返回的是第 20 层那个模型，而不是链尾」——否则改上限的人只能靠
+// 读 SQL 猜影响面，或者以为这条路径只有环会碰到。
+func TestIntegrationResolveModelRefsStopsAtDepthLimit(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	q := store.New(pool)
+
+	const hops = 24 // 24 跳 = 25 个模型；起点 depth 是 0，所以停在第 20 个模型上
+	ids := make([]int64, hops+1)
+	slugs := make([]string, hops+1)
+	for i := range ids {
+		slugs[i] = fmt.Sprintf("it-long-%02d", i)
+		ids[i] = mkAliasTestModel(t, pool, slugs[i], fmt.Sprintf("长链%02d", i))
+	}
+	t.Cleanup(func() {
+		clearMerges(t, pool, ids[:len(ids)-1]...)
+		cleanupAliasTest(t, pool, nil, slugs)
+	})
+
+	for i := 0; i < hops; i++ {
+		setMerged(t, pool, ids[i], ids[i+1])
+	}
+
+	got, err := resolveModelRefs(ctx, q, []string{slugs[0]})
+	if err != nil {
+		t.Fatalf("解析长链失败: %v", err)
+	}
+	if len(got) != 1 || got[0] != ids[20] {
+		t.Fatalf("解析 %s = %v，想要 [%d]（第 20 层停住）；链尾是 %d",
+			slugs[0], got, ids[20], ids[hops])
 	}
 }
 
