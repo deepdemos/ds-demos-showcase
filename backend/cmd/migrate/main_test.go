@@ -120,3 +120,44 @@ func TestParseArgsKeepsDirectoryOverrides(t *testing.T) {
 		t.Fatalf("解析结果不对: %+v", opt)
 	}
 }
+
+// flag.ContinueOnError 自己会把「错误 + 用法」打到 stderr；main 再 fail 一次会让同一个
+// 错误在终端里出现两遍。这条用例钉住「被打包成 alreadyReported 而不是裸 err」。
+func TestParseArgsFlagErrorIsMarkedAlreadyReported(t *testing.T) {
+	for _, argv := range [][]string{{"-bogusflag"}, {"-mode"}} {
+		_, err := parseArgs(argv)
+		if err == nil {
+			t.Fatalf("%v 应当报错", argv)
+		}
+		var reported alreadyReported
+		if !errors.As(err, &reported) {
+			t.Fatalf("%v 的错误应当被标记成 alreadyReported（否则会被打印两遍），实际: %T %v", argv, err, err)
+		}
+		if errors.Is(err, flag.ErrHelp) {
+			t.Fatalf("%v 是选项写错，不是请求帮助", argv)
+		}
+	}
+}
+
+// 求帮助与顺序无关：写在哪里都该看到用法，而不是「选项必须写在模式之前」。
+func TestParseArgsHelpAfterModeIsHelp(t *testing.T) {
+	for _, argv := range [][]string{{"status", "-h"}, {"up", "--help"}, {"-h"}} {
+		if _, err := parseArgs(argv); !errors.Is(err, flag.ErrHelp) {
+			t.Fatalf("%v 应当返回 flag.ErrHelp，实际: %v", argv, err)
+		}
+	}
+}
+
+// `--` 是选项结束符，不是「写错位置的选项」。
+func TestParseArgsDoubleDashIsNotMisplacedFlag(t *testing.T) {
+	if _, err := parseArgs([]string{"status", "--"}); err != nil {
+		t.Fatalf("\"status --\" 不该报错，实际: %v", err)
+	}
+	opt, err := parseArgs([]string{"--", "status"})
+	if err != nil {
+		t.Fatalf("\"-- status\" 应当被接受，实际: %v", err)
+	}
+	if opt.mode != modeStatus {
+		t.Fatalf("mode = %q，想要 status", opt.mode)
+	}
+}

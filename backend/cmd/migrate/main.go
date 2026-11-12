@@ -51,6 +51,12 @@ func main() {
 		// flag 已经把选项打出来了，正常退出。
 		return
 	case err != nil:
+		var reported alreadyReported
+		if errors.As(err, &reported) {
+			// flag.ContinueOnError 自己已经把「错误 + 用法」打到 stderr 了，
+			// 这里再打一遍会让同一个错误在终端里出现两次。
+			os.Exit(1)
+		}
 		fail("%v", err)
 	}
 
@@ -133,15 +139,29 @@ func parseArgs(argv []string) (options, error) {
 	migrateDir := fs.String("migrations", "../db/migrations", "增量迁移目录")
 	seedDir := fs.String("seeds", "../db/seeds", "开发种子目录")
 	if err := fs.Parse(argv); err != nil {
-		return options{}, err
+		if errors.Is(err, flag.ErrHelp) {
+			return options{}, err
+		}
+		return options{}, alreadyReported{err}
 	}
-	positional := fs.Args()
 	// flag 解析到**第一个非选项**就停：`migrate seed -seeds X` 里的 -seeds 根本不会被看见，
 	// 于是它既不生效也不报错。静默忽略正是这次事故的形状，所以这里明确要求选项写在前面。
-	for _, tok := range positional {
-		if strings.HasPrefix(tok, "-") {
+	//
+	// `--` 是选项结束符，不占位置参数的名额：它出现在模式后面（此时早就不再解析选项了）
+	// 不该被当成「选项写错位置」——那会让人以为自己拼错了什么。
+	positional := make([]string, 0, len(fs.Args()))
+	for _, tok := range fs.Args() {
+		switch {
+		case tok == "--":
+			continue
+		case tok == "-h" || tok == "-help" || tok == "--help":
+			// 求帮助的意图与顺序无关：写在哪里都该看到用法。
+			fs.Usage()
+			return options{}, flag.ErrHelp
+		case strings.HasPrefix(tok, "-"):
 			return options{}, fmt.Errorf("选项必须写在模式之前：`migrate -seeds <目录> seed`，不是 `migrate seed -seeds <目录>`（看到 %q）", tok)
 		}
+		positional = append(positional, tok)
 	}
 	mode, err := resolveMode(positional, *flagMode)
 	if err != nil {
@@ -154,6 +174,14 @@ func parseArgs(argv []string) (options, error) {
 	}
 	return options{mode: mode, schemaDir: *schemaDir, migrateDir: *migrateDir, seedDir: *seedDir}, nil
 }
+
+// alreadyReported 标记「flag 包自己已经把错误和用法打到 stderr 了」。
+// 用它把「再打一遍」变成显式选择，而不是靠调用方记着别调 fail。
+type alreadyReported struct{ err error }
+
+func (e alreadyReported) Error() string { return e.err.Error() }
+
+func (e alreadyReported) Unwrap() error { return e.err }
 
 func fail(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
