@@ -277,8 +277,11 @@ func TestIntegrationListModels(t *testing.T) {
 
 // 派生 `source` 只认 authority='models.dev'：端点上表的行不该把模型标成「来自上游目录」。
 //
-// 这同时是那四处 `r.authority = 'models.dev'` 判据的反向用例——把条件删掉，
+// 覆盖的是 `ListModels` 那一处 `r.authority = 'models.dev'` 判据——把条件删掉，
 // 这里会红（任何出处的 offering 都会把 source 翻成 models.dev）。
+// 另三处（`GetModelBySlug` / `GetModelByID` / `ListRevisionModels`）**没有**同样的反向
+// 用例：删掉它们各自的条件，整套 httpapi 仍然全绿（2026-11-13 实测）。等端点写入方落地、
+// 造得出「只挂 endpoint offering 的模型」再补，见 #445。
 func TestIntegrationListModelsSourceIgnoresOtherAuthorities(t *testing.T) {
 	h, _, pool := newModelTestHandler(t)
 	insertModel(t, pool, "it-model-endpoint", "端点来源模型", "active")
