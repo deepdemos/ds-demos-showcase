@@ -71,15 +71,6 @@ func (fakeDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	return &emptyRows{}, nil
 }
 
-// CopyFrom 让假库满足 store.DBTX 的完整接口。
-//
-// 它只被模型目录同步用到（`InsertCatalogItem :copyfrom`）。假库返回 0 行而不是报错：
-// 这个桩是为「从代码到 HTTP 响应」那层用例准备的，同步路径由
-// `model_sync_integration_test.go` 用真库 + httptest 覆盖。
-func (fakeDB) CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error) {
-	return 0, nil
-}
-
 // emptyRows 是一个立即结束的行集。
 //
 // 它只需要实现 pgx.Rows 的四个方法：我们从不真的读它（store 生成的代码在

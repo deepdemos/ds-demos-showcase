@@ -361,12 +361,13 @@ export const getSyncModelCatalogUrl = () => {
 }
 
 /**
- * 拉 `models.dev` 整包（约 6 MB）重写本地镜像 `model_catalog_items`，并写一行
- * `model_source_sync` 记账。整包地址与定时开关见模型域 §6.3。
+ * 拉 `models.dev` 整包（约 6 MB）把本地镜像 `model_catalog_items` 更新成上游现在的样子，
+ * 并写一行 `model_source_sync` 记账。整包地址与定时开关见模型域 §6.3。
  *
- * **整表重写**而不是逐条 upsert：镜像只回答「上游现在有什么」，混两个时间点之后
- * 就分不清「上游改了」与「这条还没更新」。行 id 会整批变，但没有任何地方引用它
- * （认领关系存的是 `(source, provider_id, external_id)` 三元组）。
+ * **按条更新，不是整表重写**：唯一键 `(source, provider_id, external_id)` 决定
+ * 行身份，同一条上游条目重同步后行 id 不变；内容没变的那行连 `fetched_at` 都不动
+ * （它记的是「这一行内容最后一次变化」，不是「这次同步跑过」）。上游已经下架的条目
+ * 在同一事务里删掉。
  *
  * 三件失败保护：
  *

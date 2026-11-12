@@ -276,11 +276,6 @@ func (d *recordingDB) Exec(ctx context.Context, _ string, _ ...any) (pgconn.Comm
 	return pgconn.CommandTag{}, nil
 }
 
-// CopyFrom 只为满足 store.DBTX 接口：下载路径不会批量写。
-func (d *recordingDB) CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error) {
-	return 0, errors.New("recordingDB: CopyFrom 不该被调用")
-}
-
 func (d *recordingDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	return nil, errors.New("recordingDB: Query 不该被调用")
 }
