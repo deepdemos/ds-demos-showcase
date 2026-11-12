@@ -23,14 +23,14 @@
  *
  * # 它不能证明什么
  *
- * 主机名对不对、上传真的能过、systemd 单元真的能起——**一条都证明不了**。
+ * 语法正确、主机名对不对、上传真的能过、systemd 单元真的能起——**一条都证明不了**。
  * `deploy/nginx/deepdemos.conf` 与 `deploy/systemd/deepdemos-api.service`
- * 都没有被 `nginx -t` / `systemctl start` 加载过：宿主与 WSL 的 rootfs 里都没有 nginx，真机反代
- * 一次都没跑过，只能靠 `docs/部署.md` §7 的验证清单在部署机上验。
+ * 都没有被 `nginx -t` / `systemctl start` 加载过：宿主与 WSL 的 rootfs 里都没有 nginx，**这份主配置的**
+ * 反代一次都没跑过，只能靠 `docs/部署.md` §7 的验证清单在部署机上验。
  *
  * 唯一被真正加载过的是安全头：容器镜像把同一个 `deploy/nginx/security-headers.conf` 拷进
- * `/etc/nginx/snippets/` 并 include 四次，2026-11-10 的容器实测里那些头真的发出去了
- * （`docs/部署.md` §10.4）。容器那条路的 web 层同样是 nginx（1.27-alpine），但主配置是另一份
+ * `/etc/nginx/snippets/` 并 include 四次；`docs/部署.md` §10.4 的记录只 grep 了 CSP 与 nosniff，
+ * 另外两个头在 2026-11-13 的补测里单独确认。容器那条路的 web 层同样是 nginx（1.27-alpine），但主配置是另一份
  * `deploy/docker/nginx.conf.template`。所以容器跑通证明的是「这份片段在 1.27 上能加载、能发头」，
  * **不**证明这份主配置能用。
  *
