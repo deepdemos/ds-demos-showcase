@@ -403,7 +403,7 @@ func (h *Handler) diffTarget(ctx context.Context, ref catalogRef) (*store.GetMod
 		canonical = pgtype.Text{String: ref.CanonicalID, Valid: true}
 	}
 	row, err := h.queries.GetModelDiffTarget(ctx, store.GetModelDiffTargetParams{
-		Source:      ref.Source,
+		Authority:   ref.Source,
 		ProviderID:  ref.ProviderID,
 		ExternalID:  ref.ExternalID,
 		CanonicalID: canonical,

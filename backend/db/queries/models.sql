@@ -11,7 +11,8 @@
 -- 那等于没给。把筛选交给调用方（`?status=candidate`），字段才有意义。
 --
 -- `source` 是派生的，不是列：`models` 表没有这一列，「这个模型是不是被上游目录认领过」
--- 本来就是 `model_external_refs` 的事实。多加一列等于给同一件事两个出处。
+-- 本来就是 `model_offerings` 里 `authority = 'models.dev'` 那些行的事实。
+-- 多加一列等于给同一件事两个出处。
 --
 -- `merged_into_slug` 而不是 `merged_into_id`：合并归宿要用 slug 表达（引用一律 slug），
 -- 数字 id 是实现细节。
@@ -23,7 +24,7 @@ SELECT m.id,
        m.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
        CASE
-           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = m.id) THEN 'models.dev'
+           WHEN EXISTS (SELECT 1 FROM model_offerings r WHERE r.model_id = m.id AND r.authority = 'models.dev') THEN 'models.dev'
            ELSE 'manual'
        END::text AS source,
        m.description,
@@ -86,7 +87,7 @@ SELECT mo.id,
        mo.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
        CASE
-           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = mo.id) THEN 'models.dev'
+           WHEN EXISTS (SELECT 1 FROM model_offerings r WHERE r.model_id = mo.id AND r.authority = 'models.dev') THEN 'models.dev'
            ELSE 'manual'
        END::text AS source,
        mo.description,
@@ -231,8 +232,8 @@ SELECT i.id,
        i.description,
        i.fetched_at,
        CASE WHEN EXISTS (
-           SELECT 1 FROM model_external_refs r
-           WHERE r.source = i.source
+           SELECT 1 FROM model_offerings r
+           WHERE r.authority = i.source
              AND r.provider_id = i.provider_id
              AND r.external_id = i.external_id
        ) THEN true ELSE false END AS imported
@@ -303,11 +304,11 @@ WHERE source = sqlc.arg(source)::text
 -- 后面的别名 / slug / name 匹配交给 ResolveModelRefs——那条 SQL 已经覆盖了三种写法，
 -- 这里不重复一套优先级。
 SELECT r.model_id
-FROM model_external_refs r
-WHERE (r.source = sqlc.arg(source)::text
+FROM model_offerings r
+WHERE (r.authority = sqlc.arg(authority)::text
        AND r.provider_id = sqlc.arg(provider_id)::text
        AND r.external_id = sqlc.arg(external_id)::text)
-   OR (r.source = sqlc.arg(source)::text
+   OR (r.authority = sqlc.arg(authority)::text
        AND sqlc.narg('canonical_id')::text IS NOT NULL
        AND r.canonical_id = sqlc.narg('canonical_id')::text)
 ORDER BY (r.provider_id = sqlc.arg(provider_id)::text) DESC, r.id
@@ -368,13 +369,19 @@ ON CONFLICT (model_id, field) DO UPDATE SET
     source = EXCLUDED.source,
     updated_at = now();
 
--- name: UpsertModelExternalRef :exec
--- 认领上游条目。唯一键 `(source, provider_id, external_id)` 保证一条上游条目只能被
--- 一个本地模型认领——重复认领会造出两个模型指向同一个上游，是模型域 §4.7.4 明令禁止的。
-INSERT INTO model_external_refs (model_id, source, provider_id, provider_name, external_id, canonical_id, is_official)
-VALUES (sqlc.arg(model_id), sqlc.arg(source), sqlc.arg(provider_id), sqlc.arg(provider_name),
+-- name: UpsertModelOffering :exec
+-- 登记一条「调用」：某个 authority（现在只有 models.dev，将来还有端点上报）下的
+-- 某个 external_id 指的是这个模型。唯一键 `(authority, provider_id, external_id)`
+-- 保证同一条上游条目只能被一个本地模型认领——重复认领会造出两个模型指向同一个上游，
+-- 是模型域 §4.7.4 明令禁止的。
+--
+-- 键里为什么要带 provider_id：目录实测 8988 条里只有 4131 个 distinct external_id，
+-- 1182 个 external_id 被多个 provider 复用（同一个名字挂在不同 provider 名下）。
+-- 去掉 provider 维度会在迁移那一步直接撞唯一约束。
+INSERT INTO model_offerings (model_id, authority, provider_id, provider_name, external_id, canonical_id, is_official)
+VALUES (sqlc.arg(model_id), sqlc.arg(authority), sqlc.arg(provider_id), sqlc.arg(provider_name),
         sqlc.arg(external_id), sqlc.narg(canonical_id), sqlc.arg(is_official))
-ON CONFLICT (source, provider_id, external_id) DO UPDATE SET
+ON CONFLICT (authority, provider_id, external_id) DO UPDATE SET
     model_id = EXCLUDED.model_id,
     provider_name = EXCLUDED.provider_name,
     canonical_id = EXCLUDED.canonical_id,
@@ -419,7 +426,7 @@ SELECT m.id,
        m.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
        CASE
-           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = m.id) THEN 'models.dev'
+           WHEN EXISTS (SELECT 1 FROM model_offerings r WHERE r.model_id = m.id AND r.authority = 'models.dev') THEN 'models.dev'
            ELSE 'manual'
        END::text AS source,
        m.description,
@@ -458,7 +465,7 @@ SELECT m.id,
        m.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
        CASE
-           WHEN EXISTS (SELECT 1 FROM model_external_refs r WHERE r.model_id = m.id) THEN 'models.dev'
+           WHEN EXISTS (SELECT 1 FROM model_offerings r WHERE r.model_id = m.id AND r.authority = 'models.dev') THEN 'models.dev'
            ELSE 'manual'
        END::text AS source,
        m.description,

@@ -190,8 +190,8 @@ func purgeImportLeftovers(t *testing.T, pool *pgxpool.Pool, providerID, external
 	t.Helper()
 	ctx := context.Background()
 	rows, err := pool.Query(ctx, `
-SELECT model_id FROM model_external_refs
- WHERE source = 'models.dev' AND provider_id = $1 AND external_id = $2`, providerID, externalID)
+SELECT model_id FROM model_offerings
+ WHERE authority = 'models.dev' AND provider_id = $1 AND external_id = $2`, providerID, externalID)
 	if err != nil {
 		t.Fatalf("查遗留认领失败: %v", err)
 	}
@@ -209,7 +209,7 @@ SELECT model_id FROM model_external_refs
 		for _, stmt := range []string{
 			`DELETE FROM model_spec_fields WHERE model_id = $1`,
 			`DELETE FROM model_specs WHERE model_id = $1`,
-			`DELETE FROM model_external_refs WHERE model_id = $1`,
+			`DELETE FROM model_offerings WHERE model_id = $1`,
 			`DELETE FROM model_aliases WHERE model_id = $1`,
 			`DELETE FROM demo_revision_models WHERE model_id = $1`,
 			`DELETE FROM audit_log WHERE entity_id = $1 AND entity_type = 'model'`,
@@ -255,7 +255,7 @@ func TestIntegrationModelImportPreviewMarksUnselectable(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM model_spec_fields WHERE model_id = $1`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM model_specs WHERE model_id = $1`, modelID)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM model_external_refs WHERE model_id = $1`, modelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM model_offerings WHERE model_id = $1`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM audit_log WHERE entity_id = $1 AND entity_type = 'model'`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM models WHERE id = $1`, modelID)
 	})
@@ -341,7 +341,7 @@ func TestIntegrationModelImportApplyWritesSelectedOnly(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM model_spec_fields WHERE model_id = $1`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM model_specs WHERE model_id = $1`, modelID)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM model_external_refs WHERE model_id = $1`, modelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM model_offerings WHERE model_id = $1`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM audit_log WHERE entity_id = $1 AND entity_type = 'model'`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM models WHERE id = $1`, modelID)
 	})
@@ -355,7 +355,7 @@ func TestIntegrationModelImportApplyWritesSelectedOnly(t *testing.T) {
 	// 就没有用例压着（反向验证时改成恒 true 也仍然 PASS，就是证据）。
 	var isOfficial bool
 	if err := pool.QueryRow(context.Background(), `
-SELECT is_official FROM model_external_refs WHERE model_id = $1`, modelID).Scan(&isOfficial); err != nil {
+SELECT is_official FROM model_offerings WHERE model_id = $1`, modelID).Scan(&isOfficial); err != nil {
 		t.Fatalf("查认领行失败: %v", err)
 	}
 	if isOfficial {
@@ -404,7 +404,7 @@ func TestIntegrationModelImportCreateWritesOnlySelected(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM model_spec_fields WHERE model_id = $1`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM model_specs WHERE model_id = $1`, modelID)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM model_external_refs WHERE model_id = $1`, modelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM model_offerings WHERE model_id = $1`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM audit_log WHERE entity_id = $1 AND entity_type = 'model'`, modelID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM models WHERE id = $1`, modelID)
 	})

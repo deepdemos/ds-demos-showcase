@@ -293,7 +293,7 @@ export const getListModelsUrl = (params?: ListModelsParams,) => {
  * 等于给了个常量。目录页要展示「候选 / 未核实 / 已退役（并指向合并归宿）」，
  * 这个筛选交给调用方做——表单那边自己传 `?status=active`。
  *
- * `source` 是**派生的**（有 `model_external_refs` 行就是 `models.dev`，否则
+ * `source` 是**派生的**（有 `authority='models.dev'` 的 `model_offerings` 行就是 `models.dev`，否则
  * `manual`），不是表上的列：`models` 表没有这一列，而「有没有被上游目录认领过」
  * 本来就是 refs 表的事实。多加一列等于给同一件事两个出处。
  *

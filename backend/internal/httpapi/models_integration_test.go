@@ -247,7 +247,7 @@ func TestIntegrationListModels(t *testing.T) {
 			continue
 		}
 		if m.Source != "manual" {
-			t.Fatalf("%s 的 source = %q，没有 model_external_refs 行时应为 manual", m.Slug, m.Source)
+			t.Fatalf("%s 的 source = %q，没有 models.dev 的 model_offerings 行时应为 manual", m.Slug, m.Source)
 		}
 		if m.Aliases == nil {
 			t.Fatalf("%s 的 aliases 是 null，应该是空数组", m.Slug)
