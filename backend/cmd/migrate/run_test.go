@@ -14,6 +14,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -157,5 +159,40 @@ func TestCLIReportsMissingDatabaseURL(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "DATABASE_URL 未设置") {
 		t.Fatalf("要明确报出 DATABASE_URL 未设置，实际: %q", buf.String())
+	}
+}
+
+// production 那一行接线必须被看着。
+//
+// 上面十条用例都是「注入假的 subcommands 再断言选了谁」，于是 run.go 里
+//
+//	var production = subcommands{status: status, up: applyUp, seed: applySeeds}
+//
+// 这一行**没有任何用例经过**。盲审 PR #416 正是从这一行复现了事故：
+//
+//	production = subcommands{status: applyUp, up: applyUp, seed: applySeeds}
+//	→ 21/21 全绿，而 status 模式真的在推迁移
+//
+// 这不是「理论上可能」：status 与 up 是三个字段里**唯一签名相同**的一对
+// （seed 只收一个参数，接错会编译失败），也就是说唯一能悄悄改错的方式，
+// 恰好就是 2026-11-12 那次事故的形状。所以这一条直接比函数地址指向谁，
+// 而不是再走一遍 run —— 走 run 只能证明 switch 对，证明不了接线对。
+func TestProductionWiringIsNotSwapped(t *testing.T) {
+	name := func(fn any) string {
+		return runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
+	}
+	cases := []struct {
+		field string
+		got   any
+		want  string
+	}{
+		{"status", production.status, ".status"},
+		{"up", production.up, ".applyUp"},
+		{"seed", production.seed, ".applySeeds"},
+	}
+	for _, c := range cases {
+		if !strings.HasSuffix(name(c.got), c.want) {
+			t.Errorf("production.%s 接的是 %s，应当是 *%s", c.field, name(c.got), c.want)
+		}
 	}
 }
