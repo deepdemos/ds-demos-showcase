@@ -29,6 +29,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { ModelCheckpoint } from './modelCheckpoint';
 import type { ModelRef } from './modelRef';
 
 export type Model = ModelRef & ({
@@ -66,4 +67,15 @@ export type Model = ModelRef & ({
   aliases: string[];
   /** 人工说明；没有时为空串 */
   description: string;
+  /**
+     * 这个模型条目**所指的那一版**；`null` 表示没指定。
+     *
+     * 只有作品详情里可能非空——版本挂在「作品版本 × 模型」这条关系上
+     * （见 `DemoDetail.models`）。模型目录里恒为 `null`：目录描述的是模型本身，
+     * 不是「某个作品用了它的哪一版」。
+     *
+     * `null` 不等于「最新版」：作者没填、插件没上报、或者这行是更早写入的。
+     * 展示必须落到「未固定」。
+     */
+  checkpoint: ModelCheckpoint | null;
 });

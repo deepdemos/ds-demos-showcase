@@ -19,6 +19,34 @@ import { RelatedSection } from '@/features/demo/related-section';
 type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
 
 /**
+ * 模型声明后面的版本标记。
+ *
+ * `checkpoint` 为 null 时显示「未固定」——这是 E06 的硬要求：没填不等于最新版，
+ * 留空或写「最新」都是在替作者说一句他没说过的话。有值时给 label，日期放 title，
+ * 不占版面（日期常常只到月份，甚至没有）。
+ */
+function ModelVersion({ checkpoint }: { checkpoint: DemoDetail['models'][number]['checkpoint'] }) {
+  if (!checkpoint) {
+    return (
+      <span
+        className="ml-1 text-xs text-gray-500 dark:text-gray-500"
+        title="作者没有说明用的是哪一版"
+      >
+        未固定
+      </span>
+    );
+  }
+  return (
+    <span
+      className="ml-1 text-xs text-gray-500 dark:text-gray-500"
+      title={checkpoint.releasedOn ? `发布于 ${checkpoint.releasedOn}` : '发布日期未知'}
+    >
+      {checkpoint.label} 版
+    </span>
+  );
+}
+
+/**
  * 软删之后服务端不再返回标题（`title` 是空串），页面上就只剩一段说明，
  * 作者只能凭 URL 认人。给一个占位，恢复后标题自然回来（issue #372）。
  */
@@ -234,7 +262,10 @@ export function DemoDetailPage() {
           ) : null}
 
           {/* 模型声明是作者自述，不是平台核验过的结论——文案里说清楚，
-              否则读者会把它当成「这个作品确实跑在这些模型上」的保证。 */}
+              否则读者会把它当成「这个作品确实跑在这些模型上」的保证。
+
+              每一项带「用的是哪一版」：没有就是「未固定」，**不能**省略、也不能
+              默认成最新版。作者没说的事，界面不替他补。 */}
           {data.demo.models.length > 0 ? (
             <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
               模型声明：
@@ -244,6 +275,7 @@ export function DemoDetailPage() {
                   <Link className="underline" to={`/models/${m.slug}`}>
                     {m.name}
                   </Link>
+                  <ModelVersion checkpoint={m.checkpoint} />
                 </span>
               ))}
               <span className="ml-2 text-xs text-gray-500 dark:text-gray-500">

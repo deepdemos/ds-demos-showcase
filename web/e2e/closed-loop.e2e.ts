@@ -201,7 +201,14 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
   // 模型声明跟着版本走：投稿时声明的那一个，发布后匿名访问者也看得到。
   // 这一条串起了「表单 → 表单字段 → 版本级声明 → 详情接口 → 页面」整条链，
   // 是全套里唯一一处真的从界面点出来、再从界面读回去的地方。
-  await expect(screen.getByText(/模型声明：DeepSeek Chat/)).toBeVisible();
+  //
+  // 「未固定」也一起断言：投稿表单现在没有「用的是哪一版」这个字段，
+  // 所以声明必然落在「作者没说」这一档。断言它出现，等于钉住
+  // 「没填不等于最新版」——漏掉这段标记（或默认写成「最新版」）这条会红。
+  //
+  // 用 `\s*` 而不是字面拼接：两段文本之间有没有空白取决于排版（换个分隔符就会变），
+  // 而这条要钉的是「标签之后跟的是未固定」，不是「中间没有空格」。
+  await expect(screen.getByText(/模型声明：DeepSeek Chat\s*未固定/)).toBeVisible();
 
   const downloadLink = screen.getByRole('link', { name: '下载作品' });
   await expect(downloadLink).toBeVisible();

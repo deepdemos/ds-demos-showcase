@@ -483,6 +483,10 @@
         "type": "[]string",
         "optional": false
       },
+      "checkpoint": {
+        "type": "ModelCheckpoint",
+        "optional": true
+      },
       "description": {
         "type": "string",
         "optional": false
@@ -652,6 +656,16 @@
       "total": {
         "type": "int",
         "optional": false
+      }
+    },
+    "ModelCheckpoint": {
+      "label": {
+        "type": "string",
+        "optional": false
+      },
+      "releasedOn": {
+        "type": "openapi_types.Date",
+        "optional": true
       }
     },
     "ModelDemoRef": {

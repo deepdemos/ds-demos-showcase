@@ -1354,7 +1354,7 @@ sequenceDiagram
 
 | 项 | 来源 | 谁看得见 |
 |---|---|---|
-| 模型声明 | `demo_revision_models` → `models`（`slug` / `name` / `vendor`） | 访客看**已发布版本**的声明；作者看**当前版本**的声明 |
+| 模型声明 | `demo_revision_models` → `models`（`slug` / `name` / `vendor`）；同一行的 `checkpoint_id` → `model_checkpoints`（`label` / `released_on`，空 = 未固定） | 访客看**已发布版本**的声明；作者看**当前版本**的声明 |
 | 作者 | `demos.author_id` → `users` → `accounts` → `profiles`（`display_name` 优先，空则 `username`） | 所有人 |
 | 发布时间 | `min(demo_channels.published_at)`，只算 `listed` / `unlisted` 渠道 | 所有人；未发布为 `null` |
 
@@ -1364,6 +1364,9 @@ sequenceDiagram
 2. **声明进版本，不进 demo**：投稿与更新都接收重复的 `modelSlugs` 表单字段，解析成 id 写进**这一版**的 `demo_revision_models`，与建版本同一个事务（声明写失败 = 这次投稿失败，不允许「作品建好了、声明丢了」）。任何一个 slug 不存在或未启用都回 400 并点出是哪个——**不能静默丢掉**，否则作者以为声明了两个、库里只有一个而他不知道。没有条数上限：多少由主数据与作品事实决定。
 3. **改稿不动线上**：`modelsOf` 按版本读——访客用 `published_revision_id`，作者用 `current_revision_id`。这正是 §3.2.1 版本分离在详情上的体现：作者把模型换掉、作品在审核中，线上仍是旧声明。回滚会 `CopyRevisionModels` 把声明一起带回那一版，否则「回到上一版」会顺手抹掉「这个作品用了哪些模型」。
 4. **墓碑与已删除不披露**：模型声明和标题一样属于内容，`archived` / `removed` 的墓碑页不给；`deleted` 对外本来就是 404。
+
+5. **版本空着就是「未固定」，不是最新版**：`demo_revision_models.checkpoint_id` 为空时，详情接口回 `Model.checkpoint = null`，页面显示「未固定」，而**不是**替作者补一个「最新版」。同一行声明照样出现——填不填版本不改变「作品用了几行模型」。契约里这个字段挂在 `Model` 上（`DemoDetail.models` 的每一项就是目录里那个 `Model`，只是 `checkpoint` 可能非空），目录端点 `GET /api/v1/models` 那一侧恒为 `null`：目录问的是「这个模型有哪些版本」，不是「某个作品用了哪版」。
+6. **写入侧还没有**：投稿与编辑表单目前不收「用的是哪一版」，`checkpoint_id` 只有读路径。页面上永远「未固定」——这是现状，不是设计目标；见《已知松点》第 64 条。
 
 **字段名为什么带 slugs**：调用方手里只有 `models.slug`（`GET /api/v1/models` 返回的就是它），
 数字 id 是实现细节。曾经叫 `modelIds` 却收 slug，每个接入方都要去翻一遍文档确认自己没传错。

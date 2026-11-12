@@ -16,6 +16,7 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 	"github.com/jackc/pgx/v5"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // ListDemos 对应 GET /api/v1/demos。
@@ -207,12 +208,6 @@ func summaryOf(row store.ListPublishedDemosRow, classes []api.ClassificationRef)
 	}
 }
 
-// detailOf 决定「对外可见吗」与「是不是墓碑」，false 表示 404：
-// 已擦除 / 草稿待审驳回 → 404（**作者本人除外**）；归档、移除、软删 → 墓碑；
-// published → 完整内容。
-//
-// viewerIsAuthor 改变三件事：能不能看到未公开的稿件、看到哪一版的文字、
-// 以及 canEdit。它不改「墓碑」与「渠道可见性」的判定——作者也看不见被移除的内容。
 // modelsOf 取这一版声明的模型。
 //
 // 三种情况返回空数组而不是省略字段：
@@ -221,6 +216,9 @@ func summaryOf(row store.ListPublishedDemosRow, classes []api.ClassificationRef)
 //
 // 查询失败不把整个详情打成 503：模型声明是**附加信息**，缺了它详情页仍然可用。
 // 这是刻意的取舍——为了一块可选的展示，让整个页面挂掉不划算。
+//
+// 每一项带上这一版用的 checkpoint。没填时是 nil——前端必须显示「未固定」，
+// 不能默认成最新版（作者没说过的话，别替他补）。
 func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, viewerIsAuthor bool, detail api.DemoDetail) []api.Model {
 	out := []api.Model{}
 	// 墓碑态：detailOf 只填了标题与 lifecycleActions，类型是空串。
@@ -257,7 +255,7 @@ func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, view
 		aliases[a.ModelID] = append(aliases[a.ModelID], a.Alias)
 	}
 	for _, m := range rows {
-		out = append(out, modelOf(store.ListModelsRow{
+		item := modelOf(store.ListModelsRow{
 			ID:             m.ID,
 			Slug:           m.Slug,
 			Name:           m.Name,
@@ -269,11 +267,38 @@ func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, view
 			Description:    m.Description,
 			CreatedAt:      m.CreatedAt,
 			UpdatedAt:      m.UpdatedAt,
-		}, aliases[m.ID]))
+		}, aliases[m.ID])
+		// 只有详情这一路填 checkpoint：目录那份 Model 没有「用了哪一版」的概念。
+		item.Checkpoint = checkpointOf(m)
+		out = append(out, item)
 	}
 	return out
 }
 
+// checkpointOf 把声明上的三个 checkpoint 列摊成契约里的对象。
+//
+// 三列全空是常态——存量声明都没有这一列（0029 只加列，不写回填）。这时返回 nil，
+// 调用方据此显示「未固定」，**不能**当成最新版。
+//
+// 只认 label：`checkpoint_id` 有值而 JOIN 不到行在库里不可能（外键挡着），
+// 但如果真出现（外键被手工删掉、迁移回滚过），也不能凭空造一个没有 label 的版本。
+func checkpointOf(m store.ListRevisionModelsRow) *api.ModelCheckpoint {
+	if !m.CheckpointID.Valid || !m.CheckpointLabel.Valid {
+		return nil
+	}
+	cp := api.ModelCheckpoint{Label: m.CheckpointLabel.String}
+	if m.CheckpointReleasedOn.Valid {
+		cp.ReleasedOn = &openapi_types.Date{Time: m.CheckpointReleasedOn.Time}
+	}
+	return &cp
+}
+
+// detailOf 决定「对外可见吗」与「是不是墓碑」，false 表示 404：
+// 已擦除 / 草稿待审驳回 → 404（**作者本人除外**）；归档、移除、软删 → 墓碑；
+// published → 完整内容。
+//
+// viewerIsAuthor 改变三件事：能不能看到未公开的稿件、看到哪一版的文字、
+// 以及 canEdit。它不改「墓碑」与「渠道可见性」的判定——作者也看不见被移除的内容。
 func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, bool) {
 	state := api.LifecycleState(row.LifecycleState)
 
