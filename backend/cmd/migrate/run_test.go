@@ -164,7 +164,7 @@ func TestCLIReportsMissingDatabaseURL(t *testing.T) {
 
 // production 那一行接线必须被看着。
 //
-// 上面十条用例都是「注入假的 subcommands 再断言选了谁」，于是 run.go 里
+// 上面九条用例里，四条 `TestRun*` 都是「注入假的 subcommands 再断言选了谁」，于是 run.go 里
 //
 //	var production = subcommands{status: status, up: applyUp, seed: applySeeds}
 //
@@ -192,7 +192,7 @@ func TestProductionWiringIsNotSwapped(t *testing.T) {
 	}
 	for _, c := range cases {
 		if !strings.HasSuffix(name(c.got), c.want) {
-			t.Errorf("production.%s 接的是 %s，应当是 *%s", c.field, name(c.got), c.want)
+			t.Errorf("production.%s 接的是 %s，应当是 %s", c.field, name(c.got), c.want)
 		}
 	}
 }
