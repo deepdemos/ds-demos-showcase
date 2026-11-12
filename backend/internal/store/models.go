@@ -8,6 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ModelCheckpoint struct {
+	ID         int64
+	ModelID    int64
+	Label      string
+	ReleasedOn pgtype.Date
+	Notes      string
+	CreatedAt  pgtype.Timestamptz
+}
+
 type ModelSourceSync struct {
 	Source        string
 	LastAttemptAt pgtype.Timestamptz
