@@ -24,9 +24,12 @@
  * # 它不能证明什么
  *
  * 语法正确、能启动、头真的发出去、上传真的能过——**一条都证明不了**。
- * 开发机上没有 `nginx`（宿主与 WSL 都没有），`nginx -t` 与真机反代一次都没跑过。
- * 容器那条路验过（WSL 里的 docker，`docs/部署.md` §10.4），但它走的是 Caddy，不经过这份 nginx 配置。
- * 所以下面这些判据只能靠 `docs/部署.md` §7 的验证清单在部署机上验。
+ * 开发机宿主与 WSL 的 rootfs 里都没有 `nginx`：这份 `deploy/nginx/deepdemos.conf` 从未被
+ * `nginx -t` 加载过，真机反代一次都没跑过，只能靠 `docs/部署.md` §7 的验证清单在部署机上验。
+ *
+ * 容器那条路验过（WSL 里的 docker，`docs/部署.md` §10.4），它的 web 层同样是 nginx，但用的是另一份
+ * 主配置（`deploy/docker/nginx.conf.template`，与这份共用 `deploy/nginx/security-headers.conf`）。
+ * 容器跑通只证明那份模板与共用的安全头能用，不证明这份主配置能用。
  *
  * 所以这道门禁的定位是「防止配置被整段删掉或改歪」，不是「证明部署可用」。
  */
