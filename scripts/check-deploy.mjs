@@ -23,13 +23,16 @@
  *
  * # 它不能证明什么
  *
- * 语法正确、能启动、头真的发出去、上传真的能过——**一条都证明不了**。
- * 开发机宿主与 WSL 的 rootfs 里都没有 `nginx`：这份 `deploy/nginx/deepdemos.conf` 从未被
- * `nginx -t` 加载过，真机反代一次都没跑过，只能靠 `docs/部署.md` §7 的验证清单在部署机上验。
+ * 主机名对不对、上传真的能过、systemd 单元真的能起——**一条都证明不了**。
+ * `deploy/nginx/deepdemos.conf` 与 `deploy/systemd/deepdemos-api.service`
+ * 都没有被 `nginx -t` / `systemctl start` 加载过：宿主与 WSL 的 rootfs 里都没有 nginx，真机反代
+ * 一次都没跑过，只能靠 `docs/部署.md` §7 的验证清单在部署机上验。
  *
- * 容器那条路验过（WSL 里的 docker，`docs/部署.md` §10.4），它的 web 层同样是 nginx，但用的是另一份
- * 主配置（`deploy/docker/nginx.conf.template`，与这份共用 `deploy/nginx/security-headers.conf`）。
- * 容器跑通只证明那份模板与共用的安全头能用，不证明这份主配置能用。
+ * 唯一被真正加载过的是安全头：容器镜像把同一个 `deploy/nginx/security-headers.conf` 拷进
+ * `/etc/nginx/snippets/` 并 include 四次，2026-11-10 的容器实测里那些头真的发出去了
+ * （`docs/部署.md` §10.4）。容器那条路的 web 层同样是 nginx（1.27-alpine），但主配置是另一份
+ * `deploy/docker/nginx.conf.template`。所以容器跑通证明的是「这份片段在 1.27 上能加载、能发头」，
+ * **不**证明这份主配置能用。
  *
  * 所以这道门禁的定位是「防止配置被整段删掉或改歪」，不是「证明部署可用」。
  */

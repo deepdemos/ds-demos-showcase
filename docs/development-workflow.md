@@ -98,8 +98,13 @@ SPA 回退 `try_files … /index.html`、上传上限（不小于契约允许的
 `deploy/systemd/deepdemos-api.service` 有 `EnvironmentFile=` 与 `ExecStart=`。
 
 **它能证明什么**：这些块没有被整段删掉或改歪。
-**它不能证明什么**：语法正确、能启动、头真的发出去、上传真的能过——开发机上没有 nginx
-也没有 systemd，`nginx -t` 从未跑过。这些只在部署机按 `docs/部署.md` §7 的清单验。
+**它不能证明什么**：主机名对不对、上传真的能过、单元真的能起——宿主与 WSL 的 rootfs 里都没有
+`nginx`，`deploy/nginx/deepdemos.conf` 没被 `nginx -t` 加载过；
+`deploy/systemd/deepdemos-api.service` 也没被 `systemctl start` 起过
+（WSL 里 systemd 是 PID 1，但这个单元从没安装过）。这些只在部署机按 `docs/部署.md` §7 的清单验。
+安全头是唯一被真跑过的一份：容器镜像把同一个 `security-headers.conf` 拷进去并 include，
+2026-11-10 的容器实测里那些头确实发出去了（`docs/部署.md` §10.4）——那证明的是片段能用，
+不是这份主配置能用。
 
 ### 作品形态文档门禁（`check-shape-docs.mjs`）
 
