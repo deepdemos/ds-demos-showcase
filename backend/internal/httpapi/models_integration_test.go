@@ -289,7 +289,7 @@ func TestIntegrationListModelsShowsMergeAndAliases(t *testing.T) {
 	if _, err := pool.Exec(context.Background(),
 		`INSERT INTO model_aliases (alias, model_id)
 		 VALUES ('it-merged-src-alias', (SELECT id FROM models WHERE slug = 'it-merged-src'))
-		 ON CONFLICT (alias) DO NOTHING`); err != nil {
+		 ON CONFLICT (alias, model_id) DO NOTHING`); err != nil {
 		t.Fatalf("造别名失败: %v", err)
 	}
 	t.Cleanup(func() {
@@ -434,7 +434,7 @@ func TestIntegrationModelRefsAcceptNameAndAlias(t *testing.T) {
 	}
 	if _, err := pool.Exec(context.Background(),
 		`INSERT INTO model_aliases (alias, model_id) VALUES ($1, $2)
-		 ON CONFLICT (alias) DO UPDATE SET model_id = excluded.model_id`, "it-指称别名", id); err != nil {
+		 ON CONFLICT (alias, model_id) DO NOTHING`, "it-指称别名", id); err != nil {
 		t.Fatalf("插别名失败: %v", err)
 	}
 	t.Cleanup(func() {
