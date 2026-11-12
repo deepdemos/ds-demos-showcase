@@ -1330,14 +1330,16 @@ func (q *Queries) ReleaseModelSyncLock(ctx context.Context, key int64) error {
 }
 
 const resolveModelRefs = `-- name: ResolveModelRefs :many
-WITH input AS (
+WITH RECURSIVE input AS (
     SELECT DISTINCT lower(btrim(r))::text AS ref
     FROM unnest($1::text[]) AS r
     WHERE btrim(r) <> ''
 ),
-cand AS (
+matched AS (
     SELECT i.ref,
-           COALESCE(t.id, m.id) AS model_id,
+           m.id AS model_id,
+           m.status,
+           m.merged_into_id,
            CASE
                WHEN lower(m.slug) = i.ref THEN 0
                WHEN EXISTS (
@@ -1354,11 +1356,24 @@ cand AS (
           SELECT 1 FROM model_aliases a
           WHERE a.model_id = m.id AND lower(a.alias) = i.ref
       )
-    LEFT JOIN models t
-      ON t.id = m.merged_into_id AND m.status = 'deprecated'
+),
+walk AS (
+    SELECT ref, model_id, status, merged_into_id, rank, 0 AS depth
+    FROM matched
+    UNION ALL
+    SELECT w.ref, t.id, t.status, t.merged_into_id, w.rank, w.depth + 1
+    FROM walk w
+    JOIN models t ON t.id = w.merged_into_id
+    WHERE w.status = 'deprecated'
+      AND w.merged_into_id IS NOT NULL
+      AND w.depth < 20
 )
 SELECT DISTINCT ON (ref) ref::text AS ref, model_id
-FROM cand
+FROM walk w
+WHERE w.status <> 'deprecated'
+   OR w.merged_into_id IS NULL
+   OR w.depth >= 20
+   OR NOT EXISTS (SELECT 1 FROM models t WHERE t.id = w.merged_into_id)
 ORDER BY ref, rank, model_id
 `
 
@@ -1375,15 +1390,25 @@ type ResolveModelRefsRow struct {
 // 各写一套优先级。
 //
 // `rank` 决定同名不同形态时谁优先：slug(0) > alias(1) > name(2)。同 rank 再按 `model_id`
-// 取小的（已合并的取归宿 id，见下面的 `COALESCE`）——保证结果稳定，否则同一份输入两次解析
+// 取小的（已合并的取归宿 id，见下面）——保证结果稳定，否则同一份输入两次解析
 // 可能命中不同的行，作者会看到模型莫名换掉。
 //
 // 别名允许歧义：`model_aliases` 的主键是 `(alias, model_id)`，同一个写法可以同时指向多个
 // 模型，这条规则就是唯一的裁决者，库层不再拦。
 //
-// 已合并的模型（`status='deprecated'` 且 `merged_into_id` 非空）沿指针走一跳，返回归宿 id：
-// 作者手里可能还留着旧名字，报错「模型不存在」既不准确也没帮助。只走一跳——多级合并链
-// 在库里没出现过，真出现时再按需展开。
+// 已合并的模型（`status='deprecated'` 且 `merged_into_id` 非空）沿指针**走到尽头**，返回
+// 最终归宿 id：作者手里可能还留着旧名字，报错「模型不存在」既不准确也没帮助。A→B→C 的
+// 两跳链以前会停在 B（那时只走一跳），B 也被合并掉之后这条写法就等于指向一个「已合并、
+// 归宿也已合并」的中间态，按 id 查得到、按名字解析到 B 的归宿却不是 C。
+//
+// 环（A→B→A）用 `depth < 20` 兜住：20 是大类「实体合并链最大深度」的登记值
+// （`docs/运行手册-可变常量.md` 第 10 条），超出的行按深度 20 的那一层当终点，保证任何数据
+// 形状都能返回一行、不会换成一次无限递归。自指（`merged_into_id = id`）在库里已被
+// `ck_models_no_self` 挡住，这里不假设上游一定拦住了。
+//
+// 指针悬空时退回被合并的那个 id，而不是解析成「没有这个模型」：`models.merged_into_id`
+// 没有外键（见 `docs/已知松点.md`），归宿被硬删之后指针会留在原处；此时若返回空，
+// 作者手里那个旧名字就会重新变成一个待建的候选模型，等于凭空多出一行。
 func (q *Queries) ResolveModelRefs(ctx context.Context, refs []string) ([]ResolveModelRefsRow, error) {
 	rows, err := q.db.Query(ctx, resolveModelRefs, refs)
 	if err != nil {
