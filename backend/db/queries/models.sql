@@ -115,8 +115,12 @@ ORDER BY ma.model_id, ma.alias;
 -- （`models.slug` / `models.name` / `model_aliases.alias`），解析放在一处，别让每个调用点
 -- 各写一套优先级。
 --
--- `rank` 决定同名不同形态时谁优先：slug(0) > alias(1) > name(2)。同 rank 再按 id 取小的，
--- 保证结果稳定——否则同一份输入两次解析可能命中不同的行，作者会看到模型莫名换掉。
+-- `rank` 决定同名不同形态时谁优先：slug(0) > alias(1) > name(2)。同 rank 再按 `model_id`
+-- 取小的（已合并的取归宿 id，见下面的 `COALESCE`）——保证结果稳定，否则同一份输入两次解析
+-- 可能命中不同的行，作者会看到模型莫名换掉。
+--
+-- 别名允许歧义：`model_aliases` 的主键是 `(alias, model_id)`，同一个写法可以同时指向多个
+-- 模型，这条规则就是唯一的裁决者，库层不再拦。
 --
 -- 已合并的模型（`status='deprecated'` 且 `merged_into_id` 非空）沿指针走一跳，返回归宿 id：
 -- 作者手里可能还留着旧名字，报错「模型不存在」既不准确也没帮助。只走一跳——多级合并链
@@ -183,11 +187,13 @@ LIMIT 1;
 -- name: InsertModelAlias :exec
 -- 把作者这次填的原文记成别名，下次同样的写法直接命中，不用再建一遍。
 --
--- `alias` 是单列主键（全库唯一）：同一个写法不允许同时指两个模型，否则解析结果取决于
--- 查询顺序——那是比「解析不到」更糟的状态。
+-- `(alias, model_id)` 是复合主键：同一个写法**允许**先后指到多个模型（作者手填的名字撞名
+-- 是常态，两个模型共用一个写法也该写得进来），主键只保证「同一个写法不会重复挂到同一个模型
+-- 上」。有歧义时取哪一条由 `ResolveModelRefs` 裁决（同 rank 取小的 `model_id`），不靠库层把写
+-- 拦掉：库层只会把「有歧义」变成「写不进去」。
 INSERT INTO model_aliases (alias, model_id)
 VALUES (sqlc.arg(alias), sqlc.arg(model_id))
-ON CONFLICT (alias) DO NOTHING;
+ON CONFLICT (alias, model_id) DO NOTHING;
 
 -- name: ModelSlugTaken :one
 -- slug 是公开 URL 的一部分、创建后不可变，生成时先查一遍再落库。

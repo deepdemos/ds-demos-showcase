@@ -1421,7 +1421,7 @@ sequenceDiagram
 | `resolution` | `models.resolution` 列 | `exact` 与 `family` 的可信度不同；作者说不清具体型号时会落到 `unknown` / `guess`，前端据此决定要不要标「未核实」 |
 | `mergedIntoSlug` | `models.merged_into_id` join 回 `models.slug` | 已退役的模型要指出它并到了谁。给 slug 而不是替调用方解析过去：作者当初声明的就是这一个 |
 | `source` | **派生**：有 `model_external_refs` 行 → `models.dev`，否则 `manual` | `models` 表没有这一列。「有没有被上游目录认领过」本来就是 refs 表的事实，多加一列等于给同一件事两个出处 |
-| `aliases` | `model_aliases` | 同一个模型在别处的写法（旧站实测：同一个 DeepSeek V4 Flash 有五种写法）。它是**解析入口**，所以 `alias` 是单列主键 |
+| `aliases` | `model_aliases` | 同一个模型在别处的写法（旧站实测：同一个 DeepSeek V4 Flash 有五种写法）。它是**解析入口**，所以主键是 `(alias, model_id)`：同一个写法可以指多个模型，解析时同 rank 取小的 `model_id` |
 | `description` | `models.description` | 人工说明，没有时为空串 |
 
 **详情里的 `models` 用同一个 `Model` schema**（早先它是精简的 `ModelRef`）。同一份数据
