@@ -631,30 +631,82 @@ SELECT b.slug AS benchmark_slug,
    AND bm.is_primary
  ORDER BY b.name, bv.as_of DESC;
 
--- name: DeleteCatalogItemsBySource :exec
--- 整表快照的前半步：镜像是「上游现在有什么」，不是我们的数据。逐条 upsert 会把两个
--- 时间点的行混在一张表里，「目录更新于什么时候」就答不出来。
--- 敢整表删的前提是：没有任何人引用 catalog 行的 id——外部引用存的是
--- (source, provider_id, external_id) 三元组。
-DELETE FROM model_catalog_items WHERE source = @source::text;
-
--- name: InsertCatalogItem :copyfrom
--- 批量灌镜像。
+-- name: UpsertCatalogItems :execrows
+-- 按条更新镜像：同一 (source, provider_id, external_id) 的行 id 不变，只把内容改成上游这次的样子。
 --
--- 用 COPY 而不是逐条 INSERT：一次同步约 9000 行，逐条是 9000 次往返。
+-- 为什么不再「先清空再灌」：整表重写让每一行每天都换一个 id，翻页、人工记下的 id、
+-- 以及将来任何想引用 catalog 行的东西都会在第二天失效；9000 行也全是死元组。
+-- 按条更新把这件事变成「只有真的变了才写」。
+--
+-- 闸门（结尾那句 WHERE）不是优化，是语义：`fetched_at` 记的是**这一行内容最后一次变化**
+-- 的时间，不是「这次同步跑过」的时间。没有闸门，每天都会把 9000 行的 fetched_at
+-- 原地刷新一遍，「上游改了」与「我们同步过」就又混成一个时间点了。
+--
+-- 闸门写成「整行减去 id / source / fetched_at」再比，而不是逐列写字面量：
+-- 加列时这里不必再改一次，也就不会出现「SET 里加了、闸门里漏了」这种
+-- 「每轮都更新全部行」的静默退化。行比较用 IS DISTINCT FROM 而不是 <>，
+-- 所以 NULL → 值、值 → NULL 都算变化（上游把 canonical_id 补上或抹掉是常见的）。
+--
+-- payload 是一个 JSON 数组，每个元素的键就是下面这些列名（`jsonb_populate_recordset`
+-- 按列名取值，多余的键忽略，缺的键给 NULL）。空串不会被当成 NULL，所以可空文本列
+-- 在 Go 侧必须序列化成 null 而不是 ""——否则「上游没给」会变成「上游给了一个空串」。
 INSERT INTO model_catalog_items (
     source, provider_id, provider_name, external_id, name, canonical_id, vendor_slug,
     family, description, modalities_in, modalities_out, context_window, max_output,
     cost_in, cost_out, release_date, knowledge_cutoff, open_weights, model_type,
     upstream_status, supports_tool_call, supports_reasoning, supports_structured_output,
     supports_attachment, raw_json, fetched_at
-) VALUES (
-    @source, @provider_id, @provider_name, @external_id, @name, @canonical_id, @vendor_slug,
-    @family, @description, @modalities_in, @modalities_out, @context_window, @max_output,
-    @cost_in, @cost_out, @release_date, @knowledge_cutoff, @open_weights, @model_type,
-    @upstream_status, @supports_tool_call, @supports_reasoning, @supports_structured_output,
-    @supports_attachment, @raw_json, @fetched_at
-);
+)
+SELECT @source::text,
+       v.provider_id, v.provider_name, v.external_id, v.name, v.canonical_id, v.vendor_slug,
+       v.family, v.description, v.modalities_in, v.modalities_out, v.context_window, v.max_output,
+       v.cost_in, v.cost_out, v.release_date, v.knowledge_cutoff, v.open_weights, v.model_type,
+       v.upstream_status, v.supports_tool_call, v.supports_reasoning, v.supports_structured_output,
+       v.supports_attachment, v.raw_json, @fetched_at::timestamptz
+FROM jsonb_populate_recordset(NULL::model_catalog_items, @payload::jsonb) AS v
+ON CONFLICT (source, provider_id, external_id) DO UPDATE SET
+    provider_name              = EXCLUDED.provider_name,
+    name                       = EXCLUDED.name,
+    canonical_id               = EXCLUDED.canonical_id,
+    vendor_slug                = EXCLUDED.vendor_slug,
+    family                     = EXCLUDED.family,
+    description                = EXCLUDED.description,
+    modalities_in              = EXCLUDED.modalities_in,
+    modalities_out             = EXCLUDED.modalities_out,
+    context_window             = EXCLUDED.context_window,
+    max_output                 = EXCLUDED.max_output,
+    cost_in                    = EXCLUDED.cost_in,
+    cost_out                   = EXCLUDED.cost_out,
+    release_date               = EXCLUDED.release_date,
+    knowledge_cutoff           = EXCLUDED.knowledge_cutoff,
+    open_weights               = EXCLUDED.open_weights,
+    model_type                 = EXCLUDED.model_type,
+    upstream_status            = EXCLUDED.upstream_status,
+    supports_tool_call         = EXCLUDED.supports_tool_call,
+    supports_reasoning         = EXCLUDED.supports_reasoning,
+    supports_structured_output = EXCLUDED.supports_structured_output,
+    supports_attachment        = EXCLUDED.supports_attachment,
+    raw_json                   = EXCLUDED.raw_json,
+    fetched_at                 = EXCLUDED.fetched_at
+WHERE (to_jsonb(model_catalog_items) - 'id' - 'source' - 'fetched_at')
+  IS DISTINCT FROM (to_jsonb(EXCLUDED) - 'id' - 'source' - 'fetched_at');
+
+-- name: DeleteCatalogItemsNotIn :exec
+-- 上游这次没有的条目从镜像里删掉。
+--
+-- 只删「本次 payload 里没有的」，不整表删：镜像要跟上游一致，但一致的办法是
+-- 「补 + 删」，不是「推倒重来」。调用方保证 keys 非空——空目录在解析那一步就被拒了
+-- （`TestIntegrationSyncRejectsEmptyCatalog`），否则这条会删光整张镜像。
+--
+-- keys 只带 (provider_id, external_id) 两个键：整包 6 MB，为了删几行再传一遍完整
+-- payload 不值。实测 9000 行时这一步从 200 ms 降到 17 ms。
+DELETE FROM model_catalog_items c
+WHERE c.source = @source::text
+  AND NOT EXISTS (
+      SELECT 1 FROM jsonb_to_recordset(@keys::jsonb) AS k(provider_id text, external_id text)
+      WHERE k.provider_id = c.provider_id
+        AND k.external_id = c.external_id
+  );
 
 -- name: UpsertModelSourceSync :exec
 -- 记账一行：这次同步什么时候试的、成没成、抓到了多少条、payload 指纹是什么。

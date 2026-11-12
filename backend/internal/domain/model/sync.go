@@ -101,8 +101,8 @@ func (s *Service) Sync(ctx context.Context) (Result, error) {
 	}
 	hash := catalog.Hash(raw)
 
-	// payload 没变就不重写：一天一次、9000 行，没变化时白删白灌一遍没有任何收益，
-	// 却会让每个 catalog 行的 id 漂移一次、留下 9000 个死元组。
+	// payload 没变就连解析都不做：整包 11 MB，摊成 9000 行再逐行比一遍，最后一条都没写，
+	// 纯属白跑。按条更新之后这一步不再是「防 id 漂移」的必需品，省下的是解析与一趟写。
 	if last, err := s.q.GetModelSourceSync(ctx, catalog.Source); err == nil {
 		if last.PayloadHash.Valid && last.PayloadHash.String == hash && last.Status == StatusOK {
 			return Result{Items: last.ItemCount.Int64, Hash: hash, Skipped: true, At: time.Now()}, nil
@@ -115,11 +115,15 @@ func (s *Service) Sync(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 
-	if err := s.write(ctx, entries, hash); err != nil {
+	written, err := s.write(ctx, entries, hash)
+	if err != nil {
 		s.recordFailure(ctx, err)
 		return Result{}, err
 	}
-	s.log.Info("模型目录已同步", "source", catalog.Source, "items", len(entries), "hash", hash[:12])
+	// 一条日志说清三件事：这次上游给了多少条、真正写了多少条（其余内容没变）、指纹。
+	// 「items 与 written 不相等」是正常的，一天里通常只有几条会动。
+	s.log.Info("模型目录已同步", "source", catalog.Source, "items", len(entries),
+		"written", written, "hash", hash[:12])
 	return Result{Items: int64(len(entries)), Hash: hash, At: time.Now()}, nil
 }
 
@@ -143,49 +147,42 @@ func (s *Service) lock(ctx context.Context) (func(), error) {
 	}, nil
 }
 
-// write 在一个事务里「清空 + 灌入 + 记账成功」。
+// write 在一个事务里「按条更新 + 删掉下架的 + 记账成功」。
 //
-// 三件事必须同一个事务：只清不灌会让目录空着，灌了不记账会让下次同步以为没成功。
-func (s *Service) write(ctx context.Context, entries []catalog.Entry, hash string) error {
+// 三件事必须同一个事务：只删不写会让目录缺条目，写了不删会让下架模型永远留在
+// 列表里，两件都做了不记账会让下次同步以为没成功。
+//
+// 为什么不是「先清空再灌」：镜像是快照，但快照不等于每次换一批 id。整表重写会让
+// 9000 行每天都换 id、全是死元组，而且任何记住过某个 catalog id 的人第二天都会
+// 拿到别人的行。按条更新之后，只有内容真的变了的行才会被写一次。
+//
+// 返回被真正写过的行数：其余行内容没变，闸门把它们挡在了 UPDATE 之外。
+func (s *Service) write(ctx context.Context, entries []catalog.Entry, hash string) (int64, error) {
+	payload, keys, err := catalogPayload(entries)
+	if err != nil {
+		return 0, err
+	}
 	now := time.Now()
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	var written int64
+	err = s.inTx(ctx, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		if err := q.DeleteCatalogItemsBySource(ctx, catalog.Source); err != nil {
-			return fmt.Errorf("清空镜像失败: %w", err)
-		}
-		rows := make([]store.InsertCatalogItemParams, 0, len(entries))
-		for _, e := range entries {
-			rows = append(rows, store.InsertCatalogItemParams{
-				Source:                   catalog.Source,
-				ProviderID:               e.ProviderID,
-				ProviderName:             e.ProviderName,
-				ExternalID:               e.ExternalID,
-				Name:                     e.Name,
-				CanonicalID:              text(e.CanonicalID),
-				VendorSlug:               text(e.VendorSlug),
-				Family:                   text(e.Family),
-				Description:              e.Description,
-				ModalitiesIn:             e.ModalitiesIn,
-				ModalitiesOut:            e.ModalitiesOut,
-				ContextWindow:            int4(e.ContextWindow),
-				MaxOutput:                int4(e.MaxOutput),
-				CostIn:                   float8(e.CostIn),
-				CostOut:                  float8(e.CostOut),
-				ReleaseDate:              date(e.ReleaseDate),
-				KnowledgeCutoff:          text(e.Knowledge),
-				OpenWeights:              int4(e.OpenWeights),
-				ModelType:                text(e.ModelType),
-				UpstreamStatus:           text(e.UpstreamState),
-				SupportsToolCall:         int4(e.SupportsToolCall),
-				SupportsReasoning:        int4(e.SupportsReasoning),
-				SupportsStructuredOutput: int4(e.SupportsStructuredOutput),
-				SupportsAttachment:       int4(e.SupportsAttachment),
-				RawJson:                  e.RawJSON,
-				FetchedAt:                pgtype.Timestamptz{Time: now, Valid: true},
-			})
-		}
-		if _, err := q.InsertCatalogItem(ctx, rows); err != nil {
+		// 先写后删。同一事务里两种顺序结果一样（keys 与 payload 出自同一批 entries，
+		// 先删也删不到这次要写的行），选这个顺序只是因为「先补齐、再清走」是读起来
+		// 更省事的那一种：不用先想「删的时候会不会把即将写入的行也删掉」。
+		n, err := q.UpsertCatalogItems(ctx, store.UpsertCatalogItemsParams{
+			Source:    catalog.Source,
+			FetchedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			Payload:   payload,
+		})
+		if err != nil {
 			return fmt.Errorf("写入镜像失败: %w", err)
+		}
+		written = n
+		if err := q.DeleteCatalogItemsNotIn(ctx, store.DeleteCatalogItemsNotInParams{
+			Source: catalog.Source,
+			Keys:   keys,
+		}); err != nil {
+			return fmt.Errorf("清走下架条目失败: %w", err)
 		}
 		if err := q.UpsertModelSourceSync(ctx, store.UpsertModelSourceSyncParams{
 			Source:        catalog.Source,
@@ -199,6 +196,7 @@ func (s *Service) write(ctx context.Context, entries []catalog.Entry, hash strin
 		}
 		return nil
 	})
+	return written, err
 }
 
 // recordFailure 把失败写进 `model_source_sync`：状态 `failed` + 原因。
@@ -309,31 +307,10 @@ func (s *Service) inTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	return tx.Commit(ctx)
 }
 
+// text 把空串变成 SQL NULL。
+//
+// 用到它的地方是 `payload_hash`：空指纹与「没有指纹」必须是同一件事，
+// 否则「payload 没变过」的判断会拿一个空串去比。
 func text(v string) pgtype.Text {
 	return pgtype.Text{String: v, Valid: v != ""}
-}
-
-func int4(v *int32) pgtype.Int4 {
-	if v == nil {
-		return pgtype.Int4{}
-	}
-	return pgtype.Int4{Int32: *v, Valid: true}
-}
-
-func float8(v *float64) pgtype.Float8 {
-	if v == nil {
-		return pgtype.Float8{}
-	}
-	return pgtype.Float8{Float64: *v, Valid: true}
-}
-
-func date(v string) pgtype.Date {
-	if v == "" {
-		return pgtype.Date{}
-	}
-	t, err := time.Parse("2006-01-02", v)
-	if err != nil {
-		return pgtype.Date{}
-	}
-	return pgtype.Date{Time: t, Valid: true}
 }
