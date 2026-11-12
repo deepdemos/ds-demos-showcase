@@ -699,7 +699,8 @@ WHERE (to_jsonb(model_catalog_items) - 'id' - 'source' - 'fetched_at')
 -- （`TestIntegrationSyncRejectsEmptyCatalog`），否则这条会删光整张镜像。
 --
 -- keys 只带 (provider_id, external_id) 两个键：整包 6 MB，为了删几行再传一遍完整
--- payload 不值。实测 9000 行时这一步从 200 ms 降到 17 ms。
+-- payload 不值。实测 9000 行时：旧写法 DELETE ... WHERE source 只要 3.7 ms，但它之后还得
+-- 灌 9000 行（199 ms）；这条只带两个键的反连接是 25 ms。
 DELETE FROM model_catalog_items c
 WHERE c.source = @source::text
   AND NOT EXISTS (

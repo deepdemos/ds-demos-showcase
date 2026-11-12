@@ -101,7 +101,7 @@ func (s *Service) Sync(ctx context.Context) (Result, error) {
 	}
 	hash := catalog.Hash(raw)
 
-	// payload 没变就连解析都不做：整包 11 MB，摊成 9000 行再逐行比一遍，最后一条都没写，
+	// payload 没变就连解析都不做：上游整包约 6 MB，摊成 upsertRow 之后约 12 MB，逐行比一遍，最后一条都没写，
 	// 纯属白跑。按条更新之后这一步不再是「防 id 漂移」的必需品，省下的是解析与一趟写。
 	if last, err := s.q.GetModelSourceSync(ctx, catalog.Source); err == nil {
 		if last.PayloadHash.Valid && last.PayloadHash.String == hash && last.Status == StatusOK {

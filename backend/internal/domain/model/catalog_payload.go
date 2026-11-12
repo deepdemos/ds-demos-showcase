@@ -54,8 +54,8 @@ type upsertRow struct {
 
 // catalogKey 是「这次上游有哪些条目」的清单，只带主键那两列。
 //
-// 删下架条目只需要认人，不需要内容：整包 11 MB，为了删几行再传一遍完整 payload
-// 不值。实测 9000 行时这一步从 200 ms 降到 17 ms。
+// 删下架条目只需要认人，不需要内容：整包 6 MB，为了删几行再传一遍完整 payload
+// 不值。实测 9000 行时这条反连接 25 ms，而整包反序列化再比一遍要 200 ms 量级。
 type catalogKey struct {
 	ProviderID string `json:"provider_id"`
 	ExternalID string `json:"external_id"`
