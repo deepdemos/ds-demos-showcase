@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -155,5 +156,115 @@ func TestIntegrationInsertModelAliasIsIdempotentPerModel(t *testing.T) {
 	}
 	if rows != 1 {
 		t.Fatalf("别名行数 = %d，想要 1（同一对 (alias, model_id) 只该有一行）", rows)
+	}
+}
+
+// cleanupRaceTest 按模型名清掉别名与模型行：`model_aliases.model_id` 没有外键
+// （见 docs/已知松点.md），删模型不会带走别名行。
+func cleanupRaceTest(t *testing.T, pool *pgxpool.Pool, names []string) {
+	t.Helper()
+	ctx := context.Background()
+	for _, n := range names {
+		if _, err := pool.Exec(ctx,
+			`DELETE FROM model_aliases WHERE model_id IN (SELECT id FROM models WHERE name = $1)`, n); err != nil {
+			t.Logf("清理别名（按模型名 %s）失败: %v", n, err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM models WHERE name = $1`, n); err != nil {
+			t.Logf("清理模型（按名字 %s）失败: %v", n, err)
+		}
+	}
+}
+
+// TestIntegrationCreateCandidateModelRecoversWhenNameExists 钉住「并发撞名时后到的那次不许失败」。
+//
+// 形状：库里已经有同名的模型，调用方却没在 `ResolveModelRefs` 里查到它（真实的并发窗口是
+// 「查的时候还没有、写的时候已经有了」）。`CreateCandidateModel` 是 `ON CONFLICT DO NOTHING`，
+// 冲突时**不报 23505、只返回 0 行**，sqlc 的 `:one` 于是让 Scan 返回 `pgx.ErrNoRows`。
+//
+// 修之前：这条 ErrNoRows 落到 default 分支，作者看到「新建模型失败: no rows in result set」，
+// 整次投稿失败——而他什么都没做错，只是和别人同时提到了同一个新模型名（issue #420）。
+//
+// 变异验证：把 `createCandidateModel` 的 `case` 里 `errors.Is(err, pgx.ErrNoRows)` 去掉，
+// 这条必须红。
+func TestIntegrationCreateCandidateModelRecoversWhenNameExists(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	q := store.New(pool)
+
+	const name = "并发撞名模型甲"
+	t.Cleanup(func() { cleanupRaceTest(t, pool, []string{name}) })
+	cleanupRaceTest(t, pool, []string{name}) // 上一轮残留的兜底
+
+	existing := mkAliasTestModel(t, pool, "it-race-existing-a", name)
+
+	got, err := createCandidateModel(ctx, q, name)
+	if err != nil {
+		t.Fatalf("撞上已存在的名字时不该失败，实际: %v", err)
+	}
+	if got != existing {
+		t.Fatalf("回查拿到 %d，想要已有的 %d（回查应当按名字命中同一行）", got, existing)
+	}
+
+	var rows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM models WHERE name = $1`, name).Scan(&rows); err != nil {
+		t.Fatalf("数模型行失败: %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("同名模型有 %d 行，想要 1（撞名不该长出新行）", rows)
+	}
+}
+
+// TestIntegrationCreateCandidateModelConcurrentSameName 是两个 goroutine 真的同时建同一个名字。
+//
+// 与上一条的区别：那条把「已经存在」这一步做成了确定的，这条让它自己去争。两条都要有——
+// 前者可稳定复现，后者证明真实并发下的形状也是它（不靠时序假设）。
+func TestIntegrationCreateCandidateModelConcurrentSameName(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	q := store.New(pool)
+
+	const name = "并发撞名模型乙"
+	t.Cleanup(func() { cleanupRaceTest(t, pool, []string{name}) })
+	cleanupRaceTest(t, pool, []string{name})
+
+	const n = 2
+	ids := make([]int64, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start // 一起放行，尽量重叠
+			ids[i], errs[i] = createCandidateModel(ctx, q, name)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("第 %d 个并发请求失败了: %v（并发撞名不是作者的错）", i+1, err)
+		}
+	}
+	if ids[0] != ids[1] {
+		t.Fatalf("两个请求拿到不同的 id %v，想要同一个（名字唯一约束保证只有一行）", ids)
+	}
+
+	var rows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM models WHERE name = $1`, name).Scan(&rows); err != nil {
+		t.Fatalf("数模型行失败: %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("同名模型有 %d 行，想要 1", rows)
+	}
+	var aliases int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM model_aliases WHERE alias = $1`, name).Scan(&aliases); err != nil {
+		t.Fatalf("数别名行失败: %v", err)
+	}
+	if aliases != 1 {
+		t.Fatalf("别名有 %d 行，想要 1（同一对 (alias, model_id) 只该有一行）", aliases)
 	}
 }
