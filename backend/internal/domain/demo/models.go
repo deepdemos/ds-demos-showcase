@@ -115,43 +115,62 @@ func cleanModelRefs(refs []string) ([]string, error) {
 	return out, nil
 }
 
+// createCandidateModelAttempts 是「slug 被别人占了」时的总尝试次数。
+//
+// slug 是「先查再插」（uniqueModelSlug 查 ModelSlugTaken，再 INSERT）。两个**不同**的名字
+// 折出同一个基座时（「Qwen 2.5」与「Qwen-2.5」都折成 qwen-2-5），两边都可能查到「没被
+// 占用」，后插的那条撞上 models.slug 的唯一约束。这跟作者写错无关，换一个带随机后缀的
+// slug 重来即可，所以给它几次机会，而不是把整次投稿判死。
+const createCandidateModelAttempts = 3
+
 // createCandidateModel 建一个候选项，并把作者这次的写法记成别名。
 //
-// 并发时两个请求可能同时建同名模型：`CreateCandidateModel` 的 `ON CONFLICT DO NOTHING`
-// 冲突时**不报错**（不是 23505），而是返回 0 行——sqlc 的 `:one` 于是让 Scan 返回
-// `pgx.ErrNoRows`。所以「并发撞上」这件事在这里的形状是 ErrNoRows，不是唯一约束冲突：
-// 回查名字拿现成的那条，把冲突当成成功，而不是把这名作者整次投稿判死。
+// 撞车有两种，形状都是 `pgx.ErrNoRows`：`CreateCandidateModel` 是
+// `ON CONFLICT DO NOTHING`，冲突时**不报 23505** 而是返回 0 行，sqlc 的 `:one`
+// 于是让 Scan 返回 ErrNoRows。两条路都不该让作者整次投稿失败——他什么都没做错：
+//   - **同名**：别人刚建了同一个名字。按名字回查拿到现成的那条，把冲突当成成功；
+//   - **同 slug 不同名**：名字确实不同（回查不到），撞的是机器生成的 slug。换一个
+//     带随机后缀的 slug 重试（次数见 createCandidateModelAttempts）。
 func createCandidateModel(ctx context.Context, q *store.Queries, ref string) (int64, error) {
-	slug, err := uniqueModelSlug(ctx, q, ref)
-	if err != nil {
-		return 0, err
-	}
-	row, err := q.CreateCandidateModel(ctx, store.CreateCandidateModelParams{
-		Slug: slug,
-		Name: ref,
-		// 厂商留空：作者填的是模型名，没有厂商信息。按模型域 §4.6.3 的规则，
-		// 拿不到证据就不建厂商，避免造出「Bothub」这种假厂商。
-		Vendor: pgtype.Text{},
-	})
-	switch {
-	case err == nil:
-		if err := q.InsertModelAlias(ctx, store.InsertModelAliasParams{Alias: ref, ModelID: row}); err != nil {
-			return 0, fmt.Errorf("记模型别名失败: %w", err)
+	for attempt := 0; attempt < createCandidateModelAttempts; attempt++ {
+		slug, err := uniqueModelSlug(ctx, q, ref)
+		if err != nil {
+			return 0, err
 		}
-		return row, nil
-	case errors.Is(err, pgx.ErrNoRows), isUniqueViolation(err):
-		// 两条路都归到这里，因为「同名已经存在」有两种形状：
-		//   - `ON CONFLICT DO NOTHING` 命中 → 0 行 → ErrNoRows（并发下的常态，见上）；
-		//   - 未来若有人把查询改成会报错的形状（比如去掉 ON CONFLICT）→ 23505。
-		// 名字是作者给的、slug 才是机器生成的，所以按名字回查更准。
-		existing, findErr := q.FindModelByName(ctx, ref)
-		if findErr != nil {
-			return 0, fmt.Errorf("回查同名模型失败: %w", findErr)
+		row, err := q.CreateCandidateModel(ctx, store.CreateCandidateModelParams{
+			Slug: slug,
+			Name: ref,
+			// 厂商留空：作者填的是模型名，没有厂商信息。按模型域 §4.6.3 的规则，
+			// 拿不到证据就不建厂商，避免造出「Bothub」这种假厂商。
+			Vendor: pgtype.Text{},
+		})
+		switch {
+		case err == nil:
+			if err := q.InsertModelAlias(ctx, store.InsertModelAliasParams{Alias: ref, ModelID: row}); err != nil {
+				return 0, fmt.Errorf("记模型别名失败: %w", err)
+			}
+			return row, nil
+		case errors.Is(err, pgx.ErrNoRows), isUniqueViolation(err):
+			// 两条路都归到这里，因为「写不进去」有两种形状：
+			//   - `ON CONFLICT DO NOTHING` 命中 → 0 行 → ErrNoRows；
+			//   - 未来若有人把查询改成会报错的形状（比如去掉 ON CONFLICT）→ 23505。
+			// 名字是作者给的、slug 才是机器生成的，所以先按名字回查。
+			existing, findErr := q.FindModelByName(ctx, ref)
+			switch {
+			case findErr == nil:
+				return existing, nil
+			case !errors.Is(findErr, pgx.ErrNoRows):
+				return 0, fmt.Errorf("回查同名模型失败: %w", findErr)
+			}
+			// 名字也不在库里（否则上面就返回了）→ 撞的是 slug：下一轮 ModelSlugTaken
+			// 会看见别人刚写进去的那一行，uniqueModelSlug 于是加随机后缀。
+		default:
+			return 0, fmt.Errorf("新建模型失败: %w", err)
 		}
-		return existing, nil
-	default:
-		return 0, fmt.Errorf("新建模型失败: %w", err)
 	}
+	// 走到这里说明连续几次都撞上：不是作者的输入错（名字与 slug 都是合法的），
+	// 所以不包 ErrInvalidInput，让它按服务端故障报出去。
+	return 0, fmt.Errorf("新建模型失败：连续 %d 次撞上别人刚建的 slug（%s）", createCandidateModelAttempts, ref)
 }
 
 // uniqueModelSlug 从名字生成一个没被占用的 slug。
