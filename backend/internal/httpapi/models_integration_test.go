@@ -275,6 +275,49 @@ func TestIntegrationListModels(t *testing.T) {
 	}
 }
 
+// 派生 `source` 只认 authority='models.dev'：端点上表的行不该把模型标成「来自上游目录」。
+//
+// 这同时是那四处 `r.authority = 'models.dev'` 判据的反向用例——把条件删掉，
+// 这里会红（任何出处的 offering 都会把 source 翻成 models.dev）。
+func TestIntegrationListModelsSourceIgnoresOtherAuthorities(t *testing.T) {
+	h, _, pool := newModelTestHandler(t)
+	insertModel(t, pool, "it-model-endpoint", "端点来源模型", "active")
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO model_offerings (authority, provider_id, external_id, model_id)
+		 SELECT 'endpoint', '', 'api.example.com/v1/x', id FROM models WHERE slug = 'it-model-endpoint'`); err != nil {
+		t.Fatalf("造端点出处失败: %v", err)
+	}
+
+	var body struct {
+		Items []struct {
+			Slug   string `json:"slug"`
+			Source string `json:"source"`
+		} `json:"items"`
+	}
+	rec := httptest.NewRecorder()
+	h.ListModels(rec, httptest.NewRequest(http.MethodGet, "/api/v1/models", nil), api.ListModelsParams{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("模型目录 = %d，想要 200；响应体：%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析模型目录失败: %v", err)
+	}
+	found := false
+	for _, m := range body.Items {
+		if m.Slug != "it-model-endpoint" {
+			continue
+		}
+		found = true
+		if m.Source != "manual" {
+			t.Fatalf("authority=endpoint 的 offering 不该把 source 翻成 %q，应为 manual", m.Source)
+		}
+	}
+	if !found {
+		t.Fatalf("it-model-endpoint 没出现在目录里")
+	}
+}
+
 // 合并归宿与别名：deprecated 的模型要指出它并到了谁，别名要能从目录读出来。
 func TestIntegrationListModelsShowsMergeAndAliases(t *testing.T) {
 	h, _, pool := newModelTestHandler(t)

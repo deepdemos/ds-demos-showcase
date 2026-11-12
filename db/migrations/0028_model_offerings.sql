@@ -12,8 +12,12 @@
 -- 会在迁移这一步就撞唯一约束。设计稿 #404 写的「(authority, external_id)」
 -- 是简写，落地必须带 provider 维度；端点类条目的 provider_id 留空串。
 --
--- 老表的两条附属物（fk_model_external_refs_model_id69 / ix_external_refs_model）
--- 随 DROP TABLE 一起消失，新的在下面对应建回。
+-- 老表的三条附属物（fk_model_external_refs_model_id69 / ix_external_refs_model /
+-- ix_external_refs_canonical）随 DROP TABLE 一起消失，新的在下面对应建回。
+--
+-- 新表比老表多了两条长度 CHECK（authority 1..128 / external_id 1..256）：老表没有，
+-- 这是刻意收紧——两列都会被端点上报写入，长度不设上限等于让外部输入决定索引宽度。
+-- 迁移当天库里的最长值是 authority 65 / external_id 10，搬行不会失败。
 
 CREATE TABLE model_offerings (
     id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -39,6 +43,10 @@ SELECT source, provider_id, provider_name, external_id, model_id, canonical_id, 
 FROM model_external_refs;
 
 CREATE INDEX ix_model_offerings_model ON model_offerings (model_id);
+
+-- 与老表的 ix_external_refs_canonical 对应：`GetModelDiffTarget` 的 canonical 分支按
+-- (source, canonical_id) 找行，没有这条索引就会退化成全表扫描。
+CREATE INDEX ix_model_offerings_canonical ON model_offerings (authority, canonical_id);
 
 ALTER TABLE model_offerings ADD CONSTRAINT fk_model_offerings_model_id69
     FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE CASCADE;
