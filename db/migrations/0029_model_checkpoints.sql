@@ -13,10 +13,21 @@
 -- `released_on` 可空：上游给的日期不一定有（有的只写「2026-10」），空着比编一个准确；
 -- 不设「不能晚于今天」之类的约束——版本预发布、日期写错都要允许人工修正，日期本身不是判据。
 --
--- 两条引用列都 ON DELETE RESTRICT：一个 checkpoint 一旦被作品或调用行引用，它就是
--- 「当时用的是哪一版」这句话的一部分，删掉它等于改写历史。要删就先解除引用。
--- `demo_revision_models.checkpoint_id` 与 `model_offerings.checkpoint_id` 都允许 NULL：
--- 存量行、以及只知道模型不知道版本的投稿与上报，NULL 就是「未指定」，不是「默认最新版」。
+-- 两条引用列都是**复合外键** `(checkpoint_id, model_id) → (id, model_id)`，并且
+-- ON DELETE RESTRICT：一个 checkpoint 一旦被作品或调用行引用，它就是「当时用的是哪一版」
+-- 这句话的一部分，删掉它等于改写历史，要删就先解除引用。
+--
+-- 为什么复合而不是单列 `checkpoint_id`：单列外键只保证「指向了某一行版本」，不保证
+-- 「指向的是这个模型的版本」。实测（2026-11-13，隔离 schema）单列写法下，调用行
+-- `model_id = 21` 挂上 `model_id = 22` 的 checkpoint 照样插得进去——库里于是出现
+-- 「这一行说模型 21，版本却是 22 的」，读出来就是错的。复合外键把这条不变量交给库，
+-- 不用每个写入方自己记得查一遍。为此模型侧要有一条 `UNIQUE (id, model_id)`：PG 要求
+-- 外键指的那组列上**恰好有一条唯一约束**，主键 `(id)` 不满足它——这条约束逻辑上冗余，
+-- 但它是这条外键能成立的前提。
+--
+-- 两列都允许 NULL：存量行、以及只知道模型不知道版本的投稿与上报，NULL 就是「未指定」，
+-- 不是「默认最新版」。复合外键是 MATCH SIMPLE：`checkpoint_id` 为 NULL 时整条不检查，
+-- 所以「只知道模型」的行照常写。
 -- 这层语义刻意不用哨兵行（NULL 与 `'unknown'` 两种写法会让每个读的地方都要判一遍）。
 --
 -- `model_offerings.pinning` 与 checkpoint 分开：checkpoint 说的是「这是哪一版」，
@@ -24,6 +35,17 @@
 -- （`deepseek-chat` 指向当前版），硬当一个版本理解就会把历史串味。取值三种：
 -- exact（钉死）/ rolling（滚动）/ unknown（不知道，默认）。默认 unknown 保证存量行
 -- 与还没判定的写入方都不会假装知道；这一列在 Step 2 只管存，判据等端点写入方落地再定。
+--
+-- 索引：不再给 `model_checkpoints.model_id` 单建索引——`UNIQUE (model_id, label)`
+-- 的前缀就是它，单独再建一条是重复（0029 首版建过，review 指出去掉了）。反过来两张子表
+-- 的 `checkpoint_id` 要建：ON DELETE RESTRICT 删一个版本时要回查子表，没有索引就得全表扫
+-- （生产上 `model_offerings` 已经是 8988 行）。索引列顺序与外键一致，一次走完两列。
+--
+-- `ck_model_checkpoints_label` 的 1..64 **没有**登记到 `docs/运行手册-可变常量.md`：
+-- 理由与 0028 的 authority / external_id 两条相同——label 是外部输入的入口宽度（版本号写在
+-- 上游目录里、也会由作者填），值由真实数据决定，不是运营可调的旋钮；等真有写入方落地、
+-- 见过超长输入怎么来，再把「超长回什么」连同这个宽度一起登记，免得现在填的数字变成
+-- 没人维护的样子货。
 --
 -- 不改 `db/schema/`（冻结基线，等于 0000 号迁移），也不动 `models.merged_into_id`
 -- 那条自引用（它本来就没有外键，合并链靠递归查询走）。
@@ -39,10 +61,11 @@ CREATE TABLE model_checkpoints (
     created_at  timestamptz NOT NULL DEFAULT now(),
 
     CONSTRAINT ck_model_checkpoints_label CHECK (length(label) BETWEEN 1 AND 64),
-    UNIQUE (model_id, label)
-);
+    UNIQUE (model_id, label),
 
-CREATE INDEX ix_model_checkpoints_model ON model_checkpoints (model_id);
+    -- 复合外键的目标，见文件头的理由。
+    CONSTRAINT uq_model_checkpoints_id_model UNIQUE (id, model_id)
+);
 
 ALTER TABLE model_checkpoints ADD CONSTRAINT fk_model_checkpoints_model_id70
     FOREIGN KEY (model_id) REFERENCES models (id) ON DELETE RESTRICT;
@@ -50,14 +73,18 @@ ALTER TABLE model_checkpoints ADD CONSTRAINT fk_model_checkpoints_model_id70
 ALTER TABLE demo_revision_models ADD COLUMN checkpoint_id bigint;
 
 ALTER TABLE demo_revision_models ADD CONSTRAINT fk_demo_revision_models_checkpoint_id71
-    FOREIGN KEY (checkpoint_id) REFERENCES model_checkpoints (id) ON DELETE RESTRICT;
+    FOREIGN KEY (checkpoint_id, model_id) REFERENCES model_checkpoints (id, model_id) ON DELETE RESTRICT;
 
 ALTER TABLE model_offerings ADD COLUMN checkpoint_id bigint;
 
 ALTER TABLE model_offerings ADD CONSTRAINT fk_model_offerings_checkpoint_id72
-    FOREIGN KEY (checkpoint_id) REFERENCES model_checkpoints (id) ON DELETE RESTRICT;
+    FOREIGN KEY (checkpoint_id, model_id) REFERENCES model_checkpoints (id, model_id) ON DELETE RESTRICT;
 
 ALTER TABLE model_offerings ADD COLUMN pinning text NOT NULL DEFAULT 'unknown';
 
 ALTER TABLE model_offerings ADD CONSTRAINT ck_model_offerings_pinning
     CHECK (pinning IN ('exact', 'rolling', 'unknown'));
+
+CREATE INDEX ix_demo_revision_models_checkpoint ON demo_revision_models (checkpoint_id, model_id);
+
+CREATE INDEX ix_model_offerings_checkpoint ON model_offerings (checkpoint_id, model_id);
