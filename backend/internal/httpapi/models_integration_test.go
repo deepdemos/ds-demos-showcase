@@ -247,7 +247,7 @@ func TestIntegrationListModels(t *testing.T) {
 			continue
 		}
 		if m.Source != "manual" {
-			t.Fatalf("%s 的 source = %q，没有 model_external_refs 行时应为 manual", m.Slug, m.Source)
+			t.Fatalf("%s 的 source = %q，没有 models.dev 的 model_offerings 行时应为 manual", m.Slug, m.Source)
 		}
 		if m.Aliases == nil {
 			t.Fatalf("%s 的 aliases 是 null，应该是空数组", m.Slug)
@@ -272,6 +272,52 @@ func TestIntegrationListModels(t *testing.T) {
 		if m.Status != "active" {
 			t.Fatalf("筛 active 之后出现了 %s（status=%s）", m.Slug, m.Status)
 		}
+	}
+}
+
+// 派生 `source` 只认 authority='models.dev'：端点上表的行不该把模型标成「来自上游目录」。
+//
+// 覆盖的是 `ListModels` 那一处 `r.authority = 'models.dev'` 判据——把条件删掉，
+// 这里会红（任何出处的 offering 都会把 source 翻成 models.dev）。
+// 另三处（`GetModelBySlug` / `GetModelByID` / `ListRevisionModels`）**没有**同样的反向
+// 用例：删掉它们各自的条件，整套 httpapi 仍然全绿（2026-11-13 实测）。等端点写入方落地、
+// 造得出「只挂 endpoint offering 的模型」再补，见 #445。
+func TestIntegrationListModelsSourceIgnoresOtherAuthorities(t *testing.T) {
+	h, _, pool := newModelTestHandler(t)
+	insertModel(t, pool, "it-model-endpoint", "端点来源模型", "active")
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO model_offerings (authority, provider_id, external_id, model_id)
+		 SELECT 'endpoint', '', 'api.example.com/v1/x', id FROM models WHERE slug = 'it-model-endpoint'`); err != nil {
+		t.Fatalf("造端点出处失败: %v", err)
+	}
+
+	var body struct {
+		Items []struct {
+			Slug   string `json:"slug"`
+			Source string `json:"source"`
+		} `json:"items"`
+	}
+	rec := httptest.NewRecorder()
+	h.ListModels(rec, httptest.NewRequest(http.MethodGet, "/api/v1/models", nil), api.ListModelsParams{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("模型目录 = %d，想要 200；响应体：%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析模型目录失败: %v", err)
+	}
+	found := false
+	for _, m := range body.Items {
+		if m.Slug != "it-model-endpoint" {
+			continue
+		}
+		found = true
+		if m.Source != "manual" {
+			t.Fatalf("authority=endpoint 的 offering 不该把 source 翻成 %q，应为 manual", m.Source)
+		}
+	}
+	if !found {
+		t.Fatalf("it-model-endpoint 没出现在目录里")
 	}
 }
 

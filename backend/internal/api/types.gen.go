@@ -838,7 +838,7 @@ type Model struct {
 	// Slug 稳定可引用的模型标识（`models.slug`）
 	Slug string `json:"slug"`
 
-	// Source 这条是从哪来的，**派生值**：有 `model_external_refs` 行就是 `models.dev`
+	// Source 这条是从哪来的，**派生值**：有 `authority='models.dev'` 的 `model_offerings` 行就是 `models.dev`
 	// （被上游目录认领过），否则 `manual`（人工建/导入）。
 	// 它不是 `models` 表上的列——同一件事不该有两个出处。
 	Source ModelSource `json:"source"`
@@ -855,7 +855,7 @@ type Model struct {
 // `guess` 是兜底实体（作者说不清具体用了什么）。
 type ModelResolution string
 
-// ModelSource 这条是从哪来的，**派生值**：有 `model_external_refs` 行就是 `models.dev`
+// ModelSource 这条是从哪来的，**派生值**：有 `authority='models.dev'` 的 `model_offerings` 行就是 `models.dev`
 // （被上游目录认领过），否则 `manual`（人工建/导入）。
 // 它不是 `models` 表上的列——同一件事不该有两个出处。
 type ModelSource string

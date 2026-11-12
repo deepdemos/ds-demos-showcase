@@ -35,5 +35,6 @@
   "db/migrations/0024_model_and_image_formats.sql": "2962de3682673983e751d19b8168b6aa76877f3cd34b69cde046326fa7a875d0",
   "db/migrations/0025_single_file_kinds.sql": "19405970cd8e521cf8409308ec7a73cf448c888f543ae63e7e614b3fbada1063",
   "db/migrations/0026_link_type.sql": "3a126789d1311616e85e965a703a3a751956a56631ad93249b850f3b92007b51",
-  "db/migrations/0027_model_alias_composite_pk.sql": "e600e68b69361344d6633802c0c7ce274028c203ed110ba773c8493d3dead431"
+  "db/migrations/0027_model_alias_composite_pk.sql": "e600e68b69361344d6633802c0c7ce274028c203ed110ba773c8493d3dead431",
+  "db/migrations/0028_model_offerings.sql": "9585c8b6f2cf3b8baa73c75b14d5a147b3e5262673a70aab7dcb82d30d2b352c"
 }

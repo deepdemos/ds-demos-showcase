@@ -181,9 +181,9 @@ func (h *Handler) applyImport(
 		if ref.CanonicalID != "" {
 			canonical = pgtype.Text{String: ref.CanonicalID, Valid: true}
 		}
-		if err := q.UpsertModelExternalRef(ctx, store.UpsertModelExternalRefParams{
+		if err := q.UpsertModelOffering(ctx, store.UpsertModelOfferingParams{
 			ModelID:      modelID,
-			Source:       ref.Source,
+			Authority:    ref.Source,
 			ProviderID:   ref.ProviderID,
 			ProviderName: item.ProviderName,
 			ExternalID:   ref.ExternalID,

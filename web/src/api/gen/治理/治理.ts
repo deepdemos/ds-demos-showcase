@@ -521,8 +521,8 @@ export const getListModelCatalogUrl = (params?: ListModelCatalogParams,) => {
  * 查的是**本地镜像** `model_catalog_items`，不是实时问 models.dev：上游只提供整包
  * JSON（约 10MB），没有搜索接口；上游不可用时本站照常工作（模型域 §4.6.1）。
  *
- * 每行带 `imported`：这个上游条目是否已被某个本地模型认领（`model_external_refs`
- * 有行）。导入页据此显示「已导入 / 可导入」。
+ * 每行带 `imported`：这个上游条目是否已被某个本地模型认领（`model_offerings`
+ * 里有 `authority='models.dev'` 的行）。导入页据此显示「已导入 / 可导入」。
  *
  * 默认过滤掉上游 `status = 'deprecated'` 的条目（旧站实测 904 条）。这与我们的
  * `models.status = 'deprecated'`（合并退役）是**两套语义**：上游弃用说的是
@@ -706,7 +706,7 @@ export const getApplyModelImportUrl = () => {
 /**
  * 把勾选的字段写进本地：新建时先落一个 `status = 'active'` 的模型（有人对着上游条目
  * 点过，不是作者随手填的 `candidate`），再写 `model_specs`、逐字段
- * `model_spec_fields(source='models.dev')`、`model_external_refs` 与审计。
+ * `model_spec_fields(source='models.dev')`、`model_offerings` 与审计。
  *
  * **只写 `fields` 里列出的字段**：没勾的保持原样。上游字段消失时不清空本地值
  * （模型域 §4.6.8），只会在 preview 里标「上游已移除」。
