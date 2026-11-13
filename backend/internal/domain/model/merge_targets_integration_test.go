@@ -379,12 +379,15 @@ func TestIntegrationReadPathsStopLongCycleAtDepthLimit(t *testing.T) {
 	const ring = 21
 	slugs := make([]string, 0, ring)
 	ids := make([]int64, 0, ring)
+	modelIDs := make(map[string]int64, ring)
 	for i := 0; i < ring; i++ {
 		slugs = append(slugs, fmt.Sprintf("it-merge-c%02d", i))
 	}
 	t.Cleanup(func() { cleanupCheckpointTest(t, pool, slugs) })
 	for _, slug := range slugs {
-		ids = append(ids, mergeTestModel(t, pool, slug))
+		id := mergeTestModel(t, pool, slug)
+		ids = append(ids, id)
+		modelIDs[slug] = id
 	}
 	for i := 0; i < ring; i++ {
 		mergeModels(t, pool, ids[i], ids[(i+1)%ring])
@@ -404,12 +407,34 @@ func TestIntegrationReadPathsStopLongCycleAtDepthLimit(t *testing.T) {
 		}
 	}
 	// 环长 21 不整除 20，所以 c00 走 20 跳落在 c20、c01 落在 c00，都没有回到起点。
+	// 四条读路径都断言：展示侧同口径，不能只在目录列表里对。
 	for _, tc := range []struct{ slug, want string }{
 		{"it-merge-c00", "it-merge-c20"},
 		{"it-merge-c01", "it-merge-c00"},
 	} {
 		if got, ok := mergedSlug(rows, tc.slug); !ok || got != tc.want {
-			t.Errorf("21 环：%s 的归宿是 %q（找到=%v），想要 %q", tc.slug, got, ok, tc.want)
+			t.Errorf("21 环：ListModels 里 %s 的归宿是 %q（找到=%v），想要 %q", tc.slug, got, ok, tc.want)
+		}
+		if row, err := q.GetModelBySlug(ctx, tc.slug); err != nil {
+			t.Fatalf("21 环下 GetModelBySlug(%s) 报错: %v", tc.slug, err)
+		} else if row.MergedIntoSlug != tc.want {
+			t.Errorf("21 环：GetModelBySlug(%s) 的归宿是 %q，想要 %q", tc.slug, row.MergedIntoSlug, tc.want)
+		}
+		if byID, err := q.GetModelByID(ctx, modelIDs[tc.slug]); err != nil {
+			t.Fatalf("21 环下 GetModelByID(%s) 报错: %v", tc.slug, err)
+		} else if byID.MergedIntoSlug != tc.want {
+			t.Errorf("21 环：GetModelByID(%s) 的归宿是 %q，想要 %q", tc.slug, byID.MergedIntoSlug, tc.want)
+		}
+		revID := mergeTestRevision(t, pool, modelIDs[tc.slug])
+		revRows, err := q.ListRevisionModels(ctx, revID)
+		if err != nil {
+			t.Fatalf("21 环下 ListRevisionModels(%s) 报错: %v", tc.slug, err)
+		}
+		if len(revRows) != 1 {
+			t.Fatalf("21 环下 ListRevisionModels(%s) 返回 %d 行，想要 1 行", tc.slug, len(revRows))
+		}
+		if revRows[0].MergedIntoSlug != tc.want {
+			t.Errorf("21 环：ListRevisionModels(%s) 的归宿是 %q，想要 %q", tc.slug, revRows[0].MergedIntoSlug, tc.want)
 		}
 	}
 }
