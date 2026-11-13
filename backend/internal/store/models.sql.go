@@ -306,7 +306,8 @@ SELECT m.id,
        m.created_at,
        m.updated_at
 FROM models m
-LEFT JOIN models t ON t.id = m.merged_into_id
+LEFT JOIN model_merge_targets mt ON mt.model_id = m.id
+LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> m.id
 WHERE m.id = $1
 `
 
@@ -362,7 +363,8 @@ SELECT m.id,
        m.created_at,
        m.updated_at
 FROM models m
-LEFT JOIN models t ON t.id = m.merged_into_id
+LEFT JOIN model_merge_targets mt ON mt.model_id = m.id
+LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> m.id
 WHERE m.slug = $1
 `
 
@@ -1147,7 +1149,8 @@ SELECT m.id,
        m.created_at,
        m.updated_at
 FROM models m
-LEFT JOIN models t ON t.id = m.merged_into_id
+LEFT JOIN model_merge_targets mt ON mt.model_id = m.id
+LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> m.id
 WHERE $1::text IS NULL OR m.status = $1::text
 ORDER BY m.name, m.id
 `
@@ -1269,7 +1272,8 @@ SELECT mo.id,
        c.released_on AS checkpoint_released_on
 FROM demo_revision_models rm
 JOIN models mo ON mo.id = rm.model_id
-LEFT JOIN models t ON t.id = mo.merged_into_id
+LEFT JOIN model_merge_targets mt ON mt.model_id = mo.id
+LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> mo.id
 LEFT JOIN model_checkpoints c ON c.id = rm.checkpoint_id
 WHERE rm.revision_id = $1
 ORDER BY mo.name, mo.id

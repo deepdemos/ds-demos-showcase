@@ -1422,7 +1422,7 @@ sequenceDiagram
 |---|---|---|
 | `status` | `models.status` 列 | 目录页要区分「可用 / 候选 / 未核实 / 已退役」。默认**返回全部状态**，表单那边自己传 `?status=active`——筛选责任交给调用方，接口不替它决定看什么 |
 | `resolution` | `models.resolution` 列 | `exact` 与 `family` 的可信度不同；作者说不清具体型号时会落到 `unknown` / `guess`，前端据此决定要不要标「未核实」 |
-| `mergedIntoSlug` | `models.merged_into_id` join 回 `models.slug` | 已退役的模型要指出它并到了谁。给 slug 而不是替调用方解析过去：作者当初声明的就是这一个 |
+| `mergedIntoSlug` | 视图 `model_merge_targets` 给出终点，再 join 回 `models.slug` | 已退役的模型要指出它并到了谁。给 slug 而不是替调用方解析过去：作者当初声明的就是这一个 |
 | `source` | **派生**：有 `authority='models.dev'` 的 `model_offerings` 行 → `models.dev`，否则 `manual` | `models` 表没有这一列。「有没有被上游目录认领过」本来就是 refs 表的事实，多加一列等于给同一件事两个出处 |
 | `aliases` | `model_aliases` | 同一个模型在别处的写法（旧站实测：同一个 DeepSeek V4 Flash 有五种写法）。它是**解析入口**，所以主键是 `(alias, model_id)`：同一个写法可以指多个模型，解析时同 rank 取小的 `model_id` |
 | `description` | `models.description` | 人工说明，没有时为空串 |
@@ -1451,6 +1451,7 @@ sequenceDiagram
   按 A 的写法会解析到 B 这个「归宿也已合并」的中间态，与按 id 查给出两个不同的答案；现在按
   递归走到尽头，环（A→B→A）用 20 层上限兜住，指针悬空（归宿被硬删，`merged_into_id` 没有外键）
   时退回被合并的那个 id，不把旧名字变回一条新候选。
+- **展示侧也跟到尽头**：列表 / 详情 / 修订模型这四条读路径（`ListModels` / `ListRevisionModels` / `GetModelByID` / `GetModelBySlug`）统一 JOIN 视图 `model_merge_targets`（`db/migrations/0030_model_merge_targets.sql`），不再各写一遍单跳 join。链只给终点；环由 walk 的 `path` 列认出来（不能只靠 20 层上限——只有环长整除 20 时第 20 层才绕回起点，3 环会停在环内一个成员上），视图把终点判成被合并的模型自己；悬空停在最后那个存在的节点，它自己的终点就是自己、前驱仍指向它。读路径用 `t.id <> m.id` 把「指回自己」滤成「没有归宿」，不把用户带回指回自己或环内成员的链接；链尾悬空的前驱因此仍显示「并到那个存在的节点」。超过 20 层的环认不出来，按上限停在那一层。
 - **厂商留空**。按模型域 §4.6.3 的规则，拿不到证据就不建 vendor，避免造出
   「Bothub」这种假厂商；界面显示「厂商未标注」。
 - **脏名字靠人工归并消化**（`docs/已知松点.md` 第 50 条）：三种写法就是三个候选项，
