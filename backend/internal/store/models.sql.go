@@ -1263,33 +1263,48 @@ SELECT mo.id,
        END::text AS source,
        mo.description,
        mo.created_at,
-       mo.updated_at
+       mo.updated_at,
+       rm.checkpoint_id,
+       c.label AS checkpoint_label,
+       c.released_on AS checkpoint_released_on
 FROM demo_revision_models rm
 JOIN models mo ON mo.id = rm.model_id
 LEFT JOIN models t ON t.id = mo.merged_into_id
+LEFT JOIN model_checkpoints c ON c.id = rm.checkpoint_id
 WHERE rm.revision_id = $1
 ORDER BY mo.name, mo.id
 `
 
 type ListRevisionModelsRow struct {
-	ID             int64
-	Slug           string
-	Name           string
-	Vendor         string
-	Status         string
-	Resolution     string
-	MergedIntoSlug string
-	Source         string
-	Description    string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID                   int64
+	Slug                 string
+	Name                 string
+	Vendor               string
+	Status               string
+	Resolution           string
+	MergedIntoSlug       string
+	Source               string
+	Description          string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	CheckpointID         pgtype.Int8
+	CheckpointLabel      pgtype.Text
+	CheckpointReleasedOn pgtype.Date
 }
 
 // 详情页用：某一版的模型声明（作者视图看当前版本、访客看对外版本）。
 //
-// 字段面与 ListModels **逐字一致**：详情里的模型对象与目录里的模型对象是同一个形状，
-// 否则前端要为两处写两套渲染（同一份数据在两张页面上长得不一样，是最容易被忽略的
-// 不一致）。排序按名字，让同一个作品两次打开的顺序一致。
+// 字段面与 ListModels **逐字一致**（前 11 列同名同序；ListModels 的 SELECT 正好 11 列），**外加这一版用的 checkpoint**。
+// checkpoint 挂在「版本 × 模型」这条关系上（`demo_revision_models.checkpoint_id`），
+// 不是模型的属性：同一个模型在两个作品里可以是不同的一版。它照样走 `Model.checkpoint`
+// 这个字段（契约里 Model 就带它，目录那一侧恒为 null）——不另开一个 schema，是因为
+// allOf 摊平后会把全局枚举常量一起改名，生成物的噪声远大于收益。
+//
+// 三个 checkpoint 列的 NULL 有意义：`checkpoint_id IS NULL` 就是「这一版没说用的是
+// 哪一版模型」，展示要落到「未固定」，不能默认成最新版。LEFT JOIN 保证没填
+// checkpoint 的声明照样出现（否则填不填会改变「作品用了几行模型」）。
+//
+// 排序按名字，让同一个作品两次打开的顺序一致。
 func (q *Queries) ListRevisionModels(ctx context.Context, revisionID int64) ([]ListRevisionModelsRow, error) {
 	rows, err := q.db.Query(ctx, listRevisionModels, revisionID)
 	if err != nil {
@@ -1311,6 +1326,9 @@ func (q *Queries) ListRevisionModels(ctx context.Context, revisionID int64) ([]L
 			&i.Description,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CheckpointID,
+			&i.CheckpointLabel,
+			&i.CheckpointReleasedOn,
 		); err != nil {
 			return nil, err
 		}

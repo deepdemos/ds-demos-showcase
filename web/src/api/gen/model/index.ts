@@ -90,6 +90,7 @@ export * from './model';
 export * from './modelBenchmarkScore';
 export * from './modelCatalogItem';
 export * from './modelCatalogList';
+export * from './modelCheckpoint';
 export * from './modelDemoRef';
 export * from './modelImportApply';
 export * from './modelImportBatchRequest';

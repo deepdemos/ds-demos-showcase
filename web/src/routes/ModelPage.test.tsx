@@ -30,6 +30,9 @@ function profile(overrides: Record<string, unknown> = {}) {
       mergedIntoSlug: '',
       source: 'manual',
       aliases: [],
+      // 目录里的模型永远没有版本：checkpoint 是「某个作品声明用的是哪一版」，
+      // 不是模型本身的属性。
+      checkpoint: null,
       description: '对话模型',
     },
     specs: {

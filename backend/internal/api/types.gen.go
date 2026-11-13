@@ -528,9 +528,10 @@ type DemoDetail struct {
 	// - 访客看**对外版本**的声明，作者看**当前版本**的——与标题、简介同一口径
 	// - 空数组是正常状态：作品可以不声明模型（展示件未必用了模型）
 	// - 墓碑态恒为空数组：墓碑不承载内容，也就不承载「用了什么模型」
-	// - 本期只给名字，不给可点击的模型页链接（还没有那一页，给了就是死链）
-	// - 字段面与 `GET /api/v1/models` 的**每一项完全相同**（同一个 `Model`
-	//   schema）：同一份数据在两处长得不一样，前端就得写两套渲染
+	// - 每一项就是目录里的那个 `Model`（同一个 schema），只是这一份的
+	//   `checkpoint` 可能非空——版本挂在「作品 × 模型」这条关系上，
+	//   目录那份没有这个概念，所以那边恒为 `null`
+	// - `checkpoint` 为 `null` 时展示必须落到「未固定」：**不得**当成最新版
 	Models []Model `json:"models"`
 
 	// ModerationState 当前版本的审核态。
@@ -819,6 +820,16 @@ type Model struct {
 	// 同形态取小的 `model_id`。
 	Aliases []string `json:"aliases"`
 
+	// Checkpoint 这个模型条目**所指的那一版**；`null` 表示没指定。
+	//
+	// 只有作品详情里可能非空——版本挂在「作品版本 × 模型」这条关系上
+	// （见 `DemoDetail.models`）。模型目录里恒为 `null`：目录描述的是模型本身，
+	// 不是「某个作品用了它的哪一版」。
+	//
+	// `null` 不等于「最新版」：作者没填、插件没上报、或者这行是更早写入的。
+	// 展示必须落到「未固定」。
+	Checkpoint *ModelCheckpoint `json:"checkpoint"`
+
 	// Description 人工说明；没有时为空串
 	Description string `json:"description"`
 
@@ -949,6 +960,18 @@ type ModelCatalogList struct {
 
 	// Total 同一组筛选条件下的总条数（不受 limit / offset 影响）
 	Total int `json:"total"`
+}
+
+// ModelCheckpoint defines model for ModelCheckpoint.
+type ModelCheckpoint struct {
+	// Label 版本号，在模型内部唯一（如 `1017`）
+	Label string `json:"label"`
+
+	// ReleasedOn 发布日期；不知道时为 `null`。
+	//
+	// 不设「不能晚于今天」的校验：上游常常只给到月份，编一个准确日期比空着更假。
+	// 未来日期也不拒（时钟回拨有过先例），展示时按「未发布」处理。
+	ReleasedOn *openapi_types.Date `json:"releasedOn"`
 }
 
 // ModelDemoRef defines model for ModelDemoRef.

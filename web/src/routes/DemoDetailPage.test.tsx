@@ -201,6 +201,42 @@ test('详情显示作者、发布时间与模型声明', async () => {
 });
 
 /**
+ * 模型声明还要带「用的是哪一版」：作者选了就显示 label，没选就显示「未固定」。
+ *
+ * 没填**不能**顺手写成「最新版」——那是替作者说一句他没说过的话（E06）。所以两条
+ * 断言必须同时存在：一条钉住 label 出来，一条钉住 null 变成「未固定」。
+ */
+test('模型声明显示作者选定的版本，没填的显示未固定', async () => {
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({
+      models: [
+        {
+          slug: 'glm-5',
+          name: 'GLM-5',
+          vendor: '智谱',
+          checkpoint: { label: '1017', releasedOn: '2026-10-17' },
+        },
+        { slug: 'deepseek-chat', name: 'DeepSeek Chat', vendor: 'DeepSeek', checkpoint: null },
+      ],
+    }),
+  } as never);
+
+  renderPage();
+
+  const fixed = await screen.findByText('1017 版');
+  expect(fixed.getAttribute('title')).toBe('发布于 2026-10-17');
+
+  const unfixed = screen.getByText('未固定');
+  // 同一段声明里：既有版本标记，也有没填的那个模型名。
+  const paragraph = unfixed.closest('p');
+  expect(paragraph?.textContent).toContain('DeepSeek Chat');
+  expect(paragraph?.textContent).toContain('1017 版');
+  // 「未固定」不是默认成最新版的另一种写法：页面上不许出现「最新版」。
+  expect(screen.queryByText(/最新版/)).toBeNull();
+});
+
+/**
  * 没有对外版本时 `publishedAt` 是 null。拿 `createdAt` 顶上却仍写「发布」，
  * 草稿页就成了「未发布却标着发布日」（issue #375）。
  */

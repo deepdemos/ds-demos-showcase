@@ -198,6 +198,134 @@ func TestIntegrationDetailModelHasCatalogFields(t *testing.T) {
 	}
 }
 
+// 详情里的「用的是哪一版」。
+//
+// checkpoint 挂在「版本 × 模型」这条关系上（demo_revision_models.checkpoint_id），
+// 不是模型的属性：同一个模型在两个作品里可以是不同的一版。所以详情里每一项除了目录字段，
+// 还带 checkpoint；没填就是 null，展示层落「未固定」——**不能**默认成最新版。
+//
+// 这一列现在没有写入方（投稿与改稿都还不收 checkpoint），所以这里直接改库：钉的是读路径。
+// 写入方是 #445 的 4b/4d。
+//
+// 同一条用例还要钉住目录那一侧：同一个模型在 GET /api/v1/models 里的 checkpoint 恒为 null，
+// 目录不挂在任何版本上。
+func TestIntegrationDetailModelCarriesCheckpoint(t *testing.T) {
+	h, idSvc, pool := newModelTestHandler(t)
+	ctx := context.Background()
+	insertModel(t, pool, "it-model-ck", "测试版本模型", "active")
+
+	var modelID int64
+	if err := pool.QueryRow(ctx, `SELECT id FROM models WHERE slug = 'it-model-ck'`).Scan(&modelID); err != nil {
+		t.Fatalf("查模型 id 失败: %v", err)
+	}
+	var checkpointID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO model_checkpoints (model_id, label, released_on)
+		 VALUES ($1, '1017', DATE '2026-10-17') RETURNING id`, modelID).Scan(&checkpointID); err != nil {
+		t.Fatalf("插入 checkpoint 失败: %v", err)
+	}
+	// 清理顺序：先删作品（cleanupAuthor 会连版本与声明一起删），再删版本，最后删模型。
+	// t.Cleanup 后进先出，所以这里先登记版本清理、后登记账号清理。
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM model_checkpoints WHERE id = $1`, checkpointID)
+	})
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-model-ck@example.com",
+		Password:    "modeltest1234",
+		Username:    "it-model-ck",
+		DisplayName: "版本作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+
+	rec := submitHTMLWithModels(t, h, sid, "带版本的详情", `<!doctype html><p>v</p>`, []string{"it-model-ck"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("投稿 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("解析投稿回执失败: %v", err)
+	}
+
+	type checkpointBody struct {
+		Label      string `json:"label"`
+		ReleasedOn string `json:"releasedOn"`
+	}
+	type detailBody struct {
+		Models []struct {
+			Slug       string          `json:"slug"`
+			Checkpoint *checkpointBody `json:"checkpoint"`
+		} `json:"models"`
+	}
+
+	// 1) 还没挂版本：checkpoint 必须是 null（不是 {}、也不是最新版）。
+	before := getDemoAs(t, h, created.Slug, sid)
+	if before.Code != http.StatusOK {
+		t.Fatalf("作者读详情 = %d，想要 200；响应体：%s", before.Code, before.Body.String())
+	}
+	var beforeBody detailBody
+	if err := json.Unmarshal(before.Body.Bytes(), &beforeBody); err != nil {
+		t.Fatalf("解析详情失败: %v", err)
+	}
+	if len(beforeBody.Models) != 1 || beforeBody.Models[0].Checkpoint != nil {
+		t.Fatalf("没填 checkpoint 时应当是 null：%+v", beforeBody.Models)
+	}
+
+	// demo_revision_models 只有 revision_id，没有 demo_id——要经作品表拿到当前版本再改。
+	if _, err := pool.Exec(ctx, `
+		UPDATE demo_revision_models rm
+		SET checkpoint_id = $1
+		FROM demos d
+		WHERE d.slug = $2
+		  AND d.current_revision_id = rm.revision_id
+		  AND rm.model_id = $3`, checkpointID, created.Slug, modelID); err != nil {
+		t.Fatalf("挂 checkpoint 失败: %v", err)
+	}
+
+	// 2) 填了要原样带出来：label 与日期都从版本表读，不是从模型表推的。
+	after := getDemoAs(t, h, created.Slug, sid)
+	if after.Code != http.StatusOK {
+		t.Fatalf("作者读详情 = %d，想要 200；响应体：%s", after.Code, after.Body.String())
+	}
+	var afterBody detailBody
+	if err := json.Unmarshal(after.Body.Bytes(), &afterBody); err != nil {
+		t.Fatalf("解析详情失败: %v", err)
+	}
+	if len(afterBody.Models) != 1 {
+		t.Fatalf("详情里的模型数 = %d，想要 1", len(afterBody.Models))
+	}
+	got := afterBody.Models[0].Checkpoint
+	if got == nil {
+		t.Fatalf("挂了 checkpoint 之后详情里仍是 null：%+v", afterBody.Models[0])
+	}
+	if got.Label != "1017" || got.ReleasedOn != "2026-10-17" {
+		t.Fatalf("checkpoint = %+v，想要 label=1017 releasedOn=2026-10-17", got)
+	}
+
+	// 3) 目录那一侧：同一个模型，checkpoint 恒为 null。
+	list := httptest.NewRecorder()
+	h.ListModels(list, httptest.NewRequest(http.MethodGet, "/api/v1/models", nil), api.ListModelsParams{})
+	if list.Code != http.StatusOK {
+		t.Fatalf("模型目录 = %d，想要 200；响应体：%s", list.Code, list.Body.String())
+	}
+	var catalog struct {
+		Items []struct {
+			Slug       string          `json:"slug"`
+			Checkpoint *checkpointBody `json:"checkpoint"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &catalog); err != nil {
+		t.Fatalf("解析目录失败: %v", err)
+	}
+	for _, item := range catalog.Items {
+		if item.Slug == "it-model-ck" && item.Checkpoint != nil {
+			t.Fatalf("目录里的 checkpoint 应当是 null，实际 %+v", item.Checkpoint)
+		}
+	}
+}
+
 // 模型目录的字段面。
 //
 // 契约里的 `status` 字段早先永远等于 `active`——因为查询写死了 `WHERE status='active'`，
