@@ -539,7 +539,7 @@ paths:
           description: |
             调用方自己生成的幂等键（建议 UUID），最长 128 字符，超出回 400。
 
-            命中已有键时**不新建**、不重新上传、不占用待审配额，直接返回
+            命中已有键时**不新建**、不重新上传，直接返回
             `200` 与当初那条作品；第一次提交返回 `201`。两者回执形状相同，
             客户端用状态码区分「我创建了它」与「它早就存在」。
 
@@ -675,23 +675,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: 包内容不合格（缺 index.html、压缩炸弹、成员过多等）
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: |
-            待审作品太多（`UPLOAD_MAX_PENDING`），等审核消化一些再来。
-
-            带 `Retry-After`：它是**建议的复查间隔，不是承诺**——真正的解锁时刻
-            是有人审完你压着的那几条，服务端不知道那会是什么时候。
-            给一个数是为了让调用方能退避重试，而不是立刻重打或直接放弃。
-          headers:
-            Retry-After:
-              description: 建议等待的秒数（当前实现为 3600）
-              schema:
-                type: integer
-                minimum: 1
           content:
             application/json:
               schema:

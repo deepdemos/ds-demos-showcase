@@ -8,22 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/storage"
-	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
-
-// newServiceWithPending 与 testService 相同，除了显式指定待审配额。
-func newServiceWithPending(t *testing.T, pool *pgxpool.Pool, maxPending int) *Service {
-	t.Helper()
-	files, err := storage.NewLocal(t.TempDir())
-	if err != nil {
-		t.Fatalf("建本地存储失败: %v", err)
-	}
-	return New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, maxPending, nil)
-}
 
 // buildZipLevel 与 buildZip 相同，除了可指定压缩方式（用来证明 manifest 与打包方式无关）。
 func buildZipLevel(t *testing.T, files map[string]string, method uint16) string {

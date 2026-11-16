@@ -145,7 +145,7 @@ export function SubmitPage() {
         return;
       }
       const body = response.data as ApiError;
-      // 413/415/422 是「这个包不行」，429 是「现在不行」。都直接展示后端的中文说明：
+      // 413/415/422 是「这个包不行」，都直接展示后端的中文说明：
       // 这几条消息是写给用户看的，不是内部错误串。
       setError(body.message);
     } catch {
