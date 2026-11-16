@@ -8,7 +8,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
@@ -233,16 +232,6 @@ func (h *Handler) writeDemoError(w http.ResponseWriter, err error) {
 		// 404：这个作品没有这个版本号，或者那一版已经擦掉了。
 		// 不区分两者——擦除过的版本对外就是不存在，区分会透出「这里曾经有过一版」。
 		writeError(w, http.StatusNotFound, api.NotFound, messageOf(err))
-	case errors.Is(err, demo.ErrTooManyPending):
-		// 429 而不是 400：这不是「你写错了」，是「现在不行，等一会儿」。
-		// 契约里 429 已经存在（登录限流用同一个码）。
-		//
-		// Retry-After 是**建议的复查间隔，不是承诺**：真正解锁的时刻是有人审完
-		// 压着的那几条，服务端不知道那会是什么时候。没有这个头，脚本只能
-		// 「立刻重试」（打成循环）或「直接放弃」；有了它至少能退避。
-		// 登录限流（identity 里的 429）早就在带这个头，两处口径到这才一致。
-		w.Header().Set("Retry-After", strconv.Itoa(int(demo.PendingRetryHint.Seconds())))
-		writeError(w, http.StatusTooManyRequests, api.RateLimited, messageOf(err))
 	default:
 		slog.Error("submit demo failed", "err", err)
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")

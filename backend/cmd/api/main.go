@@ -82,7 +82,7 @@ func main() {
 			pool, queries, files,
 			storage.DefaultLimits(),
 			cfg.UploadMaxPackageMiB<<20,
-			cfg.UploadMaxPending,
+			0, // 待审配额已停用，见 demo.New 的说明
 			logger,
 		)
 		modelSvc = model.New(pool, queries, catalog.NewFetcher(cfg.ModelCatalogURL, nil), logger)

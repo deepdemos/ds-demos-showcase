@@ -22,8 +22,6 @@ var (
 	ErrUnsupportedPackage = errors.New("demo: 不支持的作品包类型")
 	// ErrBadPackage 包内容不合格（缺 index.html、压缩炸弹、成员过多等）。
 	ErrBadPackage = errors.New("demo: 作品包内容不合格")
-	// ErrTooManyPending 待审作品太多，暂时不能再投。
-	ErrTooManyPending = errors.New("demo: 待审作品太多")
 )
 
 const (

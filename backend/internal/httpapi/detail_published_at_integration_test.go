@@ -23,7 +23,7 @@ import (
 //
 // 反向验证：把子查询改回 `FROM demo_channels c`（不过滤），第一条断言立刻红。
 func TestIntegrationDetailPublishedAtCountsVisibleChannelsOnly(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 0)
+	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)
 	ctx := context.Background()
 

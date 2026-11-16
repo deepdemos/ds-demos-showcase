@@ -589,11 +589,6 @@ export type submitDemoResponse422 = {
   status: 422
 }
 
-export type submitDemoResponse429 = {
-  data: Error
-  status: 429
-}
-
 export type submitDemoResponse503 = {
   data: Error
   status: 503
@@ -602,7 +597,7 @@ export type submitDemoResponse503 = {
 export type submitDemoResponseSuccess = (submitDemoResponse200 | submitDemoResponse201) & {
   headers: Headers;
 };
-export type submitDemoResponseError = (submitDemoResponse400 | submitDemoResponse401 | submitDemoResponse413 | submitDemoResponse415 | submitDemoResponse422 | submitDemoResponse429 | submitDemoResponse503) & {
+export type submitDemoResponseError = (submitDemoResponse400 | submitDemoResponse401 | submitDemoResponse413 | submitDemoResponse415 | submitDemoResponse422 | submitDemoResponse503) & {
   headers: Headers;
 };
 

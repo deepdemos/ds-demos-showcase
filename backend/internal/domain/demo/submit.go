@@ -33,15 +33,6 @@ const submitTimeout = SubmitTimeout
 // 用同一个值——两处各写一个 5 分钟，改一处另一处不会跟着变。
 const SubmitTimeout = 5 * time.Minute
 
-// PendingRetryHint 是「待审配额满了」时给客户端的 Retry-After 值。
-//
-// 它是**建议的复查间隔，不是承诺**：真正的解锁时刻是有人审完你压着的那几条，
-// 这个服务不知道那会是什么时候。给一个数是为了让脚本能退避重试——没有它，
-// 调用方只能两条路：立刻重试（打成循环）或永远放弃。
-//
-// 取 1 小时：审核是人工的，比这更密的轮询没有意义。
-const PendingRetryHint = time.Hour
-
 // maxIdempotencyKeyLen 与 `demos.idempotency_key` 的长度约束一致。
 //
 // 在领域层先挡，是因为越界到库里只会变成一个 23514——那个错误对客户端毫无意义，
@@ -57,17 +48,19 @@ type Service struct {
 	limits storage.Limits
 	// maxPackageBytes 是上传包本身的体积上限。
 	maxPackageBytes int64
-	// maxPending 是一个作者同时能压多少条待审。0 表示不限。
-	maxPending int
-	log        *slog.Logger
+	log             *slog.Logger
 }
 
 // New 组装服务。files 与 q 都必须非 nil——投稿没有「降级运行」这一说。
-func New(pool *pgxpool.Pool, q *store.Queries, files storage.Store, limits storage.Limits, maxPackageBytes int64, maxPending int, log *slog.Logger) *Service {
+//
+// 第 6 个参数是**已停用的待审配额**（原 UPLOAD_MAX_PENDING），现在被忽略：
+// 传什么都不会生效，也没有日志。留着它只是因为调用点散在 cmd 与十几个测试文件里，
+// 一次删干净会越过 pr-guard 的 20 文件上限。删除这件事记在 #467，别让「下次」落空。
+func New(pool *pgxpool.Pool, q *store.Queries, files storage.Store, limits storage.Limits, maxPackageBytes int64, _ int, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Service{pool: pool, q: q, files: files, limits: limits, maxPackageBytes: maxPackageBytes, maxPending: maxPending, log: log}
+	return &Service{pool: pool, q: q, files: files, limits: limits, maxPackageBytes: maxPackageBytes, log: log}
 }
 
 // MaxPackageBytes 返回上传包的体积上限（字节）。
@@ -118,8 +111,8 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	if len([]rune(in.IdempotencyKey)) > maxIdempotencyKeyLen {
 		return out, fmt.Errorf("%w：幂等键最长 %d 个字符", ErrInvalidInput, maxIdempotencyKeyLen)
 	}
-	// 先查重放，且查在解压与配额之前：重放请求不该付出任何一次解压成本，
-	// 也不该因为「待审满了」被拒——它本来就不会新建任何东西。
+	// 先查重放，且查在解压之前：重放请求不该付出任何一次解压成本——
+	// 它本来就不会新建任何东西。
 	if in.IdempotencyKey != "" {
 		row, err := s.q.FindDemoByIdempotencyKey(ctx, store.FindDemoByIdempotencyKeyParams{
 			AuthorID:       int8(in.AuthorID),
@@ -132,18 +125,6 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 			return out, fmt.Errorf("demo: 查幂等键失败: %w", err)
 		}
 	}
-	// 配额判在解压之前：解压是全站最贵的一步（最多 500 MiB），
-	// 等解完再拒等于先付出成本再告诉对方不行。
-	if s.maxPending > 0 {
-		n, err := s.q.CountPendingDemosByAuthor(ctx, int8(in.AuthorID))
-		if err != nil {
-			return out, fmt.Errorf("demo: 查待审数量失败: %w", err)
-		}
-		if int(n) >= s.maxPending {
-			return out, fmt.Errorf("%w：最多同时有 %d 条待审作品，请等已提交的审核完再投", ErrTooManyPending, s.maxPending)
-		}
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, submitTimeout)
 	defer cancel()
 

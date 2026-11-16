@@ -62,11 +62,6 @@ type Config struct {
 	// 默认 log（只记不拦）——先在真实流量上观察一轮，再切 enforce。
 	// 取值的解析在 httpapi.ParseCSRFMode，那里会对拼错的值报错而不是静默降级。
 	CSRFMode string
-
-	// UploadMaxPending 是一个作者同时能压多少条待审。默认 5。
-	// 投稿是全站最贵的写路径（200 MiB 包 + 最多 500 MiB 解压），
-	// 没有这道闸时登录用户循环 POST 就能把磁盘写满。
-	UploadMaxPending int
 }
 
 // Load 从环境变量读取配置。
@@ -88,7 +83,6 @@ func Load() Config {
 		ModelCatalogURL:     os.Getenv("MODEL_CATALOG_URL"),
 		CSRFMode:            getenv("CSRF_MODE", "log"),
 		UploadMaxPackageMiB: intenv("UPLOAD_MAX_PACKAGE_MIB", 200),
-		UploadMaxPending:    int(intenv("UPLOAD_MAX_PENDING", 5)),
 	}
 }
 

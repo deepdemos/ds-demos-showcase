@@ -75,7 +75,7 @@ func submitWithKey(t *testing.T, h *Handler, sid, title, body, key string) (int,
  * 说成了我们这边坏了。契约里 maxLength 是 128，这里与它保持一致。
  */
 func TestIntegrationSubmitRejectsLongIdempotencyKey(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 5)
+	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
@@ -92,7 +92,7 @@ func TestIntegrationSubmitRejectsLongIdempotencyKey(t *testing.T) {
 	}
 }
 
-func newIdempotencyHandler(t *testing.T, maxPending int) (*Handler, *store.Queries, *identity.Service) {
+func newIdempotencyHandler(t *testing.T) (*Handler, *store.Queries, *identity.Service) {
 	t.Helper()
 	pool := integrationPool(t)
 	q := store.New(pool)
@@ -101,7 +101,7 @@ func newIdempotencyHandler(t *testing.T, maxPending int) (*Handler, *store.Queri
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
-	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, maxPending, nil)
+	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
 	return New(pool, q, idSvc, nil, demoSvc), q, idSvc
 }
 
@@ -111,7 +111,7 @@ func newIdempotencyHandler(t *testing.T, maxPending int) (*Handler, *store.Queri
 // 回执的那几秒里连接断了。脚本不知道服务端收没收到，只能重传——没有幂等键，
 // 这就是两条一模一样的作品，等着人工去删。
 func TestIntegrationSubmitIsIdempotent(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 0)
+	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
@@ -153,7 +153,7 @@ func TestIntegrationSubmitIsIdempotent(t *testing.T) {
 //
 // 更要紧的是另一半：不能因为 key 撞了就让 B 读到 A 的作品。
 func TestIntegrationIdempotencyKeyIsScopedByAuthor(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 0)
+	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)
 
 	accA, sidA := registerVerified(t, pool, idSvc, identity.RegisterInput{
@@ -188,7 +188,7 @@ func TestIntegrationIdempotencyKeyIsScopedByAuthor(t *testing.T) {
 // 这条是上面几条的对照——没有它，上面几条全靠「幂等逻辑生效」解释，
 // 也可能是「本来就只建一条」。
 func TestIntegrationSubmitWithoutKeyCreatesTwo(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 0)
+	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
@@ -213,7 +213,7 @@ func TestIntegrationSubmitWithoutKeyCreatesTwo(t *testing.T) {
 // 已发布那一版，所以访客那边必须是 approved。如果照抄库里的值，
 // 访客会看到「这条作品还没审完就上线了」，而那正是版本分离要消除的误会。
 func TestIntegrationDetailModerationStateVisibility(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 0)
+	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
@@ -254,57 +254,6 @@ func TestIntegrationDetailModerationStateVisibility(t *testing.T) {
 	}
 }
 
-// 配额满时的 429 必须带 Retry-After。
-//
-// 登录限流早就带这个头（`identity.go`），投稿配额却不带——同一类「现在不行、
-// 过会儿再来」的响应，两套标准。没有它，脚本只能立刻重试（打成循环）或直接放弃。
-func TestIntegrationSubmitQuotaSendsRetryAfter(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 1)
-	pool := integrationPool(t)
-
-	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
-		Email: "it-quota@example.com", Password: "idempotency123",
-		Username: "it-quota", DisplayName: "配额作者",
-	})
-	t.Cleanup(func() { cleanupAuthor(t, pool, acc.Sub) })
-
-	if code, _ := submitWithKey(t, h, sid, "配额一", `<!doctype html><p>1</p>`, ""); code != http.StatusCreated {
-		t.Fatalf("第一条 = %d，想要 201", code)
-	}
-
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	if err := mw.WriteField("title", "配额二"); err != nil {
-		t.Fatal(err)
-	}
-	if err := mw.WriteField("demoType", "web"); err != nil {
-		t.Fatal(err)
-	}
-	part, err := mw.CreateFormFile("package", "index.html")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := part.Write([]byte(`<!doctype html><p>2</p>`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := mw.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/demos", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
-	rec := httptest.NewRecorder()
-	h.SubmitDemo(rec, req, api.SubmitDemoParams{})
-
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("超配额 = %d，想要 429（%s）", rec.Code, rec.Body.String())
-	}
-	if got := rec.Header().Get("Retry-After"); got != "3600" {
-		t.Fatalf("Retry-After = %q，想要 \"3600\"（与 demo.PendingRetryHint 一致）", got)
-	}
-}
-
 // decodeDetail 解出详情响应的 `DemoDetail`，顺带断言状态码是 200。
 func decodeDetail(t *testing.T, rec *httptest.ResponseRecorder) api.DemoDetail {
 	t.Helper()
@@ -326,7 +275,7 @@ func decodeDetail(t *testing.T, rec *httptest.ResponseRecorder) api.DemoDetail {
  * 真栈上第一次撞到它，是 Windows 的 curl 按 GBK 把中文标题发了出来。
  */
 func TestIntegrationSubmitRejectsInvalidUTF8(t *testing.T) {
-	h, _, idSvc := newIdempotencyHandler(t, 5)
+	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
