@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { submitDemo } from '@/api';
@@ -175,34 +175,26 @@ describe('SubmitPage', () => {
   });
 
   /**
-   * 手填的模型名也要进请求体。
+   * 模型声明只能从目录里挑：不再有「手填模型名」的入口。
    *
-   * 这条钉的是「目录不是白名单」：灰测模型上游没收录，作者只能自己打。
-   * 若手填的只留在草稿里、没进 value，投稿会成功但声明是空的——
-   * 没有任何错误，作者也不会去核对。
+   * 2026-11-06 曾有一版手填入口（服务端解析不到就建 candidate），2026-11-17 撤掉
+   * （#296 → #465）。这条钉的是「入口真的没了」：只改服务端、留着输入框的话，
+   * 作者打完字提交才收到 400——撤销的代价被转给了作者。
    */
-  test('手填的模型名跟着投稿一起提交', async () => {
+  test('模型声明没有手填入口', async () => {
     auth.me = { sub: 'x', username: 'u', displayName: 'U' };
     auth.isLoading = false;
-    vi.mocked(submitDemo).mockResolvedValue({
-      status: 201,
-      data: { slug: 'demo-a', lifecycleState: 'draft', moderationState: 'pending' },
-    } as never);
 
     renderAt('/submit');
 
-    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '用了灰测模型' } });
-    pickFile();
-
-    const box = await screen.findByLabelText('手填模型名');
-    fireEvent.change(box, { target: { value: '某厂家的灰测模型' } });
-    fireEvent.click(screen.getByRole('button', { name: '添加' }));
-
-    fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
-
-    await waitFor(() => expect(submitDemo).toHaveBeenCalled());
-    const [body] = vi.mocked(submitDemo).mock.calls[0] as unknown as [Record<string, unknown>];
-    expect(body.modelSlugs).toEqual(['某厂家的灰测模型']);
+    // 等目录渲染出来，再按结构断言：模型声明这一组里只有复选框，没有任何文本输入框。
+    // 只断言「手填模型名」这个 aria 名不够——把 label 换个名字、或者用无 label 的
+    // <input type="text"> 把入口加回来，那种断言照样绿。
+    await screen.findByLabelText('DeepSeek Reasoner（DeepSeek）');
+    const section = screen.getByRole('group', { name: '模型声明（可留空，可多选）' });
+    expect(within(section).queryAllByRole('textbox')).toEqual([]);
+    expect(within(section).queryByRole('button', { name: '添加' })).toBeNull();
+    expect(within(section).getAllByRole('checkbox').length).toBeGreaterThan(0);
   });
 
   /**

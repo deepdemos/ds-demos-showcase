@@ -35,7 +35,7 @@ export type ListModelsParams = {
   /**
    * 只出这个状态的行。不传表示全部。
    *
-   * `candidate` 是作者手动建、还没被核实的新行；`unverified` 是认领了上游
+   * `candidate` 是人工登记、还没被核实的新行（2026-11-17 起没有自动写入方）；`unverified` 是认领了上游
    * 条目但来源可疑的；`deprecated` 是已退役，`mergedIntoSlug` 指出它并到了谁。
    */
   status?: ListModelsStatus;
