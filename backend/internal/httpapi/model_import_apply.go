@@ -26,8 +26,9 @@ import (
 //
 // # 为什么新建是 active 而不是 candidate
 //
-// 作者手填建的是 `candidate`（没人给它背书）；目录导入是管理员对着一条上游条目点的，
+// `candidate` 只来自人工登记（没人给它背书）；目录导入是管理员对着一条上游条目点的，
 // 那是**有人背过书**的。状态不同正是为了让「这条凭什么可信」有答案。
+// 投稿路径 2026-11-17 起不再建模型（#296 → #465），所以这里没有「作者随手填」那条路要区分。
 func (h *Handler) ApplyModelImport(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil || h.demos == nil {
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")

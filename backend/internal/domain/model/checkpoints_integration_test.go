@@ -111,7 +111,7 @@ func checkpointDate(y int, m time.Month, d int) pgtype.Date {
 //
 // 为什么重要：版本会被反复登记——同一份上游目录同步两次、作者改一次作品又提交一次。
 // 若第二次报错，调用方就得先查再插，而那一段查插之间又是新的竞态。这里让冲突变成
-// 「不返回行」，调用方据此回查（与 CreateCandidateModel 同一套路）。
+// 「不返回行」，调用方据此回查，不把冲突当失败。
 func TestIntegrationInsertModelCheckpointIsIdempotent(t *testing.T) {
 	pool := checkpointTestPool(t)
 	ctx := context.Background()

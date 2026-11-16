@@ -34,7 +34,7 @@ import type { ModelRef } from './modelRef';
 
 export type Model = ModelRef & ({
   /**
-     * `candidate` 作者手动建、未核实；`active` 可用；`unverified` 认领了上游
+     * `candidate` 人工登记、未核实（2026-11-17 起没有自动写入方）；`active` 可用；`unverified` 认领了上游
      * 条目但来源可疑；`deprecated` 已退役。
      */
   status: 'candidate' | 'active' | 'unverified' | 'deprecated';
@@ -57,12 +57,12 @@ export type Model = ModelRef & ({
      */
   source: 'manual' | 'models.dev';
   /**
-     * 这个模型的其他写法（`model_aliases`）。用它可以把作者手填的名字
-     * 解析回来，也用于展示「同一个模型在别处叫什么」。
+     * 这个模型的其他写法（`model_aliases`）。用它可以把同一个模型在别处的
+     * 名字解析回来，也用于展示「同一个模型在别处叫什么」。
      *
-     * 别名是**解析入口**，不是展示字段：同一个写法允许被多个模型共享（作者手填的
-     * 名字撞名是常态），取哪一条由解析规则决定——先比形态（slug > 别名 > 展示名），
-     * 同形态取小的 `model_id`。
+     * 别名是**解析入口**，不是展示字段：同一个写法允许被多个模型共享（上游不同
+     * 渠道的命名撞名是常态），取哪一条由解析规则决定——先比形态
+     * （slug > 别名 > 展示名），同形态取小的 `model_id`。
      */
   aliases: string[];
   /** 人工说明；没有时为空串 */

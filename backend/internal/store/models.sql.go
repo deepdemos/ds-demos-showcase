@@ -64,41 +64,6 @@ func (q *Queries) CountCatalogItems(ctx context.Context, arg CountCatalogItemsPa
 	return column_1, err
 }
 
-const createCandidateModel = `-- name: CreateCandidateModel :one
-INSERT INTO models (slug, name, vendor, status, resolution, description)
-VALUES (
-    $1,
-    $2,
-    $3,
-    'candidate',
-    'exact',
-    ''
-)
-ON CONFLICT DO NOTHING
-RETURNING id
-`
-
-type CreateCandidateModelParams struct {
-	Slug   string
-	Name   string
-	Vendor pgtype.Text
-}
-
-// 作者填了一个库里没有的名字：**立刻建实体**，状态 `candidate`。
-//
-// 为什么不让投稿失败：AI 圈的灰测模型等不起人工审核（旧站的 142 个模型写法里有大量
-// 上游没收录的名字）。先落 `candidate` 让作品能提交，管理员事后归并——归并是按 id 改指针，
-// 作品不用动。
-//
-// `ON CONFLICT DO NOTHING` 不带目标：`slug` 与 `name` 两个唯一约束都要兜住并发。
-// 冲突时不返回行，调用方据此回查现有行（而不是把它当失败）。
-func (q *Queries) CreateCandidateModel(ctx context.Context, arg CreateCandidateModelParams) (int64, error) {
-	row := q.db.QueryRow(ctx, createCandidateModel, arg.Slug, arg.Name, arg.Vendor)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
-}
-
 const createModelFromCatalog = `-- name: CreateModelFromCatalog :one
 INSERT INTO models (slug, name, vendor, status, resolution, description)
 VALUES (
@@ -121,8 +86,8 @@ type CreateModelFromCatalogParams struct {
 
 // 导入新建：落一个 active 的模型（模型域 §4.6.5「新建」模式）。
 //
-// `status='active'` 而不是 `candidate`：目录导入是有人对着上游条目点的，不是作者随手填的。
-// 这与作者手填建 `candidate` 是两条路，状态不同正是为了区分「谁给它背过书」。
+// `status='active'` 而不是 `candidate`：目录导入是管理员对着上游条目点的（有人背书）；
+// `candidate` 只来自人工登记——2026-11-17 起投稿路径不再建模型（#296 → #465）。
 func (q *Queries) CreateModelFromCatalog(ctx context.Context, arg CreateModelFromCatalogParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createModelFromCatalog,
 		arg.Slug,
@@ -162,21 +127,6 @@ type DeleteCatalogItemsNotInParams struct {
 func (q *Queries) DeleteCatalogItemsNotIn(ctx context.Context, arg DeleteCatalogItemsNotInParams) error {
 	_, err := q.db.Exec(ctx, deleteCatalogItemsNotIn, arg.Source, arg.Keys)
 	return err
-}
-
-const findModelByName = `-- name: FindModelByName :one
-SELECT id
-FROM models
-WHERE lower(name) = lower($1)
-LIMIT 1
-`
-
-// 建档撞唯一约束后回查：名字是作者给的，slug 才是机器生成的，按名字找人话更准。
-func (q *Queries) FindModelByName(ctx context.Context, name string) (int64, error) {
-	row := q.db.QueryRow(ctx, findModelByName, name)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
 }
 
 const findModelCheckpoint = `-- name: FindModelCheckpoint :one
@@ -583,10 +533,13 @@ type InsertModelAliasParams struct {
 	ModelID int64
 }
 
-// 把作者这次填的原文记成别名，下次同样的写法直接命中，不用再建一遍。
+// 给模型登记一个同义写法（别名），让「DeepSeek V4 Flash」这种人话也能解析到它。
 //
-// `(alias, model_id)` 是复合主键：同一个写法**允许**先后指到多个模型（作者手填的名字撞名
-// 是常态，两个模型共用一个写法也该写得进来），主键只保证「同一个写法不会重复挂到同一个模型
+// 2026-11-17 起投稿不再写别名（作者手填模型名已撤，见 #465）；这条查询留给
+// 管理端的收录与归并流程，以及测试夹具。
+//
+// `(alias, model_id)` 是复合主键：同一个写法**允许**先后指到多个模型（收录与归并流程里
+// 两个模型共用一个写法是常态，也该写得进来），主键只保证「同一个写法不会重复挂到同一个模型
 // 上」。有歧义时取哪一条由 `ResolveModelRefs` 裁决（同 rank 取小的 `model_id`），不靠库层把写
 // 拦掉：库层只会把「有歧义」变成「写不进去」。
 func (q *Queries) InsertModelAlias(ctx context.Context, arg InsertModelAliasParams) error {
@@ -622,7 +575,7 @@ type InsertModelCheckpointParams struct {
 // `(model_id, label)` 唯一：同一个模型下同名版本只该有一行；不同模型下同名版本互不相干。
 //
 // `ON CONFLICT DO NOTHING` 不带条件地让「同一个版本登记两次」变成无害操作：
-// 冲突时不返回行，调用方据此回查（与 `CreateCandidateModel` 同一套路），不把它当失败。
+// 冲突时不返回行，调用方据此回查，不把它当失败。
 // `released_on` 走 `sqlc.narg`：上游日期常常只知道月份，空着比编一个准，NULL 就是「日期不明」。
 func (q *Queries) InsertModelCheckpoint(ctx context.Context, arg InsertModelCheckpointParams) (int64, error) {
 	row := q.db.QueryRow(ctx, insertModelCheckpoint,
@@ -1506,8 +1459,8 @@ type ResolveModelRefsRow struct {
 
 // 把作者填的「模型指称」解析成模型 id。指称可以是 slug、展示名或别名，**大小写不敏感**。
 //
-// 为什么一条 SQL 里带三种匹配：作者在投稿框里手打的是「DeepSeek V4 Flash」这种人话，
-// 不是 slug；只认 slug 等于要求他先去查目录。三种形态在库里本来就是同一件事的三种写法
+// 为什么一条 SQL 里带三种匹配：调用方给的是「DeepSeek V4 Flash」这种人话（早期是作者在投稿框
+// 里手打，现在是目录选择或管理端登记），不是 slug。三种形态在库里本来就是同一件事的三种写法
 // （`models.slug` / `models.name` / `model_aliases.alias`），解析放在一处，别让每个调用点
 // 各写一套优先级。
 //

@@ -2,12 +2,8 @@ package demo
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
@@ -41,17 +37,17 @@ func attachModels(ctx context.Context, q *store.Queries, revisionID int64, model
 	return nil
 }
 
-// resolveModelRefs 把作者填的模型「指称」解析成模型 id，**解析不到就建一个候选项**。
+// resolveModelRefs 把作者填的模型「指称」解析成模型 id；解析不到就是 400。
 //
-// 指称可以是 slug、展示名或别名（大小写不敏感）。为什么允许三种：
-// 作者在投稿框里打的是「DeepSeek V4 Flash」这种人话，不是 slug；只认 slug 等于要求他
-// 先去目录里查一遍，而灰测模型本来就查不到。
+// 指称可以是 slug、展示名或别名（大小写不敏感）——作者在投稿框里打的是
+// 「DeepSeek V4 Flash」这种人话，不是 slug。但这**只是同义词匹配**，不是「目录之外
+// 也能声明」：三种写法都必须在模型目录里对得上。
 //
-// 解析不到时**不留 400、也不静默丢掉**，而是落一行 `status='candidate'`：
-//   - 留 400 会把「上游还没收录」变成作者的错，而旧站的 142 种模型写法里有大量这种名字；
-//   - 静默丢掉会让作者以为声明了、详情页却少一个，且他无从发现。
-//
-// 候选项与真模型的区别只是 `status`：归并时改的是指针（`merged_into_id`），作品不用动。
+// 2026-11-06 曾有一版「解析不到就建 `status='candidate'` 的候选项」（#296），
+// 2026-11-17 撤掉（#465）：需求里没有「作者可以造模型名」这一条
+// （MODEL-001~021 管的是声明与核验口径），而它把模型表变成了任何登录用户都能写的表——
+// 脏名字只能靠人工归并消化，归并端点至今没有。要收录灰测模型，走「申请收录 →
+// 审核通过才建」，不该由投稿顺手建。
 func resolveModelRefs(ctx context.Context, q *store.Queries, refs []string) ([]int64, error) {
 	cleaned, err := cleanModelRefs(refs)
 	if err != nil {
@@ -72,13 +68,12 @@ func resolveModelRefs(ctx context.Context, q *store.Queries, refs []string) ([]i
 	for _, r := range rows {
 		resolved[strings.ToLower(r.Ref)] = r.ModelID
 	}
+	var unknown []string
 	for _, ref := range cleaned {
 		id, ok := resolved[strings.ToLower(ref)]
 		if !ok {
-			id, err = createCandidateModel(ctx, q, ref)
-			if err != nil {
-				return nil, err
-			}
+			unknown = append(unknown, ref)
+			continue
 		}
 		if _, dup := seen[id]; dup {
 			// 两个不同写法指向同一个模型（比如 slug 与别名各写一次）：只挂一条。
@@ -87,7 +82,28 @@ func resolveModelRefs(ctx context.Context, q *store.Queries, refs []string) ([]i
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
+	if len(unknown) > 0 {
+		// 一次把没认出来的都列出来：只报第一个会让作者改一次投一次。
+		// 但回显要有上限：请求体里能塞多少个名字，响应体就会跟着长多少（自伤型放大）。
+		return nil, fmt.Errorf("%w: 模型目录里没有：%s（请从目录里挑；灰测模型等收录后再声明）",
+			ErrInvalidInput, summarizeUnknown(unknown))
+	}
 	return ids, nil
+}
+
+// maxUnknownInMessage 是错误信息里最多点名几个没认出来的指称。
+//
+// 不设上限的话，请求体里塞多少个名字，400 的正文就会跟着长多少——这是自伤型的
+// 放大（调用方自己付带宽），但也没必要把整份输入原样回显。超出部分只报个数，
+// 作者仍然知道「还有哪些没认出来」这件事。
+const maxUnknownInMessage = 20
+
+// summarizeUnknown 把没认出来的指称拼成一句话，最多点名前 maxUnknownInMessage 个。
+func summarizeUnknown(unknown []string) string {
+	if len(unknown) <= maxUnknownInMessage {
+		return strings.Join(unknown, "、")
+	}
+	return fmt.Sprintf("%s 等 %d 个", strings.Join(unknown[:maxUnknownInMessage], "、"), len(unknown))
 }
 
 // cleanModelRefs 去空白、去空项、按大小写不敏感去重，并先挡下超长输入。
@@ -113,91 +129,4 @@ func cleanModelRefs(refs []string) ([]string, error) {
 		out = append(out, s)
 	}
 	return out, nil
-}
-
-// createCandidateModelAttempts 是「slug 被别人占了」时的总尝试次数。
-//
-// slug 是「先查再插」（uniqueModelSlug 查 ModelSlugTaken，再 INSERT）。两个**不同**的名字
-// 折出同一个基座时（「Qwen 2.5」与「Qwen-2.5」都折成 qwen-2-5），两边都可能查到「没被
-// 占用」，后插的那条撞上 models.slug 的唯一约束。这跟作者写错无关，换一个带随机后缀的
-// slug 重来即可，所以给它几次机会，而不是把整次投稿判死。
-const createCandidateModelAttempts = 3
-
-// createCandidateModel 建一个候选项，并把作者这次的写法记成别名。
-//
-// 撞车有两种，形状都是 `pgx.ErrNoRows`：`CreateCandidateModel` 是
-// `ON CONFLICT DO NOTHING`，冲突时**不报 23505** 而是返回 0 行，sqlc 的 `:one`
-// 于是让 Scan 返回 ErrNoRows。两条路都不该让作者整次投稿失败——他什么都没做错：
-//   - **同名**：别人刚建了同一个名字。按名字回查拿到现成的那条，把冲突当成成功；
-//   - **同 slug 不同名**：名字确实不同（回查不到），撞的是机器生成的 slug。换一个
-//     带随机后缀的 slug 重试（次数见 createCandidateModelAttempts）。
-func createCandidateModel(ctx context.Context, q *store.Queries, ref string) (int64, error) {
-	for attempt := 0; attempt < createCandidateModelAttempts; attempt++ {
-		slug, err := uniqueModelSlug(ctx, q, ref)
-		if err != nil {
-			return 0, err
-		}
-		row, err := q.CreateCandidateModel(ctx, store.CreateCandidateModelParams{
-			Slug: slug,
-			Name: ref,
-			// 厂商留空：作者填的是模型名，没有厂商信息。按模型域 §4.6.3 的规则，
-			// 拿不到证据就不建厂商，避免造出「Bothub」这种假厂商。
-			Vendor: pgtype.Text{},
-		})
-		switch {
-		case err == nil:
-			if err := q.InsertModelAlias(ctx, store.InsertModelAliasParams{Alias: ref, ModelID: row}); err != nil {
-				return 0, fmt.Errorf("记模型别名失败: %w", err)
-			}
-			return row, nil
-		case errors.Is(err, pgx.ErrNoRows), isUniqueViolation(err):
-			// 两条路都归到这里，因为「写不进去」有两种形状：
-			//   - `ON CONFLICT DO NOTHING` 命中 → 0 行 → ErrNoRows；
-			//   - 未来若有人把查询改成会报错的形状（比如去掉 ON CONFLICT）→ 23505。
-			// 名字是作者给的、slug 才是机器生成的，所以先按名字回查。
-			existing, findErr := q.FindModelByName(ctx, ref)
-			switch {
-			case findErr == nil:
-				return existing, nil
-			case !errors.Is(findErr, pgx.ErrNoRows):
-				return 0, fmt.Errorf("回查同名模型失败: %w", findErr)
-			}
-			// 名字也不在库里（否则上面就返回了）→ 撞的是 slug：下一轮 ModelSlugTaken
-			// 会看见别人刚写进去的那一行，uniqueModelSlug 于是加随机后缀。
-		default:
-			return 0, fmt.Errorf("新建模型失败: %w", err)
-		}
-	}
-	// 走到这里说明连续几次都撞上：不是作者的输入错（名字与 slug 都是合法的），
-	// 所以不包 ErrInvalidInput，让它按服务端故障报出去。
-	return 0, fmt.Errorf("新建模型失败：连续 %d 次撞上别人刚建的 slug（%s）", createCandidateModelAttempts, ref)
-}
-
-// uniqueModelSlug 从名字生成一个没被占用的 slug。
-//
-// slug 是公开 URL 的一部分、创建后不可变（模型域 §1），所以宁可在建之前多查一次，
-// 也不要让它撞上唯一约束再回退。名字全是中文时 slugify 返回空，退回 `model-<随机>`。
-func uniqueModelSlug(ctx context.Context, q *store.Queries, name string) (string, error) {
-	base := slugify(name)
-	if base == "" {
-		base = "model"
-	}
-	for attempt := 0; attempt < 5; attempt++ {
-		slug := base
-		if attempt > 0 {
-			suffix, err := randomSuffix(4)
-			if err != nil {
-				return "", fmt.Errorf("生成模型 slug 失败: %w", err)
-			}
-			slug = base + "-" + suffix
-		}
-		taken, err := q.ModelSlugTaken(ctx, slug)
-		if err != nil {
-			return "", fmt.Errorf("检查模型 slug 失败: %w", err)
-		}
-		if !taken {
-			return slug, nil
-		}
-	}
-	return "", fmt.Errorf("%w: 模型名称生成的标识已被占用：%s", ErrInvalidInput, base)
 }

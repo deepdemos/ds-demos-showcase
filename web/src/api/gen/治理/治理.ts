@@ -705,7 +705,7 @@ export const getApplyModelImportUrl = () => {
 
 /**
  * 把勾选的字段写进本地：新建时先落一个 `status = 'active'` 的模型（有人对着上游条目
- * 点过，不是作者随手填的 `candidate`），再写 `model_specs`、逐字段
+ * 点过；导入不产生 `candidate`，候选只来自人工登记），再写 `model_specs`、逐字段
  * `model_spec_fields(source='models.dev')`、`model_offerings` 与审计。
  *
  * **只写 `fields` 里列出的字段**：没勾的保持原样。上游字段消失时不清空本地值

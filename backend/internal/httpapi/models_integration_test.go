@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -539,22 +540,24 @@ func TestIntegrationSubmitDeclaresModels(t *testing.T) {
 
 	// 2) 库里的候选（未启用）模型：**可以声明**。
 	//
-	// 早先这里断言「候选模型回 400」，理由是「目录里选不到、接口不能被绕过」。
-	// 那条规矩在「作者可以自由填模型名」之后就自相矛盾了：作者自己填的名字
-	// 落库时就是 candidate，若候选一律不可用，他刚建的那个也立刻不能用了。
+	// 候选只来自人工登记（目录导入建的是 active），是「这个模型存在、但还没核验」，
+	// 不是「作者编的名字」。
+	// 声明是作者自述（MODEL-003 的核验口径另算），所以候选也能被声明。
+	// 2026-11-17 撤掉的是「解析不到就建候选项」（#296），不是「候选不可用」。
 	rec = submitHTMLWithModels(t, h, sid, "声明候选模型", `<!doctype html><p>m</p>`,
 		[]string{"it-model-candidate"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("声明候选模型 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
 	}
 
-	// 3) 库里没有的模型名：**建一个候选项，而不是让整次投稿失败**。
+	// 3) 库里没有的模型名：**400，而不是顺手建一行**。
 	//
-	// 名字带本用例专属的后缀：这条用例会在库里**建出**一行，若名字固定，
-	// 第二次跑时它已经存在，「解析不到就建」这条路径根本不会被走到——
-	// 那时候就算把建行逻辑整段删掉，测试照样绿（已踩过一次）。
+	// 2026-11-06 曾有一版「解析不到就建 status='candidate' 的候选项」（#296），
+	// 2026-11-17 撤掉（#465）：需求里没有「作者可以造模型名」这一条，
+	// 而它把模型表变成了任何登录用户都能写的表——脏名字只能靠人工归并消化。
 	//
-	// 名字带纳秒后缀：上一次跑留下的行（清理可能因外键删不掉）会让这条路径不被走到。
+	// 名字带纳秒后缀：旧行为会在库里留下一行，若名字固定，第二次跑时它已经存在，
+	// 「解析不到」这条路径根本不会被走到（已踩过一次）。
 	unknown := "尚未收录的灰测模型-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM model_aliases WHERE alias = $1`, unknown)
@@ -562,24 +565,19 @@ func TestIntegrationSubmitDeclaresModels(t *testing.T) {
 	})
 	rec = submitHTMLWithModels(t, h, sid, "声明上游还没收录的模型", `<!doctype html><p>m</p>`,
 		[]string{"it-model-active", unknown})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("声明未收录模型 = %d，想要 201；响应体：%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("声明未收录模型 = %d，想要 400；响应体：%s", rec.Code, rec.Body.String())
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
-		t.Fatalf("解析投稿回执失败: %v", err)
+	if !strings.Contains(rec.Body.String(), unknown) {
+		t.Fatalf("错误信息里应当点名 %q，实际：%s", unknown, rec.Body.String())
 	}
-	got = modelSlugsOf(t, getDemoAs(t, h, created.Slug, sid))
-	if len(got) != 2 {
-		t.Fatalf("作者看详情 models = %v，想要两条（一条已有、一条新建）", got)
-	}
-	// 新建的那条必须是 candidate：active 意味着「已确认」，而它只是作者的输入。
-	var status string
+	var rows int
 	if err := pool.QueryRow(context.Background(),
-		`SELECT status FROM models WHERE name = $1`, unknown).Scan(&status); err != nil {
-		t.Fatalf("回查新建模型失败: %v", err)
+		`SELECT count(*) FROM models WHERE name = $1`, unknown).Scan(&rows); err != nil {
+		t.Fatalf("数模型行失败: %v", err)
 	}
-	if status != "candidate" {
-		t.Fatalf("作者新建的模型 status = %q，想要 candidate", status)
+	if rows != 0 {
+		t.Fatalf("被拒的投稿不该在模型表留下行，实际 %d 行", rows)
 	}
 
 	// 4) 一次都不传：合法，models 是空数组而不是 null。
@@ -644,8 +642,8 @@ func TestIntegrationModelRefsAcceptNameAndAlias(t *testing.T) {
 
 // TestIntegrationCandidateModelCanBeUsed 钉住「候选项不是不可用」。
 //
-// 作者自由填的模型一开始就是 candidate。若候选一律拒绝，他刚建的那条立刻不能用，
-// 「让作者自己填」这条设计就只剩一半。
+// 候选只来自人工登记（status='candidate'；目录导入建的是 active），是「存在但未核验」。
+// 声明是作者自述，所以候选也能被声明——撤掉「作者手填建候选项」不影响这一条。
 func TestIntegrationCandidateModelCanBeUsed(t *testing.T) {
 	h, idSvc, pool := newModelTestHandler(t)
 	insertModel(t, pool, "it-cand", "候选模型甲", "candidate")

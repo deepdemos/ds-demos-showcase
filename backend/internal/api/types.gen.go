@@ -812,12 +812,12 @@ type Me struct {
 
 // Model defines model for Model.
 type Model struct {
-	// Aliases 这个模型的其他写法（`model_aliases`）。用它可以把作者手填的名字
-	// 解析回来，也用于展示「同一个模型在别处叫什么」。
+	// Aliases 这个模型的其他写法（`model_aliases`）。用它可以把同一个模型在别处的
+	// 名字解析回来，也用于展示「同一个模型在别处叫什么」。
 	//
-	// 别名是**解析入口**，不是展示字段：同一个写法允许被多个模型共享（作者手填的
-	// 名字撞名是常态），取哪一条由解析规则决定——先比形态（slug > 别名 > 展示名），
-	// 同形态取小的 `model_id`。
+	// 别名是**解析入口**，不是展示字段：同一个写法允许被多个模型共享（上游不同
+	// 渠道的命名撞名是常态），取哪一条由解析规则决定——先比形态
+	// （slug > 别名 > 展示名），同形态取小的 `model_id`。
 	Aliases []string `json:"aliases"`
 
 	// Checkpoint 这个模型条目**所指的那一版**；`null` 表示没指定。
@@ -854,7 +854,7 @@ type Model struct {
 	// 它不是 `models` 表上的列——同一件事不该有两个出处。
 	Source ModelSource `json:"source"`
 
-	// Status `candidate` 作者手动建、未核实；`active` 可用；`unverified` 认领了上游
+	// Status `candidate` 人工登记、未核实（2026-11-17 起没有自动写入方）；`active` 可用；`unverified` 认领了上游
 	// 条目但来源可疑；`deprecated` 已退役。
 	Status ModelStatus `json:"status"`
 
@@ -871,7 +871,7 @@ type ModelResolution string
 // 它不是 `models` 表上的列——同一件事不该有两个出处。
 type ModelSource string
 
-// ModelStatus `candidate` 作者手动建、未核实；`active` 可用；`unverified` 认领了上游
+// ModelStatus `candidate` 人工登记、未核实（2026-11-17 起没有自动写入方）；`active` 可用；`unverified` 认领了上游
 // 条目但来源可疑；`deprecated` 已退役。
 type ModelStatus string
 
@@ -1584,18 +1584,19 @@ type SubmitDemoMultipartBody struct {
 
 	// ModelSlugs 这一版用到的模型。每一项是一个**模型指称**：`slug`、展示名或别名
 	// 都可以（大小写不敏感），由服务端统一解析。从 `GET /api/v1/models`
-	// 选一个是最常见的情形，但不是唯一写法——作者在表单里手打的名字
-	// 同样成立。
+	// 选一个是最常见的情形，但不是唯一写法——同一个模型在别处的名字
+	// 也能对上。
 	//
 	// 字段名带 slugs 而不是 ids：调用方手里拿到的是 slug，数字 id 是实现
 	// 细节。叫 modelIds 却收 slug，等于让每个调用方都去翻一遍文档确认
 	// 自己没传错。
 	//
-	// **解析不到的名字不会报错**：服务端建一条 `status=candidate` 的候选项
-	// （`models` 表一行 + 一个同名别名）并挂到这一版上，之后管理员归并。
-	// 理由：灰测模型等不起人工审核，而 candidate 与 active 的区别只是
-	// 「有没有被确认过」。代价是作者可以造出脏名字，由归并消化
-	// （`docs/已知松点.md` 第 50 条）。
+	// **解析不到的名字一律 400**，错误信息里点名每一个没认出来的指称。
+	// 服务端不会替调用方建模型：`models` 是平台主数据，不是投稿的副产物
+	// （2026-11-06 曾有一版「解析不到就建 candidate」，2026-11-17 撤掉，
+	// 见 #296 → #465）。灰测模型等上游还没收录的，走「申请收录 →
+	// 管理员审核进目录」，收录之后同样能声明——`status=candidate` 也能声明，
+	// 候选只表示「还没核验」，不表示「不能用」。
 	//
 	// 不传或空数组都合法——作品可以不声明模型。超长（>128 字）的名字
 	// 一律 400。
@@ -1640,7 +1641,7 @@ type UpdateDemoMultipartBody struct {
 	ExternalUrl *string `json:"externalUrl,omitempty"`
 
 	// ModelSlugs 这一版声明的模型，语义是**整体替换**。每一项是模型指称
-	// （slug / 展示名 / 别名），解析不到时自动建候选项，
+	// （slug / 展示名 / 别名），解析不到时一律 400，
 	// 规则与 `POST /api/v1/demos` 完全相同。
 	//
 	// 不传等价于空数组，也就是「这一版不声明任何模型」——不做
@@ -1686,7 +1687,7 @@ type ListMyDemosParamsModeration string
 type ListModelsParams struct {
 	// Status 只出这个状态的行。不传表示全部。
 	//
-	// `candidate` 是作者手动建、还没被核实的新行；`unverified` 是认领了上游
+	// `candidate` 是人工登记、还没被核实的新行（2026-11-17 起没有自动写入方）；`unverified` 是认领了上游
 	// 条目但来源可疑的；`deprecated` 是已退役，`mergedIntoSlug` 指出它并到了谁。
 	Status *ListModelsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
 }
