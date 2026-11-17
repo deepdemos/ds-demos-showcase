@@ -408,9 +408,10 @@ func TestIntegrationListModels(t *testing.T) {
 //
 // 覆盖的是 `ListModels` 那一处 `r.authority = 'models.dev'` 判据——把条件删掉，
 // 这里会红（任何出处的 offering 都会把 source 翻成 models.dev）。
-// 另三处（`GetModelBySlug` / `GetModelByID` / `ListRevisionModels`）**没有**同样的反向
-// 用例：删掉它们各自的条件，整套 httpapi 仍然全绿（2026-11-13 实测）。等端点写入方落地、
-// 造得出「只挂 endpoint offering 的模型」再补，见 #445。
+// 另三处（`GetModelBySlug` / `GetModelByID` / `ListRevisionModels`）的反向用例在
+// `endpoint_report_integration_test.go`：前三处由
+// `TestIntegrationEndpointAuthorityDoesNotClaimCatalogSource` 钉住，第四处由
+// `TestIntegrationEndpointReportOverHTTP` 的详情断言钉住（2026-11-17，#445 的 4d 补齐）。
 func TestIntegrationListModelsSourceIgnoresOtherAuthorities(t *testing.T) {
 	h, _, pool := newModelTestHandler(t)
 	insertModel(t, pool, "it-model-endpoint", "端点来源模型", "active")

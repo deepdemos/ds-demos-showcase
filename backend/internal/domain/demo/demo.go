@@ -74,6 +74,16 @@ type SubmitInput struct {
 	// 「只能给一个」这条判在 validate 里，因为它同时是契约（400）与领域不变量。
 	ExternalURL string
 	ModelSlugs  []string
+	// ModelCalls 是端点上报：调用方说「我在这个地址上用的是这个模型名」（#445 的 4d）。
+	//
+	// 每一项是一个 JSON 对象字符串（multipart 的字段值只能是字符串），形如
+	// {"ref":"deepseek-v4-flash-1017","endpoint":"https://api.deepseek.com/v1","checkpoint":"1017"}。
+	// 解析与规范化在 calls.go，这里保持原样传输层的形状——与 ModelSlugs 一样，
+	// 领域层拿到的是「调用方原样说的话」。
+	//
+	// 一条调用也算一条声明：ref 会被当成模型指称解析，解析不到与 ModelSlugs 同样 400。
+	// 与 ModelSlugs 重复时只算一条，调用那条带的版本优先。
+	ModelCalls []string
 	// ClassificationSlugs 是这件作品的内容分类（取 classifications.slug）。
 	//
 	// 与 ModelSlugs 的关键区别：分类挂在**作品**上，模型挂在**版本**上

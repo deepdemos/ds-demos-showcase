@@ -66,6 +66,11 @@ type UpdateInput struct {
 	// 不给也是空列表。不做「没传就沿用上一版」——multipart 里「没传」与「传了空」
 	// 在浏览器侧无法区分（空选择不会产生字段），沿用会让作者永远删掉不了一个声明。
 	ModelSlugs []string
+	// ModelCalls 是端点上报，语义与 SubmitInput.ModelCalls 相同（整体替换）。
+	//
+	// 改稿时它是「这一版的上报」：没带版本的那些模型会沿用上一版记过的版本
+	// （见 applyModelDeclarations 的 carryOver），不会因为改个标题就变回「未固定」。
+	ModelCalls []string
 	// ClassificationSlugs 是这件作品的内容分类（取 classifications.slug）。
 	//
 	// **注意：它的语义与 ModelSlugs 不同——不传（空）表示「不改」，不是「清空」。**
@@ -248,11 +253,14 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 
 		// 这一版的模型声明整体替换（语义见 UpdateInput.ModelSlugs 的注释）。
 		// 新版本本来没有行，所以「替换」就是写入；不需要先删。
-		modelIDs, err := resolveModelRefs(ctx, q, in.ModelSlugs)
+		//
+		// 版本从上一版带过来：作者只改标题时表单仍会把当前勾选的模型原样提交一遍，
+		// 不带过来的话一次改标题就把「1017 版」变回「未固定」（docs/已知松点.md 第 64 条）。
+		carryOver, err := revisionCheckpoints(ctx, q, cur.CurrentRevisionID.Int64)
 		if err != nil {
 			return err
 		}
-		if err := attachModels(ctx, q, rev.ID, modelIDs); err != nil {
+		if err := applyModelDeclarations(ctx, q, rev.ID, in.ModelSlugs, in.ModelCalls, carryOver); err != nil {
 			return err
 		}
 

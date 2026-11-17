@@ -58,8 +58,13 @@ ORDER BY id;
 -- name: InsertRevisionModel :exec
 -- `ON CONFLICT DO NOTHING`：同一个模型重复提交（重复字段、去重前的脏数据）不该让整次投稿失败。
 -- 主键 (revision_id, model_id) 保证同一模型经不同 provider 只算一条。
-INSERT INTO demo_revision_models (revision_id, model_id, provider_id, serving_note, source)
-VALUES (sqlc.arg(revision_id), sqlc.arg(model_id), NULL, '', 'api')
+--
+-- `checkpoint_id` 可空：NULL 就是「这一版没说用的是哪一版模型」，展示落到「未固定」，
+-- 不是「默认最新版」。它由端点上报（#445 的 4d）或改稿时从上一版带过来，投稿表单本身
+-- 不强制填。复合外键 `(checkpoint_id, model_id)` 保证「选的版本属于声明的那个模型」，
+-- 写错模型直接 23503，不用每个写入方自己记得先查一遍。
+INSERT INTO demo_revision_models (revision_id, model_id, provider_id, serving_note, source, checkpoint_id)
+VALUES (sqlc.arg(revision_id), sqlc.arg(model_id), NULL, '', 'api', sqlc.narg(checkpoint_id))
 ON CONFLICT ON CONSTRAINT demo_revision_models_pkey DO NOTHING;
 
 -- name: CopyRevisionModels :exec
@@ -68,8 +73,12 @@ ON CONFLICT ON CONSTRAINT demo_revision_models_pkey DO NOTHING;
 -- 为什么必须复制：回滚追加的是**新版本**（`source = 'rollback'`），而模型声明挂在
 -- revision 上。不复制的话，一次回滚会把「这个作品用了哪些模型」抹掉——
 -- 内容回到旧版、声明却消失了，这与「回滚到那一版」的语义不符。
-INSERT INTO demo_revision_models (revision_id, model_id, provider_id, serving_note, source)
-SELECT sqlc.arg(target_revision_id), m.model_id, m.provider_id, m.serving_note, m.source
+--
+-- `checkpoint_id` 必须一起复制（#445 的 4d 起才有写入方）：不复制的话，回滚一次会把
+-- 「用的是哪一版」静默变回「未固定」——内容回到旧版、版本声明却丢了，与「回滚到那一版」
+-- 的语义相反。这条是 `docs/已知松点.md` 第 64 条点名的两处之一。
+INSERT INTO demo_revision_models (revision_id, model_id, provider_id, serving_note, source, checkpoint_id)
+SELECT sqlc.arg(target_revision_id), m.model_id, m.provider_id, m.serving_note, m.source, m.checkpoint_id
 FROM demo_revision_models m
 WHERE m.revision_id = sqlc.arg(source_revision_id)
 ON CONFLICT ON CONSTRAINT demo_revision_models_pkey DO NOTHING;
@@ -112,6 +121,20 @@ LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> mo.id
 LEFT JOIN model_checkpoints c ON c.id = rm.checkpoint_id
 WHERE rm.revision_id = $1
 ORDER BY mo.name, mo.id;
+
+-- name: ListRevisionModelCheckpoints :many
+-- 改稿时把「上一版给这个模型记的版本」带过来（#445 的 4d）。
+--
+-- 为什么需要它：编辑走的是「追加新版本 + 模型声明整体替换」，作者只改标题时表单仍会
+-- 把当前勾选的模型原样提交一遍。新版本的行从零开始，不显式带过来的话，一次改标题
+-- 就会把「1017 版」静默变回「未固定」——与「我没改模型声明」的意图相反。
+--
+-- 只回有版本的行：checkpoint_id IS NULL 的那些本来就没有可带的东西。
+SELECT model_id, checkpoint_id
+FROM demo_revision_models
+WHERE revision_id = sqlc.arg(revision_id)
+  AND checkpoint_id IS NOT NULL;
+
 -- name: ListRevisionModelAliases :many
 -- 详情里那些模型各自的别名（与 ListRevisionModels 同一批 model_id）。
 SELECT ma.model_id, ma.alias
@@ -438,6 +461,34 @@ ON CONFLICT (authority, provider_id, external_id) DO UPDATE SET
     provider_name = EXCLUDED.provider_name,
     canonical_id = EXCLUDED.canonical_id,
     is_official = EXCLUDED.is_official;
+
+-- name: UpsertEndpointOffering :exec
+-- 端点上报写一行「调用」：某个 base_url 上的某个模型名指的是这个模型（#445 的 4d）。
+--
+-- 与 `UpsertModelOffering` 的区别只在这几列：authority 恒为 'endpoint'、provider_id 是
+-- 规范化后的 base_url、带 checkpoint_id 与 pinning。合并不成一条查询的理由是键不同——
+-- 目录那条的 provider_id 是上游 provider 键，端点这条是 URL，两者的来源校验、长度闸、
+-- 冲突后果都不一样；塞进一条会让「导入」和「上报」互相影响。
+--
+-- 键 (authority='endpoint', provider_id, external_id) 幂等：同一个端点上同一个名字重复
+-- 上报只留一行（D01）。冲突时**后一次覆盖前一次**（model_id / checkpoint_id / pinning）：
+-- 这张表记的是「现在这个名字指的是谁」，不是历史；某条作品当时用的是哪一版，记在
+-- `demo_revision_models` 上，不靠这里追溯。
+INSERT INTO model_offerings (model_id, authority, provider_id, provider_name, external_id, checkpoint_id, pinning)
+VALUES (
+    sqlc.arg(model_id),
+    'endpoint',
+    sqlc.arg(provider_id),
+    sqlc.arg(provider_name),
+    sqlc.arg(external_id),
+    sqlc.narg(checkpoint_id),
+    sqlc.arg(pinning)
+)
+ON CONFLICT (authority, provider_id, external_id) DO UPDATE SET
+    model_id      = EXCLUDED.model_id,
+    provider_name = EXCLUDED.provider_name,
+    checkpoint_id = EXCLUDED.checkpoint_id,
+    pinning       = EXCLUDED.pinning;
 
 -- name: UpdateModelFromCatalog :exec
 -- 导入新建后把展示名 / 描述 / 厂商补上。

@@ -44,10 +44,10 @@ func TestIntegrationResolveModelRefsFollowsMergeChainToTheEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("解析 %q 失败: %v", ref, err)
 		}
-		if len(got) != 1 || got[0] != tail {
-			t.Fatalf("解析 %q = %v，想要 [%d]（跟到链尾；停在中间站说明只走了一跳）", ref, got, tail)
+		if len(got) != 1 || got[ref] != tail {
+			t.Fatalf("解析 %q = %v，想要 %d（跟到链尾；停在中间站说明只走了一跳）", ref, got, tail)
 		}
-		if len(got) == 1 && got[0] == middle {
+		if len(got) == 1 && got[ref] == middle {
 			t.Fatalf("解析 %q 停在中间站 %d，应当跟到 %d", ref, middle, tail)
 		}
 	}
@@ -84,7 +84,7 @@ func TestIntegrationResolveModelRefsSurvivesCycle(t *testing.T) {
 	// 这里断言的是「有界、且每次一样」，与两个 id 谁大谁小无关。
 	want := first
 	for i := 0; i < 3; i++ {
-		done := make(chan []int64, 1)
+		done := make(chan map[string]int64, 1)
 		errCh := make(chan error, 1)
 		go func() {
 			got, err := resolveModelRefs(ctx, q, []string{"it-cycle-a"})
@@ -96,8 +96,8 @@ func TestIntegrationResolveModelRefsSurvivesCycle(t *testing.T) {
 		}()
 		select {
 		case got := <-done:
-			if len(got) != 1 || got[0] != want {
-				t.Fatalf("第 %d 次解析环上的写入 = %v，想要 [%d]", i+1, got, want)
+			if len(got) != 1 || got["it-cycle-a"] != want {
+				t.Fatalf("第 %d 次解析环上的写入 = %v，想要 %d", i+1, got, want)
 			}
 		case err := <-errCh:
 			t.Fatalf("第 %d 次解析环失败: %v", i+1, err)
@@ -131,8 +131,8 @@ func TestIntegrationResolveModelRefsFallsBackWhenTargetMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("解析悬空指针失败: %v", err)
 	}
-	if len(got) != 1 || got[0] != row {
-		t.Fatalf("解析悬空指针 = %v，想要 [%d]（退回被合并的那个 id）", got, row)
+	if len(got) != 1 || got["it-dangle-a"] != row {
+		t.Fatalf("解析悬空指针 = %v，想要 %d（退回被合并的那个 id）", got, row)
 	}
 }
 
@@ -183,8 +183,8 @@ func TestIntegrationResolveModelRefsStopsAtDepthLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("解析长链失败: %v", err)
 	}
-	if len(got) != 1 || got[0] != ids[20] {
-		t.Fatalf("解析 %s = %v，想要 [%d]（第 20 层停住）；链尾是 %d",
+	if len(got) != 1 || got[slugs[0]] != ids[20] {
+		t.Fatalf("解析 %s = %v，想要 %d（第 20 层停住）；链尾是 %d",
 			slugs[0], got, ids[20], ids[hops])
 	}
 }

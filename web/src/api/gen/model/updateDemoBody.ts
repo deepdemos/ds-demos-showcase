@@ -63,6 +63,20 @@ export type UpdateDemoBody = {
      */
   modelSlugs?: string[];
   /**
+     * 这一版的端点上报，语义是**整体替换**；每一项的形状、规范化与校验
+     * 规则与 `POST /api/v1/demos` 的同名字段完全相同（见那边的说明）。
+     *
+     * 不传等价于空数组。注意与 `modelSlugs` 的配合：两者一起决定这一版
+     * 的模型声明，只报端点不写 `modelSlugs` 也能声明模型。
+     *
+     * 改稿时**上一版记过的版本会带过来**：某个模型上一版固定了 `1017`、
+     * 这次既没在 `modelCalls` 里提它、也没在 `modelSlugs` 里换写法，
+     * 这一版仍记 `1017`，不会静默退回「未固定」。
+     * @maxItems 50
+     * @items.maxLength 2048
+     */
+  modelCalls?: string[];
+  /**
      * 这件作品的内容分类（`classifications.slug`），语义是**整体替换**，
      * 但**不传表示「不改」而不是「清空」**——理由见 `POST /api/v1/demos`
      * 同名参数的说明与 `docs/已知松点.md` 第 48 条。
