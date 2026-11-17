@@ -58,7 +58,9 @@ func (h *Handler) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string
 		DemoType:    strings.TrimSpace(r.FormValue("demoType")),
 		// 语义是整体替换（见 UpdateInput.ModelSlugs 的注释）：
 		// 表单里没带 modelSlugs 就等于「这一版不声明任何模型」。
-		ModelSlugs:          formValues(r, "modelSlugs"),
+		ModelSlugs: formValues(r, "modelSlugs"),
+		// 端点上报同样是整体替换（#445 的 4d），校验与投稿共用领域层那一处。
+		ModelCalls:          formValues(r, "modelCalls"),
 		ClassificationSlugs: formValues(r, "classificationSlugs"),
 	}
 

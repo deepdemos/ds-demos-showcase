@@ -398,13 +398,9 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			}
 			revID = revIDFromCreate
 
-			// 模型声明挂在**这一版**上（MODEL-007）。放在同一事务里：
-			// 声明写失败就等于这次投稿失败，不能出现「作品建好了、声明丢了」。
-			modelIDs, err := resolveModelRefs(ctx, q, in.ModelSlugs)
-			if err != nil {
-				return err
-			}
-			if err := attachModels(ctx, q, revID, modelIDs); err != nil {
+			// 模型声明挂在**这一版**上（MODEL-007），端点上报（#445 的 4d）也在这里落库。
+			// 放在同一事务里：声明写失败就等于这次投稿失败，不能出现「作品建好了、声明丢了」。
+			if err := applyModelDeclarations(ctx, q, revID, in.ModelSlugs, in.ModelCalls, nil); err != nil {
 				return err
 			}
 

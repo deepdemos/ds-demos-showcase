@@ -1460,6 +1460,43 @@ MODEL-001~021 里也没有「作者可以造模型名」这一条。灰测模型
 「申请收录 → 管理员审核进目录」。撤销后 `docs/已知松点.md` 第 50 条关闭了「脏名字累积」
 那一半，只留合并链的有界兜底。
 
+**落地状态（2026-11-17）——端点上报：作者可以说明「在哪个端点上用的是哪一版」**
+
+`modelSlugs` 只能声明「用了哪个模型」，说不出「在哪个 base_url 上、调的是哪一版」。
+4d 加了第二个字段 `modelCalls`：**重复的 multipart 字段，每一项是一个 JSON 对象字符串**
+`{"ref":"...","endpoint":"...","checkpoint":"..."}`。
+
+为什么不把对象塞进 `modelSlugs` 的 items 里：multipart 的字段值只能是字符串（浏览器 `FormData` 只能 append
+字符串或 Blob）。把 items 改成 `oneOf[string, object]` 之后，orval 生成的
+`formData.append('modelSlugs', value)` 会因为 `string | ModelCall` 报 TS 错，前端 typecheck 直接红。
+两个字段各管一件事，也避免了「同一个字段有时是名字、有时是对象」的解析歧义。
+
+- **一条上报也算一条声明**：`ref` 走与 `modelSlugs` 完全相同的指称解析（slug / 展示名 / 别名），
+  解析不到同样 400、同样一次点名。只写 `modelCalls` 不写 `modelSlugs` 也成立。
+- **端点规范化**（D02）：scheme 与 host 小写、去默认端口（http 80 / https 443）、去尾部斜杠、
+  丢掉查询串与片段。`https://API.Example.com:443/v1/` 与 `https://api.example.com/v1` 是同一个出处。
+  IPv6 字面量保留方括号（`[::1]` 去掉括号就拼不回来）；路径用 `EscapedPath`，`%2F` 不能被解成 `/`
+  ——那是两个不同的端点。不收敛的话同一个端点会在库里变成多行，`UNIQUE` 拦不住（两行都是合法的键），
+  「现在这个名字指谁」就失准了。
+- **带凭据的一律 400**（D03）：userinfo（`https://用户名:口令@主机`）直接拒收；查询串里出现
+  `token` / `api_key` / `secret` 这类参数名也拒收。判据是**参数名**不是值——
+  值长什么样没有可靠特征，而把 `?api_key=...` 静默丢掉等于假装收到了。
+- **版本**：`checkpoint` 给了就是 `pinning='exact'`，没给是 `'unknown'`（不知道就写不知道）。
+  这一版在 `model_checkpoints` 里不存在就顺手建一行（`notes` 记「来自端点上报」）。
+  名字里带不带 `1017` 不参与判断：上报优先，名字只作索引（D07）。
+- **版本一旦记上不能清空**：声明（`demo_revision_models.checkpoint_id`）只能改成另一个版本，
+  要退回「未固定」只能把这条模型声明整个删掉。调用行不一样：不带 `checkpoint` 的上报就是 `unknown`。
+- **写进 `model_offerings`**：`authority='endpoint'`、`provider_id` = 规范化后的 base_url、
+  `external_id` = 上报的模型名。`UNIQUE (authority, provider_id, external_id)` 保证同一端点上同一个名字只有一行（D01），
+  冲突时后一次覆盖前一次——这张表记的是「现在这个名字指谁」，历史在 `demo_revision_models` 上。
+- **不改变 `source`**：四处 `r.authority = 'models.dev'` 判据一个字没动，端点上报过的模型仍然是 `manual`。
+  反过来写（「有调用行就算目录认领」）会让来源这一列说谎，而且没人会立刻发现——有用例钉着。
+- **改稿与回滚带版本**：改稿时上一版记过的版本会被带过来（显式上报优先）；回滚（`CopyRevisionModels`）
+  也复制 `checkpoint_id`。不带的话「改个标题」或「回滚一次」会把「用的是哪一版」静默变回「未固定」。
+
+**表单界面还没有输入项**：投稿页只有模型勾选列表，`modelCalls` 目前只能由 API 调用方发。
+登记在 `docs/已知松点.md` 第 64 条。
+
 `model_specs`（参数规格）与 `model_catalog_items`（上游目录快照）仍然空着，本期不接：
 规格的面比字段面大得多（context / 价格 / 模态…），先有真实数据再谈。
 

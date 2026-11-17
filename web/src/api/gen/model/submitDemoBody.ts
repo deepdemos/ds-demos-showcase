@@ -83,6 +83,45 @@ export type SubmitDemoBody = {
      */
   modelSlugs?: string[];
   /**
+     * 这一版的**端点上报**：调用方说「我在这个地址上用的是这个模型名」。
+     * 每一项是一个 JSON 对象的字符串形式，形如
+     * `{"ref":"DeepSeek V4 Flash","endpoint":"https://api.deepseek.com/v1","checkpoint":"1017"}`。
+     *
+     * 为什么按项 JSON 编码、而不是并进 `modelSlugs`：multipart 的字段值
+     * 只能是字符串（浏览器的 `FormData` 也只能 append 字符串或 Blob），
+     * 嵌套对象没有标准编码。把 `modelSlugs` 的 items 改成
+     * `oneOf[string, object]` 会让生成的浏览器客户端在
+     * `formData.append('modelSlugs', value)` 处报类型错，而作者手填的
+     * 表单本来就只送字符串。两个字段、两种形状，各自说清楚。
+     *
+     * - `ref`（必填）：上报的模型名。与 `modelSlugs` 走同一套指称解析
+     *   （slug / 展示名 / 别名，大小写不敏感），**解析不到一律 400**——
+     *   服务端不替调用方建模型，判据只有一处。
+     * - `endpoint`（可空）：模型服务的 base_url。落库前规范化：scheme 与
+     *   host 小写、去默认端口（http 的 80 / https 的 443）、去尾部斜杠、
+     *   丢掉查询串与片段。带 userinfo（`https://用户名:口令@主机`）或
+     *   查询串里出现 `token` / `api_key` / `secret` 之类参数名一律 400：
+     *   那是凭据，不落库。私网地址（如 `http://10.0.0.5:8000`）可以存：
+     *   这一列目前**不出现在任何公开页面上**（模型页的来源分布读的是
+     *   `demo_models`，不是 `model_offerings`）；将来要展示时必须隐去。
+     *   留空表示「只报版本，不报端点」——这条上报仍然把版本记到声明上。
+     * - `checkpoint`（可空）：版本 label（如 `1017`）。给了就落
+     *   `pinning='exact'`，没给就是 `'unknown'`——不知道就写不知道。
+     *   该模型下还没有这一版时**顺手建一行**（备注记「来自端点上报」）：
+     *   版本表此前没有任何写入方，上报是最自然的第一处。
+     *
+     * **一条上报也算一条声明**：`ref` 解析出的模型会挂到这一版的模型
+     * 声明上，所以只写 `modelCalls`、不写 `modelSlugs` 也能声明模型。
+     *
+     * 同一个 (端点, 名字) 出现多次时**后一次覆盖前一次**；库里同一
+     * (出处, 名字) 只有一行，重复上报幂等，历史在版本表里。
+     *
+     * 最多 50 条；不传或空数组都合法。
+     * @maxItems 50
+     * @items.maxLength 2048
+     */
+  modelCalls?: string[];
+  /**
      * 这件作品的内容分类，取值为 `classifications.slug`（来自
      * `GET /api/v1/classifications`）。
      *

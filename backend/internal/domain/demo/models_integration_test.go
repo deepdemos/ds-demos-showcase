@@ -92,8 +92,8 @@ func TestIntegrationResolveModelRefsAmbiguousAliasPicksLowestID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("第 %d 次解析失败: %v", i+1, err)
 		}
-		if len(got) != 1 || got[0] != want {
-			t.Fatalf("第 %d 次解析 = %v，想要 [%d]（同 rank 取小的 model_id）", i+1, got, want)
+		if len(got) != 1 || got["同名写法"] != want {
+			t.Fatalf("第 %d 次解析 = %v，想要 %d（同 rank 取小的 model_id）", i+1, got, want)
 		}
 	}
 }
@@ -125,8 +125,8 @@ func TestIntegrationResolveModelRefsRankBeatsID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("解析失败: %v", err)
 	}
-	if len(got) != 1 || got[0] != byAlias {
-		t.Fatalf("解析 = %v，想要 [%d]：别名 rank(1) 应当赢展示名 rank(2)，即使 id 更大", got, byAlias)
+	if len(got) != 1 || got["撞名"] != byAlias {
+		t.Fatalf("解析 = %v，想要 %d：别名 rank(1) 应当赢展示名 rank(2)，即使 id 更大", got, byAlias)
 	}
 }
 
