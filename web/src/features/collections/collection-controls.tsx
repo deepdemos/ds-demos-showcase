@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { Button, Checkbox, Skeleton } from '@/components/ui';
+import { Button, Checkbox, ErrorState, Skeleton } from '@/components/ui';
 import {
   addCollectionItem,
   getCollectionStatus,
@@ -95,6 +95,22 @@ export function CollectionControls({ slug }: { slug: string }) {
     return (
       <div className="mt-4">
         <Skeleton lines={1} />
+      </div>
+    );
+  }
+
+  if (status.isError || collections.isError) {
+    return (
+      <div className="mt-4">
+        <ErrorState
+          title="收藏状态加载失败"
+          description="先别点收藏：这里读不到你已有的收藏夹。"
+          onRetry={() => {
+            void status.refetch();
+            void collections.refetch();
+          }}
+          retrying={status.isFetching || collections.isFetching}
+        />
       </div>
     );
   }

@@ -47,8 +47,10 @@ describe('AppLayout 通知角标', () => {
 
     renderLayout();
 
-    expect(await screen.findByLabelText('未读通知 3')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /通知/ })).toHaveAttribute('href', '/notifications');
+    expect(await screen.findByRole('link', { name: '通知，3 条未读' })).toHaveAttribute(
+      'href',
+      '/notifications',
+    );
   });
 
   test('未读为 0 时不显示角标', async () => {
@@ -60,6 +62,6 @@ describe('AppLayout 通知角标', () => {
     renderLayout();
 
     await screen.findByText('首页');
-    expect(screen.queryByLabelText(/未读通知/)).toBeNull();
+    expect(screen.queryByRole('link', { name: /条未读/ })).toBeNull();
   });
 });

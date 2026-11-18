@@ -8,8 +8,8 @@ import { useAuth } from '@/features/auth/AuthContext';
 /**
  * 聚合收件箱（#433）。
  *
- * 这一轮只做「看得到」：三组待办 + 各自计数。动作仍走 /admin/reviews（demo 专用），
- * 统一裁决入口与提案处理下一轮接入——这里不给一个会假装成功的按钮。
+ * 三组待办 + 各自计数；提案可勾选后批量通过/驳回，逐条显示结果。
+ * 作品审核仍走 /admin/reviews 的 demo 分派。
  */
 
 function formatAt(iso: string): string {
@@ -229,11 +229,12 @@ export function AdminInboxPage() {
                       indeterminate={false}
                       disabled={batch.isPending}
                       onChange={(event) =>
-                        setSelected((current) =>
-                          event.target.checked
+                        setSelected((current) => {
+                          setBatchResults(null);
+                          return event.target.checked
                             ? [...current, proposal.id]
-                            : current.filter((id) => id !== proposal.id),
-                        )
+                            : current.filter((id) => id !== proposal.id);
+                        })
                       }
                     />
                     <p className="mt-1 text-sm">
@@ -252,7 +253,7 @@ export function AdminInboxPage() {
               </ul>
             )}
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              提案审核入口下一轮接入；这一页先保证待办不会被漏看。
+              提案可勾选后批量处理；失败行会单独给出原因。
             </p>
           </section>
         </>

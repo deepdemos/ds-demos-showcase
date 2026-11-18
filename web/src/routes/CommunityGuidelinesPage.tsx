@@ -28,8 +28,8 @@ export function CommunityGuidelinesPage() {
 
       <h2 className="mt-6 text-lg font-semibold">处置与申诉</h2>
       <p className="mt-2 text-sm">
-        违反规范的作品会被下架（archived 由作者自主下架；removed 是平台移除）。removed
-        的作品页仍保留标题与处理时间，作者可以在墓碑页提交一次申诉；申诉处理期间作品不会恢复公开，
+        违反规范的作品会被下架：作者可以自主下架，平台也可以因违规移除。被移除的作品页
+        仍保留标题与处理时间，作者可以在墓碑页提交一次申诉；申诉处理期间作品不会恢复公开，
         也不能修改。申诉结果会显示在同一个位置。
       </p>
       <p className="mt-2 text-sm">
