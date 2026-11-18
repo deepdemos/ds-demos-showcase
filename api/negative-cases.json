@@ -758,6 +758,72 @@
         }
       }
     ],
+    "GET /api/v1/users/{username}": [
+      {
+        "case": "未知用户名 / 格式不合法 / 非 active 账号一律 404，不返回空资料",
+        "test": {
+          "file": "backend/internal/httpapi/users_integration_test.go",
+          "name": "TestIntegrationPublicProfileUnknownUser"
+        }
+      },
+      {
+        "case": "受限账号的公开资料不返回（避免变成账号状态探测器）",
+        "test": {
+          "file": "backend/internal/httpapi/users_integration_test.go",
+          "name": "TestIntegrationPublicProfileHidesInactive"
+        }
+      }
+    ],
+    "GET /api/v1/users/{username}/demos": [
+      {
+        "case": "未知用户名回 404，而不是 200 + 空列表",
+        "test": {
+          "file": "backend/internal/httpapi/users_integration_test.go",
+          "name": "TestIntegrationPublicProfileUnknownUser"
+        }
+      },
+      {
+        "case": "未发布的草稿不出现在公开作品列表里",
+        "test": {
+          "file": "backend/internal/httpapi/users_integration_test.go",
+          "name": "TestIntegrationPublicProfile"
+        }
+      }
+    ],
+    "GET /api/v1/me/history": [
+      {
+        "case": "未登录返回 401，不把「没有会话」当成空历史",
+        "test": {
+          "file": "backend/internal/httpapi/history_integration_test.go",
+          "name": "TestIntegrationAccountHistoryRequiresLogin"
+        }
+      }
+    ],
+    "DELETE /api/v1/me/history": [
+      {
+        "case": "未登录返回 401，不能清别人的历史",
+        "test": {
+          "file": "backend/internal/httpapi/history_integration_test.go",
+          "name": "TestIntegrationAccountHistoryRequiresLogin"
+        }
+      }
+    ],
+    "PUT /api/v1/me/history/settings": [
+      {
+        "case": "缺 enabled 返回 400，不把「没传」当成关闭",
+        "test": {
+          "file": "backend/internal/httpapi/history_integration_test.go",
+          "name": "TestIntegrationAccountHistoryRequiresLogin"
+        }
+      },
+      {
+        "case": "关闭只停新增，已有记录保留（HIST-008）",
+        "test": {
+          "file": "backend/internal/httpapi/history_integration_test.go",
+          "name": "TestIntegrationAccountHistory"
+        }
+      }
+    ],
     "GET /api/v1/me/demos": [
       {
         "case": "未登录返回 401，而不是 403",

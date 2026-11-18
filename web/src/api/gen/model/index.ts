@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 44 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,6 +30,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './accountHistory';
+export * from './accountHistoryItem';
+export * from './accountHistorySettings';
 export * from './accountStatus';
 export * from './classification';
 export * from './classificationCatalog';
@@ -68,10 +71,12 @@ export * from './demoTypeList';
 export * from './emailCodeRequest';
 export * from './error';
 export * from './errorCode';
+export * from './getMyHistoryParams';
 export * from './healthz';
 export * from './healthzStatus';
 export * from './lifecycleState';
 export * from './listDemoReviewQueueParams';
+export * from './listDemoReviewQueueState';
 export * from './listDemosParams';
 export * from './listDemosSort';
 export * from './listModelCatalogParams';
@@ -84,6 +89,7 @@ export * from './listRankingsParams';
 export * from './listRankingsRange';
 export * from './listRecommendationsParams';
 export * from './listRelatedDemosParams';
+export * from './listUserDemosParams';
 export * from './loginRequest';
 export * from './me';
 export * from './model';
@@ -112,6 +118,9 @@ export * from './myDemoSummary';
 export * from './myDemoSummaryModerationState';
 export * from './passwordResetCodeRequest';
 export * from './passwordResetRequest';
+export * from './profileDemo';
+export * from './profileDemoList';
+export * from './publicProfile';
 export * from './publishRequest';
 export * from './publishRequestLang';
 export * from './publishRequestVisibility';

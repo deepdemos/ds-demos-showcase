@@ -132,6 +132,26 @@ func (s *stub) GetMe(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "me")
 }
 
+func (s *stub) GetUserProfile(_ http.ResponseWriter, _ *http.Request, username string) {
+	s.hits = append(s.hits, "user:"+username)
+}
+
+func (s *stub) ListUserDemos(_ http.ResponseWriter, _ *http.Request, username string, _ api.ListUserDemosParams) {
+	s.hits = append(s.hits, "user-demos:"+username)
+}
+
+func (s *stub) GetMyHistory(_ http.ResponseWriter, _ *http.Request, _ api.GetMyHistoryParams) {
+	s.hits = append(s.hits, "my-history")
+}
+
+func (s *stub) DeleteMyHistory(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "delete-my-history")
+}
+
+func (s *stub) UpdateMyHistorySettings(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "history-settings")
+}
+
 func (s *stub) PostAuthRegister(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "register")
 }
@@ -195,6 +215,11 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/demos", "list"},
 		{http.MethodGet, "/api/v1/demos/some-slug", "detail:some-slug"},
 		{http.MethodGet, "/api/v1/me", "me"},
+		{http.MethodGet, "/api/v1/users/it-author", "user:it-author"},
+		{http.MethodGet, "/api/v1/users/it-author/demos", "user-demos:it-author"},
+		{http.MethodGet, "/api/v1/me/history", "my-history"},
+		{http.MethodDelete, "/api/v1/me/history", "delete-my-history"},
+		{http.MethodPut, "/api/v1/me/history/settings", "history-settings"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

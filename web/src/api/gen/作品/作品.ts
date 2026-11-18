@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 44 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -47,9 +47,11 @@ import type {
   ListRankingsParams,
   ListRecommendationsParams,
   ListRelatedDemosParams,
+  ListUserDemosParams,
   ModelList,
   ModelProfile,
   MyDemoList,
+  ProfileDemoList,
   RankingList,
   RecommendationList,
   RelatedList,
@@ -245,6 +247,75 @@ export const getModel = async (slug: string, options?: RequestInit): Promise<get
 
   const data: getModelResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getModelResponse
+}
+
+
+export type listUserDemosResponse200 = {
+  data: ProfileDemoList
+  status: 200
+}
+
+export type listUserDemosResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listUserDemosResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listUserDemosResponseSuccess = (listUserDemosResponse200) & {
+  headers: Headers;
+};
+export type listUserDemosResponseError = (listUserDemosResponse404 | listUserDemosResponse503) & {
+  headers: Headers;
+};
+
+export type listUserDemosResponse = (listUserDemosResponseSuccess | listUserDemosResponseError)
+
+export const getListUserDemosUrl = (username: string,
+    params?: ListUserDemosParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/users/${username}/demos?${stringifiedParams}` : `/api/v1/users/${username}/demos`
+}
+
+/**
+ * 只列公开可见的作品：判据与作品库同一份（\`demo_public_demos\` 视图：
+ * approved + published + 未删除 + 有 listed 渠道）。作者自己看未发布作品走
+ * \`GET /api/v1/me/demos\`，不是这个端点。
+ *
+ * 不存在的用户名回 404；存在的作者没有公开作品回 200 + \`items: []\`
+ * ——「没有作品」是答案，不是错误。
+ * @summary 作者的公开作品
+ */
+export const listUserDemos = async (username: string,
+    params?: ListUserDemosParams, options?: RequestInit): Promise<listUserDemosResponse> => {
+
+  const res = await fetch(getListUserDemosUrl(username,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listUserDemosResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listUserDemosResponse
 }
 
 

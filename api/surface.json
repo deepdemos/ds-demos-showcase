@@ -1,5 +1,51 @@
 {
   "models": {
+    "AccountHistory": {
+      "enabled": {
+        "type": "bool",
+        "optional": false
+      },
+      "items": {
+        "type": "[]AccountHistoryItem",
+        "optional": false
+      },
+      "page": {
+        "type": "int",
+        "optional": false
+      },
+      "pageSize": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "AccountHistoryItem": {
+      "coverUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
+      },
+      "viewedAt": {
+        "type": "time.Time",
+        "optional": false
+      }
+    },
+    "AccountHistorySettings": {
+      "enabled": {
+        "type": "bool",
+        "optional": false
+      }
+    },
     "Classification": {
       "aliases": {
         "type": "[]string",
@@ -1783,6 +1829,21 @@
       "method": "ListMyDemos",
       "pathParams": 0,
       "params": "ListMyDemosParams"
+    },
+    "DELETE /api/v1/me/history": {
+      "method": "DeleteMyHistory",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/me/history": {
+      "method": "GetMyHistory",
+      "pathParams": 0,
+      "params": "GetMyHistoryParams"
+    },
+    "PUT /api/v1/me/history/settings": {
+      "method": "UpdateMyHistorySettings",
+      "pathParams": 0,
+      "params": null
     },
     "GET /api/v1/models": {
       "method": "ListModels",

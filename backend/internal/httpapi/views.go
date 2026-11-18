@@ -44,5 +44,9 @@ func (h *Handler) PostDemoView(w http.ResponseWriter, r *http.Request, slug stri
 		// 计数失败不该影响用户：他来看作品，不是来给统计表添乱的。
 		slog.Warn("记浏览失败", "slug", slug, "err", err)
 	}
+	// 账号历史与计数同一时刻发生：只多两条查询，不为它单独开一个端点。
+	if accountID > 0 && h.queries != nil {
+		h.recordAccountView(ctx, accountID, slug)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }

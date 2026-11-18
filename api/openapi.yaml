@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 44 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -162,6 +162,94 @@ paths:
                 $ref: '#/components/schemas/ModelProfile'
         '404':
           description: 没有这个模型
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users/{username}:
+    get:
+      operationId: getUserProfile
+      tags: [身份]
+      summary: 作者公开资料
+      description: |
+        按用户名查公开资料（大小写不敏感）。只返回 \`status='active'\` 的账号；
+        未验证 / 受限 / 已注销一律 404——「这个作者不存在」与「作者已不可见」
+        对外是同一句话，不泄露账号状态。
+
+        社区贡献与公开收藏夹还没有数据源（依赖收藏域与关注/获赞），这个响应
+        不带这两块，作者页也不拿空区块占位。
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{3,20}$'
+            minLength: 3
+            maxLength: 20
+      responses:
+        '200':
+          description: 公开资料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProfile'
+        '404':
+          description: 用户名不存在，或账号不是 active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users/{username}/demos:
+    get:
+      operationId: listUserDemos
+      tags: [作品]
+      summary: 作者的公开作品
+      description: |
+        只列公开可见的作品：判据与作品库同一份（\`demo_public_demos\` 视图：
+        approved + published + 未删除 + 有 listed 渠道）。作者自己看未发布作品走
+        \`GET /api/v1/me/demos\`，不是这个端点。
+
+        不存在的用户名回 404；存在的作者没有公开作品回 200 + \`items: []\`
+        ——「没有作品」是答案，不是错误。
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{3,20}$'
+            minLength: 3
+            maxLength: 20
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 12 }
+      responses:
+        '200':
+          description: 公开作品列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileDemoList'
+        '404':
+          description: 用户名不存在，或账号不是 active
           content:
             application/json:
               schema:
@@ -1893,6 +1981,117 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/me/history:
+    get:
+      operationId: getMyHistory
+      tags: [身份]
+      summary: 我的账号浏览历史
+      description: |
+        只返回**自己的**账号历史（HIST-010：他人主页看不到）。一行 = 一件作品的最近一次浏览，
+        按浏览时间倒序；软删 / 擦除的作品不出现在结果里（它们对外是 404，历史页不该给死链）。
+
+        \`enabled\` 是账号历史开关的当前值（设置域 \`history.record\`，默认 true）。
+        关闭之后**只停新增，不删旧**（HIST-008）；要删旧的走 \`DELETE /api/v1/me/history\`。
+
+        本机历史不走这个端点：它只存在浏览器里，前端把两个来源合并展示。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 账号历史
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountHistory'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: deleteMyHistory
+      tags: [身份]
+      summary: 清空我的账号浏览历史
+      description: |
+        删除自己的全部账号历史行。**幂等**：没有记录时也返回 204——「已经空了」与
+        「刚清空」对调用方是同一件事。本机历史不在这里清，它由前端自己清。
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 已清空（没有记录也是 204）
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/me/history/settings:
+    put:
+      operationId: updateMyHistorySettings
+      tags: [身份]
+      summary: 开关我的账号浏览历史
+      description: |
+        写设置域的用户级键 \`history.record\`（只有本人能写，不接受目标 account_id）。
+
+        **关闭不等于清空**：关闭后不再新增账号记录，已有记录保留（HIST-008）。
+        界面上的「关闭并清空」是两个动作的组合：先 \`PUT enabled=false\`，再
+        \`DELETE /api/v1/me/history\`；确认文案必须先说明会删掉已有记录（HIST-009）。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountHistorySettings'
+      responses:
+        '200':
+          description: 开关已写入
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountHistorySettings'
+        '400':
+          description: 请求体不是合法 JSON / 缺 enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/me/demos:
     get:
       operationId: listMyDemos
@@ -2550,9 +2749,15 @@ paths:
     get:
       operationId: listDemoReviewQueue
       tags: [治理]
-      summary: 待审作品队列
+      summary: 审核队列（待审 / 已通过待发布）
       description: |
-        只列 `moderation_state = 'pending'` 的作品，按提交时间正序（先来先审）。
+        同一端点按 `state` 返回两段队列：
+
+        - `pending`（默认）：只列 `moderation_state = 'pending'` 的作品，按提交时间正序
+          （先来先审）。
+        - `approved_unpublished`：已通过审核、但 `lifecycle_state` 还是 `draft` 的作品，
+          按进入待发布的时间正序（先通过先发布）。审核页用它给「通过 ≠ 已发布」一个
+          固定的家——刷新页面、或者换一个审核员来发布，都能在这里找到。
 
         需要 `demo.review` 权限。权限来自 `accounts.role` 经 `role_permissions` 展开，
         **不是**「登录了就能看」——审核队列里有未公开内容，见预览端口径。
@@ -2565,6 +2770,14 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved_unpublished]
+            default: pending
+          description: |
+            `pending` 或 `approved_unpublished`；省略等于 `pending`。
       responses:
         '200':
           description: 队列
@@ -4222,6 +4435,120 @@ components:
             改绑之后要等下一次 /me 才生效，与 `role` 同一条口径。
             空权限是空数组，不是 null——前端不该为「没有权限」多一条分支。
 
+    PublicProfile:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, bio, avatarUrl, joinedAt, demoCount]
+      properties:
+        username:
+          type: string
+          maxLength: 20
+          description: 用户名（不可变，公开地址用）
+        displayName:
+          type: string
+          maxLength: 50
+          description: 昵称；为空串时前端回退到 username
+        bio:
+          type: string
+          description: 作者自述；没有写时是空串
+        avatarUrl:
+          type: string
+          nullable: true
+          description: 头像 URL；没有头像时为 null（不要回退到任何第三方头像服务）
+        joinedAt:
+          type: string
+          format: date-time
+          description: 账号创建时间（不是资料更新时间）
+        demoCount:
+          type: integer
+          minimum: 0
+          description: 公开作品数，与 \`GET /users/{username}/demos\` 的 total 同源
+
+    ProfileDemo:
+      type: object
+      additionalProperties: false
+      required: [slug, title, coverUrl, createdAt]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ProfileDemoList:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileDemo'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+
+    AccountHistoryItem:
+      type: object
+      additionalProperties: false
+      required: [slug, title, coverUrl, viewedAt]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        viewedAt:
+          type: string
+          format: date-time
+
+    AccountHistory:
+      type: object
+      additionalProperties: false
+      required: [enabled, items, total, page, pageSize]
+      properties:
+        enabled:
+          type: boolean
+          description: 账号历史开关；关闭只停新增，不删旧（HIST-008）
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountHistoryItem'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+
+    AccountHistorySettings:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+
     AccountStatus:
       type: string
       enum: [pending, active, suspended, banned, deleted]
@@ -4257,10 +4584,16 @@ components:
           description: 作者显示名；作者已注销时（author_id 被 SET NULL）为 null
         moderationState:
           type: string
-          enum: [pending]
+          enum: [pending, approved]
+          description: |
+            `pending`：还在待审；`approved`：已通过审核（出现在
+            `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
         submittedAt:
           type: string
           format: date-time
+          description: |
+            进入当前队列的时间：待审队列是投稿时间；已通过待发布队列是通过审核的时间
+            （`demos.updated_at`，demos 上没有单独的 reviewed_at）。
         previewPath:
           type: string
           description: 作品入口的相对地址，审核员直接拼到本站域名后使用

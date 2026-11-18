@@ -231,7 +231,8 @@ const (
 
 // Defines values for ReviewQueueItemModerationState.
 const (
-	ReviewQueueItemModerationStatePending ReviewQueueItemModerationState = "pending"
+	ReviewQueueItemModerationStateApproved ReviewQueueItemModerationState = "approved"
+	ReviewQueueItemModerationStatePending  ReviewQueueItemModerationState = "pending"
 )
 
 // Defines values for ReviewResultModerationState.
@@ -247,6 +248,12 @@ const (
 	SubmissionResultModerationStateRejected SubmissionResultModerationState = "rejected"
 )
 
+// Defines values for ListDemoReviewQueueParamsState.
+const (
+	ListDemoReviewQueueParamsStateApprovedUnpublished ListDemoReviewQueueParamsState = "approved_unpublished"
+	ListDemoReviewQueueParamsStatePending             ListDemoReviewQueueParamsState = "pending"
+)
+
 // Defines values for ListDemosParamsSort.
 const (
 	Hot    ListDemosParamsSort = "hot"
@@ -256,9 +263,9 @@ const (
 
 // Defines values for ListMyDemosParamsModeration.
 const (
-	Approved ListMyDemosParamsModeration = "approved"
-	Pending  ListMyDemosParamsModeration = "pending"
-	Rejected ListMyDemosParamsModeration = "rejected"
+	ListMyDemosParamsModerationApproved ListMyDemosParamsModeration = "approved"
+	ListMyDemosParamsModerationPending  ListMyDemosParamsModeration = "pending"
+	ListMyDemosParamsModerationRejected ListMyDemosParamsModeration = "rejected"
 )
 
 // Defines values for ListModelsParamsStatus.
@@ -285,6 +292,29 @@ const (
 	ListRankingsParamsRangeMonth ListRankingsParamsRange = "month"
 	ListRankingsParamsRangeWeek  ListRankingsParamsRange = "week"
 )
+
+// AccountHistory defines model for AccountHistory.
+type AccountHistory struct {
+	// Enabled 账号历史开关；关闭只停新增，不删旧（HIST-008）
+	Enabled  bool                 `json:"enabled"`
+	Items    []AccountHistoryItem `json:"items"`
+	Page     int                  `json:"page"`
+	PageSize int                  `json:"pageSize"`
+	Total    int                  `json:"total"`
+}
+
+// AccountHistoryItem defines model for AccountHistoryItem.
+type AccountHistoryItem struct {
+	CoverUrl *string   `json:"coverUrl"`
+	Slug     string    `json:"slug"`
+	Title    *string   `json:"title"`
+	ViewedAt time.Time `json:"viewedAt"`
+}
+
+// AccountHistorySettings defines model for AccountHistorySettings.
+type AccountHistorySettings struct {
+	Enabled bool `json:"enabled"`
+}
 
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
 type AccountStatus string
@@ -1288,6 +1318,43 @@ type PasswordResetRequest struct {
 	NewPassword string              `json:"newPassword"`
 }
 
+// ProfileDemo defines model for ProfileDemo.
+type ProfileDemo struct {
+	CoverUrl  *string   `json:"coverUrl"`
+	CreatedAt time.Time `json:"createdAt"`
+	Slug      string    `json:"slug"`
+	Title     *string   `json:"title"`
+}
+
+// ProfileDemoList defines model for ProfileDemoList.
+type ProfileDemoList struct {
+	Items    []ProfileDemo `json:"items"`
+	Page     int           `json:"page"`
+	PageSize int           `json:"pageSize"`
+	Total    int           `json:"total"`
+}
+
+// PublicProfile defines model for PublicProfile.
+type PublicProfile struct {
+	// AvatarUrl 头像 URL；没有头像时为 null（不要回退到任何第三方头像服务）
+	AvatarUrl *string `json:"avatarUrl"`
+
+	// Bio 作者自述；没有写时是空串
+	Bio string `json:"bio"`
+
+	// DemoCount 公开作品数，与 \`GET /users/{username}/demos\` 的 total 同源
+	DemoCount int `json:"demoCount"`
+
+	// DisplayName 昵称；为空串时前端回退到 username
+	DisplayName string `json:"displayName"`
+
+	// JoinedAt 账号创建时间（不是资料更新时间）
+	JoinedAt time.Time `json:"joinedAt"`
+
+	// Username 用户名（不可变，公开地址用）
+	Username string `json:"username"`
+}
+
 // PublishRequest defines model for PublishRequest.
 type PublishRequest struct {
 	// Channel 必须是 channels 表里已登记且 status='active' 的码值
@@ -1422,18 +1489,25 @@ type ReviewQueue struct {
 // ReviewQueueItem defines model for ReviewQueueItem.
 type ReviewQueueItem struct {
 	// AuthorName 作者显示名；作者已注销时（author_id 被 SET NULL）为 null
-	AuthorName      *string                        `json:"authorName"`
-	Description     *string                        `json:"description"`
+	AuthorName  *string `json:"authorName"`
+	Description *string `json:"description"`
+
+	// ModerationState `pending`：还在待审；`approved`：已通过审核（出现在
+	// `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
 	ModerationState ReviewQueueItemModerationState `json:"moderationState"`
 
 	// PreviewPath 作品入口的相对地址，审核员直接拼到本站域名后使用
-	PreviewPath string    `json:"previewPath"`
-	Slug        string    `json:"slug"`
+	PreviewPath string `json:"previewPath"`
+	Slug        string `json:"slug"`
+
+	// SubmittedAt 进入当前队列的时间：待审队列是投稿时间；已通过待发布队列是通过审核的时间
+	// （`demos.updated_at`，demos 上没有单独的 reviewed_at）。
 	SubmittedAt time.Time `json:"submittedAt"`
 	Title       *string   `json:"title"`
 }
 
-// ReviewQueueItemModerationState defines model for ReviewQueueItem.ModerationState.
+// ReviewQueueItemModerationState `pending`：还在待审；`approved`：已通过审核（出现在
+// `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
 type ReviewQueueItemModerationState string
 
 // ReviewResult defines model for ReviewResult.
@@ -1495,7 +1569,13 @@ type ListModelCatalogParams struct {
 // ListDemoReviewQueueParams defines parameters for ListDemoReviewQueue.
 type ListDemoReviewQueueParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// State `pending` 或 `approved_unpublished`；省略等于 `pending`。
+	State *ListDemoReviewQueueParamsState `form:"state,omitempty" json:"state,omitempty"`
 }
+
+// ListDemoReviewQueueParamsState defines parameters for ListDemoReviewQueue.
+type ListDemoReviewQueueParamsState string
 
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
@@ -1736,6 +1816,12 @@ type ListMyDemosParams struct {
 // ListMyDemosParamsModeration defines parameters for ListMyDemos.
 type ListMyDemosParamsModeration string
 
+// GetMyHistoryParams defines parameters for GetMyHistory.
+type GetMyHistoryParams struct {
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
 // ListModelsParams defines parameters for ListModels.
 type ListModelsParams struct {
 	// Status 只出这个状态的行。不传表示全部。
@@ -1778,6 +1864,12 @@ type ListRankingsParamsRange string
 type ListRecommendationsParams struct {
 	// Limit 返回条数，越界回 400，不静默截断。
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListUserDemosParams defines parameters for ListUserDemos.
+type ListUserDemosParams struct {
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 }
 
 // AddDemoChannelJSONRequestBody defines body for AddDemoChannel for application/json ContentType.
@@ -1830,3 +1922,6 @@ type UpdateDemoMultipartRequestBody UpdateDemoMultipartBody
 
 // PutDemoRatingJSONRequestBody defines body for PutDemoRating for application/json ContentType.
 type PutDemoRatingJSONRequestBody = DemoRatingInput
+
+// UpdateMyHistorySettingsJSONRequestBody defines body for UpdateMyHistorySettings for application/json ContentType.
+type UpdateMyHistorySettingsJSONRequestBody = AccountHistorySettings
