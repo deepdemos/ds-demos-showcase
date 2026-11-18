@@ -186,6 +186,56 @@ const (
 	MyDemoSummaryModerationStateRejected MyDemoSummaryModerationState = "rejected"
 )
 
+// Defines values for ProposalDecisionDecision.
+const (
+	ProposalDecisionDecisionApprove ProposalDecisionDecision = "approve"
+	ProposalDecisionDecisionReject  ProposalDecisionDecision = "reject"
+)
+
+// Defines values for ProposalDetailSource.
+const (
+	ProposalDetailSourceAdmin    ProposalDetailSource = "admin"
+	ProposalDetailSourceAi       ProposalDetailSource = "ai"
+	ProposalDetailSourceExternal ProposalDetailSource = "external"
+	ProposalDetailSourceImported ProposalDetailSource = "imported"
+	ProposalDetailSourceInferred ProposalDetailSource = "inferred"
+	ProposalDetailSourceUser     ProposalDetailSource = "user"
+)
+
+// Defines values for ProposalDetailStatus.
+const (
+	ProposalDetailStatusApproved   ProposalDetailStatus = "approved"
+	ProposalDetailStatusPending    ProposalDetailStatus = "pending"
+	ProposalDetailStatusRejected   ProposalDetailStatus = "rejected"
+	ProposalDetailStatusSuperseded ProposalDetailStatus = "superseded"
+	ProposalDetailStatusWithdrawn  ProposalDetailStatus = "withdrawn"
+)
+
+// Defines values for ProposalReviewResultStatus.
+const (
+	ProposalReviewResultStatusApproved ProposalReviewResultStatus = "approved"
+	ProposalReviewResultStatusRejected ProposalReviewResultStatus = "rejected"
+)
+
+// Defines values for ProposalSummarySource.
+const (
+	ProposalSummarySourceAdmin    ProposalSummarySource = "admin"
+	ProposalSummarySourceAi       ProposalSummarySource = "ai"
+	ProposalSummarySourceExternal ProposalSummarySource = "external"
+	ProposalSummarySourceImported ProposalSummarySource = "imported"
+	ProposalSummarySourceInferred ProposalSummarySource = "inferred"
+	ProposalSummarySourceUser     ProposalSummarySource = "user"
+)
+
+// Defines values for ProposalSummaryStatus.
+const (
+	ProposalSummaryStatusApproved   ProposalSummaryStatus = "approved"
+	ProposalSummaryStatusPending    ProposalSummaryStatus = "pending"
+	ProposalSummaryStatusRejected   ProposalSummaryStatus = "rejected"
+	ProposalSummaryStatusSuperseded ProposalSummaryStatus = "superseded"
+	ProposalSummaryStatusWithdrawn  ProposalSummaryStatus = "withdrawn"
+)
+
 // Defines values for PublishRequestLang.
 const (
 	PublishRequestLangEn PublishRequestLang = "en"
@@ -237,8 +287,8 @@ const (
 
 // Defines values for ReviewDecisionDecision.
 const (
-	Approve ReviewDecisionDecision = "approve"
-	Reject  ReviewDecisionDecision = "reject"
+	ReviewDecisionDecisionApprove ReviewDecisionDecision = "approve"
+	ReviewDecisionDecisionReject  ReviewDecisionDecision = "reject"
 )
 
 // Defines values for ReviewQueueItemModerationState.
@@ -258,6 +308,25 @@ const (
 	SubmissionResultModerationStateApproved SubmissionResultModerationState = "approved"
 	SubmissionResultModerationStatePending  SubmissionResultModerationState = "pending"
 	SubmissionResultModerationStateRejected SubmissionResultModerationState = "rejected"
+)
+
+// Defines values for ListAdminProposalsParamsStatus.
+const (
+	ListAdminProposalsParamsStatusApproved   ListAdminProposalsParamsStatus = "approved"
+	ListAdminProposalsParamsStatusPending    ListAdminProposalsParamsStatus = "pending"
+	ListAdminProposalsParamsStatusRejected   ListAdminProposalsParamsStatus = "rejected"
+	ListAdminProposalsParamsStatusSuperseded ListAdminProposalsParamsStatus = "superseded"
+	ListAdminProposalsParamsStatusWithdrawn  ListAdminProposalsParamsStatus = "withdrawn"
+)
+
+// Defines values for ListAdminProposalsParamsSource.
+const (
+	Admin    ListAdminProposalsParamsSource = "admin"
+	Ai       ListAdminProposalsParamsSource = "ai"
+	External ListAdminProposalsParamsSource = "external"
+	Imported ListAdminProposalsParamsSource = "imported"
+	Inferred ListAdminProposalsParamsSource = "inferred"
+	User     ListAdminProposalsParamsSource = "user"
 )
 
 // Defines values for ListDemoReviewQueueParamsState.
@@ -1471,6 +1540,81 @@ type ProfileDemoList struct {
 	Total    int           `json:"total"`
 }
 
+// ProposalDecision defines model for ProposalDecision.
+type ProposalDecision struct {
+	Decision ProposalDecisionDecision `json:"decision"`
+
+	// Reason 驳回原因（可选）；通过时忽略
+	Reason *string `json:"reason,omitempty"`
+}
+
+// ProposalDecisionDecision defines model for ProposalDecision.Decision.
+type ProposalDecisionDecision string
+
+// ProposalDetail defines model for ProposalDetail.
+type ProposalDetail struct {
+	Confidence *float32  `json:"confidence"`
+	CreatedAt  time.Time `json:"createdAt"`
+	CreatedBy  *int      `json:"createdBy"`
+	Id         int       `json:"id"`
+	Kind       string    `json:"kind"`
+
+	// Payload 提案内容原文；擦除后为 null
+	Payload      *map[string]interface{} `json:"payload"`
+	RejectReason *string                 `json:"rejectReason"`
+	ResultId     *int                    `json:"resultId"`
+	ResultKind   *string                 `json:"resultKind"`
+	ReviewedAt   *time.Time              `json:"reviewedAt"`
+	ReviewedBy   *int                    `json:"reviewedBy"`
+	Source       ProposalDetailSource    `json:"source"`
+	Status       ProposalDetailStatus    `json:"status"`
+	UpdatedAt    time.Time               `json:"updatedAt"`
+}
+
+// ProposalDetailSource defines model for ProposalDetail.Source.
+type ProposalDetailSource string
+
+// ProposalDetailStatus defines model for ProposalDetail.Status.
+type ProposalDetailStatus string
+
+// ProposalList defines model for ProposalList.
+type ProposalList struct {
+	Items    []ProposalSummary `json:"items"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"pageSize"`
+	Total    int               `json:"total"`
+}
+
+// ProposalReviewResult defines model for ProposalReviewResult.
+type ProposalReviewResult struct {
+	Id     int                        `json:"id"`
+	Status ProposalReviewResultStatus `json:"status"`
+}
+
+// ProposalReviewResultStatus defines model for ProposalReviewResult.Status.
+type ProposalReviewResultStatus string
+
+// ProposalSummary defines model for ProposalSummary.
+type ProposalSummary struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Id        int       `json:"id"`
+
+	// Kind 提案 kind；取值由 proposals 的 CHECK 定义，不在契约里复制一份
+	Kind   string                `json:"kind"`
+	Source ProposalSummarySource `json:"source"`
+	Status ProposalSummaryStatus `json:"status"`
+
+	// Title 从 payload 摘出的标题；取不到为空串
+	Title     string    `json:"title"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// ProposalSummarySource defines model for ProposalSummary.Source.
+type ProposalSummarySource string
+
+// ProposalSummaryStatus defines model for ProposalSummary.Status.
+type ProposalSummaryStatus string
+
 // PublicProfile defines model for PublicProfile.
 type PublicProfile struct {
 	// AvatarUrl 头像 URL；没有头像时为 null（不要回退到任何第三方头像服务）
@@ -1712,6 +1856,21 @@ type ListModelCatalogParams struct {
 	// 所以「第几页 / 共几页」由调用方自己算，接口不替它做除法。
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
+
+// ListAdminProposalsParams defines parameters for ListAdminProposals.
+type ListAdminProposalsParams struct {
+	Status   *ListAdminProposalsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Kind     *string                         `form:"kind,omitempty" json:"kind,omitempty"`
+	Source   *ListAdminProposalsParamsSource `form:"source,omitempty" json:"source,omitempty"`
+	Page     *int                            `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int                            `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
+// ListAdminProposalsParamsStatus defines parameters for ListAdminProposals.
+type ListAdminProposalsParamsStatus string
+
+// ListAdminProposalsParamsSource defines parameters for ListAdminProposals.
+type ListAdminProposalsParamsSource string
 
 // ListDemoReviewQueueParams defines parameters for ListDemoReviewQueue.
 type ListDemoReviewQueueParams struct {
@@ -2047,6 +2206,9 @@ type ApplyModelImportBatchJSONRequestBody = ModelImportBatchRequest
 
 // PreviewModelImportJSONRequestBody defines body for PreviewModelImport for application/json ContentType.
 type PreviewModelImportJSONRequestBody = ModelImportRef
+
+// ReviewAdminProposalJSONRequestBody defines body for ReviewAdminProposal for application/json ContentType.
+type ReviewAdminProposalJSONRequestBody = ProposalDecision
 
 // ReviewDemoJSONRequestBody defines body for ReviewDemo for application/json ContentType.
 type ReviewDemoJSONRequestBody = ReviewDecision

@@ -16,6 +16,7 @@ import { RankingsPage } from '@/routes/RankingsPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
 import { AdminInboxPage } from '@/routes/AdminInboxPage';
 import { AdminPage } from '@/routes/AdminPage';
+import { ProposalDetailPage } from '@/routes/ProposalDetailPage';
 import { MyDemosPage } from '@/routes/MyDemosPage';
 import { HistoryPage } from '@/routes/HistoryPage';
 import { ClassificationPage } from '@/routes/ClassificationPage';
@@ -76,6 +77,7 @@ export const router = createBrowserRouter([
       page('admin', <AdminPage />),
       page('admin/inbox', <AdminInboxPage />),
       page('admin/reviews', <AdminReviewPage />),
+      page('admin/proposals/:id', <ProposalDetailPage />),
       page('admin/models', <AdminModelsPage />),
       page('*', <NotFoundPage />),
     ],

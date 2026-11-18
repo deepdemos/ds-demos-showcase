@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 63 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 66 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -3286,6 +3286,188 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/proposals:
+    get:
+      operationId: listAdminProposals
+      tags: [治理]
+      summary: 提案列表
+      description: |
+        按 status / kind / source 筛。默认只列 pending；status 传空串表示全部。
+
+        这一页先让管理员看得见待办；通过的执行矩阵下一轮按 kind 接入。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, withdrawn, superseded]
+            default: pending
+        - name: kind
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [user, admin, ai, inferred, external, imported]
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 提案列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalList'
+        '400':
+          description: 筛选值不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有提案审核权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/proposals/{id}:
+    get:
+      operationId: getAdminProposal
+      tags: [治理]
+      summary: 提案详情
+      description: 返回 payload 原文、来源、审核结果；已擦除的提案按不存在处理。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: 提案详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalDetail'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有提案审核权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 提案不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/proposals/{id}/review:
+    post:
+      operationId: reviewAdminProposal
+      tags: [治理]
+      summary: 裁决提案
+      description: |
+        目前只接 reject：拒绝只改 proposals 的状态并写审计，不产生任何正式数据（ENT-023）。
+
+        approve 需要按 kind 执行对应的正式写入（ENT-020）；执行器尚未接入，统一回 422，
+        不会出现「状态通过了但业务表没变」的假成功。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalDecision'
+      responses:
+        '200':
+          description: 已裁决
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalReviewResult'
+        '400':
+          description: 裁决值不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有提案审核权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 提案不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 提案已被处理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: approve 的执行器尚未接入
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/inbox:
     get:
       operationId: getAdminInbox
@@ -5358,6 +5540,134 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ProposalSummary:
+      type: object
+      additionalProperties: false
+      required: [id, kind, status, source, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          description: 提案 kind；取值由 proposals 的 CHECK 定义，不在契约里复制一份
+        status:
+          type: string
+          enum: [pending, approved, rejected, withdrawn, superseded]
+        source:
+          type: string
+          enum: [user, admin, ai, inferred, external, imported]
+        title:
+          type: string
+          description: 从 payload 摘出的标题；取不到为空串
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProposalList:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalSummary'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+
+    ProposalDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - status
+        - payload
+        - source
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, withdrawn, superseded]
+        payload:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: 提案内容原文；擦除后为 null
+        source:
+          type: string
+          enum: [user, admin, ai, inferred, external, imported]
+        confidence:
+          type: number
+          nullable: true
+        createdBy:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        reviewedBy:
+          type: integer
+          nullable: true
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectReason:
+          type: string
+          nullable: true
+        resultKind:
+          type: string
+          nullable: true
+        resultId:
+          type: integer
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProposalDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: string
+          maxLength: 500
+          description: 驳回原因（可选）；通过时忽略
+
+    ProposalReviewResult:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [approved, rejected]
 
     AdminInbox:
       type: object

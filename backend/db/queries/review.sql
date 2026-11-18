@@ -80,7 +80,7 @@ VALUES ($1, $2, NULLIF($3::text, ''), $4);
 INSERT INTO audit_log (actor_type, actor_id, actor_role, action,
                        entity_type, entity_id, before, after, reason)
 VALUES ('user', sqlc.arg(actor_id), sqlc.arg(actor_role), sqlc.arg(action),
-        'demo', sqlc.arg(entity_id), sqlc.arg(before), sqlc.arg(after), sqlc.arg(reason));
+        sqlc.arg(entity_type), sqlc.arg(entity_id), sqlc.arg(before), sqlc.arg(after), sqlc.arg(reason));
 
 -- ---------- 发布（治理域 §4.3 的 demo.publish）----------
 

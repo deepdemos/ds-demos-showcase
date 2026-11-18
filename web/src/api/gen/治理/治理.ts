@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 63 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 66 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -36,6 +36,7 @@ import type {
   DemoChannelResult,
   Error,
   GetAdminInboxParams,
+  ListAdminProposalsParams,
   ListDemoReviewQueueParams,
   ListModelCatalogParams,
   Model,
@@ -47,6 +48,10 @@ import type {
   ModelImportRef,
   ModelSyncResult,
   ModelSyncStatus,
+  ProposalDecision,
+  ProposalDetail,
+  ProposalList,
+  ProposalReviewResult,
   PublishRequest,
   PublishResult,
   ReviewDecision,
@@ -935,6 +940,243 @@ const res = await fetch(getReviewEntityUrl(kind,id),
 
   const data: reviewEntityResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as reviewEntityResponse
+}
+
+
+export type listAdminProposalsResponse200 = {
+  data: ProposalList
+  status: 200
+}
+
+export type listAdminProposalsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listAdminProposalsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listAdminProposalsResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listAdminProposalsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listAdminProposalsResponseSuccess = (listAdminProposalsResponse200) & {
+  headers: Headers;
+};
+export type listAdminProposalsResponseError = (listAdminProposalsResponse400 | listAdminProposalsResponse401 | listAdminProposalsResponse403 | listAdminProposalsResponse503) & {
+  headers: Headers;
+};
+
+export type listAdminProposalsResponse = (listAdminProposalsResponseSuccess | listAdminProposalsResponseError)
+
+export const getListAdminProposalsUrl = (params?: ListAdminProposalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/admin/proposals?${stringifiedParams}` : `/api/v1/admin/proposals`
+}
+
+/**
+ * 按 status / kind / source 筛。默认只列 pending；status 传空串表示全部。
+ *
+ * 这一页先让管理员看得见待办；通过的执行矩阵下一轮按 kind 接入。
+ * @summary 提案列表
+ */
+export const listAdminProposals = async (params?: ListAdminProposalsParams, options?: RequestInit): Promise<listAdminProposalsResponse> => {
+
+  const res = await fetch(getListAdminProposalsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listAdminProposalsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listAdminProposalsResponse
+}
+
+
+export type getAdminProposalResponse200 = {
+  data: ProposalDetail
+  status: 200
+}
+
+export type getAdminProposalResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getAdminProposalResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getAdminProposalResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getAdminProposalResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getAdminProposalResponseSuccess = (getAdminProposalResponse200) & {
+  headers: Headers;
+};
+export type getAdminProposalResponseError = (getAdminProposalResponse401 | getAdminProposalResponse403 | getAdminProposalResponse404 | getAdminProposalResponse503) & {
+  headers: Headers;
+};
+
+export type getAdminProposalResponse = (getAdminProposalResponseSuccess | getAdminProposalResponseError)
+
+export const getGetAdminProposalUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/admin/proposals/${id}`
+}
+
+/**
+ * 返回 payload 原文、来源、审核结果；已擦除的提案按不存在处理。
+ * @summary 提案详情
+ */
+export const getAdminProposal = async (id: number, options?: RequestInit): Promise<getAdminProposalResponse> => {
+
+  const res = await fetch(getGetAdminProposalUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getAdminProposalResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getAdminProposalResponse
+}
+
+
+export type reviewAdminProposalResponse200 = {
+  data: ProposalReviewResult
+  status: 200
+}
+
+export type reviewAdminProposalResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type reviewAdminProposalResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type reviewAdminProposalResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type reviewAdminProposalResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type reviewAdminProposalResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type reviewAdminProposalResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type reviewAdminProposalResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type reviewAdminProposalResponseSuccess = (reviewAdminProposalResponse200) & {
+  headers: Headers;
+};
+export type reviewAdminProposalResponseError = (reviewAdminProposalResponse400 | reviewAdminProposalResponse401 | reviewAdminProposalResponse403 | reviewAdminProposalResponse404 | reviewAdminProposalResponse409 | reviewAdminProposalResponse422 | reviewAdminProposalResponse503) & {
+  headers: Headers;
+};
+
+export type reviewAdminProposalResponse = (reviewAdminProposalResponseSuccess | reviewAdminProposalResponseError)
+
+export const getReviewAdminProposalUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/admin/proposals/${id}/review`
+}
+
+/**
+ * 目前只接 reject：拒绝只改 proposals 的状态并写审计，不产生任何正式数据（ENT-023）。
+ *
+ * approve 需要按 kind 执行对应的正式写入（ENT-020）；执行器尚未接入，统一回 422，
+ * 不会出现「状态通过了但业务表没变」的假成功。
+ * @summary 裁决提案
+ */
+export const reviewAdminProposal = async (id: number,
+    proposalDecision: ProposalDecision, options?: RequestInit): Promise<reviewAdminProposalResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getReviewAdminProposalUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(proposalDecision)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reviewAdminProposalResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reviewAdminProposalResponse
 }
 
 

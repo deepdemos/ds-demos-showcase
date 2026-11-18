@@ -140,17 +140,18 @@ const insertAuditLog = `-- name: InsertAuditLog :exec
 INSERT INTO audit_log (actor_type, actor_id, actor_role, action,
                        entity_type, entity_id, before, after, reason)
 VALUES ('user', $1, $2, $3,
-        'demo', $4, $5, $6, $7)
+        $4, $5, $6, $7, $8)
 `
 
 type InsertAuditLogParams struct {
-	ActorID   pgtype.Int8
-	ActorRole string
-	Action    string
-	EntityID  int64
-	Before    []byte
-	After     []byte
-	Reason    string
+	ActorID    pgtype.Int8
+	ActorRole  string
+	Action     string
+	EntityType string
+	EntityID   int64
+	Before     []byte
+	After      []byte
+	Reason     string
 }
 
 // 治理域 §5.2：actor 三列必须由服务端从会话取，调用方不能自报。
@@ -160,6 +161,7 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.ActorID,
 		arg.ActorRole,
 		arg.Action,
+		arg.EntityType,
 		arg.EntityID,
 		arg.Before,
 		arg.After,

@@ -280,13 +280,14 @@ func recordTrail(ctx context.Context, q *store.Queries, demoID int64, actor Acto
 		return fmt.Errorf("序列化留痕后态失败: %w", err)
 	}
 	if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
-		ActorID:   int8(actor.AccountID),
-		ActorRole: actor.Role,
-		Action:    t.action,
-		EntityID:  demoID,
-		Before:    before,
-		After:     after,
-		Reason:    t.reason,
+		ActorID:    int8(actor.AccountID),
+		ActorRole:  actor.Role,
+		Action:     t.action,
+		EntityType: "demo",
+		EntityID:   demoID,
+		Before:     before,
+		After:      after,
+		Reason:     t.reason,
 	}); err != nil {
 		return fmt.Errorf("写审计失败: %w", err)
 	}

@@ -212,6 +212,18 @@ func (s *stub) ReviewEntity(_ http.ResponseWriter, _ *http.Request, kind api.Rev
 	s.hits = append(s.hits, "review-entity:"+string(kind)+":"+id)
 }
 
+func (s *stub) ListAdminProposals(_ http.ResponseWriter, _ *http.Request, _ api.ListAdminProposalsParams) {
+	s.hits = append(s.hits, "admin-proposals")
+}
+
+func (s *stub) GetAdminProposal(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "admin-proposal:"+strconv.Itoa(id))
+}
+
+func (s *stub) ReviewAdminProposal(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "review-proposal:"+strconv.Itoa(id))
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -291,6 +303,9 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/admin/inbox", "admin-inbox"},
 		// demo 的具体路径由旧端点（兼容别名）接住；泛化路由用另一个 kind 验证存在。
 		{http.MethodPost, "/api/v1/admin/reviews/proposal/9", "review-entity:proposal:9"},
+		{http.MethodGet, "/api/v1/admin/proposals", "admin-proposals"},
+		{http.MethodGet, "/api/v1/admin/proposals/7", "admin-proposal:7"},
+		{http.MethodPost, "/api/v1/admin/proposals/7/review", "review-proposal:7"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

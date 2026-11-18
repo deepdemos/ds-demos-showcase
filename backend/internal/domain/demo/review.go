@@ -135,13 +135,14 @@ func (s *Service) Review(ctx context.Context, actor Actor, in ReviewInput) (Revi
 		before, _ := json.Marshal(map[string]string{"moderation_state": cur.ModerationState})
 		after, _ := json.Marshal(map[string]string{"moderation_state": row.ModerationState})
 		if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
-			ActorID:   int8(actor.AccountID),
-			ActorRole: actor.Role,
-			Action:    "review",
-			EntityID:  row.ID,
-			Before:    before,
-			After:     after,
-			Reason:    in.Reason,
+			ActorID:    int8(actor.AccountID),
+			ActorRole:  actor.Role,
+			Action:     "review",
+			EntityType: "demo",
+			EntityID:   row.ID,
+			Before:     before,
+			After:      after,
+			Reason:     in.Reason,
 		}); err != nil {
 			return fmt.Errorf("写审计失败: %w", err)
 		}

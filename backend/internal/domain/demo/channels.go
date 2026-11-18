@@ -153,11 +153,12 @@ func (s *Service) AddChannel(ctx context.Context, actor Actor, in ChannelInput) 
 			action = "update"
 		}
 		if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
-			ActorID:   int8(actor.AccountID),
-			ActorRole: actor.Role,
-			Action:    action,
-			EntityID:  row.ID,
-			After:     after,
+			ActorID:    int8(actor.AccountID),
+			ActorRole:  actor.Role,
+			Action:     action,
+			EntityType: "demo",
+			EntityID:   row.ID,
+			After:      after,
 		}); err != nil {
 			return fmt.Errorf("demo: 写审计失败: %w", err)
 		}
@@ -245,11 +246,12 @@ func (s *Service) RemoveChannel(ctx context.Context, actor Actor, slug, channel 
 			return fmt.Errorf("demo: 写时间线失败: %w", err)
 		}
 		if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
-			ActorID:   int8(actor.AccountID),
-			ActorRole: actor.Role,
-			Action:    "detach",
-			EntityID:  row.ID,
-			Before:    before,
+			ActorID:    int8(actor.AccountID),
+			ActorRole:  actor.Role,
+			Action:     "detach",
+			EntityType: "demo",
+			EntityID:   row.ID,
+			Before:     before,
 		}); err != nil {
 			return fmt.Errorf("demo: 写审计失败: %w", err)
 		}

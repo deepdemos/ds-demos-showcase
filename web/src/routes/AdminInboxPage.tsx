@@ -158,7 +158,9 @@ export function AdminInboxPage() {
                     className="rounded border border-gray-200 p-3 dark:border-gray-800"
                   >
                     <p className="text-sm">
-                      {proposal.title || '（没有标题）'}
+                      <Link className="underline" to={'/admin/proposals/' + proposal.id}>
+                        {proposal.title || '（没有标题）'}
+                      </Link>
                       <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
                         {proposal.kind} · {proposal.source}
                       </span>
