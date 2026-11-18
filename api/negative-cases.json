@@ -862,6 +862,40 @@
         }
       }
     ],
+    "GET /api/v1/admin/proposals": [
+      {
+        "case": "没有 proposal.review 返回 403",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_integration_test.go",
+          "name": "TestIntegrationProposalsRequirePermission"
+        }
+      }
+    ],
+    "GET /api/v1/admin/proposals/{id}": [
+      {
+        "case": "没有 proposal.review 返回 403",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_integration_test.go",
+          "name": "TestIntegrationProposalsRequirePermission"
+        }
+      }
+    ],
+    "POST /api/v1/admin/proposals/{id}/review": [
+      {
+        "case": "approve 的执行器未接入返回 422，提案仍是 pending",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_integration_test.go",
+          "name": "TestIntegrationProposalApproveNotWired"
+        }
+      },
+      {
+        "case": "重复驳回返回 409",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_integration_test.go",
+          "name": "TestIntegrationProposalReviewReject"
+        }
+      }
+    ],
     "POST /api/v1/admin/reviews/{kind}/{id}": [
       {
         "case": "未知 kind 返回 400，不落到默认分支",

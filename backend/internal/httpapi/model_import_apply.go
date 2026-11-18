@@ -208,13 +208,14 @@ func (h *Handler) applyImport(
 			return fmt.Errorf("序列化留痕前态失败: %w", err)
 		}
 		if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
-			ActorID:   pgtype.Int8{Int64: actor.AccountID, Valid: true},
-			ActorRole: actor.Role,
-			Action:    "create",
-			EntityID:  modelID,
-			Before:    beforeJSON,
-			After:     after,
-			Reason:    "",
+			ActorID:    pgtype.Int8{Int64: actor.AccountID, Valid: true},
+			ActorRole:  actor.Role,
+			Action:     "create",
+			EntityType: "model",
+			EntityID:   modelID,
+			Before:     beforeJSON,
+			After:      after,
+			Reason:     "",
 		}); err != nil {
 			return fmt.Errorf("写审计失败: %w", err)
 		}

@@ -177,13 +177,14 @@ func (s *Service) Publish(ctx context.Context, actor Actor, in PublishInput) (Pu
 			return fmt.Errorf("demo: 序列化留痕前态失败: %w", err)
 		}
 		if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
-			ActorID:   int8(actor.AccountID),
-			ActorRole: actor.Role,
-			Action:    "status_set",
-			EntityID:  row.ID,
-			Before:    before,
-			After:     detail,
-			Reason:    "",
+			ActorID:    int8(actor.AccountID),
+			ActorRole:  actor.Role,
+			Action:     "status_set",
+			EntityType: "demo",
+			EntityID:   row.ID,
+			Before:     before,
+			After:      detail,
+			Reason:     "",
 		}); err != nil {
 			return fmt.Errorf("demo: 写审计失败: %w", err)
 		}

@@ -1410,6 +1410,132 @@
         "optional": false
       }
     },
+    "ProposalDecision": {
+      "decision": {
+        "type": "ProposalDecisionDecision",
+        "optional": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "ProposalDetail": {
+      "confidence": {
+        "type": "float32",
+        "optional": true
+      },
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "createdBy": {
+        "type": "int",
+        "optional": true
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "kind": {
+        "type": "string",
+        "optional": false
+      },
+      "payload": {
+        "type": "map[string]interface{}",
+        "optional": true
+      },
+      "rejectReason": {
+        "type": "string",
+        "optional": true
+      },
+      "resultId": {
+        "type": "int",
+        "optional": true
+      },
+      "resultKind": {
+        "type": "string",
+        "optional": true
+      },
+      "reviewedAt": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "reviewedBy": {
+        "type": "int",
+        "optional": true
+      },
+      "source": {
+        "type": "ProposalDetailSource",
+        "optional": false
+      },
+      "status": {
+        "type": "ProposalDetailStatus",
+        "optional": false
+      },
+      "updatedAt": {
+        "type": "time.Time",
+        "optional": false
+      }
+    },
+    "ProposalList": {
+      "items": {
+        "type": "[]ProposalSummary",
+        "optional": false
+      },
+      "page": {
+        "type": "int",
+        "optional": false
+      },
+      "pageSize": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "ProposalReviewResult": {
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "status": {
+        "type": "ProposalReviewResultStatus",
+        "optional": false
+      }
+    },
+    "ProposalSummary": {
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "kind": {
+        "type": "string",
+        "optional": false
+      },
+      "source": {
+        "type": "ProposalSummarySource",
+        "optional": false
+      },
+      "status": {
+        "type": "ProposalSummaryStatus",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": false
+      },
+      "updatedAt": {
+        "type": "time.Time",
+        "optional": false
+      }
+    },
     "PublicProfile": {
       "avatarUrl": {
         "type": "string",
@@ -1861,6 +1987,44 @@
       "pending",
       "rejected"
     ],
+    "ProposalDecisionDecision": [
+      "approve",
+      "reject"
+    ],
+    "ProposalDetailSource": [
+      "admin",
+      "ai",
+      "external",
+      "imported",
+      "inferred",
+      "user"
+    ],
+    "ProposalDetailStatus": [
+      "approved",
+      "pending",
+      "rejected",
+      "superseded",
+      "withdrawn"
+    ],
+    "ProposalReviewResultStatus": [
+      "approved",
+      "rejected"
+    ],
+    "ProposalSummarySource": [
+      "admin",
+      "ai",
+      "external",
+      "imported",
+      "inferred",
+      "user"
+    ],
+    "ProposalSummaryStatus": [
+      "approved",
+      "pending",
+      "rejected",
+      "superseded",
+      "withdrawn"
+    ],
     "PublishRequestLang": [
       "en",
       "zh"
@@ -1912,6 +2076,21 @@
       "approved",
       "pending",
       "rejected"
+    ],
+    "ListAdminProposalsParamsStatus": [
+      "approved",
+      "pending",
+      "rejected",
+      "superseded",
+      "withdrawn"
+    ],
+    "ListAdminProposalsParamsSource": [
+      "admin",
+      "ai",
+      "external",
+      "imported",
+      "inferred",
+      "user"
     ],
     "ListDemoReviewQueueParamsState": [
       "approved_unpublished",
@@ -2004,6 +2183,21 @@
     "POST /api/v1/admin/models/sync": {
       "method": "SyncModelCatalog",
       "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/admin/proposals": {
+      "method": "ListAdminProposals",
+      "pathParams": 0,
+      "params": "ListAdminProposalsParams"
+    },
+    "GET /api/v1/admin/proposals/{id}": {
+      "method": "GetAdminProposal",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/admin/proposals/{id}/review": {
+      "method": "ReviewAdminProposal",
+      "pathParams": 1,
       "params": null
     },
     "GET /api/v1/admin/reviews/demo": {

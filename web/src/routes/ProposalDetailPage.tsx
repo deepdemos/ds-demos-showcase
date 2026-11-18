@@ -1,0 +1,173 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { Link, Navigate, useParams } from 'react-router';
+import { Button, EmptyState, ErrorState, Skeleton, Textarea } from '@/components/ui';
+import { getAdminProposal, reviewAdminProposal } from '@/api';
+import { useAuth } from '@/features/auth/AuthContext';
+
+/**
+ * 提案详情（#433）。
+ *
+ * 这一轮只做「看得清 + 能驳回」：拒绝不写任何正式业务表（ENT-023）。
+ * 通过需要按 kind 执行，执行器未接入前按钮是 disabled 的——不给一个注定 422 的按钮。
+ */
+
+const REASON_MAX = 500;
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: '待处理',
+  approved: '已通过',
+  rejected: '已驳回',
+  withdrawn: '已撤回',
+  superseded: '已被合并替代',
+};
+
+function formatAt(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? '时间未知' : at.toLocaleString('zh-CN', { hour12: false });
+}
+
+export function ProposalDetailPage() {
+  const params = useParams();
+  const id = Number(params.id);
+  const { me, isLoading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const detail = useQuery({
+    queryKey: ['admin', 'proposal', id],
+    queryFn: async () => {
+      const response = await getAdminProposal(id);
+      if (response.status === 403) throw new Error('没有提案审核权限');
+      if (response.status === 404) return null;
+      if (response.status !== 200) throw new Error('提案加载失败（' + response.status + '）');
+      return response.data;
+    },
+    enabled: me !== null && Number.isInteger(id) && id > 0,
+  });
+
+  const reject = useMutation({
+    mutationFn: async () => {
+      const response = await reviewAdminProposal(id, {
+        decision: 'reject',
+        reason: reason.trim() || undefined,
+      });
+      if (response.status !== 200) {
+        const message =
+          typeof response.data === 'object' && response.data && 'message' in response.data
+            ? String((response.data as { message?: unknown }).message)
+            : '驳回失败（' + response.status + '）';
+        throw new Error(message);
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'proposal', id] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'proposals'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox'] });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : '驳回失败'),
+  });
+
+  if (authLoading) return <Skeleton lines={3} />;
+  if (me === null) return <Navigate to={'/login?return_to=/admin/proposals/' + id} replace />;
+
+  if (detail.isPending) {
+    return (
+      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+        <Skeleton lines={4} />
+      </section>
+    );
+  }
+
+  if (detail.isError) {
+    return (
+      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+        <ErrorState
+          title="提案加载失败"
+          description={detail.error instanceof Error ? detail.error.message : '请稍后重试。'}
+          onRetry={() => void detail.refetch()}
+          retrying={detail.isFetching}
+        />
+      </section>
+    );
+  }
+
+  if (detail.data === null) {
+    return (
+      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+        <EmptyState title="提案不存在" description="它可能已经被擦除，或者编号不对。" />
+      </section>
+    );
+  }
+
+  const data = detail.data;
+  const pending = data.status === 'pending';
+
+  return (
+    <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        <Link className="underline" to="/admin/inbox">
+          收件箱
+        </Link>{' '}
+        · 提案 #{data.id}
+      </p>
+      <h1 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
+        {String(data.payload?.title ?? data.payload?.name ?? data.kind)}
+      </h1>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        {data.kind} · {data.source} · {STATUS_LABEL[data.status] ?? data.status} · 提交于{' '}
+        {formatAt(data.createdAt)}
+      </p>
+
+      <h2 className="mt-6 text-lg font-semibold text-gray-900 dark:text-gray-100">内容</h2>
+      <pre className="mt-2 overflow-x-auto rounded border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-800 dark:bg-gray-900">
+        {JSON.stringify(data.payload ?? {}, null, 2)}
+      </pre>
+
+      {data.status === 'rejected' ? (
+        <p className="mt-4 text-sm text-gray-700 dark:text-gray-300">
+          驳回原因：{data.rejectReason || '管理员未填写理由'}
+        </p>
+      ) : null}
+
+      {pending ? (
+        <section className="mt-6 space-y-3 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">裁决</h2>
+          <label className="block text-sm">
+            <span className="text-gray-500 dark:text-gray-400">驳回原因（可选）</span>
+            <Textarea
+              className="mt-1"
+              rows={2}
+              maxLength={REASON_MAX}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              danger
+              disabled={reject.isPending}
+              onClick={() => reject.mutate()}
+            >
+              驳回
+            </Button>
+            <span className="text-sm text-gray-500 dark:text-gray-400">通过（执行器未接入）</span>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            通过会按 kind 写正式业务表，执行器接入前不提供按钮；驳回只改提案状态并写审计。
+          </p>
+          {error ? (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+    </section>
+  );
+}
