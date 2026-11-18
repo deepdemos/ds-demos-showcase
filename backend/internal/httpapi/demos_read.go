@@ -157,23 +157,28 @@ func (h *Handler) GetDemo(w http.ResponseWriter, r *http.Request, slug string) {
 		return
 	}
 
-	// 作者视图：作者要能看到自己还没过审的稿件，否则「投稿完就再也打不开自己的作品」。
+	// 作者 / 审核视角（#462）：作者看自己的稿件；持 demo.review / demo.publish 的人
+	// 看审核视角。同一份详情按身份裁剪，不新增端点。
 	// 认人失败一律按访客处理——这里不是鉴权点，不该因为没登录就报错。
 	viewerIsAuthor := false
+	viewerIsStaff := false
 	if h.identity != nil && row.AuthorSub != "" {
-		if account, err := h.identity.Me(ctx, readSessionCookie(r)); err == nil && account.Sub == row.AuthorSub {
-			viewerIsAuthor = true
+		if account, err := h.identity.Me(ctx, readSessionCookie(r)); err == nil {
+			viewerIsAuthor = account.Sub == row.AuthorSub
+			if !viewerIsAuthor {
+				viewerIsStaff = h.viewerCanReview(ctx, account.Sub)
+			}
 		}
 	}
 
-	detail, ok := detailOf(row, viewerIsAuthor)
+	detail, ok := detailOf(row, viewerIsAuthor, viewerIsStaff)
 	if !ok {
 		writeError(w, http.StatusNotFound, api.NotFound, "作品不存在")
 		return
 	}
 	// 模型声明按「版本」取：访客看对外版本，作者看当前版本——与标题、简介同一口径。
 	// 墓碑态与已删除态 detailOf 已经把内容清空了，这里也不需要再取。
-	detail.Models = h.modelsOf(ctx, row, viewerIsAuthor, detail)
+	detail.Models = h.modelsOf(ctx, row, viewerIsAuthor || viewerIsStaff, detail)
 	// 分类是作品级的，与版本无关：墓碑态也照样给它——「这是一款游戏」这件事
 	// 不会因为下架而不再是事实，而墓碑页正需要一点上下文。
 	detail.Classifications = h.classificationsOf(ctx, row.ID)
@@ -208,6 +213,26 @@ func summaryOf(row store.ListPublishedDemosRow, classes []api.ClassificationRef)
 	}
 }
 
+// viewerCanReview 判断这个人能不能以审核视角读未公开稿件。
+//
+// 凭据是权限键（demo.review / demo.publish），不是角色字符串（#460 已把权限键摊在会话里；
+// 这里是服务端，直接查 role_permissions 的展开）。
+// 读权限失败按「不能」处理并留日志：详情不是鉴权点，不该因为一次权限查询失败就 503，
+// 但也不能悄悄放行。
+func (h *Handler) viewerCanReview(ctx context.Context, sub string) bool {
+	for _, key := range []string{"demo.review", "demo.publish"} {
+		ok, err := h.queries.HasPermission(ctx, store.HasPermissionParams{Sub: sub, PermissionKey: key})
+		if err != nil {
+			slog.Error("读审核权限失败", "sub", sub, "permission", key, "err", err)
+			continue
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
 // modelsOf 取这一版声明的模型。
 //
 // 三种情况返回空数组而不是省略字段：
@@ -219,7 +244,7 @@ func summaryOf(row store.ListPublishedDemosRow, classes []api.ClassificationRef)
 //
 // 每一项带上这一版用的 checkpoint。没填时是 nil——前端必须显示「未固定」，
 // 不能默认成最新版（作者没说过的话，别替他补）。
-func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, viewerIsAuthor bool, detail api.DemoDetail) []api.Model {
+func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, viewerSeesCurrent bool, detail api.DemoDetail) []api.Model {
 	out := []api.Model{}
 	// 墓碑态：detailOf 只填了标题与 lifecycleActions，类型是空串。
 	// 用「有没有类型」判不可靠（异常数据也可能没有），所以直接看重放出来的字段。
@@ -231,7 +256,7 @@ func (h *Handler) modelsOf(ctx context.Context, row store.GetDemoBySlugRow, view
 	}
 
 	revID := row.PublishedRevisionID
-	if viewerIsAuthor && row.CurrentRevisionID.Valid {
+	if viewerSeesCurrent && row.CurrentRevisionID.Valid {
 		revID = row.CurrentRevisionID
 	}
 	if !revID.Valid || revID.Int64 <= 0 {
@@ -294,12 +319,14 @@ func checkpointOf(m store.ListRevisionModelsRow) *api.ModelCheckpoint {
 }
 
 // detailOf 决定「对外可见吗」与「是不是墓碑」，false 表示 404：
-// 已擦除 / 草稿待审驳回 → 404（**作者本人除外**）；归档、移除、软删 → 墓碑；
+// 已擦除 / 草稿待审驳回 → 404（**作者本人与审核视角除外**）；归档、移除、软删 → 墓碑；
 // published → 完整内容。
 //
-// viewerIsAuthor 改变三件事：能不能看到未公开的稿件、看到哪一版的文字、
-// 以及 canEdit。它不改「墓碑」与「渠道可见性」的判定——作者也看不见被移除的内容。
-func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, bool) {
+// viewerIsAuthor 改变四件事：能不能看到未公开的稿件、看到哪一版的文字、
+// 看到真实的审核态、以及 canEdit。
+// viewerIsStaff 只做前三件：审核视角不是作者——不给 canEdit、不给 isAuthor、
+// 不给生命周期动作，也不让软删（deleted）的作品越过「对外不存在」这条线。
+func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor, viewerIsStaff bool) (api.DemoDetail, bool) {
 	state := api.LifecycleState(row.LifecycleState)
 
 	// 已擦除：行还在（逻辑封存），但对外不存在。
@@ -308,9 +335,10 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	}
 	// 从未公开过。作者本人要看得见——否则他投完稿就再也打不开自己的作品，
 	// 「更新作品」也就无从谈起（更新页要先把当前内容读出来）。
+	// 审核视角也要看得见：待审队列里点进来的是同一份稿件（#462）。
 	switch state {
 	case api.LifecycleStateDraft, api.LifecycleStatePending, api.LifecycleStateRejected:
-		if !viewerIsAuthor {
+		if !viewerIsAuthor && !viewerIsStaff {
 			return api.DemoDetail{}, false
 		}
 	}
@@ -336,7 +364,7 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	// 而对外的内容仍是上一版、照常可见。继续判审核态会让作者一提交更新，
 	// 自己的作品就从作品库里消失。
 	// 作者能看自己的草稿（它本来就没有对外版本），访客不行。
-	if !tombstone && !row.HasPublishedRevision && !viewerIsAuthor {
+	if !tombstone && !row.HasPublishedRevision && !viewerIsAuthor && !viewerIsStaff {
 		return api.DemoDetail{}, false
 	}
 	// 渠道对外可见：`hidden` 的作品对外不存在。
@@ -346,7 +374,7 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	// 页面变成「有正文、无内容」的半截状态。三处入口（列表 / 详情 / 预览 / 下载）
 	// 必须同一口径：列表 `listed`（unlisted 不上列表）；其余三处 `listed|unlisted`。
 	// 作者能看自己还没上架的作品（刚投稿就属于这种），访客不行。
-	if !tombstone && !row.HasVisibleChannel && !viewerIsAuthor {
+	if !tombstone && !row.HasVisibleChannel && !viewerIsAuthor && !viewerIsStaff {
 		return api.DemoDetail{}, false
 	}
 
@@ -356,7 +384,7 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	// 回一个 pending 只会让人以为「这东西还没审完就上线了」，而那恰恰是
 	// 版本分离想让大家都别误会的事（复审期间审核态是 pending，对外内容不变）。
 	moderationState := api.DemoDetailModerationStateApproved
-	if viewerIsAuthor {
+	if viewerIsAuthor || viewerIsStaff {
 		moderationState = api.DemoDetailModerationState(row.ModerationState)
 	}
 
@@ -401,7 +429,7 @@ func detailOf(row store.GetDemoBySlugRow, viewerIsAuthor bool) (api.DemoDetail, 
 	//
 	// current_* 是 COALESCE 出来的空串——没有当前版本时（异常数据）
 	// 退回 demos 上的列，不要给作者一个空标题。
-	if viewerIsAuthor {
+	if viewerIsAuthor || viewerIsStaff {
 		detail.Title = preferString(row.CurrentTitle, row.Title)
 		detail.Description = preferString(row.CurrentDescription, row.Description)
 		detail.CoverUrl = textPtr(row.CoverUrl)

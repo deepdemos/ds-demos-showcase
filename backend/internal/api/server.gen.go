@@ -116,7 +116,7 @@ type ServerInterface interface {
 	// 回滚到某一版
 	// (POST /api/v1/demos/{slug}/revisions/{revNo}/restore)
 	RestoreDemoRevision(w http.ResponseWriter, r *http.Request, slug string, revNo int)
-	// 作品动态（只有作者能看）
+	// 作品动态（作者与审核视角可看）
 	// (GET /api/v1/demos/{slug}/timeline)
 	ListDemoTimeline(w http.ResponseWriter, r *http.Request, slug string)
 	// 重新上架（作者本人）
@@ -356,7 +356,7 @@ func (_ Unimplemented) RestoreDemoRevision(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 作品动态（只有作者能看）
+// 作品动态（作者与审核视角可看）
 // (GET /api/v1/demos/{slug}/timeline)
 func (_ Unimplemented) ListDemoTimeline(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
