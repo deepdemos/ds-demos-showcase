@@ -178,7 +178,7 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
   await screen.getByRole('button', { name: '通过' }).nth(index).click();
 
   // ---- 6. 发布（通过 ≠ 发布，这一步是单独的动作）-------------------------
-  await expect(screen.getByText('刚通过 · 待发布')).toBeVisible();
+  await expect(screen.getByText('已通过 · 待发布')).toBeVisible();
   await screen.getByRole('button', { name: '发布' }).click();
   await expect(screen.getByText(/已发布到「主站」/)).toBeVisible();
 

@@ -2661,9 +2661,15 @@ paths:
     get:
       operationId: listDemoReviewQueue
       tags: [治理]
-      summary: 待审作品队列
+      summary: 审核队列（待审 / 已通过待发布）
       description: |
-        只列 `moderation_state = 'pending'` 的作品，按提交时间正序（先来先审）。
+        同一端点按 `state` 返回两段队列：
+
+        - `pending`（默认）：只列 `moderation_state = 'pending'` 的作品，按提交时间正序
+          （先来先审）。
+        - `approved_unpublished`：已通过审核、但 `lifecycle_state` 还是 `draft` 的作品，
+          按进入待发布的时间正序（先通过先发布）。审核页用它给「通过 ≠ 已发布」一个
+          固定的家——刷新页面、或者换一个审核员来发布，都能在这里找到。
 
         需要 `demo.review` 权限。权限来自 `accounts.role` 经 `role_permissions` 展开，
         **不是**「登录了就能看」——审核队列里有未公开内容，见预览端口径。
@@ -2676,6 +2682,14 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved_unpublished]
+            default: pending
+          description: |
+            `pending` 或 `approved_unpublished`；省略等于 `pending`。
       responses:
         '200':
           description: 队列
@@ -4416,10 +4430,16 @@ components:
           description: 作者显示名；作者已注销时（author_id 被 SET NULL）为 null
         moderationState:
           type: string
-          enum: [pending]
+          enum: [pending, approved]
+          description: |
+            `pending`：还在待审；`approved`：已通过审核（出现在
+            `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
         submittedAt:
           type: string
           format: date-time
+          description: |
+            进入当前队列的时间：待审队列是投稿时间；已通过待发布队列是通过审核的时间
+            （`demos.updated_at`，demos 上没有单独的 reviewed_at）。
         previewPath:
           type: string
           description: 作品入口的相对地址，审核员直接拼到本站域名后使用

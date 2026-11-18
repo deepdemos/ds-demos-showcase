@@ -43,7 +43,15 @@ export interface ReviewQueueItem {
      * @nullable
      */
   authorName: string | null;
+  /**
+     * `pending`：还在待审；`approved`：已通过审核（出现在
+     * `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
+     */
   moderationState: ReviewQueueItemModerationState;
+  /**
+     * 进入当前队列的时间：待审队列是投稿时间；已通过待发布队列是通过审核的时间
+     * （`demos.updated_at`，demos 上没有单独的 reviewed_at）。
+     */
   submittedAt: string;
   /** 作品入口的相对地址，审核员直接拼到本站域名后使用 */
   previewPath: string;

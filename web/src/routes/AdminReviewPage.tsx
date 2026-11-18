@@ -44,24 +44,28 @@ const REASON_MAX = 500;
  * 留在一个可能弹窗、可能占满、可能劫持键盘的页面里做裁决。
  * 新标签页里它是个独立文档，CSP sandbox 也是那边在服务端注的。
  *
- * # 已知限制：通过之后没当场发布，就找不回来了
+ * # 已通过待发布的家
  *
- * `GET /admin/reviews/demo` 只列待审作品，没有「已通过待发布」列表端点。所以这一页
- * 的发布卡片只活在本次会话里，刷新就消失，那条作品会停在 `draft` 且界面上无处可寻。
- * 要彻底解决需要一个「已通过待发布」列表（后端 + 契约），见 `docs/已知松点.md`。
+ * 「通过 ≠ 已发布」：通过之后作品从待审队列消失，但还没出现在作品库。
+ * 队列端点加 `state=approved_unpublished` 之后，这一页的第二个区块读服务端——
+ * 刷新页面、或者换一个审核员来发布，都还能找到那些停在 `draft` 的作品
+ * （已知松点第 28 条 / #433 的前置）。
  */
 export function AdminReviewPage() {
   const { me, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const [reasons, setReasons] = useState<Record<string, string>>({});
-  // 本次会话里刚通过、还没发布的作品。
-  // 队列只列待审，一条作品通过后就从 queue 里消失了；不留这一份，管理员点完
-  // 「通过」就再也找不到它，作品会永远停在 draft。刷新页面会丢——见文件末尾注释。
-  const [approved, setApproved] = useState<ReviewQueueItem[]>([]);
 
   const queue = useQuery({
-    queryKey: ['admin', 'reviews', 'demo'],
-    queryFn: () => listDemoReviewQueue({ limit: 50 }),
+    queryKey: ['admin', 'reviews', 'demo', 'pending'],
+    queryFn: () => listDemoReviewQueue({ limit: 50, state: 'pending' }),
+    enabled: me !== null,
+  });
+
+  // 已通过、还没发布的作品。它不再依赖「刚才是谁点的通过」：刷新、换人都在。
+  const publishQueue = useQuery({
+    queryKey: ['admin', 'reviews', 'demo', 'approved_unpublished'],
+    queryFn: () => listDemoReviewQueue({ limit: 50, state: 'approved_unpublished' }),
     enabled: me !== null,
   });
 
@@ -84,13 +88,8 @@ export function AdminReviewPage() {
       }
       return res;
     },
-    onSuccess: (_data, variables) => {
-      if (variables.decision === 'approve') {
-        // 先收进「待发布」列表再刷新队列：队列一刷新这条就不在了。
-        setApproved((prev) =>
-          prev.some((item) => item.slug === variables.item.slug) ? prev : [...prev, variables.item],
-        );
-      }
+    onSuccess: () => {
+      // 两段队列都刷新：待审那段要移走刚裁决的条目，待发布那段要接住刚通过的。
       void queryClient.invalidateQueries({ queryKey: ['admin', 'reviews', 'demo'] });
     },
   });
@@ -166,27 +165,41 @@ export function AdminReviewPage() {
         </p>
       ) : null}
 
-      {approved.length > 0 ? (
-        <section className="space-y-3">
-          <div className="space-y-1">
-            <h2 className="text-lg font-medium">刚通过 · 待发布</h2>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              通过 ≠ 已发布。只有在这里发出去的作品才会出现在作品库。
-            </p>
-          </div>
-          {canPublish ? (
-            <ul className="list-none space-y-4 p-0">
-              {approved.map((item) => (
-                <PublishCard key={item.slug} slug={item.slug} title={item.title ?? '（无标题）'} />
-              ))}
-            </ul>
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-medium">已通过 · 待发布</h2>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            通过 ≠ 已发布。这里列出所有已通过审核、还没发布的作品；刷新或换人发布都还在。
+          </p>
+        </div>
+        {publishQueue.isPending ? <Skeleton lines={1} /> : null}
+        {publishQueue.isError ? (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            待发布列表加载失败，请刷新重试。
+          </p>
+        ) : null}
+        {publishQueue.data?.status === 200 ? (
+          publishQueue.data.data.items.length > 0 ? (
+            canPublish ? (
+              <ul className="list-none space-y-4 p-0">
+                {publishQueue.data.data.items.map((item) => (
+                  <PublishCard
+                    key={item.slug}
+                    slug={item.slug}
+                    title={item.title ?? '（无标题）'}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                已经通过审核，但当前账号没有发布权限；由有发布权限的审核员或管理员发布。
+              </p>
+            )
           ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              已经通过审核，但当前账号没有发布权限；由有发布权限的审核员或管理员发布。
-            </p>
-          )}
-        </section>
-      ) : null}
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">没有待发布的作品。</p>
+          )
+        ) : null}
+      </section>
 
       {queue.data?.status === 200 && queue.data.data.items.length === 0 ? (
         <EmptyState title="没有待审作品" description="有新投稿时会出现在这里。" />

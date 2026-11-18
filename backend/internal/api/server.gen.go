@@ -44,7 +44,7 @@ type ServerInterface interface {
 	// 立即同步上游目录镜像
 	// (POST /api/v1/admin/models/sync)
 	SyncModelCatalog(w http.ResponseWriter, r *http.Request)
-	// 待审作品队列
+	// 审核队列（待审 / 已通过待发布）
 	// (GET /api/v1/admin/reviews/demo)
 	ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams)
 	// 审核裁决
@@ -221,7 +221,7 @@ func (_ Unimplemented) SyncModelCatalog(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 待审作品队列
+// 审核队列（待审 / 已通过待发布）
 // (GET /api/v1/admin/reviews/demo)
 func (_ Unimplemented) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -761,6 +761,14 @@ func (siw *ServerInterfaceWrapper) ListDemoReviewQueue(w http.ResponseWriter, r 
 	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state", r.URL.Query(), &params.State)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
 		return
 	}
 

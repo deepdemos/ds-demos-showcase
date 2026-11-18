@@ -30,9 +30,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * `pending`：还在待审；`approved`：已通过审核（出现在
+ * `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
+ */
 export type ReviewQueueItemModerationState = typeof ReviewQueueItemModerationState[keyof typeof ReviewQueueItemModerationState];
 
 
 export const ReviewQueueItemModerationState = {
   pending: 'pending',
+  approved: 'approved',
 } as const;

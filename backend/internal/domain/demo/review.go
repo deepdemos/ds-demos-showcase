@@ -184,3 +184,29 @@ func (s *Service) ListPendingReviews(ctx context.Context, limit int32) ([]Pendin
 	}
 	return out, nil
 }
+
+// ListApprovedUnpublished 返回「已通过审核、还没发布」的队列。
+//
+// 这条队列是审核页「已通过 · 待发布」区块的固定家：通过之后刷新页面、
+// 或者换一个审核员来发布，都能在这里找到（已知松点第 28 条）。
+//
+// SubmittedAt 这里取的是 demos.updated_at——demos 上没有 reviewed_at，
+// 而 ReviewDemo 在通过那一刻会刷新它，所以它近似「进入待发布的时间」。
+func (s *Service) ListApprovedUnpublished(ctx context.Context, limit int32) ([]PendingReview, error) {
+	rows, err := s.q.ListApprovedUnpublishedDemos(ctx, limit)
+	if err != nil {
+		return nil, fmt.Errorf("查已通过待发布队列失败: %w", err)
+	}
+	out := make([]PendingReview, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, PendingReview{
+			Slug:         r.Slug,
+			Title:        r.Title.String,
+			Description:  r.Description.String,
+			AuthorName:   r.AuthorName,
+			CurrentRevNo: int(r.CurrentRevNo),
+			SubmittedAt:  r.UpdatedAt.Time,
+		})
+	}
+	return out, nil
+}

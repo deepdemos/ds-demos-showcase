@@ -82,7 +82,8 @@ func (h *Handler) writeReviewError(w http.ResponseWriter, err error) {
 	}
 }
 
-// ListDemoReviewQueue 返回待审队列。
+// ListDemoReviewQueue 返回审核队列：默认待审，state=approved_unpublished 时返回
+// 「已通过、还没发布」的那一段（已知松点第 28 条）。
 func (h *Handler) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params api.ListDemoReviewQueueParams) {
 	if h.demos == nil {
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
@@ -102,7 +103,29 @@ func (h *Handler) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, pa
 		limit = int32(*params.Limit)
 	}
 
-	rows, err := h.demos.ListPendingReviews(ctx, limit)
+	state := api.ListDemoReviewQueueParamsStatePending
+	if params.State != nil {
+		state = *params.State
+	}
+
+	var (
+		rows            []demo.PendingReview
+		moderationState api.ReviewQueueItemModerationState
+		err             error
+	)
+	switch state {
+	case api.ListDemoReviewQueueParamsStatePending:
+		moderationState = api.ReviewQueueItemModerationStatePending
+		rows, err = h.demos.ListPendingReviews(ctx, limit)
+	case api.ListDemoReviewQueueParamsStateApprovedUnpublished:
+		moderationState = api.ReviewQueueItemModerationStateApproved
+		rows, err = h.demos.ListApprovedUnpublished(ctx, limit)
+	default:
+		// 枚举校验只写在契约里；绑定层不拦未知值。显式拒掉，别把拼错的 state
+		// 悄悄当成 pending 返回——那会让前端以为「待发布队列是空的」。
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "state 只能是 pending 或 approved_unpublished")
+		return
+	}
 	if err != nil {
 		h.writeReviewError(w, err)
 		return
@@ -117,7 +140,7 @@ func (h *Handler) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, pa
 			Title:           nullableString(row.Title),
 			Description:     nullableString(row.Description),
 			AuthorName:      nullableString(row.AuthorName),
-			ModerationState: api.ReviewQueueItemModerationState("pending"),
+			ModerationState: moderationState,
 			SubmittedAt:     row.SubmittedAt,
 			PreviewPath:     previewPath(row.Slug, row.CurrentRevNo),
 		})

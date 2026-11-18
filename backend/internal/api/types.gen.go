@@ -231,7 +231,8 @@ const (
 
 // Defines values for ReviewQueueItemModerationState.
 const (
-	ReviewQueueItemModerationStatePending ReviewQueueItemModerationState = "pending"
+	ReviewQueueItemModerationStateApproved ReviewQueueItemModerationState = "approved"
+	ReviewQueueItemModerationStatePending  ReviewQueueItemModerationState = "pending"
 )
 
 // Defines values for ReviewResultModerationState.
@@ -247,6 +248,12 @@ const (
 	SubmissionResultModerationStateRejected SubmissionResultModerationState = "rejected"
 )
 
+// Defines values for ListDemoReviewQueueParamsState.
+const (
+	ListDemoReviewQueueParamsStateApprovedUnpublished ListDemoReviewQueueParamsState = "approved_unpublished"
+	ListDemoReviewQueueParamsStatePending             ListDemoReviewQueueParamsState = "pending"
+)
+
 // Defines values for ListDemosParamsSort.
 const (
 	Hot    ListDemosParamsSort = "hot"
@@ -256,9 +263,9 @@ const (
 
 // Defines values for ListMyDemosParamsModeration.
 const (
-	Approved ListMyDemosParamsModeration = "approved"
-	Pending  ListMyDemosParamsModeration = "pending"
-	Rejected ListMyDemosParamsModeration = "rejected"
+	ListMyDemosParamsModerationApproved ListMyDemosParamsModeration = "approved"
+	ListMyDemosParamsModerationPending  ListMyDemosParamsModeration = "pending"
+	ListMyDemosParamsModerationRejected ListMyDemosParamsModeration = "rejected"
 )
 
 // Defines values for ListModelsParamsStatus.
@@ -1445,18 +1452,25 @@ type ReviewQueue struct {
 // ReviewQueueItem defines model for ReviewQueueItem.
 type ReviewQueueItem struct {
 	// AuthorName 作者显示名；作者已注销时（author_id 被 SET NULL）为 null
-	AuthorName      *string                        `json:"authorName"`
-	Description     *string                        `json:"description"`
+	AuthorName  *string `json:"authorName"`
+	Description *string `json:"description"`
+
+	// ModerationState `pending`：还在待审；`approved`：已通过审核（出现在
+	// `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
 	ModerationState ReviewQueueItemModerationState `json:"moderationState"`
 
 	// PreviewPath 作品入口的相对地址，审核员直接拼到本站域名后使用
-	PreviewPath string    `json:"previewPath"`
-	Slug        string    `json:"slug"`
+	PreviewPath string `json:"previewPath"`
+	Slug        string `json:"slug"`
+
+	// SubmittedAt 进入当前队列的时间：待审队列是投稿时间；已通过待发布队列是通过审核的时间
+	// （`demos.updated_at`，demos 上没有单独的 reviewed_at）。
 	SubmittedAt time.Time `json:"submittedAt"`
 	Title       *string   `json:"title"`
 }
 
-// ReviewQueueItemModerationState defines model for ReviewQueueItem.ModerationState.
+// ReviewQueueItemModerationState `pending`：还在待审；`approved`：已通过审核（出现在
+// `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
 type ReviewQueueItemModerationState string
 
 // ReviewResult defines model for ReviewResult.
@@ -1518,7 +1532,13 @@ type ListModelCatalogParams struct {
 // ListDemoReviewQueueParams defines parameters for ListDemoReviewQueue.
 type ListDemoReviewQueueParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// State `pending` 或 `approved_unpublished`；省略等于 `pending`。
+	State *ListDemoReviewQueueParamsState `form:"state,omitempty" json:"state,omitempty"`
 }
+
+// ListDemoReviewQueueParamsState defines parameters for ListDemoReviewQueue.
+type ListDemoReviewQueueParamsState string
 
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {

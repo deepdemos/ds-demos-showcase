@@ -20,7 +20,27 @@ const publishDemo = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api', () => ({ listDemoReviewQueue, reviewDemo, publishDemo }));
 
-function queueItem() {
+type QueueResponse = {
+  status: number;
+  data: { items?: unknown[]; message?: string };
+};
+
+const okQueue = (items: unknown[]): QueueResponse => ({ status: 200, data: { items } });
+
+/**
+ * 页面会同时请求两段队列（待审 / 已通过待发布）。按 params.state 分别回包，
+ * 否则同一份 mock 会被两段都读到，测试里的「待审」和「待发布」就分不开了。
+ */
+function mockQueues(
+  pending: QueueResponse,
+  approved: QueueResponse = { status: 200, data: { items: [] } },
+) {
+  listDemoReviewQueue.mockImplementation((params?: { state?: string }) =>
+    Promise.resolve(params?.state === 'approved_unpublished' ? approved : pending),
+  );
+}
+
+function queueItem(over: Record<string, unknown> = {}) {
   return {
     slug: 'demo-abc',
     title: '一个作品',
@@ -29,6 +49,7 @@ function queueItem() {
     moderationState: 'pending',
     submittedAt: '2026-11-01T00:00:00Z',
     previewPath: '/preview/demo-abc/v1/',
+    ...over,
   };
 }
 
@@ -61,7 +82,7 @@ describe('AdminReviewPage', () => {
 
   test('403 展示「没有审核权限」，不展示空态', async () => {
     auth.me = { sub: 'x', username: 'u' };
-    listDemoReviewQueue.mockResolvedValue({ status: 403, data: { message: '没有权限' } });
+    mockQueues({ status: 403, data: { message: '没有权限' } });
     renderPage();
 
     expect(await screen.findByText('没有审核权限')).toBeInTheDocument();
@@ -73,7 +94,7 @@ describe('AdminReviewPage', () => {
     auth.me = { sub: 'x', username: 'u' };
     // 会话过期时 /me 的缓存还没失效，所以页面会进到这里而不是跳登录。
     // 以前只判 403，401 会渲染成一片空白——既没有错误态也没有队列。
-    listDemoReviewQueue.mockResolvedValue({ status: 401, data: { message: '未登录' } });
+    mockQueues({ status: 401, data: { message: '未登录' } });
     renderPage();
 
     expect(await screen.findByText('登录已过期')).toBeInTheDocument();
@@ -87,29 +108,14 @@ describe('AdminReviewPage', () => {
 
   test('队列为空时给出空态', async () => {
     auth.me = { sub: 'x', username: 'u' };
-    listDemoReviewQueue.mockResolvedValue({ status: 200, data: { items: [] } });
+    mockQueues(okQueue([]));
     renderPage();
     expect(await screen.findByText('没有待审作品')).toBeInTheDocument();
   });
 
   test('点通过与驳回都会带上对应 decision', async () => {
     auth.me = { sub: 'x', username: 'u' };
-    listDemoReviewQueue.mockResolvedValue({
-      status: 200,
-      data: {
-        items: [
-          {
-            slug: 'demo-abc',
-            title: '一个作品',
-            description: null,
-            authorName: 'someone',
-            moderationState: 'pending',
-            submittedAt: '2026-11-01T00:00:00Z',
-            previewPath: '/preview/demo-abc/v1/',
-          },
-        ],
-      },
-    });
+    mockQueues(okQueue([queueItem()]));
     reviewDemo.mockResolvedValue({ status: 200, data: {} });
     renderPage();
 
@@ -135,22 +141,7 @@ describe('AdminReviewPage', () => {
 
   test('预览链接指向版本化路径且开新标签页', async () => {
     auth.me = { sub: 'x', username: 'u' };
-    listDemoReviewQueue.mockResolvedValue({
-      status: 200,
-      data: {
-        items: [
-          {
-            slug: 'demo-abc',
-            title: '一个作品',
-            description: null,
-            authorName: null,
-            moderationState: 'pending',
-            submittedAt: '2026-11-01T00:00:00Z',
-            previewPath: '/preview/demo-abc/v1/',
-          },
-        ],
-      },
-    });
+    mockQueues(okQueue([queueItem({ authorName: null })]));
     renderPage();
 
     const link = await screen.findByRole('link', { name: '预览' });
@@ -160,22 +151,7 @@ describe('AdminReviewPage', () => {
 
   test('非 2xx 也要报错——orval 非 2xx 不 throw', async () => {
     auth.me = { sub: 'm', username: 'mod' };
-    listDemoReviewQueue.mockResolvedValue({
-      status: 200,
-      data: {
-        items: [
-          {
-            slug: 'demo-abc',
-            title: '一个作品',
-            description: null,
-            authorName: 'someone',
-            moderationState: 'pending',
-            submittedAt: '2026-11-01T00:00:00Z',
-            previewPath: '/preview/demo-abc/v1/',
-          },
-        ],
-      },
-    });
+    mockQueues(okQueue([queueItem()]));
     // 409 = 这条作品刚被别人审过。orval 会照常 resolve，所以页面必须自己看 status。
     reviewDemo.mockResolvedValue({ status: 409, data: { message: '作品不处于待审状态' } });
 
@@ -187,29 +163,52 @@ describe('AdminReviewPage', () => {
     });
   });
 
-  // #460：发布卡片按会话里的权限键渲染，不按角色字符串猜（IA §7.2）。
-  test('有 demo.publish 时，通过后出发布卡片', async () => {
+  // 已知松点第 28 条：已通过待发布改成读服务端，刷新 / 换人之后仍然在。
+  test('已通过待发布的作品刷新后仍在，并有发布卡片', async () => {
     auth.me = { sub: 'm', username: 'mod', permissions: ['demo.publish', 'demo.review'] };
-    listDemoReviewQueue.mockResolvedValue({ status: 200, data: { items: [queueItem()] } });
-    reviewDemo.mockResolvedValue({ status: 200, data: {} });
+    mockQueues(okQueue([]), okQueue([queueItem({ moderationState: 'approved' })]));
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '通过' }));
 
+    expect(await screen.findByText('已通过 · 待发布')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: '发布' })).toBeInTheDocument();
+    expect(listDemoReviewQueue).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'approved_unpublished' }),
+    );
   });
 
-  test('没有 demo.publish 时，通过后不见发布按钮', async () => {
+  test('没有 demo.publish 时，待发布只有说明没有发布按钮', async () => {
     auth.me = { sub: 'm', username: 'mod', permissions: ['demo.review'] };
-    listDemoReviewQueue.mockResolvedValue({ status: 200, data: { items: [queueItem()] } });
+    mockQueues(okQueue([queueItem()]), okQueue([queueItem({ moderationState: 'approved' })]));
+
+    renderPage();
+
+    expect(await screen.findByText('已通过 · 待发布')).toBeInTheDocument();
+    // 说明为什么没有按钮，而不是让人以为发布功能坏了。等队列加载完再断言。
+    expect(await screen.findByText(/没有发布权限/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发布' })).toBeNull();
+  });
+
+  test('通过之后会刷新两段队列（待审移走、待发布接住）', async () => {
+    auth.me = { sub: 'm', username: 'mod', permissions: ['demo.review'] };
+    mockQueues(okQueue([queueItem()]));
     reviewDemo.mockResolvedValue({ status: 200, data: {} });
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '通过' }));
 
-    expect(await screen.findByText('刚通过 · 待发布')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '发布' })).toBeNull();
-    // 说明为什么没有按钮，而不是让人以为发布功能坏了。
-    expect(screen.getByText(/没有发布权限/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(reviewDemo).toHaveBeenCalledWith('demo-abc', {
+        decision: 'approve',
+        reason: undefined,
+      }),
+    );
+    // 刷新会再请求待发布那段；一开始那次 + 裁决后这次，至少两次。
+    await waitFor(() => {
+      const approvedCalls = listDemoReviewQueue.mock.calls.filter(
+        (call) => (call[0] as { state?: string } | undefined)?.state === 'approved_unpublished',
+      );
+      expect(approvedCalls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

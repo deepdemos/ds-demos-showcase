@@ -191,6 +191,73 @@ func (q *Queries) InsertDemoTimeline(ctx context.Context, arg InsertDemoTimeline
 	return err
 }
 
+const listApprovedUnpublishedDemos = `-- name: ListApprovedUnpublishedDemos :many
+SELECT d.id,
+       d.slug,
+       d.title,
+       d.description,
+       d.updated_at,
+       COALESCE(NULLIF(p.display_name, ''), p.username, '')::text AS author_name,
+       COALESCE(r.rev_no, 0)::int AS current_rev_no
+FROM demos d
+LEFT JOIN users u ON u.id = d.author_id
+LEFT JOIN accounts a ON a.sub = u.sub
+LEFT JOIN profiles p ON p.account_id = a.id
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.moderation_state = 'approved'
+  AND d.lifecycle_state = 'draft'
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+ORDER BY d.updated_at ASC, d.id ASC
+LIMIT $1
+`
+
+type ListApprovedUnpublishedDemosRow struct {
+	ID           int64
+	Slug         string
+	Title        pgtype.Text
+	Description  pgtype.Text
+	UpdatedAt    pgtype.Timestamptz
+	AuthorName   string
+	CurrentRevNo int32
+}
+
+// 「已通过审核、还没发布」的队列（已知松点第 28 条）。
+//
+// 状态组合只有 approved + draft：通过之后作者再改稿会打回 pending，
+// 作品会从这条队列消失（回到待审），不会出现「通过了但内容又变了」的过期卡片。
+//
+// 排序用 updated_at：demos 上没有 reviewed_at，通过那一刻 ReviewDemo 会刷新
+// updated_at，所以它近似「进入待发布状态的时间」。与待审队列按 created_at
+// 正序同一意图：先通过先发布。
+func (q *Queries) ListApprovedUnpublishedDemos(ctx context.Context, limit int32) ([]ListApprovedUnpublishedDemosRow, error) {
+	rows, err := q.db.Query(ctx, listApprovedUnpublishedDemos, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListApprovedUnpublishedDemosRow{}
+	for rows.Next() {
+		var i ListApprovedUnpublishedDemosRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Title,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.AuthorName,
+			&i.CurrentRevNo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDemoChannels = `-- name: ListDemoChannels :many
 SELECT channel, visibility, lang
 FROM demo_channels

@@ -160,3 +160,31 @@ FROM demo_channels c
 JOIN demos d ON d.id = c.demo_id
 WHERE d.slug = $1 AND d.erased_at IS NULL
 ORDER BY c.channel;
+
+-- name: ListApprovedUnpublishedDemos :many
+-- 「已通过审核、还没发布」的队列（已知松点第 28 条）。
+--
+-- 状态组合只有 approved + draft：通过之后作者再改稿会打回 pending，
+-- 作品会从这条队列消失（回到待审），不会出现「通过了但内容又变了」的过期卡片。
+--
+-- 排序用 updated_at：demos 上没有 reviewed_at，通过那一刻 ReviewDemo 会刷新
+-- updated_at，所以它近似「进入待发布状态的时间」。与待审队列按 created_at
+-- 正序同一意图：先通过先发布。
+SELECT d.id,
+       d.slug,
+       d.title,
+       d.description,
+       d.updated_at,
+       COALESCE(NULLIF(p.display_name, ''), p.username, '')::text AS author_name,
+       COALESCE(r.rev_no, 0)::int AS current_rev_no
+FROM demos d
+LEFT JOIN users u ON u.id = d.author_id
+LEFT JOIN accounts a ON a.sub = u.sub
+LEFT JOIN profiles p ON p.account_id = a.id
+LEFT JOIN demo_revisions r ON r.id = d.current_revision_id
+WHERE d.moderation_state = 'approved'
+  AND d.lifecycle_state = 'draft'
+  AND d.deleted_at IS NULL
+  AND d.erased_at IS NULL
+ORDER BY d.updated_at ASC, d.id ASC
+LIMIT $1;

@@ -29,6 +29,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { ListDemoReviewQueueState } from './listDemoReviewQueueState';
 
 export type ListDemoReviewQueueParams = {
   /**
@@ -36,4 +37,6 @@ export type ListDemoReviewQueueParams = {
    * @maximum 200
    */
   limit?: number;
+  /** `pending` 或 `approved_unpublished`；省略等于 `pending`。 */
+  state?: ListDemoReviewQueueState;
 };
