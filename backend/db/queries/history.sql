@@ -48,9 +48,18 @@ FROM demos d
 WHERE d.slug = @slug
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
-  AND (d.author_id = @account_id OR EXISTS (
-      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
-  ))
+  AND (
+      d.author_id = (
+          SELECT u.id FROM users u
+          JOIN accounts a ON a.sub = u.sub
+          WHERE a.id = @account_id
+      )
+      OR (
+          d.lifecycle_state = 'published'
+          AND d.published_revision_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM demo_visible_channels c WHERE c.demo_id = d.id)
+      )
+  )
 ON CONFLICT (account_id, demo_id) DO UPDATE
 SET viewed_at = EXCLUDED.viewed_at;
 
@@ -75,9 +84,18 @@ JOIN demos d ON d.id = h.demo_id
 WHERE h.account_id = @account_id
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
-  AND (d.author_id = @account_id OR EXISTS (
-      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
-  ))
+  AND (
+      d.author_id = (
+          SELECT u.id FROM users u
+          JOIN accounts a ON a.sub = u.sub
+          WHERE a.id = @account_id
+      )
+      OR (
+          d.lifecycle_state = 'published'
+          AND d.published_revision_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM demo_visible_channels c WHERE c.demo_id = d.id)
+      )
+  )
 ORDER BY h.viewed_at DESC, d.id DESC
 LIMIT @row_limit OFFSET @row_offset;
 
@@ -88,9 +106,18 @@ JOIN demos d ON d.id = h.demo_id
 WHERE h.account_id = @account_id
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
-  AND (d.author_id = @account_id OR EXISTS (
-      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
-  ));
+  AND (
+      d.author_id = (
+          SELECT u.id FROM users u
+          JOIN accounts a ON a.sub = u.sub
+          WHERE a.id = @account_id
+      )
+      OR (
+          d.lifecycle_state = 'published'
+          AND d.published_revision_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM demo_visible_channels c WHERE c.demo_id = d.id)
+      )
+  );
 
 -- name: ClearAccountHistory :execrows
 DELETE FROM account_view_history WHERE account_id = @account_id;
