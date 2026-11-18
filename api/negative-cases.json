@@ -914,6 +914,24 @@
         }
       }
     ],
+    "GET /api/v1/demos/{slug}/appeal": [
+      {
+        "case": "非作者读申诉返回 404",
+        "test": {
+          "file": "backend/internal/httpapi/appeals_integration_test.go",
+          "name": "TestIntegrationDemoAppealAuthorization"
+        }
+      }
+    ],
+    "POST /api/v1/demos/{slug}/appeal": [
+      {
+        "case": "已有在途申诉时重复提交 409",
+        "test": {
+          "file": "backend/internal/httpapi/appeals_integration_test.go",
+          "name": "TestIntegrationDemoAppeal"
+        }
+      }
+    ],
     "GET /api/v1/admin/inbox": [
       {
         "case": "没有审核权限返回 403",
