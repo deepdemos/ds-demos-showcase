@@ -101,6 +101,11 @@ export function AppLayout() {
       <main className={styles.main}>
         <Outlet />
       </main>
+      <footer className="border-t border-gray-200 px-4 py-3 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+        <Link className="underline" to="/community-guidelines">
+          社区规范
+        </Link>
+      </footer>
     </div>
   );
 }

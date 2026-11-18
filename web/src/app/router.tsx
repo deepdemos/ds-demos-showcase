@@ -24,6 +24,7 @@ import { AuthorPage } from '@/routes/AuthorPage';
 import { CollectionsPage } from '@/routes/CollectionsPage';
 import { CollectionDetailPage } from '@/routes/CollectionDetailPage';
 import { NotificationsPage } from '@/routes/NotificationsPage';
+import { CommunityGuidelinesPage } from '@/routes/CommunityGuidelinesPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
 import { RouteError } from './RouteError';
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
       page('me/collections', <CollectionsPage />),
       page('me/collections/:id', <CollectionDetailPage />),
       page('notifications', <NotificationsPage />),
+      page('community-guidelines', <CommunityGuidelinesPage />),
       page('demos/:slug', <DemoDetailPage />),
       page('demos/:slug/edit', <EditDemoPage />),
       page('models/:slug', <ModelPage />),
