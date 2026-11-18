@@ -236,6 +236,14 @@ func (s *stub) SubmitDemoAppeal(_ http.ResponseWriter, _ *http.Request, slug str
 	s.hits = append(s.hits, "submit-appeal:"+slug)
 }
 
+func (s *stub) ListAdminAppeals(_ http.ResponseWriter, _ *http.Request, _ api.ListAdminAppealsParams) {
+	s.hits = append(s.hits, "admin-appeals")
+}
+
+func (s *stub) ReviewAdminAppeal(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "review-appeal:"+strconv.Itoa(id))
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -321,6 +329,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/admin/proposals/batch", "batch-proposals"},
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
+		{http.MethodGet, "/api/v1/admin/appeals", "admin-appeals"},
+		{http.MethodPost, "/api/v1/admin/appeals/7/review", "review-appeal:7"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

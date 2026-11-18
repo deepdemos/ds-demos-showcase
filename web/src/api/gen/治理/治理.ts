@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 69 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 71 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,12 +30,16 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  AdminAppealList,
   AdminInbox,
+  AppealDecision,
+  AppealReviewResult,
   DemoChannelList,
   DemoChannelRequest,
   DemoChannelResult,
   Error,
   GetAdminInboxParams,
+  ListAdminAppealsParams,
   ListAdminProposalsParams,
   ListDemoReviewQueueParams,
   ListModelCatalogParams,
@@ -944,6 +948,172 @@ const res = await fetch(getReviewEntityUrl(kind,id),
 
   const data: reviewEntityResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as reviewEntityResponse
+}
+
+
+export type listAdminAppealsResponse200 = {
+  data: AdminAppealList
+  status: 200
+}
+
+export type listAdminAppealsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listAdminAppealsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listAdminAppealsResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listAdminAppealsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listAdminAppealsResponseSuccess = (listAdminAppealsResponse200) & {
+  headers: Headers;
+};
+export type listAdminAppealsResponseError = (listAdminAppealsResponse400 | listAdminAppealsResponse401 | listAdminAppealsResponse403 | listAdminAppealsResponse503) & {
+  headers: Headers;
+};
+
+export type listAdminAppealsResponse = (listAdminAppealsResponseSuccess | listAdminAppealsResponseError)
+
+export const getListAdminAppealsUrl = (params?: ListAdminAppealsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/admin/appeals?${stringifiedParams}` : `/api/v1/admin/appeals`
+}
+
+/**
+ * 按状态筛，默认 pending；按提交时间正序（先来先处理）。
+ * 带作品 slug / 标题 / 作者显示名，列表可直接决策。
+ * @summary 申诉列表
+ */
+export const listAdminAppeals = async (params?: ListAdminAppealsParams, options?: RequestInit): Promise<listAdminAppealsResponse> => {
+
+  const res = await fetch(getListAdminAppealsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listAdminAppealsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listAdminAppealsResponse
+}
+
+
+export type reviewAdminAppealResponse200 = {
+  data: AppealReviewResult
+  status: 200
+}
+
+export type reviewAdminAppealResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type reviewAdminAppealResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type reviewAdminAppealResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type reviewAdminAppealResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type reviewAdminAppealResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type reviewAdminAppealResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type reviewAdminAppealResponseSuccess = (reviewAdminAppealResponse200) & {
+  headers: Headers;
+};
+export type reviewAdminAppealResponseError = (reviewAdminAppealResponse400 | reviewAdminAppealResponse401 | reviewAdminAppealResponse403 | reviewAdminAppealResponse404 | reviewAdminAppealResponse409 | reviewAdminAppealResponse503) & {
+  headers: Headers;
+};
+
+export type reviewAdminAppealResponse = (reviewAdminAppealResponseSuccess | reviewAdminAppealResponseError)
+
+export const getReviewAdminAppealUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/admin/appeals/${id}/review`
+}
+
+/**
+ * approve：申诉置 approved，作品 removed → published（渠道行保留）。
+ * reject：申诉置 rejected，作品保持 removed。
+ *
+ * 作品已不是 removed、或申诉已被处理时返回 409；不会出现「申诉通过了但作品没恢复」。
+ * @summary 裁决申诉
+ */
+export const reviewAdminAppeal = async (id: number,
+    appealDecision: AppealDecision, options?: RequestInit): Promise<reviewAdminAppealResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getReviewAdminAppealUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(appealDecision)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reviewAdminAppealResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reviewAdminAppealResponse
 }
 
 

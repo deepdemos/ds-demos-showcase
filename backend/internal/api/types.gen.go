@@ -22,6 +22,25 @@ const (
 	AccountStatusSuspended AccountStatus = "suspended"
 )
 
+// Defines values for AdminAppealStatus.
+const (
+	AdminAppealStatusApproved AdminAppealStatus = "approved"
+	AdminAppealStatusPending  AdminAppealStatus = "pending"
+	AdminAppealStatusRejected AdminAppealStatus = "rejected"
+)
+
+// Defines values for AppealDecisionDecision.
+const (
+	AppealDecisionDecisionApprove AppealDecisionDecision = "approve"
+	AppealDecisionDecisionReject  AppealDecisionDecision = "reject"
+)
+
+// Defines values for AppealReviewResultStatus.
+const (
+	AppealReviewResultStatusApproved AppealReviewResultStatus = "approved"
+	AppealReviewResultStatusRejected AppealReviewResultStatus = "rejected"
+)
+
 // Defines values for ClassificationDimension.
 const (
 	ClassificationDimensionGenre     ClassificationDimension = "genre"
@@ -307,8 +326,8 @@ const (
 
 // Defines values for ReviewDecisionDecision.
 const (
-	Approve ReviewDecisionDecision = "approve"
-	Reject  ReviewDecisionDecision = "reject"
+	ReviewDecisionDecisionApprove ReviewDecisionDecision = "approve"
+	ReviewDecisionDecisionReject  ReviewDecisionDecision = "reject"
 )
 
 // Defines values for ReviewQueueItemModerationState.
@@ -334,6 +353,13 @@ const (
 	SubmissionResultModerationStateApproved SubmissionResultModerationState = "approved"
 	SubmissionResultModerationStatePending  SubmissionResultModerationState = "pending"
 	SubmissionResultModerationStateRejected SubmissionResultModerationState = "rejected"
+)
+
+// Defines values for ListAdminAppealsParamsStatus.
+const (
+	ListAdminAppealsParamsStatusApproved ListAdminAppealsParamsStatus = "approved"
+	ListAdminAppealsParamsStatusPending  ListAdminAppealsParamsStatus = "pending"
+	ListAdminAppealsParamsStatusRejected ListAdminAppealsParamsStatus = "rejected"
 )
 
 // Defines values for ListAdminProposalsParamsStatus.
@@ -376,9 +402,9 @@ const (
 
 // Defines values for ListMyDemosParamsModeration.
 const (
-	ListMyDemosParamsModerationApproved ListMyDemosParamsModeration = "approved"
-	ListMyDemosParamsModerationPending  ListMyDemosParamsModeration = "pending"
-	ListMyDemosParamsModerationRejected ListMyDemosParamsModeration = "rejected"
+	Approved ListMyDemosParamsModeration = "approved"
+	Pending  ListMyDemosParamsModeration = "pending"
+	Rejected ListMyDemosParamsModeration = "rejected"
 )
 
 // Defines values for ListModelsParamsStatus.
@@ -432,6 +458,30 @@ type AccountHistorySettings struct {
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
 type AccountStatus string
 
+// AdminAppeal defines model for AdminAppeal.
+type AdminAppeal struct {
+	AuthorName     string            `json:"authorName"`
+	CreatedAt      time.Time         `json:"createdAt"`
+	DecisionReason *string           `json:"decisionReason"`
+	DemoSlug       string            `json:"demoSlug"`
+	DemoTitle      string            `json:"demoTitle"`
+	Id             int               `json:"id"`
+	Reason         string            `json:"reason"`
+	ReviewedAt     *time.Time        `json:"reviewedAt"`
+	Status         AdminAppealStatus `json:"status"`
+}
+
+// AdminAppealStatus defines model for AdminAppeal.Status.
+type AdminAppealStatus string
+
+// AdminAppealList defines model for AdminAppealList.
+type AdminAppealList struct {
+	Items    []AdminAppeal `json:"items"`
+	Page     int           `json:"page"`
+	PageSize int           `json:"pageSize"`
+	Total    int           `json:"total"`
+}
+
 // AdminInbox defines model for AdminInbox.
 type AdminInbox struct {
 	ApprovedUnpublished      []ReviewQueueItem `json:"approvedUnpublished"`
@@ -441,6 +491,27 @@ type AdminInbox struct {
 	ProposalPendingCount     int               `json:"proposalPendingCount"`
 	Proposals                []InboxProposal   `json:"proposals"`
 }
+
+// AppealDecision defines model for AppealDecision.
+type AppealDecision struct {
+	Decision AppealDecisionDecision `json:"decision"`
+
+	// Reason 给作者看的裁决说明（可选）
+	Reason *string `json:"reason,omitempty"`
+}
+
+// AppealDecisionDecision defines model for AppealDecision.Decision.
+type AppealDecisionDecision string
+
+// AppealReviewResult defines model for AppealReviewResult.
+type AppealReviewResult struct {
+	DemoSlug string                   `json:"demoSlug"`
+	Id       int                      `json:"id"`
+	Status   AppealReviewResultStatus `json:"status"`
+}
+
+// AppealReviewResultStatus defines model for AppealReviewResult.Status.
+type AppealReviewResultStatus string
 
 // Classification defines model for Classification.
 type Classification struct {
@@ -1927,6 +1998,16 @@ type VerifyEmailResendRequest struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// ListAdminAppealsParams defines parameters for ListAdminAppeals.
+type ListAdminAppealsParams struct {
+	Status   *ListAdminAppealsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Page     *int                          `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int                          `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
+// ListAdminAppealsParamsStatus defines parameters for ListAdminAppeals.
+type ListAdminAppealsParamsStatus string
+
 // GetAdminInboxParams defines parameters for GetAdminInbox.
 type GetAdminInboxParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -2281,6 +2362,9 @@ type ListUserDemosParams struct {
 	Page     *int `form:"page,omitempty" json:"page,omitempty"`
 	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 }
+
+// ReviewAdminAppealJSONRequestBody defines body for ReviewAdminAppeal for application/json ContentType.
+type ReviewAdminAppealJSONRequestBody = AppealDecision
 
 // AddDemoChannelJSONRequestBody defines body for AddDemoChannel for application/json ContentType.
 type AddDemoChannelJSONRequestBody = DemoChannelRequest

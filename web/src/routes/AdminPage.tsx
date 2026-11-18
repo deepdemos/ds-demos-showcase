@@ -46,6 +46,15 @@ export function AdminPage() {
         </li>
         <li>
           <Link
+            to="/admin/appeals"
+            className="block rounded-lg border border-gray-200 p-4 text-inherit no-underline dark:border-gray-800"
+          >
+            <p className="font-medium">申诉</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">处理被移除作品的申诉</p>
+          </Link>
+        </li>
+        <li>
+          <Link
             to="/admin/models"
             className="block rounded-lg border border-gray-200 p-4 text-inherit no-underline dark:border-gray-800"
           >

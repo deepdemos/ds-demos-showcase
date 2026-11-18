@@ -932,6 +932,31 @@
         }
       }
     ],
+    "GET /api/v1/admin/appeals": [
+      {
+        "case": "普通用户返回 403",
+        "test": {
+          "file": "backend/internal/httpapi/appeals_admin_integration_test.go",
+          "name": "TestIntegrationAdminAppealsRequirePermission"
+        }
+      }
+    ],
+    "POST /api/v1/admin/appeals/{id}/review": [
+      {
+        "case": "重复裁决返回 409",
+        "test": {
+          "file": "backend/internal/httpapi/appeals_admin_integration_test.go",
+          "name": "TestIntegrationAdminAppealApprove"
+        }
+      },
+      {
+        "case": "作品已不是 removed 时通过返回 409",
+        "test": {
+          "file": "backend/internal/httpapi/appeals_admin_integration_test.go",
+          "name": "TestIntegrationAdminAppealRejectAndStateConflict"
+        }
+      }
+    ],
     "GET /api/v1/admin/inbox": [
       {
         "case": "没有审核权限返回 403",

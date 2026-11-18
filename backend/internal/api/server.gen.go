@@ -14,6 +14,12 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// 申诉列表
+	// (GET /api/v1/admin/appeals)
+	ListAdminAppeals(w http.ResponseWriter, r *http.Request, params ListAdminAppealsParams)
+	// 裁决申诉
+	// (POST /api/v1/admin/appeals/{id}/review)
+	ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id int)
 	// 看这个作品挂在哪些渠道上
 	// (GET /api/v1/admin/demos/{slug}/channels)
 	ListDemoChannels(w http.ResponseWriter, r *http.Request, slug string)
@@ -226,6 +232,18 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// 申诉列表
+// (GET /api/v1/admin/appeals)
+func (_ Unimplemented) ListAdminAppeals(w http.ResponseWriter, r *http.Request, params ListAdminAppealsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 裁决申诉
+// (POST /api/v1/admin/appeals/{id}/review)
+func (_ Unimplemented) ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // 看这个作品挂在哪些渠道上
 // (GET /api/v1/admin/demos/{slug}/channels)
@@ -649,6 +667,86 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListAdminAppeals operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminAppeals(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminAppealsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminAppeals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReviewAdminAppeal operation middleware
+func (siw *ServerInterfaceWrapper) ReviewAdminAppeal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReviewAdminAppeal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ListDemoChannels operation middleware
 func (siw *ServerInterfaceWrapper) ListDemoChannels(w http.ResponseWriter, r *http.Request) {
@@ -2788,6 +2886,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/appeals", wrapper.ListAdminAppeals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/appeals/{id}/review", wrapper.ReviewAdminAppeal)
+	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/demos/{slug}/channels", wrapper.ListDemoChannels)
 	})

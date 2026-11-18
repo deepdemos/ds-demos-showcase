@@ -46,3 +46,60 @@ WHERE d.slug = @slug
   )
 ON CONFLICT (demo_id) WHERE status = 'pending' DO NOTHING
 RETURNING id, demo_id, reason, status, reviewed_at, decision_reason, created_at;
+
+
+-- name: ListAdminAppeals :many
+-- 管理员列表：默认 pending；带作品 slug / 标题 / 作者显示名，减少二次跳转。
+SELECT a.id, a.demo_id, d.slug, COALESCE(d.title, '')::text AS demo_title,
+       a.reason, a.status, a.created_at, a.reviewed_at, a.decision_reason,
+       COALESCE(NULLIF(p.display_name, ''), p.username, '')::text AS author_name
+FROM demo_appeals a
+JOIN demos d ON d.id = a.demo_id
+LEFT JOIN users u ON u.id = d.author_id
+LEFT JOIN accounts ac ON ac.sub = u.sub
+LEFT JOIN profiles p ON p.account_id = ac.id
+WHERE (sqlc.arg(status)::text = '' OR a.status = sqlc.arg(status))
+ORDER BY a.created_at ASC, a.id ASC
+LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
+
+-- name: CountAdminAppeals :one
+SELECT count(*)::bigint AS total
+FROM demo_appeals a
+WHERE (sqlc.arg(status)::text = '' OR a.status = sqlc.arg(status));
+
+-- name: GetAppealForReview :one
+SELECT a.id, a.demo_id, a.status, a.reason,
+       d.slug, d.lifecycle_state, COALESCE(d.title, '')::text AS demo_title
+FROM demo_appeals a
+JOIN demos d ON d.id = a.demo_id
+WHERE a.id = @id;
+
+-- name: ApproveAppealStatus :one
+-- 只改申诉状态；作品恢复走 TransitionDemoLifecycle（生命周期唯一写入口）。
+-- 条件里要求作品仍 removed：不满足时 0 行，调用方回滚并 409。
+UPDATE demo_appeals a
+SET status = 'approved',
+    reviewed_by = @reviewed_by,
+    reviewed_at = now(),
+    decision_reason = @decision_reason,
+    updated_at = now()
+WHERE a.id = @id
+  AND a.status = 'pending'
+  AND EXISTS (
+      SELECT 1 FROM demos d
+      WHERE d.id = a.demo_id
+        AND d.lifecycle_state = 'removed'
+        AND d.deleted_at IS NULL
+        AND d.erased_at IS NULL
+  )
+RETURNING a.demo_id;
+
+-- name: RejectAppeal :one
+UPDATE demo_appeals a
+SET status = 'rejected',
+    reviewed_by = @reviewed_by,
+    reviewed_at = now(),
+    decision_reason = @decision_reason,
+    updated_at = now()
+WHERE a.id = @id AND a.status = 'pending'
+RETURNING a.demo_id;

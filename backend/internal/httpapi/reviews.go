@@ -175,9 +175,9 @@ func (h *Handler) ReviewDemo(w http.ResponseWriter, r *http.Request, slug string
 	// 少了这段，decision:"yes" 会因为「不等于 approve」被当成驳回，还返回 200。
 	var approve bool
 	switch body.Decision {
-	case api.Approve:
+	case api.ReviewDecisionDecisionApprove:
 		approve = true
-	case api.Reject:
+	case api.ReviewDecisionDecisionReject:
 		approve = false
 	default:
 		writeError(w, http.StatusBadRequest, api.InvalidParam, "decision 只能是 approve 或 reject")

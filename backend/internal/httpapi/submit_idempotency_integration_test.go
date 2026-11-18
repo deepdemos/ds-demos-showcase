@@ -102,7 +102,7 @@ func newIdempotencyHandler(t *testing.T) (*Handler, *store.Queries, *identity.Se
 		t.Fatalf("初始化存储失败: %v", err)
 	}
 	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
-	return New(pool, q, idSvc, nil, demoSvc), q, idSvc
+	return New(pool, q, idSvc, nil, demoSvc).WithPool(pool), q, idSvc
 }
 
 // 同一个幂等键投两次，只会有一条作品。
