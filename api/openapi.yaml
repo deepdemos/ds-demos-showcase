@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 44 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 47 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1882,6 +1882,117 @@ paths:
                 $ref: '#/components/schemas/Me'
         '401':
           description: 未登录或会话已失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/me/history:
+    get:
+      operationId: getMyHistory
+      tags: [身份]
+      summary: 我的账号浏览历史
+      description: |
+        只返回**自己的**账号历史（HIST-010：他人主页看不到）。一行 = 一件作品的最近一次浏览，
+        按浏览时间倒序；软删 / 擦除的作品不出现在结果里（它们对外是 404，历史页不该给死链）。
+
+        \`enabled\` 是账号历史开关的当前值（设置域 \`history.record\`，默认 true）。
+        关闭之后**只停新增，不删旧**（HIST-008）；要删旧的走 \`DELETE /api/v1/me/history\`。
+
+        本机历史不走这个端点：它只存在浏览器里，前端把两个来源合并展示。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 账号历史
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountHistory'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: deleteMyHistory
+      tags: [身份]
+      summary: 清空我的账号浏览历史
+      description: |
+        删除自己的全部账号历史行。**幂等**：没有记录时也返回 204——「已经空了」与
+        「刚清空」对调用方是同一件事。本机历史不在这里清，它由前端自己清。
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 已清空（没有记录也是 204）
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/me/history/settings:
+    put:
+      operationId: updateMyHistorySettings
+      tags: [身份]
+      summary: 开关我的账号浏览历史
+      description: |
+        写设置域的用户级键 \`history.record\`（只有本人能写，不接受目标 account_id）。
+
+        **关闭不等于清空**：关闭后不再新增账号记录，已有记录保留（HIST-008）。
+        界面上的「关闭并清空」是两个动作的组合：先 \`PUT enabled=false\`，再
+        \`DELETE /api/v1/me/history\`；确认文案必须先说明会删掉已有记录（HIST-009）。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountHistorySettings'
+      responses:
+        '200':
+          description: 开关已写入
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountHistorySettings'
+        '400':
+          description: 请求体不是合法 JSON / 缺 enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
           content:
             application/json:
               schema:
@@ -4221,6 +4332,54 @@ components:
             前端按权限键判，不按角色字符串（IA §7.2）。它是**会话时刻的快照**：
             改绑之后要等下一次 /me 才生效，与 `role` 同一条口径。
             空权限是空数组，不是 null——前端不该为「没有权限」多一条分支。
+
+    AccountHistoryItem:
+      type: object
+      additionalProperties: false
+      required: [slug, title, coverUrl, viewedAt]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        viewedAt:
+          type: string
+          format: date-time
+
+    AccountHistory:
+      type: object
+      additionalProperties: false
+      required: [enabled, items, total, page, pageSize]
+      properties:
+        enabled:
+          type: boolean
+          description: 账号历史开关；关闭只停新增，不删旧（HIST-008）
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountHistoryItem'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+
+    AccountHistorySettings:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
 
     AccountStatus:
       type: string

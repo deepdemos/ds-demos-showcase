@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 44 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 47 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,8 +30,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  AccountHistory,
+  AccountHistorySettings,
   EmailCodeRequest,
   Error,
+  GetMyHistoryParams,
   LoginRequest,
   Me,
   PasswordResetCodeRequest,
@@ -713,6 +716,208 @@ export const getMe = async ( options?: RequestInit): Promise<getMeResponse> => {
 
   const data: getMeResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getMeResponse
+}
+
+
+export type getMyHistoryResponse200 = {
+  data: AccountHistory
+  status: 200
+}
+
+export type getMyHistoryResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getMyHistoryResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getMyHistoryResponseSuccess = (getMyHistoryResponse200) & {
+  headers: Headers;
+};
+export type getMyHistoryResponseError = (getMyHistoryResponse401 | getMyHistoryResponse503) & {
+  headers: Headers;
+};
+
+export type getMyHistoryResponse = (getMyHistoryResponseSuccess | getMyHistoryResponseError)
+
+export const getGetMyHistoryUrl = (params?: GetMyHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/me/history?${stringifiedParams}` : `/api/v1/me/history`
+}
+
+/**
+ * 只返回**自己的**账号历史（HIST-010：他人主页看不到）。一行 = 一件作品的最近一次浏览，
+ * 按浏览时间倒序；软删 / 擦除的作品不出现在结果里（它们对外是 404，历史页不该给死链）。
+ *
+ * \`enabled\` 是账号历史开关的当前值（设置域 \`history.record\`，默认 true）。
+ * 关闭之后**只停新增，不删旧**（HIST-008）；要删旧的走 \`DELETE /api/v1/me/history\`。
+ *
+ * 本机历史不走这个端点：它只存在浏览器里，前端把两个来源合并展示。
+ * @summary 我的账号浏览历史
+ */
+export const getMyHistory = async (params?: GetMyHistoryParams, options?: RequestInit): Promise<getMyHistoryResponse> => {
+
+  const res = await fetch(getGetMyHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getMyHistoryResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getMyHistoryResponse
+}
+
+
+export type deleteMyHistoryResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteMyHistoryResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type deleteMyHistoryResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type deleteMyHistoryResponseSuccess = (deleteMyHistoryResponse204) & {
+  headers: Headers;
+};
+export type deleteMyHistoryResponseError = (deleteMyHistoryResponse401 | deleteMyHistoryResponse503) & {
+  headers: Headers;
+};
+
+export type deleteMyHistoryResponse = (deleteMyHistoryResponseSuccess | deleteMyHistoryResponseError)
+
+export const getDeleteMyHistoryUrl = () => {
+
+
+
+
+  return `/api/v1/me/history`
+}
+
+/**
+ * 删除自己的全部账号历史行。**幂等**：没有记录时也返回 204——「已经空了」与
+ * 「刚清空」对调用方是同一件事。本机历史不在这里清，它由前端自己清。
+ * @summary 清空我的账号浏览历史
+ */
+export const deleteMyHistory = async ( options?: RequestInit): Promise<deleteMyHistoryResponse> => {
+
+  const res = await fetch(getDeleteMyHistoryUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: deleteMyHistoryResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as deleteMyHistoryResponse
+}
+
+
+export type updateMyHistorySettingsResponse200 = {
+  data: AccountHistorySettings
+  status: 200
+}
+
+export type updateMyHistorySettingsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateMyHistorySettingsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type updateMyHistorySettingsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type updateMyHistorySettingsResponseSuccess = (updateMyHistorySettingsResponse200) & {
+  headers: Headers;
+};
+export type updateMyHistorySettingsResponseError = (updateMyHistorySettingsResponse400 | updateMyHistorySettingsResponse401 | updateMyHistorySettingsResponse503) & {
+  headers: Headers;
+};
+
+export type updateMyHistorySettingsResponse = (updateMyHistorySettingsResponseSuccess | updateMyHistorySettingsResponseError)
+
+export const getUpdateMyHistorySettingsUrl = () => {
+
+
+
+
+  return `/api/v1/me/history/settings`
+}
+
+/**
+ * 写设置域的用户级键 \`history.record\`（只有本人能写，不接受目标 account_id）。
+ *
+ * **关闭不等于清空**：关闭后不再新增账号记录，已有记录保留（HIST-008）。
+ * 界面上的「关闭并清空」是两个动作的组合：先 \`PUT enabled=false\`，再
+ * \`DELETE /api/v1/me/history\`；确认文案必须先说明会删掉已有记录（HIST-009）。
+ * @summary 开关我的账号浏览历史
+ */
+export const updateMyHistorySettings = async (accountHistorySettings: AccountHistorySettings, options?: RequestInit): Promise<updateMyHistorySettingsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getUpdateMyHistorySettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(accountHistorySettings)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateMyHistorySettingsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateMyHistorySettingsResponse
 }
 
 

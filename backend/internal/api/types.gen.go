@@ -286,6 +286,29 @@ const (
 	ListRankingsParamsRangeWeek  ListRankingsParamsRange = "week"
 )
 
+// AccountHistory defines model for AccountHistory.
+type AccountHistory struct {
+	// Enabled 账号历史开关；关闭只停新增，不删旧（HIST-008）
+	Enabled  bool                 `json:"enabled"`
+	Items    []AccountHistoryItem `json:"items"`
+	Page     int                  `json:"page"`
+	PageSize int                  `json:"pageSize"`
+	Total    int                  `json:"total"`
+}
+
+// AccountHistoryItem defines model for AccountHistoryItem.
+type AccountHistoryItem struct {
+	CoverUrl *string   `json:"coverUrl"`
+	Slug     string    `json:"slug"`
+	Title    *string   `json:"title"`
+	ViewedAt time.Time `json:"viewedAt"`
+}
+
+// AccountHistorySettings defines model for AccountHistorySettings.
+type AccountHistorySettings struct {
+	Enabled bool `json:"enabled"`
+}
+
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
 type AccountStatus string
 
@@ -1736,6 +1759,12 @@ type ListMyDemosParams struct {
 // ListMyDemosParamsModeration defines parameters for ListMyDemos.
 type ListMyDemosParamsModeration string
 
+// GetMyHistoryParams defines parameters for GetMyHistory.
+type GetMyHistoryParams struct {
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
 // ListModelsParams defines parameters for ListModels.
 type ListModelsParams struct {
 	// Status 只出这个状态的行。不传表示全部。
@@ -1830,3 +1859,6 @@ type UpdateDemoMultipartRequestBody UpdateDemoMultipartBody
 
 // PutDemoRatingJSONRequestBody defines body for PutDemoRating for application/json ContentType.
 type PutDemoRatingJSONRequestBody = DemoRatingInput
+
+// UpdateMyHistorySettingsJSONRequestBody defines body for UpdateMyHistorySettings for application/json ContentType.
+type UpdateMyHistorySettingsJSONRequestBody = AccountHistorySettings

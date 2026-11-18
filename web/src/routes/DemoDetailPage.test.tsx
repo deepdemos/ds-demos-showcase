@@ -9,6 +9,7 @@ import {
   listRelatedDemos,
   putDemoRating,
 } from '@/api';
+import { readHistory } from '@/features/history/local-history';
 import {
   DemoDetailPage,
   DemoDownload,
@@ -579,4 +580,39 @@ describe('返回上一页', () => {
 
     expect(await screen.findByText('作品库列表')).toBeTruthy();
   });
+});
+
+/**
+ * 本机历史（#426）：详情能打开才记，墓碑与不存在不是「看过」。
+ * 这里只钉副作用，历史页自己的用例在 HistoryPage.test.tsx。
+ */
+test('浏览已发布的作品会写一条本机历史', async () => {
+  localStorage.clear();
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+
+  renderPage();
+  await screen.findByText('钢琴卷帘');
+
+  await waitFor(() => {
+    const entries = readHistory();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ slug: 'demo-a', title: '钢琴卷帘' });
+  });
+  localStorage.clear();
+});
+
+test('墓碑不写本机历史', async () => {
+  localStorage.clear();
+  vi.mocked(getDemo).mockResolvedValue({
+    status: 200,
+    data: detail({ lifecycleState: 'archived', isAuthor: true }),
+  } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+
+  renderPage();
+  await screen.findByText(/作者已下架/);
+
+  expect(readHistory()).toEqual([]);
+  localStorage.clear();
 });

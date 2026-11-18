@@ -131,6 +131,15 @@ type ServerInterface interface {
 	// 我的作品
 	// (GET /api/v1/me/demos)
 	ListMyDemos(w http.ResponseWriter, r *http.Request, params ListMyDemosParams)
+	// 清空我的账号浏览历史
+	// (DELETE /api/v1/me/history)
+	DeleteMyHistory(w http.ResponseWriter, r *http.Request)
+	// 我的账号浏览历史
+	// (GET /api/v1/me/history)
+	GetMyHistory(w http.ResponseWriter, r *http.Request, params GetMyHistoryParams)
+	// 开关我的账号浏览历史
+	// (PUT /api/v1/me/history/settings)
+	UpdateMyHistorySettings(w http.ResponseWriter, r *http.Request)
 	// 模型目录（全部状态，可筛）
 	// (GET /api/v1/models)
 	ListModels(w http.ResponseWriter, r *http.Request, params ListModelsParams)
@@ -383,6 +392,24 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 // 我的作品
 // (GET /api/v1/me/demos)
 func (_ Unimplemented) ListMyDemos(w http.ResponseWriter, r *http.Request, params ListMyDemosParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 清空我的账号浏览历史
+// (DELETE /api/v1/me/history)
+func (_ Unimplemented) DeleteMyHistory(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 我的账号浏览历史
+// (GET /api/v1/me/history)
+func (_ Unimplemented) GetMyHistory(w http.ResponseWriter, r *http.Request, params GetMyHistoryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 开关我的账号浏览历史
+// (PUT /api/v1/me/history/settings)
+func (_ Unimplemented) UpdateMyHistorySettings(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1510,6 +1537,87 @@ func (siw *ServerInterfaceWrapper) ListMyDemos(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteMyHistory operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMyHistory(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMyHistory(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMyHistory operation middleware
+func (siw *ServerInterfaceWrapper) GetMyHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMyHistoryParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMyHistory(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMyHistorySettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMyHistorySettings(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMyHistorySettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListModels operation middleware
 func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Request) {
 
@@ -1889,6 +1997,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me/demos", wrapper.ListMyDemos)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/me/history", wrapper.DeleteMyHistory)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/me/history", wrapper.GetMyHistory)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/me/history/settings", wrapper.UpdateMyHistorySettings)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/models", wrapper.ListModels)

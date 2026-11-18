@@ -14,6 +14,7 @@ import {
   type DemoDetail,
 } from '@/api';
 import { DemoTimeline } from '@/features/demo/timeline-section';
+import { recordView } from '@/features/history/local-history';
 import { RelatedSection } from '@/features/demo/related-section';
 
 type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
@@ -155,6 +156,17 @@ export function DemoDetailPage() {
       // 计数失败与用户无关，页面不该因此报错。
     });
   }, [slug]);
+
+  // 本机浏览历史（#426）：只记能打开的作品；墓碑与不存在不是「看过」。
+  // 写失败由 recordView 自己吞掉——存不下历史不能挡住看作品。
+  useEffect(() => {
+    if (data?.kind !== 'ok' || isTombstone(data.demo)) return;
+    recordView({
+      slug: data.demo.slug,
+      title: displayTitle(data.demo),
+      coverUrl: data.demo.coverUrl ?? null,
+    });
+  }, [data]);
 
   return (
     <section className="mx-auto w-full max-w-3xl px-4 py-8">

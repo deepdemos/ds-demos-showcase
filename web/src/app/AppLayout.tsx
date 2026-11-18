@@ -18,6 +18,10 @@ export function AppLayout() {
           <Link to="/rankings" className="text-gray-600 hover:underline dark:text-gray-300">
             排行榜
           </Link>
+          {/* 本机历史不要求登录（HIST-001），所以这条入口对未登录访客也显示。 */}
+          <Link to="/me/history" className="text-gray-600 hover:underline dark:text-gray-300">
+            浏览历史
+          </Link>
           {me && (
             <Link to="/submit" className="text-gray-600 hover:underline dark:text-gray-300">
               投稿
