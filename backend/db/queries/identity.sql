@@ -257,3 +257,11 @@ INSERT INTO audit_log (actor_type, actor_id, actor_role, action,
                        entity_type, entity_id, before, after, reason)
 VALUES ('system', NULL, 'system', 'role_set',
         'account', sqlc.arg(entity_id), sqlc.arg(before), sqlc.arg(after), sqlc.arg(reason));
+
+-- name: ListPermissionsByRole :many
+-- 角色 → 权限键。会话接口用它把权限摊平给前端（IA §7.2：按权限键判，不按角色字符串）。
+-- 排序固定，测试与前端都靠它；emit_empty_slices 保证没有权限时是空切片而不是 nil。
+SELECT permission_key
+FROM role_permissions
+WHERE role_key = $1
+ORDER BY permission_key;

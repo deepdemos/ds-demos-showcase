@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -214,6 +215,30 @@ func TestIntegrationGetMe(t *testing.T) {
 		me.Email != "it-me@example.com" || me.Level != 3 {
 		t.Fatalf("字段不对: %+v", me)
 	}
+	// #460：权限键跟着会话摊平（角色经 role_permissions 展开），不是让前端按角色猜。
+	if !slices.Contains(me.Permissions, "demo.review") || !slices.Contains(me.Permissions, "demo.publish") {
+		t.Fatalf("admin 的 permissions 缺项: %v", me.Permissions)
+	}
+
+	// moderator 也拿得到 demo.publish（迁移 0032），但没有 audit.read。
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE accounts SET role = 'moderator' WHERE sub = 'ITSESSION0000000000000000AA'`); err != nil {
+		t.Fatalf("改角色失败: %v", err)
+	}
+	modRec := call(sid)
+	if modRec.Code != http.StatusOK {
+		t.Fatalf("moderator 的 /me 应 200，实际 %d", modRec.Code)
+	}
+	var modMe api.Me
+	if err := json.Unmarshal(modRec.Body.Bytes(), &modMe); err != nil {
+		t.Fatalf("moderator 响应不是合法 Me: %v", err)
+	}
+	if !slices.Contains(modMe.Permissions, "demo.publish") || !slices.Contains(modMe.Permissions, "demo.review") {
+		t.Fatalf("moderator 应有 demo.review + demo.publish，实际 %v", modMe.Permissions)
+	}
+	if slices.Contains(modMe.Permissions, "audit.read") {
+		t.Fatalf("moderator 不该有 audit.read，实际 %v", modMe.Permissions)
+	}
 
 	// 401 的各种情况必须给出逐字节相同的响应体——任何差异都等于会话探测器。
 	want := call("").Body.String()
@@ -311,6 +336,18 @@ func TestIntegrationRegister(t *testing.T) {
 	h.PostAuthLogin(loginRec, loginReq)
 	if loginRec.Code != http.StatusOK {
 		t.Fatalf("验证后登录应 200，实际 %d（body=%s）", loginRec.Code, loginRec.Body.String())
+	}
+	// 登录响应也要带权限键（#460）：前端登录后立刻按权限渲染，不等下一次 /me。
+	// 新账号是 user 角色，权限是空数组——不是 null。
+	var loginMe api.Me
+	if err := json.Unmarshal(loginRec.Body.Bytes(), &loginMe); err != nil {
+		t.Fatalf("登录响应不是合法 Me: %v", err)
+	}
+	if loginMe.Permissions == nil {
+		t.Fatal("登录响应的 permissions 应为空数组，不是 null")
+	}
+	if len(loginMe.Permissions) != 0 {
+		t.Fatalf("新注册账号不该有权限，实际 %v", loginMe.Permissions)
 	}
 
 	// 未验证的账号登录：403 + email_not_verified，不是 401「密码不对」。

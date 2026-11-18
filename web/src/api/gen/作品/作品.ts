@@ -909,7 +909,12 @@ export const getGetDemoUrl = (slug: string,) => {
  *
  * **404 的语义要和墓碑口径一致**：曾经公开过、后来被作者归档或被管理员移除的作品，
  * 仍然返回 200 的墓碑态（标题等字段可空、带 `lifecycleState`），不返回 404；
- * 只有「从未公开过」或「已擦除」才返回 404。
+ * 只有「从未公开过且你没有审核视角」或「已擦除」才返回 404。
+ *
+ * **未公开稿件按身份裁剪返回**（#462）：作者本人与持 `demo.review` / `demo.publish`
+ * 的人读到完整详情——真实的审核态、当前版本的内容；其他人仍是 404。
+ * 不存在第二个「作者详情」端点：同一份详情按身份裁剪。审核视角不是作者：
+ * `canEdit` / `isAuthor` / `lifecycleActions` 都不给，软删的作品也不越过 404。
  * @summary 作品详情
  */
 export const getDemo = async (slug: string, options?: RequestInit): Promise<getDemoResponse> => {
@@ -1476,16 +1481,16 @@ export const getListDemoTimelineUrl = (slug: string,) => {
  * `audit_log`。十种动作各留一行：投稿、通过、驳回、发布、编辑、回滚、
  * 下架、恢复（`create` / `slug_change` / `merge` 是预留值，暂无写入点）。
  *
- * **只给作者本人**：审核员看得到待审队列，但看不到别人作品的改动史；
- * 对非作者一律 404 而不是 403——403 会承认「这个 slug 存在且你有权限问题」，
- * 而能被作者以外的人看到的详情本来就只有对外那一版。
+ * **作者本人与审核视角可读**（#462）：作者读自己的账本；持 `demo.review` /
+ * `demo.publish` 的人读审核过程（谁驳回、理由是什么）。判据是权限键，不是角色字符串。
+ * 对其他人一律 404 而不是 403——403 会承认「这个 slug 存在且你有权限问题」。
  *
  * 墓碑页不显示动态：作品已经被下架或删除，它的经历没有必要再展示。
  * 作者在恢复窗口内仍能读到（那是他自己的记录）。
  *
  * 最多返回最近 100 条，按时间倒序。没有分页：单件作品的动作数量级是几十，
  * 加游标只会多一个没人用的参数。
- * @summary 作品动态（只有作者能看）
+ * @summary 作品动态（作者与审核视角可看）
  */
 export const listDemoTimeline = async (slug: string, options?: RequestInit): Promise<listDemoTimelineResponse> => {
 

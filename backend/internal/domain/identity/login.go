@@ -160,12 +160,20 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Account, string, er
 		return Account{}, "", fmt.Errorf("identity: 建会话失败: %w", err)
 	}
 
+	// 登录响应也要带权限：页面拿到会话后立刻按权限键渲染，
+	// 不能等下一次 /me（见 permissionsOf 的注释）。
+	perms, err := s.permissionsOf(ctx, row.Role)
+	if err != nil {
+		return Account{}, "", err
+	}
+
 	return Account{
 		Sub:         row.Sub,
 		Username:    row.Username,
 		DisplayName: row.DisplayName,
 		Email:       row.Email,
 		Role:        row.Role,
+		Permissions: perms,
 		Status:      row.Status,
 		Level:       int32(row.Level),
 		CreatedAt:   row.CreatedAt.Time,

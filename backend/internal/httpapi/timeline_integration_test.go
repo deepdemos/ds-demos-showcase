@@ -16,7 +16,7 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
-// 作品动态的**读路径**：只有作者能读、倒序、带操作人显示名、擦除之后连作者也读不到。
+// 作品动态的**读路径**：作者与审核视角能读、倒序、带操作人显示名、擦除之后也读不到。
 //
 // 写入侧另有测试钉着（`lifecycle_trail_integration_test.go` 断言下架/恢复会写进出，
 // `TestIntegrationSoftDeleteWritesAuditOnly` 断言软删只写审计不写时间线）。
@@ -69,7 +69,7 @@ func userIDForSub(t *testing.T, pool *pgxpool.Pool, sub string) int64 {
 	return id
 }
 
-func TestIntegrationDemoTimelineAuthorOnly(t *testing.T) {
+func TestIntegrationDemoTimelineAuthorAndStaff(t *testing.T) {
 	h, idSvc, pool := newTimelineHandler(t)
 
 	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
@@ -126,10 +126,14 @@ func TestIntegrationDemoTimelineAuthorOnly(t *testing.T) {
 	if code, _ := getTimeline(t, h, slug, ""); code != http.StatusNotFound {
 		t.Fatalf("未登录读动态 = %d，想要 404", code)
 	}
-	// 审核员也读不到：D1 的裁决是只给作者。
+	// 审核视角能读同一份动态（#462）：审核过程也是他们的工作记录。
 	reviewerSID := mkAdmin(t, pool, idSvc, "timeline-mod")
-	if code, _ := getTimeline(t, h, slug, reviewerSID); code != http.StatusNotFound {
-		t.Fatalf("审核员读动态 = %d，想要 404（D1：只给作者）", code)
+	staffCode, staffTimeline := getTimeline(t, h, slug, reviewerSID)
+	if staffCode != http.StatusOK {
+		t.Fatalf("审核视角读动态 = %d，想要 200", staffCode)
+	}
+	if len(staffTimeline.Items) != 2 {
+		t.Fatalf("审核视角看到的动态条数 = %d，想要 2", len(staffTimeline.Items))
 	}
 }
 

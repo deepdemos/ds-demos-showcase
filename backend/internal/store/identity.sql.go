@@ -527,6 +527,35 @@ func (q *Queries) InsertRoleSetAudit(ctx context.Context, arg InsertRoleSetAudit
 	return err
 }
 
+const listPermissionsByRole = `-- name: ListPermissionsByRole :many
+SELECT permission_key
+FROM role_permissions
+WHERE role_key = $1
+ORDER BY permission_key
+`
+
+// 角色 → 权限键。会话接口用它把权限摊平给前端（IA §7.2：按权限键判，不按角色字符串）。
+// 排序固定，测试与前端都靠它；emit_empty_slices 保证没有权限时是空切片而不是 nil。
+func (q *Queries) ListPermissionsByRole(ctx context.Context, roleKey string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPermissionsByRole, roleKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var permission_key string
+		if err := rows.Scan(&permission_key); err != nil {
+			return nil, err
+		}
+		items = append(items, permission_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markEmailVerified = `-- name: MarkEmailVerified :exec
 UPDATE account_emails
 SET verified_at = now()

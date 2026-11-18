@@ -28,11 +28,15 @@ const REASON_MAX = 500;
 /**
  * 审核队列。
  *
- * # 为什么权限不在前端判
+ * # 为什么审核权限不在前端判
  *
  * 谁能审由服务端说了算（`demo.review` 权限）。前端**不**读 `me.role` 去猜——
  * 一猜就会和权限表脱钩：以后给某个新角色加权限，前端还得跟着改一次。
  * 这里只做一件事：收到 403 就展示「没有审核权限」，其余交给后端。
+ *
+ * 发布卡片是例外：`me.permissions` 是会话接口摊平的权限键（#460），
+ * 按 `demo.publish` 决定渲不渲染按钮——不给一个注定 403 的按钮。
+ * 服务端的 403 仍然保留，前端这层只是体验，不是鉴权。
  *
  * # 为什么预览用新标签页打开
  *
@@ -90,6 +94,9 @@ export function AdminReviewPage() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'reviews', 'demo'] });
     },
   });
+
+  // 权限键来自会话（#460）。没有它就只能按角色字符串猜，而 IA §7.2 明令不许。
+  const canPublish = me?.permissions?.includes('demo.publish') ?? false;
 
   if (authLoading) return <Skeleton lines={3} />;
   if (me === null) return <Navigate to="/login?return_to=/admin/reviews" replace />;
@@ -167,11 +174,17 @@ export function AdminReviewPage() {
               通过 ≠ 已发布。只有在这里发出去的作品才会出现在作品库。
             </p>
           </div>
-          <ul className="list-none space-y-4 p-0">
-            {approved.map((item) => (
-              <PublishCard key={item.slug} slug={item.slug} title={item.title ?? '（无标题）'} />
-            ))}
-          </ul>
+          {canPublish ? (
+            <ul className="list-none space-y-4 p-0">
+              {approved.map((item) => (
+                <PublishCard key={item.slug} slug={item.slug} title={item.title ?? '（无标题）'} />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              已经通过审核，但当前账号没有发布权限；由有发布权限的审核员或管理员发布。
+            </p>
+          )}
         </section>
       ) : null}
 

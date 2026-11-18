@@ -83,6 +83,9 @@ type Account struct {
 	DisplayName string
 	Email       string
 	Role        string
+	// Permissions 是角色经 role_permissions 展开的权限键（会话时刻的快照）。
+	// 传输层原样给 Me.permissions；没有权限的角色是空切片，不是 nil。
+	Permissions []string
 	Status      string
 	Level       int32
 	CreatedAt   time.Time

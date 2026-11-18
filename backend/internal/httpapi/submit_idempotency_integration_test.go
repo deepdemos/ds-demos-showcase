@@ -233,6 +233,20 @@ func TestIntegrationDetailModerationStateVisibility(t *testing.T) {
 		t.Fatalf("访客看未发布作品 = %d，想要 404", rec.Code)
 	}
 
+	// 审核视角（demo.review）也看得到这件待审稿件，且看到真实的 pending；
+	// 但审核视角不是作者：没有 canEdit，也不带 isAuthor（#462）。
+	staffSID := mkAdmin(t, pool, idSvc, "modstate")
+	staffDetail := decodeDetail(t, getDemoAs(t, h, slug, staffSID))
+	if staffDetail.ModerationState != api.DemoDetailModerationStatePending {
+		t.Fatalf("审核视角看到的审核态 = %q，想要 pending", staffDetail.ModerationState)
+	}
+	if staffDetail.CanEdit {
+		t.Fatal("审核视角不该拿到 canEdit")
+	}
+	if staffDetail.IsAuthor != nil && *staffDetail.IsAuthor {
+		t.Fatal("审核视角不该被当成作者")
+	}
+
 	// 发布之后：访客看得到，且审核态是 approved。
 	publishNow(t, pool, slug)
 	visitorDetail := decodeDetail(t, getDemoAs(t, h, slug, ""))
