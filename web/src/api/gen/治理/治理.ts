@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 61 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 62 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,10 +30,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  AdminInbox,
   DemoChannelList,
   DemoChannelRequest,
   DemoChannelResult,
   Error,
+  GetAdminInboxParams,
   ListDemoReviewQueueParams,
   ListModelCatalogParams,
   Model,
@@ -837,6 +839,77 @@ const res = await fetch(getApplyModelImportBatchUrl(),
 
   const data: applyModelImportBatchResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as applyModelImportBatchResponse
+}
+
+
+export type getAdminInboxResponse200 = {
+  data: AdminInbox
+  status: 200
+}
+
+export type getAdminInboxResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getAdminInboxResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getAdminInboxResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getAdminInboxResponseSuccess = (getAdminInboxResponse200) & {
+  headers: Headers;
+};
+export type getAdminInboxResponseError = (getAdminInboxResponse401 | getAdminInboxResponse403 | getAdminInboxResponse503) & {
+  headers: Headers;
+};
+
+export type getAdminInboxResponse = (getAdminInboxResponseSuccess | getAdminInboxResponseError)
+
+export const getGetAdminInboxUrl = (params?: GetAdminInboxParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/admin/inbox?${stringifiedParams}` : `/api/v1/admin/inbox`
+}
+
+/**
+ * 跨 kind 的待办汇总：作品待审、已通过待发布、待处理提案，各自带总数与前 N 条。
+ * 计数来自 count 查询，不受 limit 截断影响（ENT-022 的「计数与实际一致」）。
+ *
+ * 提案摘要额外要求 proposal.review；只有 demo.review 的角色拿不到提案内容。
+ * 提案的裁决入口与执行下一轮接入。
+ * @summary 聚合收件箱
+ */
+export const getAdminInbox = async (params?: GetAdminInboxParams, options?: RequestInit): Promise<getAdminInboxResponse> => {
+
+  const res = await fetch(getGetAdminInboxUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getAdminInboxResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getAdminInboxResponse
 }
 
 

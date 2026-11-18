@@ -204,6 +204,10 @@ func (s *stub) MarkAllNotificationsRead(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "read-all-notifications")
 }
 
+func (s *stub) GetAdminInbox(_ http.ResponseWriter, _ *http.Request, _ api.GetAdminInboxParams) {
+	s.hits = append(s.hits, "admin-inbox")
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -280,6 +284,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/notifications/unread-count", "unread-count"},
 		{http.MethodPost, "/api/v1/notifications/read-all", "read-all-notifications"},
 		{http.MethodPost, "/api/v1/notifications/5/read", "read-notification:5"},
+		{http.MethodGet, "/api/v1/admin/inbox", "admin-inbox"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},
