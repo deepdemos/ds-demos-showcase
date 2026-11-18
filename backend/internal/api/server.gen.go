@@ -44,7 +44,7 @@ type ServerInterface interface {
 	// 立即同步上游目录镜像
 	// (POST /api/v1/admin/models/sync)
 	SyncModelCatalog(w http.ResponseWriter, r *http.Request)
-	// 审核队列（待审 / 已通过待发布）
+	// 待审作品队列
 	// (GET /api/v1/admin/reviews/demo)
 	ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams)
 	// 审核裁决
@@ -152,12 +152,6 @@ type ServerInterface interface {
 	// 为你推荐（登录后现算）
 	// (GET /api/v1/recommendations)
 	ListRecommendations(w http.ResponseWriter, r *http.Request, params ListRecommendationsParams)
-	// 作者公开资料
-	// (GET /api/v1/users/{username})
-	GetUserProfile(w http.ResponseWriter, r *http.Request, username string)
-	// 作者的公开作品
-	// (GET /api/v1/users/{username}/demos)
-	ListUserDemos(w http.ResponseWriter, r *http.Request, username string, params ListUserDemosParams)
 	// 站点可用性
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -227,7 +221,7 @@ func (_ Unimplemented) SyncModelCatalog(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 审核队列（待审 / 已通过待发布）
+// 待审作品队列
 // (GET /api/v1/admin/reviews/demo)
 func (_ Unimplemented) ListDemoReviewQueue(w http.ResponseWriter, r *http.Request, params ListDemoReviewQueueParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -440,18 +434,6 @@ func (_ Unimplemented) ListRankings(w http.ResponseWriter, r *http.Request, para
 // 为你推荐（登录后现算）
 // (GET /api/v1/recommendations)
 func (_ Unimplemented) ListRecommendations(w http.ResponseWriter, r *http.Request, params ListRecommendationsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 作者公开资料
-// (GET /api/v1/users/{username})
-func (_ Unimplemented) GetUserProfile(w http.ResponseWriter, r *http.Request, username string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 作者的公开作品
-// (GET /api/v1/users/{username}/demos)
-func (_ Unimplemented) ListUserDemos(w http.ResponseWriter, r *http.Request, username string, params ListUserDemosParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -779,14 +761,6 @@ func (siw *ServerInterfaceWrapper) ListDemoReviewQueue(w http.ResponseWriter, r 
 	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "state" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "state", r.URL.Query(), &params.State)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
 		return
 	}
 
@@ -1780,75 +1754,6 @@ func (siw *ServerInterfaceWrapper) ListRecommendations(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// GetUserProfile operation middleware
-func (siw *ServerInterfaceWrapper) GetUserProfile(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "username" -------------
-	var username string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "username", chi.URLParam(r, "username"), &username, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "username", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetUserProfile(w, r, username)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListUserDemos operation middleware
-func (siw *ServerInterfaceWrapper) ListUserDemos(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "username" -------------
-	var username string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "username", chi.URLParam(r, "username"), &username, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "username", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListUserDemosParams
-
-	// ------------- Optional query parameter "page" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "pageSize" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "pageSize", r.URL.Query(), &params.PageSize)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListUserDemos(w, r, username, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetHealthz operation middleware
 func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Request) {
 
@@ -2113,12 +2018,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/recommendations", wrapper.ListRecommendations)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/users/{username}", wrapper.GetUserProfile)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/users/{username}/demos", wrapper.ListUserDemos)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.GetHealthz)

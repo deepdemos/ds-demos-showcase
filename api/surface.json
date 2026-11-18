@@ -507,6 +507,10 @@
         "type": "int",
         "optional": false
       },
+      "permissions": {
+        "type": "[]string",
+        "optional": false
+      },
       "role": {
         "type": "string",
         "optional": false
@@ -1385,6 +1389,10 @@
         "type": "string",
         "optional": true
       },
+      "modelCalls": {
+        "type": "[]string",
+        "optional": true
+      },
       "modelSlugs": {
         "type": "[]string",
         "optional": true
@@ -1419,6 +1427,10 @@
       },
       "externalUrl": {
         "type": "string",
+        "optional": true
+      },
+      "modelCalls": {
+        "type": "[]string",
         "optional": true
       },
       "modelSlugs": {

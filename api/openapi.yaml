@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 47 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -162,94 +162,6 @@ paths:
                 $ref: '#/components/schemas/ModelProfile'
         '404':
           description: 没有这个模型
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '503':
-          description: 数据库不可用
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /api/v1/users/{username}:
-    get:
-      operationId: getUserProfile
-      tags: [身份]
-      summary: 作者公开资料
-      description: |
-        按用户名查公开资料（大小写不敏感）。只返回 \`status='active'\` 的账号；
-        未验证 / 受限 / 已注销一律 404——「这个作者不存在」与「作者已不可见」
-        对外是同一句话，不泄露账号状态。
-
-        社区贡献与公开收藏夹还没有数据源（依赖收藏域与关注/获赞），这个响应
-        不带这两块，作者页也不拿空区块占位。
-      parameters:
-        - name: username
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[A-Za-z0-9_-]{3,20}$'
-            minLength: 3
-            maxLength: 20
-      responses:
-        '200':
-          description: 公开资料
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PublicProfile'
-        '404':
-          description: 用户名不存在，或账号不是 active
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '503':
-          description: 数据库不可用
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /api/v1/users/{username}/demos:
-    get:
-      operationId: listUserDemos
-      tags: [作品]
-      summary: 作者的公开作品
-      description: |
-        只列公开可见的作品：判据与作品库同一份（\`demo_public_demos\` 视图：
-        approved + published + 未删除 + 有 listed 渠道）。作者自己看未发布作品走
-        \`GET /api/v1/me/demos\`，不是这个端点。
-
-        不存在的用户名回 404；存在的作者没有公开作品回 200 + \`items: []\`
-        ——「没有作品」是答案，不是错误。
-      parameters:
-        - name: username
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[A-Za-z0-9_-]{3,20}$'
-            minLength: 3
-            maxLength: 20
-        - name: page
-          in: query
-          schema: { type: integer, minimum: 1, default: 1 }
-        - name: pageSize
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 50, default: 12 }
-      responses:
-        '200':
-          description: 公开作品列表
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProfileDemoList'
-        '404':
-          description: 用户名不存在，或账号不是 active
           content:
             application/json:
               schema:
@@ -2749,15 +2661,9 @@ paths:
     get:
       operationId: listDemoReviewQueue
       tags: [治理]
-      summary: 审核队列（待审 / 已通过待发布）
+      summary: 待审作品队列
       description: |
-        同一端点按 `state` 返回两段队列：
-
-        - `pending`（默认）：只列 `moderation_state = 'pending'` 的作品，按提交时间正序
-          （先来先审）。
-        - `approved_unpublished`：已通过审核、但 `lifecycle_state` 还是 `draft` 的作品，
-          按进入待发布的时间正序（先通过先发布）。审核页用它给「通过 ≠ 已发布」一个
-          固定的家——刷新页面、或者换一个审核员来发布，都能在这里找到。
+        只列 `moderation_state = 'pending'` 的作品，按提交时间正序（先来先审）。
 
         需要 `demo.review` 权限。权限来自 `accounts.role` 经 `role_permissions` 展开，
         **不是**「登录了就能看」——审核队列里有未公开内容，见预览端口径。
@@ -2770,14 +2676,6 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-        - name: state
-          in: query
-          schema:
-            type: string
-            enum: [pending, approved_unpublished]
-            default: pending
-          description: |
-            `pending` 或 `approved_unpublished`；省略等于 `pending`。
       responses:
         '200':
           description: 队列
@@ -4435,72 +4333,6 @@ components:
             改绑之后要等下一次 /me 才生效，与 `role` 同一条口径。
             空权限是空数组，不是 null——前端不该为「没有权限」多一条分支。
 
-    PublicProfile:
-      type: object
-      additionalProperties: false
-      required: [username, displayName, bio, avatarUrl, joinedAt, demoCount]
-      properties:
-        username:
-          type: string
-          maxLength: 20
-          description: 用户名（不可变，公开地址用）
-        displayName:
-          type: string
-          maxLength: 50
-          description: 昵称；为空串时前端回退到 username
-        bio:
-          type: string
-          description: 作者自述；没有写时是空串
-        avatarUrl:
-          type: string
-          nullable: true
-          description: 头像 URL；没有头像时为 null（不要回退到任何第三方头像服务）
-        joinedAt:
-          type: string
-          format: date-time
-          description: 账号创建时间（不是资料更新时间）
-        demoCount:
-          type: integer
-          minimum: 0
-          description: 公开作品数，与 \`GET /users/{username}/demos\` 的 total 同源
-
-    ProfileDemo:
-      type: object
-      additionalProperties: false
-      required: [slug, title, coverUrl, createdAt]
-      properties:
-        slug:
-          type: string
-          maxLength: 128
-        title:
-          type: string
-          nullable: true
-        coverUrl:
-          type: string
-          nullable: true
-        createdAt:
-          type: string
-          format: date-time
-
-    ProfileDemoList:
-      type: object
-      additionalProperties: false
-      required: [items, total, page, pageSize]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProfileDemo'
-        total:
-          type: integer
-          minimum: 0
-        page:
-          type: integer
-          minimum: 1
-        pageSize:
-          type: integer
-          minimum: 1
-
     AccountHistoryItem:
       type: object
       additionalProperties: false
@@ -4584,16 +4416,10 @@ components:
           description: 作者显示名；作者已注销时（author_id 被 SET NULL）为 null
         moderationState:
           type: string
-          enum: [pending, approved]
-          description: |
-            `pending`：还在待审；`approved`：已通过审核（出现在
-            `state=approved_unpublished` 的队列里）。审核页据此区分两段队列。
+          enum: [pending]
         submittedAt:
           type: string
           format: date-time
-          description: |
-            进入当前队列的时间：待审队列是投稿时间；已通过待发布队列是通过审核的时间
-            （`demos.updated_at`，demos 上没有单独的 reviewed_at）。
         previewPath:
           type: string
           description: 作品入口的相对地址，审核员直接拼到本站域名后使用

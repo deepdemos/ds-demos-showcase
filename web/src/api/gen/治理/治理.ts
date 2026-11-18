@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 47 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -885,20 +885,14 @@ export const getListDemoReviewQueueUrl = (params?: ListDemoReviewQueueParams,) =
 }
 
 /**
- * 同一端点按 `state` 返回两段队列：
- *
- * - `pending`（默认）：只列 `moderation_state = 'pending'` 的作品，按提交时间正序
- *   （先来先审）。
- * - `approved_unpublished`：已通过审核、但 `lifecycle_state` 还是 `draft` 的作品，
- *   按进入待发布的时间正序（先通过先发布）。审核页用它给「通过 ≠ 已发布」一个
- *   固定的家——刷新页面、或者换一个审核员来发布，都能在这里找到。
+ * 只列 `moderation_state = 'pending'` 的作品，按提交时间正序（先来先审）。
  *
  * 需要 `demo.review` 权限。权限来自 `accounts.role` 经 `role_permissions` 展开，
  * **不是**「登录了就能看」——审核队列里有未公开内容，见预览端口径。
  *
  * 队列项带 `previewPath`：审核员用它打开作品内容（该路径对持 `demo.review`
  * 的角色开放未发布作品，见 `GET /preview/{slug}/v{rev}/{path}`）。
- * @summary 审核队列（待审 / 已通过待发布）
+ * @summary 待审作品队列
  */
 export const listDemoReviewQueue = async (params?: ListDemoReviewQueueParams, options?: RequestInit): Promise<listDemoReviewQueueResponse> => {
 

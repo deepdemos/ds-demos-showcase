@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 47 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -39,72 +39,11 @@ import type {
   Me,
   PasswordResetCodeRequest,
   PasswordResetRequest,
-  PublicProfile,
   RegisterAccepted,
   RegisterRequest,
   VerifyEmailRequest,
   VerifyEmailResendRequest
 } from '../model';
-
-
-export type getUserProfileResponse200 = {
-  data: PublicProfile
-  status: 200
-}
-
-export type getUserProfileResponse404 = {
-  data: Error
-  status: 404
-}
-
-export type getUserProfileResponse503 = {
-  data: Error
-  status: 503
-}
-
-export type getUserProfileResponseSuccess = (getUserProfileResponse200) & {
-  headers: Headers;
-};
-export type getUserProfileResponseError = (getUserProfileResponse404 | getUserProfileResponse503) & {
-  headers: Headers;
-};
-
-export type getUserProfileResponse = (getUserProfileResponseSuccess | getUserProfileResponseError)
-
-export const getGetUserProfileUrl = (username: string,) => {
-
-
-
-
-  return `/api/v1/users/${username}`
-}
-
-/**
- * 按用户名查公开资料（大小写不敏感）。只返回 \`status='active'\` 的账号；
- * 未验证 / 受限 / 已注销一律 404——「这个作者不存在」与「作者已不可见」
- * 对外是同一句话，不泄露账号状态。
- *
- * 社区贡献与公开收藏夹还没有数据源（依赖收藏域与关注/获赞），这个响应
- * 不带这两块，作者页也不拿空区块占位。
- * @summary 作者公开资料
- */
-export const getUserProfile = async (username: string, options?: RequestInit): Promise<getUserProfileResponse> => {
-
-  const res = await fetch(getGetUserProfileUrl(username),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getUserProfileResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getUserProfileResponse
-}
 
 
 export type postAuthVerifyEmailResponse204 = {
