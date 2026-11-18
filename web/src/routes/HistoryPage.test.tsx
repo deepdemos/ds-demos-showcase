@@ -126,6 +126,22 @@ describe('HistoryPage', () => {
     expect(screen.getAllByText(/账号 · /).length).toBeGreaterThanOrEqual(1);
   });
 
+  test('不同时区的时间按真实时刻比较，而不是字符串', async () => {
+    auth.me = { sub: 'u1', username: 'alice', displayName: 'Alice' };
+    // 本机 17:00Z；账号串写成 +08:00 的 00:30（= 16:30Z），字符串比较会误判账号更新。
+    seedLocal([localEntry('demo-a', '本机一号', '2026-11-18T17:00:00.000Z')]);
+    vi.mocked(getMyHistory).mockResolvedValue(
+      accountHistory([accountItem('demo-a', '账号一号', '2026-11-19T00:30:00+08:00')]) as never,
+    );
+
+    const { container } = renderPage();
+    await waitFor(() => expect(container.querySelector('[data-slug="demo-a"]')).not.toBeNull());
+    expect(container.querySelector('[data-slug="demo-a"]')?.getAttribute('data-source')).toBe(
+      'local',
+    );
+    expect(screen.getByRole('link', { name: '本机一号' })).toBeInTheDocument();
+  });
+
   test('删除本机记录后，账号侧同一条仍然在', async () => {
     auth.me = { sub: 'u1', username: 'alice', displayName: 'Alice' };
     seedLocal([localEntry('demo-a', '本机一号', '2026-11-01T00:00:00.000Z')]);

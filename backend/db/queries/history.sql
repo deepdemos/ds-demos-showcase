@@ -48,6 +48,9 @@ FROM demos d
 WHERE d.slug = @slug
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
+  AND (d.author_id = @account_id OR EXISTS (
+      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
+  ))
 ON CONFLICT (account_id, demo_id) DO UPDATE
 SET viewed_at = EXCLUDED.viewed_at;
 
@@ -72,6 +75,9 @@ JOIN demos d ON d.id = h.demo_id
 WHERE h.account_id = @account_id
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
+  AND (d.author_id = @account_id OR EXISTS (
+      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
+  ))
 ORDER BY h.viewed_at DESC, d.id DESC
 LIMIT @row_limit OFFSET @row_offset;
 
@@ -81,7 +87,10 @@ FROM account_view_history h
 JOIN demos d ON d.id = h.demo_id
 WHERE h.account_id = @account_id
   AND d.deleted_at IS NULL
-  AND d.erased_at IS NULL;
+  AND d.erased_at IS NULL
+  AND (d.author_id = @account_id OR EXISTS (
+      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
+  ));
 
 -- name: ClearAccountHistory :execrows
 DELETE FROM account_view_history WHERE account_id = @account_id;

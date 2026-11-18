@@ -213,3 +213,34 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`); err != nil {
 		t.Fatalf("上限 2 时 total = %d，想要 2", got.Total)
 	}
 }
+
+// 未公开作品不能被别人借「浏览历史」读到标题/封面（PR #475 复核 F1）。
+func TestIntegrationAccountHistoryHidesUnpublished(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email: "it-history-a@example.com", Password: "correct-horse-battery",
+		Username: "it-history-a", DisplayName: "作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+	other, otherSID := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email: "it-history-b@example.com", Password: "correct-horse-battery",
+		Username: "it-history-b", DisplayName: "路人",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, other.Sub) })
+
+	draft := submitHTML(t, h, sid, "未公开历史", "<h1>draft</h1>")
+	public := submitHTML(t, h, sid, "公开历史", "<h1>public</h1>")
+	publishNow(t, pool, public)
+
+	viewAs(t, h, otherSID, draft)
+	if got := getHistory(t, h, otherSID); got.Total != 0 {
+		t.Fatalf("未公开作品进了别人的历史：%+v", got.Items)
+	}
+
+	viewAs(t, h, otherSID, public)
+	if got := getHistory(t, h, otherSID); got.Total != 1 || got.Items[0].Slug != public {
+		t.Fatalf("公开作品历史 = %+v，想要 1 条 %s", got.Items, public)
+	}
+}
