@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 57 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 61 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -43,13 +43,16 @@ import type {
   Error,
   GetCollectionStatusParams,
   GetMyHistoryParams,
+  ListNotificationsParams,
   LoginRequest,
   Me,
+  NotificationList,
   PasswordResetCodeRequest,
   PasswordResetRequest,
   PublicProfile,
   RegisterAccepted,
   RegisterRequest,
+  UnreadCount,
   VerifyEmailRequest,
   VerifyEmailResendRequest
 } from '../model';
@@ -1357,6 +1360,241 @@ export const getCollectionStatus = async (params: GetCollectionStatusParams, opt
 
   const data: getCollectionStatusResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getCollectionStatusResponse
+}
+
+
+export type listNotificationsResponse200 = {
+  data: NotificationList
+  status: 200
+}
+
+export type listNotificationsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listNotificationsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listNotificationsResponseSuccess = (listNotificationsResponse200) & {
+  headers: Headers;
+};
+export type listNotificationsResponseError = (listNotificationsResponse401 | listNotificationsResponse503) & {
+  headers: Headers;
+};
+
+export type listNotificationsResponse = (listNotificationsResponseSuccess | listNotificationsResponseError)
+
+export const getListNotificationsUrl = (params?: ListNotificationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/notifications?${stringifiedParams}` : `/api/v1/notifications`
+}
+
+/**
+ * 只返回自己的通知，按时间新→旧。带 total 与 unreadCount，导航角标可以不另拉列表。
+ *
+ * 条目里的 accessible 表示作品当前是否公开可见：作品软删 / 下架 / 擦除后仍保留
+ * 通知（NTF-007），但前端要显示「该作品已不可访问」并不给跳转。
+ * @summary 我的通知
+ */
+export const listNotifications = async (params?: ListNotificationsParams, options?: RequestInit): Promise<listNotificationsResponse> => {
+
+  const res = await fetch(getListNotificationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listNotificationsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listNotificationsResponse
+}
+
+
+export type getUnreadNotificationCountResponse200 = {
+  data: UnreadCount
+  status: 200
+}
+
+export type getUnreadNotificationCountResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getUnreadNotificationCountResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getUnreadNotificationCountResponseSuccess = (getUnreadNotificationCountResponse200) & {
+  headers: Headers;
+};
+export type getUnreadNotificationCountResponseError = (getUnreadNotificationCountResponse401 | getUnreadNotificationCountResponse503) & {
+  headers: Headers;
+};
+
+export type getUnreadNotificationCountResponse = (getUnreadNotificationCountResponseSuccess | getUnreadNotificationCountResponseError)
+
+export const getGetUnreadNotificationCountUrl = () => {
+
+
+
+
+  return `/api/v1/notifications/unread-count`
+}
+
+/**
+ * 导航角标用；只数自己的未读行。
+ * @summary 未读通知数
+ */
+export const getUnreadNotificationCount = async ( options?: RequestInit): Promise<getUnreadNotificationCountResponse> => {
+
+  const res = await fetch(getGetUnreadNotificationCountUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getUnreadNotificationCountResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getUnreadNotificationCountResponse
+}
+
+
+export type markNotificationReadResponse204 = {
+  data: void
+  status: 204
+}
+
+export type markNotificationReadResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type markNotificationReadResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type markNotificationReadResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type markNotificationReadResponseSuccess = (markNotificationReadResponse204) & {
+  headers: Headers;
+};
+export type markNotificationReadResponseError = (markNotificationReadResponse401 | markNotificationReadResponse404 | markNotificationReadResponse503) & {
+  headers: Headers;
+};
+
+export type markNotificationReadResponse = (markNotificationReadResponseSuccess | markNotificationReadResponseError)
+
+export const getMarkNotificationReadUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/notifications/${id}/read`
+}
+
+/**
+ * 幂等：已读再标记也是 204。不是自己的通知 id 回 404（不承认存在）。
+ * @summary 标记一条通知已读
+ */
+export const markNotificationRead = async (id: number, options?: RequestInit): Promise<markNotificationReadResponse> => {
+
+  const res = await fetch(getMarkNotificationReadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: markNotificationReadResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as markNotificationReadResponse
+}
+
+
+export type markAllNotificationsReadResponse204 = {
+  data: void
+  status: 204
+}
+
+export type markAllNotificationsReadResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type markAllNotificationsReadResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type markAllNotificationsReadResponseSuccess = (markAllNotificationsReadResponse204) & {
+  headers: Headers;
+};
+export type markAllNotificationsReadResponseError = (markAllNotificationsReadResponse401 | markAllNotificationsReadResponse503) & {
+  headers: Headers;
+};
+
+export type markAllNotificationsReadResponse = (markAllNotificationsReadResponseSuccess | markAllNotificationsReadResponseError)
+
+export const getMarkAllNotificationsReadUrl = () => {
+
+
+
+
+  return `/api/v1/notifications/read-all`
+}
+
+/**
+ * 幂等；只影响自己的未读行。
+ * @summary 全部标记已读
+ */
+export const markAllNotificationsRead = async ( options?: RequestInit): Promise<markAllNotificationsReadResponse> => {
+
+  const res = await fetch(getMarkAllNotificationsReadUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: markAllNotificationsReadResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as markAllNotificationsReadResponse
 }
 
 

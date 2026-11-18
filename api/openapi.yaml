@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 57 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 61 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -2306,6 +2306,133 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CollectionStatus'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      tags: [身份]
+      summary: 我的通知
+      description: |
+        只返回自己的通知，按时间新→旧。带 total 与 unreadCount，导航角标可以不另拉列表。
+
+        条目里的 accessible 表示作品当前是否公开可见：作品软删 / 下架 / 擦除后仍保留
+        通知（NTF-007），但前端要显示「该作品已不可访问」并不给跳转。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 通知列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationList'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/notifications/unread-count:
+    get:
+      operationId: getUnreadNotificationCount
+      tags: [身份]
+      summary: 未读通知数
+      description: 导航角标用；只数自己的未读行。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 未读数
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCount'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/notifications/{id}/read:
+    post:
+      operationId: markNotificationRead
+      tags: [身份]
+      summary: 标记一条通知已读
+      description: |
+        幂等：已读再标记也是 204。不是自己的通知 id 回 404（不承认存在）。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '204':
+          description: 已标记（已读再标记也是 204）
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 通知不存在或不是自己的
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [身份]
+      summary: 全部标记已读
+      description: 幂等；只影响自己的未读行。
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 已全部标记
         '401':
           description: 未登录
           content:
@@ -5013,6 +5140,69 @@ components:
           items:
             type: integer
           description: 包含这件作品的自定义夹 id（不含默认夹）
+
+    Notification:
+      type: object
+      additionalProperties: false
+      required: [id, kind, demoSlug, demoTitle, payload, readAt, createdAt, accessible]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          description: 事件类型键，由 notification_kinds 注册表定义（NTF-003）
+        demoSlug:
+          type: string
+          maxLength: 128
+        demoTitle:
+          type: string
+          description: 事件发生时的标题快照；作品删除后仍能显示
+        payload:
+          type: object
+          additionalProperties: true
+          description: 事件自己的数据，如驳回理由 reason、评分 score
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        accessible:
+          type: boolean
+          description: false = 作品当前不可访问；前端显示说明且不给跳转（NTF-007）
+
+    NotificationList:
+      type: object
+      additionalProperties: false
+      required: [items, total, unreadCount, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+          minimum: 0
+        unreadCount:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+
+    UnreadCount:
+      type: object
+      additionalProperties: false
+      required: [count]
+      properties:
+        count:
+          type: integer
+          minimum: 0
 
     AccountStatus:
       type: string

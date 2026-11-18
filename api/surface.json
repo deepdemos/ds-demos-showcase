@@ -1250,6 +1250,62 @@
         "optional": false
       }
     },
+    "Notification": {
+      "accessible": {
+        "type": "bool",
+        "optional": false
+      },
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "demoSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "demoTitle": {
+        "type": "string",
+        "optional": false
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "kind": {
+        "type": "string",
+        "optional": false
+      },
+      "payload": {
+        "type": "map[string]interface{}",
+        "optional": false
+      },
+      "readAt": {
+        "type": "time.Time",
+        "optional": true
+      }
+    },
+    "NotificationList": {
+      "items": {
+        "type": "[]Notification",
+        "optional": false
+      },
+      "page": {
+        "type": "int",
+        "optional": false
+      },
+      "pageSize": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      },
+      "unreadCount": {
+        "type": "int",
+        "optional": false
+      }
+    },
     "PasswordResetCodeRequest": {
       "email": {
         "type": "openapi_types.Email",
@@ -1531,6 +1587,12 @@
       },
       "slug": {
         "type": "string",
+        "optional": false
+      }
+    },
+    "UnreadCount": {
+      "count": {
+        "type": "int",
         "optional": false
       }
     },
@@ -2095,6 +2157,26 @@
     },
     "GET /api/v1/models/{slug}": {
       "method": "GetModel",
+      "pathParams": 1,
+      "params": null
+    },
+    "GET /api/v1/notifications": {
+      "method": "ListNotifications",
+      "pathParams": 0,
+      "params": "ListNotificationsParams"
+    },
+    "POST /api/v1/notifications/read-all": {
+      "method": "MarkAllNotificationsRead",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/notifications/unread-count": {
+      "method": "GetUnreadNotificationCount",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/notifications/{id}/read": {
+      "method": "MarkNotificationRead",
       "pathParams": 1,
       "params": null
     },

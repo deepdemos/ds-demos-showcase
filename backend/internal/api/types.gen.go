@@ -1385,6 +1385,34 @@ type MyDemoSummary struct {
 // 与 `lifecycleState` 正交：`published` + `pending` = 复审中的已上线作品。
 type MyDemoSummaryModerationState string
 
+// Notification defines model for Notification.
+type Notification struct {
+	// Accessible false = 作品当前不可访问；前端显示说明且不给跳转（NTF-007）
+	Accessible bool      `json:"accessible"`
+	CreatedAt  time.Time `json:"createdAt"`
+	DemoSlug   string    `json:"demoSlug"`
+
+	// DemoTitle 事件发生时的标题快照；作品删除后仍能显示
+	DemoTitle string `json:"demoTitle"`
+	Id        int    `json:"id"`
+
+	// Kind 事件类型键，由 notification_kinds 注册表定义（NTF-003）
+	Kind string `json:"kind"`
+
+	// Payload 事件自己的数据，如驳回理由 reason、评分 score
+	Payload map[string]interface{} `json:"payload"`
+	ReadAt  *time.Time             `json:"readAt"`
+}
+
+// NotificationList defines model for NotificationList.
+type NotificationList struct {
+	Items       []Notification `json:"items"`
+	Page        int            `json:"page"`
+	PageSize    int            `json:"pageSize"`
+	Total       int            `json:"total"`
+	UnreadCount int            `json:"unreadCount"`
+}
+
 // PasswordResetCodeRequest defines model for PasswordResetCodeRequest.
 type PasswordResetCodeRequest struct {
 	Email openapi_types.Email `json:"email"`
@@ -1618,6 +1646,11 @@ type SubmissionResult struct {
 
 // SubmissionResultModerationState defines model for SubmissionResult.ModerationState.
 type SubmissionResultModerationState string
+
+// UnreadCount defines model for UnreadCount.
+type UnreadCount struct {
+	Count int `json:"count"`
+}
 
 // VerifyEmailRequest defines model for VerifyEmailRequest.
 type VerifyEmailRequest struct {
@@ -1917,6 +1950,12 @@ type ListModelsParams struct {
 
 // ListModelsParamsStatus defines parameters for ListModels.
 type ListModelsParamsStatus string
+
+// ListNotificationsParams defines parameters for ListNotifications.
+type ListNotificationsParams struct {
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
 
 // ListRankingsParams defines parameters for ListRankings.
 type ListRankingsParams struct {

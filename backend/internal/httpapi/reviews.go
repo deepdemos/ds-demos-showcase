@@ -199,6 +199,15 @@ func (h *Handler) ReviewDemo(w http.ResponseWriter, r *http.Request, slug string
 		return
 	}
 
+	// 审核结果通知作者（NTF-002）。写失败只记日志，不影响裁决本身。
+	kind := "review.rejected"
+	payload := map[string]any{"reason": reason}
+	if approve {
+		kind = "review.approved"
+		payload = map[string]any{}
+	}
+	h.notifyDemoEvent(ctx, slug, kind, payload, actor.AccountID)
+
 	writeJSON(w, http.StatusOK, api.ReviewResult{
 		Slug:            out.Slug,
 		ModerationState: api.ReviewResultModerationState(out.ModerationState),
