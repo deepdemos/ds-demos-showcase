@@ -30,6 +30,9 @@ JOIN demos d ON d.id = h.demo_id
 WHERE h.account_id = $1
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
+  AND (d.author_id = $1 OR EXISTS (
+      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
+  ))
 `
 
 func (q *Queries) CountAccountHistory(ctx context.Context, accountID int64) (int64, error) {
@@ -95,6 +98,9 @@ JOIN demos d ON d.id = h.demo_id
 WHERE h.account_id = $1
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
+  AND (d.author_id = $1 OR EXISTS (
+      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
+  ))
 ORDER BY h.viewed_at DESC, d.id DESC
 LIMIT $3 OFFSET $2
 `
@@ -189,6 +195,9 @@ FROM demos d
 WHERE d.slug = $2
   AND d.deleted_at IS NULL
   AND d.erased_at IS NULL
+  AND (d.author_id = $1 OR EXISTS (
+      SELECT 1 FROM demo_public_demos p WHERE p.demo_id = d.id
+  ))
 ON CONFLICT (account_id, demo_id) DO UPDATE
 SET viewed_at = EXCLUDED.viewed_at
 `

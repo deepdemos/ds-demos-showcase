@@ -74,7 +74,7 @@ function mergeSources(local: HistoryEntry[], account: MergedEntry[]): MergedEntr
 
   for (const entry of localEntriesToMerged(local)) {
     const current = bySlug.get(entry.slug);
-    if (!current || entry.viewedAt > current.viewedAt) {
+    if (!current || Date.parse(entry.viewedAt) > Date.parse(current.viewedAt)) {
       bySlug.set(entry.slug, {
         ...entry,
         // 时间近的是本机，但标题/封面可能只有账号那边有（或反过来）。
@@ -91,7 +91,7 @@ function mergeSources(local: HistoryEntry[], account: MergedEntry[]): MergedEntr
     }
   }
 
-  return [...bySlug.values()].sort((a, b) => b.viewedAt.localeCompare(a.viewedAt));
+  return [...bySlug.values()].sort((a, b) => Date.parse(b.viewedAt) - Date.parse(a.viewedAt));
 }
 
 function accountEntries(
@@ -260,9 +260,11 @@ export function HistoryPage() {
             </Button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {accountEnabled
-              ? '关闭只停止新增，已有记录会保留；清空需要单独确认。'
-              : '账号历史已关闭，不再新增记录；已有记录仍在，可以清空。'}
+            {account.isError
+              ? '账号历史设置读取失败，先不要修改；重试后再看。'
+              : accountEnabled
+                ? '关闭只停止新增，已有记录会保留；清空需要单独确认。'
+                : '账号历史已关闭，不再新增记录；已有记录仍在，可以清空。'}
           </p>
 
           {account.isError ? (
