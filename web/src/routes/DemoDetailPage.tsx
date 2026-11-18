@@ -14,6 +14,7 @@ import {
   type DemoDetail,
 } from '@/api';
 import { DemoTimeline } from '@/features/demo/timeline-section';
+import { CollectionControls } from '@/features/collections/collection-controls';
 import { recordView } from '@/features/history/local-history';
 import { RelatedSection } from '@/features/demo/related-section';
 
@@ -242,6 +243,8 @@ export function DemoDetailPage() {
           ) : null}
 
           <RatingBlock slug={slug} demo={data.demo} />
+
+          <CollectionControls slug={slug} />
 
           {data.demo.coverUrl ? (
             <img

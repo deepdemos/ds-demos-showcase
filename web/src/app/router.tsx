@@ -18,6 +18,8 @@ import { MyDemosPage } from '@/routes/MyDemosPage';
 import { HistoryPage } from '@/routes/HistoryPage';
 import { ClassificationPage } from '@/routes/ClassificationPage';
 import { AuthorPage } from '@/routes/AuthorPage';
+import { CollectionsPage } from '@/routes/CollectionsPage';
+import { CollectionDetailPage } from '@/routes/CollectionDetailPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
 import { RouteError } from './RouteError';
@@ -54,6 +56,8 @@ export const router = createBrowserRouter([
       page('demos', <DemosPage />),
       page('classifications/:dimension/:slug', <ClassificationPage />),
       page('u/:username', <AuthorPage />),
+      page('me/collections', <CollectionsPage />),
+      page('me/collections/:id', <CollectionDetailPage />),
       page('demos/:slug', <DemoDetailPage />),
       page('demos/:slug/edit', <EditDemoPage />),
       page('models/:slug', <ModelPage />),
