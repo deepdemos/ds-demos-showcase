@@ -53,6 +53,9 @@ type ServerInterface interface {
 	// 审核裁决
 	// (POST /api/v1/admin/reviews/demo/{slug})
 	ReviewDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 统一审核裁决入口
+	// (POST /api/v1/admin/reviews/{kind}/{id})
+	ReviewEntity(w http.ResponseWriter, r *http.Request, kind ReviewEntityParamsKind, id string)
 	// 申请登录验证码
 	// (POST /api/v1/auth/email-code)
 	PostAuthEmailCode(w http.ResponseWriter, r *http.Request)
@@ -281,6 +284,12 @@ func (_ Unimplemented) ListDemoReviewQueue(w http.ResponseWriter, r *http.Reques
 // 审核裁决
 // (POST /api/v1/admin/reviews/demo/{slug})
 func (_ Unimplemented) ReviewDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 统一审核裁决入口
+// (POST /api/v1/admin/reviews/{kind}/{id})
+func (_ Unimplemented) ReviewEntity(w http.ResponseWriter, r *http.Request, kind ReviewEntityParamsKind, id string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -973,6 +982,46 @@ func (siw *ServerInterfaceWrapper) ReviewDemo(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReviewDemo(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReviewEntity operation middleware
+func (siw *ServerInterfaceWrapper) ReviewEntity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "kind" -------------
+	var kind ReviewEntityParamsKind
+
+	err = runtime.BindStyledParameterWithOptions("simple", "kind", chi.URLParam(r, "kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReviewEntity(w, r, kind, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2514,6 +2563,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/reviews/demo/{slug}", wrapper.ReviewDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/reviews/{kind}/{id}", wrapper.ReviewEntity)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/email-code", wrapper.PostAuthEmailCode)

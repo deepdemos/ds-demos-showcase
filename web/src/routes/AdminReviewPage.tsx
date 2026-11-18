@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Navigate, Link } from 'react-router';
-import { listDemoReviewQueue, reviewDemo } from '@/api';
+import { listDemoReviewQueue, reviewEntity } from '@/api';
 import type { ReviewQueueItem } from '@/api';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -75,7 +75,7 @@ export function AdminReviewPage() {
     // 于是 409（被别人抢先审了）/ 403（权限被撤）/ 503 全都没有任何提示。
     // 所以这里必须自己看 status，把失败翻成异常。
     mutationFn: async (input: { item: ReviewQueueItem; decision: 'approve' | 'reject' }) => {
-      const res = await reviewDemo(input.item.slug, {
+      const res = await reviewEntity('demo', input.item.slug, {
         decision: input.decision,
         reason: reasons[input.item.slug] || undefined,
       });

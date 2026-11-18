@@ -266,6 +266,11 @@ const (
 	ListDemoReviewQueueParamsStatePending             ListDemoReviewQueueParamsState = "pending"
 )
 
+// Defines values for ReviewEntityParamsKind.
+const (
+	Demo ReviewEntityParamsKind = "demo"
+)
+
 // Defines values for ListDemosParamsSort.
 const (
 	Hot    ListDemosParamsSort = "hot"
@@ -1719,6 +1724,9 @@ type ListDemoReviewQueueParams struct {
 // ListDemoReviewQueueParamsState defines parameters for ListDemoReviewQueue.
 type ListDemoReviewQueueParamsState string
 
+// ReviewEntityParamsKind defines parameters for ReviewEntity.
+type ReviewEntityParamsKind string
+
 // ListDemosParams defines parameters for ListDemos.
 type ListDemosParams struct {
 	// Genre 按形态筛选，可重复（`?genre=game&genre=puzzle`）。
@@ -2042,6 +2050,9 @@ type PreviewModelImportJSONRequestBody = ModelImportRef
 
 // ReviewDemoJSONRequestBody defines body for ReviewDemo for application/json ContentType.
 type ReviewDemoJSONRequestBody = ReviewDecision
+
+// ReviewEntityJSONRequestBody defines body for ReviewEntity for application/json ContentType.
+type ReviewEntityJSONRequestBody = ReviewDecision
 
 // PostAuthEmailCodeJSONRequestBody defines body for PostAuthEmailCode for application/json ContentType.
 type PostAuthEmailCodeJSONRequestBody = EmailCodeRequest

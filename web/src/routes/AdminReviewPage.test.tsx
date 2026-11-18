@@ -13,12 +13,12 @@ vi.mock('@/features/auth/AuthContext', () => ({
 }));
 
 const listDemoReviewQueue = vi.hoisted(() => vi.fn());
-const reviewDemo = vi.hoisted(() => vi.fn());
+const reviewEntity = vi.hoisted(() => vi.fn());
 // 页面通过 PublishCard 间接用到 publishDemo；这条 mock 只在渲染「待发布」区块时被碰，
 // 但这个用例的通过动作会让它出现，所以必须给个桩，否则 import 到 undefined 会炸。
 const publishDemo = vi.hoisted(() => vi.fn());
 
-vi.mock('@/api', () => ({ listDemoReviewQueue, reviewDemo, publishDemo }));
+vi.mock('@/api', () => ({ listDemoReviewQueue, reviewEntity, publishDemo }));
 
 type QueueResponse = {
   status: number;
@@ -69,7 +69,7 @@ function renderPage() {
 
 beforeEach(() => {
   listDemoReviewQueue.mockReset();
-  reviewDemo.mockReset();
+  reviewEntity.mockReset();
 });
 
 describe('AdminReviewPage', () => {
@@ -116,7 +116,7 @@ describe('AdminReviewPage', () => {
   test('点通过与驳回都会带上对应 decision', async () => {
     auth.me = { sub: 'x', username: 'u' };
     mockQueues(okQueue([queueItem()]));
-    reviewDemo.mockResolvedValue({ status: 200, data: {} });
+    reviewEntity.mockResolvedValue({ status: 200, data: {} });
     renderPage();
 
     expect(await screen.findByText('一个作品')).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('AdminReviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '通过' }));
     // mutation 是异步的，点完立刻断言会读到「还没发出去」。
     await waitFor(() =>
-      expect(reviewDemo).toHaveBeenCalledWith('demo-abc', {
+      expect(reviewEntity).toHaveBeenCalledWith('demo', 'demo-abc', {
         decision: 'approve',
         reason: undefined,
       }),
@@ -132,7 +132,7 @@ describe('AdminReviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '驳回' }));
     await waitFor(() =>
-      expect(reviewDemo).toHaveBeenCalledWith('demo-abc', {
+      expect(reviewEntity).toHaveBeenCalledWith('demo', 'demo-abc', {
         decision: 'reject',
         reason: undefined,
       }),
@@ -153,7 +153,7 @@ describe('AdminReviewPage', () => {
     auth.me = { sub: 'm', username: 'mod' };
     mockQueues(okQueue([queueItem()]));
     // 409 = 这条作品刚被别人审过。orval 会照常 resolve，所以页面必须自己看 status。
-    reviewDemo.mockResolvedValue({ status: 409, data: { message: '作品不处于待审状态' } });
+    reviewEntity.mockResolvedValue({ status: 409, data: { message: '作品不处于待审状态' } });
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '通过' }));
@@ -192,13 +192,13 @@ describe('AdminReviewPage', () => {
   test('通过之后会刷新两段队列（待审移走、待发布接住）', async () => {
     auth.me = { sub: 'm', username: 'mod', permissions: ['demo.review'] };
     mockQueues(okQueue([queueItem()]));
-    reviewDemo.mockResolvedValue({ status: 200, data: {} });
+    reviewEntity.mockResolvedValue({ status: 200, data: {} });
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '通过' }));
 
     await waitFor(() =>
-      expect(reviewDemo).toHaveBeenCalledWith('demo-abc', {
+      expect(reviewEntity).toHaveBeenCalledWith('demo', 'demo-abc', {
         decision: 'approve',
         reason: undefined,
       }),

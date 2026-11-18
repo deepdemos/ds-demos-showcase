@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 62 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 63 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -3205,6 +3205,82 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/reviews/{kind}/{id}:
+    post:
+      operationId: reviewEntity
+      tags: [治理]
+      summary: 统一审核裁决入口
+      description: |
+        按 review_kinds 注册表分派的统一裁决入口（GOV-006）。当前只接 demo：
+        id 是作品 slug；裁决语义与旧的 demo 专用路径完全一致。
+
+        旧路径保留为兼容别名，前端已改走这里；新增 kind 时只加一个分派分支，
+        不再新开端点。提案（kind=proposal）的裁决与执行下一轮接入。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [demo]
+          description: review_kinds.key；目前只有 demo 已接入
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+          description: demo kind 时是作品 slug
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecision'
+      responses:
+        '200':
+          description: 裁决完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResult'
+        '400':
+          description: kind / decision 不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有审核权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 目标不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 目标不在可裁决状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
           content:
             application/json:
               schema:
