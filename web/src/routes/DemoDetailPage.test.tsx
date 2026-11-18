@@ -191,7 +191,7 @@ test('详情显示作者、发布时间与模型声明', async () => {
 
   renderPage();
 
-  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole('link', { name: 'Alice' })).toBeInTheDocument());
   // createdAt 是 1 月、publishedAt 是 2 月：页面必须显示后者。
   expect(screen.getByText(/发布 2026\/2\/3/)).toBeInTheDocument();
   // 模型名现在是链接（点进模型页），所以「模型声明：」与模型名不在同一个文本节点里。
@@ -256,7 +256,7 @@ test('未发布的作品显示创建时间，不写「发布」', async () => {
 
   renderPage();
 
-  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole('link', { name: 'Alice' })).toBeInTheDocument());
   expect(screen.getByText(/创建于 2026\/1\/1/)).toBeInTheDocument();
   expect(screen.queryByText(/发布 2026/)).toBeNull();
 });
@@ -321,7 +321,7 @@ test('详情显示作品分类，并链到对应筛选', async () => {
 test('没有模型声明时不渲染那一行', async () => {
   vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
   renderPage();
-  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole('link', { name: 'Alice' })).toBeInTheDocument());
   expect(screen.queryByText(/模型声明：/)).toBeNull();
 });
 
@@ -383,7 +383,7 @@ test('已通过的作品不显示审核提示', async () => {
 
   renderPage();
 
-  await waitFor(() => expect(screen.getByText('作者 Alice')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole('link', { name: 'Alice' })).toBeInTheDocument());
   expect(screen.queryByText(/审核中/)).toBeNull();
   expect(screen.queryByText(/审核未通过/)).toBeNull();
 });
@@ -618,4 +618,14 @@ test('墓碑不写本机历史', async () => {
 
   expect(readHistory()).toEqual([]);
   localStorage.clear();
+});
+
+// #425：作者名是进作者页的入口（DEMO-043「从详情继续到作者」）。
+test('作者名链到作者主页', async () => {
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+
+  renderPage();
+
+  expect(await screen.findByRole('link', { name: 'Alice' })).toHaveAttribute('href', '/u/alice');
 });
