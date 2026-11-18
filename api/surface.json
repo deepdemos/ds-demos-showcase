@@ -238,6 +238,48 @@
         "optional": true
       }
     },
+    "DemoAppeal": {
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "decisionReason": {
+        "type": "string",
+        "optional": true
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": false
+      },
+      "reviewedAt": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "status": {
+        "type": "DemoAppealStatus",
+        "optional": false
+      }
+    },
+    "DemoAppealInput": {
+      "reason": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "DemoAppealState": {
+      "appeal": {
+        "type": "DemoAppeal",
+        "optional": true
+      },
+      "canSubmit": {
+        "type": "bool",
+        "optional": false
+      }
+    },
     "DemoAuthor": {
       "displayName": {
         "type": "string",
@@ -1938,6 +1980,11 @@
       "private",
       "public"
     ],
+    "DemoAppealStatus": [
+      "approved",
+      "pending",
+      "rejected"
+    ],
     "DemoChannelLang": [
       "en",
       "zh"
@@ -1984,6 +2031,7 @@
       "title"
     ],
     "ErrorCode": [
+      "appeal_pending",
       "conflict",
       "derivative_purged",
       "email_not_verified",
@@ -2382,6 +2430,16 @@
     },
     "PUT /api/v1/demos/{slug}": {
       "method": "UpdateDemo",
+      "pathParams": 1,
+      "params": null
+    },
+    "GET /api/v1/demos/{slug}/appeal": {
+      "method": "GetDemoAppeal",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/demos/{slug}/appeal": {
+      "method": "SubmitDemoAppeal",
       "pathParams": 1,
       "params": null
     },

@@ -61,6 +61,13 @@ const (
 	CollectionUpdateVisibilityPublic  CollectionUpdateVisibility = "public"
 )
 
+// Defines values for DemoAppealStatus.
+const (
+	DemoAppealStatusApproved DemoAppealStatus = "approved"
+	DemoAppealStatusPending  DemoAppealStatus = "pending"
+	DemoAppealStatusRejected DemoAppealStatus = "rejected"
+)
+
 // Defines values for DemoChannelLang.
 const (
 	DemoChannelLangEn DemoChannelLang = "en"
@@ -128,6 +135,7 @@ const (
 
 // Defines values for ErrorCode.
 const (
+	AppealPending        ErrorCode = "appeal_pending"
 	Conflict             ErrorCode = "conflict"
 	DerivativePurged     ErrorCode = "derivative_purged"
 	EmailNotVerified     ErrorCode = "email_not_verified"
@@ -368,9 +376,9 @@ const (
 
 // Defines values for ListMyDemosParamsModeration.
 const (
-	Approved ListMyDemosParamsModeration = "approved"
-	Pending  ListMyDemosParamsModeration = "pending"
-	Rejected ListMyDemosParamsModeration = "rejected"
+	ListMyDemosParamsModerationApproved ListMyDemosParamsModeration = "approved"
+	ListMyDemosParamsModerationPending  ListMyDemosParamsModeration = "pending"
+	ListMyDemosParamsModerationRejected ListMyDemosParamsModeration = "rejected"
 )
 
 // Defines values for ListModelsParamsStatus.
@@ -578,6 +586,33 @@ type CollectionUpdate struct {
 
 // CollectionUpdateVisibility defines model for CollectionUpdate.Visibility.
 type CollectionUpdateVisibility string
+
+// DemoAppeal defines model for DemoAppeal.
+type DemoAppeal struct {
+	CreatedAt      time.Time        `json:"createdAt"`
+	DecisionReason *string          `json:"decisionReason"`
+	Id             int              `json:"id"`
+	Reason         string           `json:"reason"`
+	ReviewedAt     *time.Time       `json:"reviewedAt"`
+	Status         DemoAppealStatus `json:"status"`
+}
+
+// DemoAppealStatus defines model for DemoAppeal.Status.
+type DemoAppealStatus string
+
+// DemoAppealInput defines model for DemoAppealInput.
+type DemoAppealInput struct {
+	Reason string `json:"reason"`
+}
+
+// DemoAppealState defines model for DemoAppealState.
+type DemoAppealState struct {
+	// Appeal 最近一条申诉；从没提过为 null
+	Appeal *DemoAppeal `json:"appeal"`
+
+	// CanSubmit 当前作者能否提交新申诉（removed 且无 pending）
+	CanSubmit bool `json:"canSubmit"`
+}
 
 // DemoAuthor defines model for DemoAuthor.
 type DemoAuthor struct {
@@ -2312,6 +2347,9 @@ type DeleteDemoJSONRequestBody = DemoDeleteRequest
 
 // UpdateDemoMultipartRequestBody defines body for UpdateDemo for multipart/form-data ContentType.
 type UpdateDemoMultipartRequestBody UpdateDemoMultipartBody
+
+// SubmitDemoAppealJSONRequestBody defines body for SubmitDemoAppeal for application/json ContentType.
+type SubmitDemoAppealJSONRequestBody = DemoAppealInput
 
 // PutDemoRatingJSONRequestBody defines body for PutDemoRating for application/json ContentType.
 type PutDemoRatingJSONRequestBody = DemoRatingInput

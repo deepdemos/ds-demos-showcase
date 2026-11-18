@@ -228,6 +228,14 @@ func (s *stub) BatchReviewAdminProposals(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "batch-proposals")
 }
 
+func (s *stub) GetDemoAppeal(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "demo-appeal:"+slug)
+}
+
+func (s *stub) SubmitDemoAppeal(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "submit-appeal:"+slug)
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -311,6 +319,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/admin/proposals/7", "admin-proposal:7"},
 		{http.MethodPost, "/api/v1/admin/proposals/7/review", "review-proposal:7"},
 		{http.MethodPost, "/api/v1/admin/proposals/batch", "batch-proposals"},
+		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
+		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

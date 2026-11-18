@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 )
@@ -27,6 +29,22 @@ func (h *Handler) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string
 	if err != nil {
 		h.writeIdentityError(w, err)
 		return
+	}
+
+	// 未结申诉期间先挡住写操作（#463 / 生命周期设计 §6.6）。放在读请求体之前：
+	// 注定 409 的请求没必要先吃 200 MiB。
+	if h.queries != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+		_, appealErr := h.queries.GetPendingAppealBySlug(ctx, slug)
+		cancel()
+		if appealErr == nil {
+			writeError(w, http.StatusConflict, api.AppealPending, "作品有未结申诉，等处理结束再来；现在不能修改")
+			return
+		}
+		if !errors.Is(appealErr, pgx.ErrNoRows) {
+			unavailable(w, appealErr)
+			return
+		}
 	}
 
 	maxBytes := h.maxUploadBytes

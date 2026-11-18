@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 67 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 69 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -724,6 +724,105 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: 存储或数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/demos/{slug}/appeal:
+    get:
+      operationId: getDemoAppeal
+      tags: [Demo]
+      summary: 我的作品申诉
+      description: |
+        作者查看最近一条申诉与「现在能不能提交」。没有申诉也返回 200（appeal 为 null）。
+
+        非作者一律 404：不承认这个 slug 上有申诉。软删 / 擦除的作品同样 404。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: 申诉状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoAppealState'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或不是作者
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: submitDemoAppeal
+      tags: [Demo]
+      summary: 提交作品申诉
+      description: |
+        只有作者、当前 lifecycle_state='removed'、且没有在途申诉时可提交。
+        同一作品同时最多一条 pending；重复提交 / 非 removed / 非作者一律 409 或 404。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoAppealInput'
+      responses:
+        '201':
+          description: 已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoAppeal'
+        '400':
+          description: reason 不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 作品不存在，或不是作者
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 已有在途申诉 / 当前状态不可申诉
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
           content:
             application/json:
               schema:
@@ -3784,7 +3883,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required, email_not_verified, payload_too_large, restore_window_closed, derivative_purged]
+          enum: [not_found, invalid_param, forbidden, unauthorized, conflict, rate_limited, unavailable, verification_required, email_not_verified, payload_too_large, restore_window_closed, derivative_purged, appeal_pending]
           description: 机器可判别的错误码；`message` 只给人看，不要拿来做判断
         message:
           type: string
@@ -4540,6 +4639,54 @@ components:
 
     # 作品作者（`DemoDetail.author`）。它曾经叫 ModelAuthor，和旁边的 ModelRef /
     # ModelList 同前缀，读起来像「模型的作者」——它跟模型域没有任何关系。
+    DemoAppeal:
+      type: object
+      additionalProperties: false
+      required: [id, reason, status, decisionReason, reviewedAt, createdAt]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        decisionReason:
+          type: string
+          nullable: true
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    DemoAppealState:
+      type: object
+      additionalProperties: false
+      required: [canSubmit, appeal]
+      properties:
+        canSubmit:
+          type: boolean
+          description: 当前作者能否提交新申诉（removed 且无 pending）
+        appeal:
+          allOf:
+            - $ref: '#/components/schemas/DemoAppeal'
+          nullable: true
+          description: 最近一条申诉；从没提过为 null
+
+    DemoAppealInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
     DemoAuthor:
       type: object
       additionalProperties: false

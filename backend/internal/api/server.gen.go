@@ -134,6 +134,12 @@ type ServerInterface interface {
 	// 更新作品（追加新版本，等复审）
 	// (PUT /api/v1/demos/{slug})
 	UpdateDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 我的作品申诉
+	// (GET /api/v1/demos/{slug}/appeal)
+	GetDemoAppeal(w http.ResponseWriter, r *http.Request, slug string)
+	// 提交作品申诉
+	// (POST /api/v1/demos/{slug}/appeal)
+	SubmitDemoAppeal(w http.ResponseWriter, r *http.Request, slug string)
 	// 下架作品（作者本人）
 	// (POST /api/v1/demos/{slug}/archive)
 	ArchiveDemo(w http.ResponseWriter, r *http.Request, slug string)
@@ -458,6 +464,18 @@ func (_ Unimplemented) GetDemo(w http.ResponseWriter, r *http.Request, slug stri
 // 更新作品（追加新版本，等复审）
 // (PUT /api/v1/demos/{slug})
 func (_ Unimplemented) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 我的作品申诉
+// (GET /api/v1/demos/{slug}/appeal)
+func (_ Unimplemented) GetDemoAppeal(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 提交作品申诉
+// (POST /api/v1/demos/{slug}/appeal)
+func (_ Unimplemented) SubmitDemoAppeal(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1770,6 +1788,68 @@ func (siw *ServerInterfaceWrapper) UpdateDemo(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// GetDemoAppeal operation middleware
+func (siw *ServerInterfaceWrapper) GetDemoAppeal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDemoAppeal(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SubmitDemoAppeal operation middleware
+func (siw *ServerInterfaceWrapper) SubmitDemoAppeal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SubmitDemoAppeal(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ArchiveDemo operation middleware
 func (siw *ServerInterfaceWrapper) ArchiveDemo(w http.ResponseWriter, r *http.Request) {
 
@@ -2827,6 +2907,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/demos/{slug}", wrapper.UpdateDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/demos/{slug}/appeal", wrapper.GetDemoAppeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/demos/{slug}/appeal", wrapper.SubmitDemoAppeal)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/demos/{slug}/archive", wrapper.ArchiveDemo)
