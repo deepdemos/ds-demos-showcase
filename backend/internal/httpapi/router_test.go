@@ -224,6 +224,10 @@ func (s *stub) ReviewAdminProposal(_ http.ResponseWriter, _ *http.Request, id in
 	s.hits = append(s.hits, "review-proposal:"+strconv.Itoa(id))
 }
 
+func (s *stub) BatchReviewAdminProposals(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "batch-proposals")
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -306,6 +310,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/admin/proposals", "admin-proposals"},
 		{http.MethodGet, "/api/v1/admin/proposals/7", "admin-proposal:7"},
 		{http.MethodPost, "/api/v1/admin/proposals/7/review", "review-proposal:7"},
+		{http.MethodPost, "/api/v1/admin/proposals/batch", "batch-proposals"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

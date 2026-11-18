@@ -415,6 +415,91 @@ RETURNING id`).Scan(&proposalID); err != nil {
 	}
 }
 
+func TestIntegrationProposalBatch(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+	adminSID := mkAdmin(t, pool, idSvc, "pbatch")
+
+	insert := func(kind, payload string) int64 {
+		var id int64
+		if err := pool.QueryRow(context.Background(), `
+INSERT INTO proposals (kind, payload, source) VALUES ($1, $2::jsonb, 'user') RETURNING id`, kind, payload).Scan(&id); err != nil {
+			t.Fatalf("插入提案失败: %v", err)
+		}
+		t.Cleanup(func() {
+			_, _ = pool.Exec(context.Background(), `DELETE FROM proposals WHERE id = $1`, id)
+		})
+		return id
+	}
+
+	slugA := "it-batch-skill-a"
+	slugB := "it-batch-skill-b"
+	_, _ = pool.Exec(context.Background(), `DELETE FROM skills WHERE slug IN ($1,$2)`, slugA, slugB)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM skills WHERE slug IN ($1,$2)`, slugA, slugB)
+	})
+
+	first := insert("new_skill", `{"slug":"`+slugA+`","name":"批量技能 A"}`)
+	second := insert("new_skill", `{"slug":"`+slugB+`","name":"批量技能 B"}`)
+	third := insert("new_model", `{"name":"批量模型"}`)
+
+	// 先单条驳回 third，制造一行「已经处理过」。
+	rec := httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"reject","reason":"先处理"}`), int(third))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("预驳回 = %d", rec.Code)
+	}
+
+	body := `{"ids":[` + itoa(int(first)) + `,` + itoa(int(second)) + `,` + itoa(int(third)) + `],"decision":"reject","reason":"批量驳回"}`
+	rec = httptest.NewRecorder()
+	h.BatchReviewAdminProposals(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/batch", adminSID, body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("批量驳回 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+	var out api.ProposalBatchResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("批量结果不是合法 JSON: %v", err)
+	}
+	if len(out.Results) != 3 {
+		t.Fatalf("结果条数 = %d，想要 3", len(out.Results))
+	}
+	if !out.Results[0].Ok || !out.Results[1].Ok || out.Results[2].Ok {
+		t.Fatalf("逐条结果 = %+v，想要 前两条 ok、第三条失败", out.Results)
+	}
+	if out.Results[2].Error == nil || *out.Results[2].Error == "" {
+		t.Fatalf("失败行没有 error：%+v", out.Results[2])
+	}
+
+	// 批量通过：技能成功，未接入的 new_model 行失败，但不影响其它行。
+	modelID := insert("new_model", `{"name":"批量模型二"}`)
+	skillID := insert("new_skill", `{"slug":"it-batch-skill-c","name":"批量技能 C"}`)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM skills WHERE slug='it-batch-skill-c'`)
+	})
+	body = `{"ids":[` + itoa(int(skillID)) + `,` + itoa(int(modelID)) + `],"decision":"approve"}`
+	rec = httptest.NewRecorder()
+	h.BatchReviewAdminProposals(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/batch", adminSID, body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("批量通过 = %d（body=%s）", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("批量通过结果不是合法 JSON: %v", err)
+	}
+	if !out.Results[0].Ok || out.Results[1].Ok {
+		t.Fatalf("批量通过结果 = %+v", out.Results)
+	}
+
+	// 空 / 重复 ids：400。
+	for _, bad := range []string{`{"ids":[],"decision":"reject"}`, `{"ids":[1,1],"decision":"reject"}`} {
+		rec = httptest.NewRecorder()
+		h.BatchReviewAdminProposals(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/batch", adminSID, bad))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("非法 ids %s = %d，想要 400", bad, rec.Code)
+		}
+	}
+}
+
 func TestIntegrationProposalsRequirePermission(t *testing.T) {
 	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)

@@ -880,6 +880,15 @@
         }
       }
     ],
+    "POST /api/v1/admin/proposals/batch": [
+      {
+        "case": "空 ids 返回 400",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_integration_test.go",
+          "name": "TestIntegrationProposalBatch"
+        }
+      }
+    ],
     "POST /api/v1/admin/proposals/{id}/review": [
       {
         "case": "approve 的执行器未接入返回 422，提案仍是 pending",

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { Button, EmptyState, ErrorState, Skeleton, Textarea } from '@/components/ui';
-import { getAdminProposal, reviewAdminProposal } from '@/api';
+import { getAdminProposal, reviewEntity } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
 /**
@@ -53,7 +53,7 @@ export function ProposalDetailPage() {
 
   const reject = useMutation({
     mutationFn: async () => {
-      const response = await reviewAdminProposal(id, {
+      const response = await reviewEntity('proposal', String(id), {
         decision: 'reject',
         reason: reason.trim() || undefined,
       });
@@ -77,7 +77,7 @@ export function ProposalDetailPage() {
 
   const approve = useMutation({
     mutationFn: async () => {
-      const response = await reviewAdminProposal(id, { decision: 'approve' });
+      const response = await reviewEntity('proposal', String(id), { decision: 'approve' });
       if (response.status !== 200) {
         const message =
           typeof response.data === 'object' && response.data && 'message' in response.data

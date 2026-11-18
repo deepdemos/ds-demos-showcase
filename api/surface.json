@@ -1410,6 +1410,44 @@
         "optional": false
       }
     },
+    "ProposalBatchItem": {
+      "error": {
+        "type": "string",
+        "optional": true
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "ok": {
+        "type": "bool",
+        "optional": false
+      },
+      "status": {
+        "type": "ProposalBatchItemStatus",
+        "optional": true
+      }
+    },
+    "ProposalBatchResult": {
+      "results": {
+        "type": "[]ProposalBatchItem",
+        "optional": false
+      }
+    },
+    "ProposalBatchReview": {
+      "decision": {
+        "type": "ProposalBatchReviewDecision",
+        "optional": false
+      },
+      "ids": {
+        "type": "[]int",
+        "optional": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true
+      }
+    },
     "ProposalDecision": {
       "decision": {
         "type": "ProposalDecisionDecision",
@@ -1731,6 +1769,10 @@
       }
     },
     "ReviewResult": {
+      "kind": {
+        "type": "ReviewResultKind",
+        "optional": true
+      },
       "moderationState": {
         "type": "ReviewResultModerationState",
         "optional": false
@@ -1987,6 +2029,14 @@
       "pending",
       "rejected"
     ],
+    "ProposalBatchItemStatus": [
+      "approved",
+      "rejected"
+    ],
+    "ProposalBatchReviewDecision": [
+      "approve",
+      "reject"
+    ],
     "ProposalDecisionDecision": [
       "approve",
       "reject"
@@ -2068,6 +2118,10 @@
       "approved",
       "pending"
     ],
+    "ReviewResultKind": [
+      "demo",
+      "proposal"
+    ],
     "ReviewResultModerationState": [
       "approved",
       "rejected"
@@ -2097,7 +2151,8 @@
       "pending"
     ],
     "ReviewEntityParamsKind": [
-      "demo"
+      "demo",
+      "proposal"
     ],
     "ListDemosParamsSort": [
       "hot",
@@ -2189,6 +2244,11 @@
       "method": "ListAdminProposals",
       "pathParams": 0,
       "params": "ListAdminProposalsParams"
+    },
+    "POST /api/v1/admin/proposals/batch": {
+      "method": "BatchReviewAdminProposals",
+      "pathParams": 0,
+      "params": null
     },
     "GET /api/v1/admin/proposals/{id}": {
       "method": "GetAdminProposal",
