@@ -155,7 +155,10 @@ describe('HistoryPage', () => {
     } as never);
 
     renderPage();
-    fireEvent.click(await screen.findByRole('checkbox', { name: '记录账号历史' }));
+    const box = await screen.findByRole('checkbox', { name: '记录账号历史' });
+    // 先等设置读回来再点：加载中的默认值不能拿来推断服务端状态。
+    await waitFor(() => expect(box).toBeChecked());
+    fireEvent.click(box);
 
     await waitFor(() => expect(updateMyHistorySettings).toHaveBeenCalledWith({ enabled: false }));
     expect(deleteMyHistory).not.toHaveBeenCalled();

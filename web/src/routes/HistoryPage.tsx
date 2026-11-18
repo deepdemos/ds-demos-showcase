@@ -187,7 +187,8 @@ export function HistoryPage() {
   const currentPage = Math.min(page, pageCount);
   const visible = merged.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const accountEnabled = account.data?.enabled ?? true;
+  // 读失败时不能用 true 冒充服务端设置：勾选被改会把真实的 false 写回 true。
+  const accountEnabled = account.data?.enabled ?? false;
 
   const onLimitChange = (value: string) => {
     writeLimit(Number(value));
@@ -247,7 +248,7 @@ export function HistoryPage() {
               label="记录账号历史"
               checked={accountEnabled}
               indeterminate={false}
-              disabled={account.isPending || toggle.isPending}
+              disabled={!account.data || account.isPending || toggle.isPending}
               onChange={(event) => toggle.mutate(event.target.checked)}
             />
             <Button
