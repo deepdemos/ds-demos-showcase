@@ -1,15 +1,27 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  addCollectionItem,
   deleteDemoRating,
+  getCollectionStatus,
   getDemo,
+  listCollections,
   listDemoTimeline,
   listRelatedDemos,
   putDemoRating,
+  removeCollectionItem,
 } from '@/api';
 import { readHistory } from '@/features/history/local-history';
+const auth = vi.hoisted(() => ({
+  me: null as null | { sub: string; username: string },
+}));
+
+vi.mock('@/features/auth/AuthContext', () => ({
+  useAuth: () => ({ ...auth, isLoading: false, isError: false, setMe: vi.fn(), signOut: vi.fn() }),
+}));
+
 import {
   DemoDetailPage,
   DemoDownload,
@@ -32,7 +44,20 @@ vi.mock('@/api', async (importOriginal) => {
     listDemoTimeline: vi.fn(),
     // 相关作品同理：详情页尾部总会挂它。
     listRelatedDemos: vi.fn(),
+    // 收藏入口：访客态不该请求，登录态用例自己设置返回值。
+    getCollectionStatus: vi.fn(),
+    listCollections: vi.fn(),
+    addCollectionItem: vi.fn(),
+    removeCollectionItem: vi.fn(),
   };
+});
+
+beforeEach(() => {
+  auth.me = null;
+  vi.mocked(getCollectionStatus).mockReset();
+  vi.mocked(listCollections).mockReset();
+  vi.mocked(addCollectionItem).mockReset();
+  vi.mocked(removeCollectionItem).mockReset();
 });
 
 // 默认「没有任何动作」：绝大多数用例关心的是详情本身，不是动态。
@@ -628,4 +653,115 @@ test('作者名链到作者主页', async () => {
   renderPage();
 
   expect(await screen.findByRole('link', { name: 'Alice' })).toHaveAttribute('href', '/u/alice');
+});
+
+// #438：详情页的收藏入口。两条路径分开：按钮切默认夹，勾选加指定夹。
+test('登录后可以把作品收藏到默认夹', async () => {
+  auth.me = { sub: 'u1', username: 'alice' };
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+  vi.mocked(getCollectionStatus).mockResolvedValue({
+    status: 200,
+    data: { slug: 'demo-a', inDefault: false, collectionIds: [] },
+  } as never);
+  vi.mocked(listCollections).mockResolvedValue({
+    status: 200,
+    data: {
+      items: [
+        {
+          id: 1,
+          name: '默认收藏',
+          description: '',
+          isDefault: true,
+          visibility: 'private',
+          itemCount: 0,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    },
+  } as never);
+  vi.mocked(addCollectionItem).mockResolvedValue({ status: 204, data: undefined } as never);
+
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: '收藏' }));
+
+  await waitFor(() => expect(addCollectionItem).toHaveBeenCalledWith(1, { slug: 'demo-a' }));
+});
+
+test('已收藏时按钮是「已收藏」，点击移出默认夹', async () => {
+  auth.me = { sub: 'u1', username: 'alice' };
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+  vi.mocked(getCollectionStatus).mockResolvedValue({
+    status: 200,
+    data: { slug: 'demo-a', inDefault: true, collectionIds: [] },
+  } as never);
+  vi.mocked(listCollections).mockResolvedValue({
+    status: 200,
+    data: {
+      items: [
+        {
+          id: 1,
+          name: '默认收藏',
+          description: '',
+          isDefault: true,
+          visibility: 'private',
+          itemCount: 1,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    },
+  } as never);
+  vi.mocked(removeCollectionItem).mockResolvedValue({ status: 204, data: undefined } as never);
+
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: '已收藏' }));
+
+  await waitFor(() => expect(removeCollectionItem).toHaveBeenCalledWith(1, 'demo-a'));
+});
+
+test('加入指定夹：勾选自定义夹会调 addCollectionItem', async () => {
+  auth.me = { sub: 'u1', username: 'alice' };
+  vi.mocked(getDemo).mockResolvedValue({ status: 200, data: detail() } as never);
+  vi.mocked(listRelatedDemos).mockResolvedValue({ status: 200, data: { items: [] } } as never);
+  vi.mocked(getCollectionStatus).mockResolvedValue({
+    status: 200,
+    data: { slug: 'demo-a', inDefault: false, collectionIds: [] },
+  } as never);
+  vi.mocked(listCollections).mockResolvedValue({
+    status: 200,
+    data: {
+      items: [
+        {
+          id: 1,
+          name: '默认收藏',
+          description: '',
+          isDefault: true,
+          visibility: 'private',
+          itemCount: 0,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 2,
+          name: '灵感夹',
+          description: '',
+          isDefault: false,
+          visibility: 'private',
+          itemCount: 0,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    },
+  } as never);
+  vi.mocked(addCollectionItem).mockResolvedValue({ status: 204, data: undefined } as never);
+
+  renderPage();
+  fireEvent.click(await screen.findByText('加入指定夹'));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '灵感夹' }));
+
+  await waitFor(() => expect(addCollectionItem).toHaveBeenCalledWith(2, { slug: 'demo-a' }));
 });
