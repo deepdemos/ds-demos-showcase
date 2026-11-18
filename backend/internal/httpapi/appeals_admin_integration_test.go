@@ -94,7 +94,10 @@ WHERE ac.sub=$1 AND n.kind='appeal.approved'`, author.Sub).Scan(&notices); err !
 		t.Fatalf("申诉通过通知 = %d err=%v", notices, err)
 	}
 	if err := pool.QueryRow(context.Background(), `
-SELECT count(*) FROM audit_log WHERE entity_type='demo' AND entity_id=(SELECT demo_id FROM demo_appeals WHERE id=$1)`, appeal.Id).Scan(&audits); err != nil || audits < 1 {
+SELECT count(*) FROM audit_log
+WHERE entity_type='demo' AND action='review'
+  AND entity_id=(SELECT demo_id FROM demo_appeals WHERE id=$1)
+  AND after->>'appeal_status'='approved'`, appeal.Id).Scan(&audits); err != nil || audits < 1 {
 		t.Fatalf("申诉审计 = %d err=%v", audits, err)
 	}
 

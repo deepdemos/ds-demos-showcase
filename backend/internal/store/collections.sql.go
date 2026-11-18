@@ -153,26 +153,23 @@ func (q *Queries) DeleteCollection(ctx context.Context, arg DeleteCollectionPara
 	return result.RowsAffected(), nil
 }
 
-const ensureDefaultCollection = `-- name: EnsureDefaultCollection :one
+const ensureDefaultCollection = `-- name: EnsureDefaultCollection :exec
 
 INSERT INTO collections (account_id, name, is_default)
 VALUES ($1, '默认收藏', true)
-ON CONFLICT (account_id) WHERE is_default DO UPDATE
-SET name = collections.name
-RETURNING id
+ON CONFLICT DO NOTHING
 `
 
 // 收藏域（#438 / COL-001 – COL-014）。
 //
 // 上限不写死：collection.max_per_account / collection.max_items 从设置域读，
 // 由调用方传进来（本文件只收 max_* 参数）。默认夹惰性创建，不写触发器。
-// 默认夹每人一个：先插，冲突时做一次无意义 UPDATE 拿回 id。
-// 不用「先查再插」：两个人同时第一次收藏时，后者会撞唯一索引。
-func (q *Queries) EnsureDefaultCollection(ctx context.Context, accountID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, ensureDefaultCollection, accountID)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+// 默认夹每人一个：惰性创建，任何唯一冲突都跳过。
+// 不能只写 ON CONFLICT (account_id) WHERE is_default：用户可能先建了同名自定义夹，
+// 撞的是 uq_collections_name；那条冲突若冒出去，收藏页会永久 503。
+func (q *Queries) EnsureDefaultCollection(ctx context.Context, accountID int64) error {
+	_, err := q.db.Exec(ctx, ensureDefaultCollection, accountID)
+	return err
 }
 
 const getCollectionByID = `-- name: GetCollectionByID :one

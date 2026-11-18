@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -133,7 +133,11 @@ func (h *Handler) ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id i
 	}
 	reason := ""
 	if body.Reason != nil {
-		reason = *body.Reason
+		reason = strings.TrimSpace(*body.Reason)
+	}
+	if len([]rune(reason)) > 500 {
+		writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, "裁决说明最多 500 个字符")
+		return
 	}
 
 	before, _ := json.Marshal(map[string]string{
@@ -179,19 +183,44 @@ func (h *Handler) ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id i
 			writeError(w, http.StatusConflict, api.Conflict, "作品已不是 removed 状态，申诉不能再通过")
 			return
 		}
+		// 作品动态：恢复也是一次生命周期变化，不能只剩审计（Demo 域 §6.2）。
+		if err := q.InsertDemoTimeline(ctx, store.InsertDemoTimelineParams{
+			DemoID:  row.DemoID,
+			Kind:    "restore",
+			Column3: "申诉通过，作品恢复发布",
+			ActorID: pgtype.Int8{Int64: actor.AccountID, Valid: actor.AccountID != 0},
+		}); err != nil {
+			unavailable(w, err)
+			return
+		}
+		if err := h.auditAppealDecision(ctx, q, actor, row, "approved", reason, before); err != nil {
+			unavailable(w, err)
+			return
+		}
 		if err := tx.Commit(ctx); err != nil {
 			unavailable(w, err)
 			return
 		}
 
-		h.auditAppealDecision(ctx, actor, row, "approved", reason, before)
+		// 通知在事务外：失败不改变裁决结果，允许丢一条（已知松点）。
 		h.notifyDemoEvent(ctx, row.Slug, "appeal.approved", map[string]string{"reason": reason}, actor.AccountID)
 		writeJSON(w, http.StatusOK, api.AppealReviewResult{
 			Id: int(id), Status: api.AppealReviewResultStatusApproved, DemoSlug: row.Slug,
 		})
 
 	case api.AppealDecisionDecisionReject:
-		if _, err := h.queries.RejectAppeal(ctx, store.RejectAppealParams{
+		if h.pool == nil {
+			writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+			return
+		}
+		tx, err := h.pool.Begin(ctx)
+		if err != nil {
+			unavailable(w, err)
+			return
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		q := h.queries.WithTx(tx)
+		if _, err := q.RejectAppeal(ctx, store.RejectAppealParams{
 			ID:             int64(id),
 			ReviewedBy:     pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
 			DecisionReason: reason,
@@ -202,7 +231,14 @@ func (h *Handler) ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id i
 			unavailable(w, err)
 			return
 		}
-		h.auditAppealDecision(ctx, actor, row, "rejected", reason, before)
+		if err := h.auditAppealDecision(ctx, q, actor, row, "rejected", reason, before); err != nil {
+			unavailable(w, err)
+			return
+		}
+		if err := tx.Commit(ctx); err != nil {
+			unavailable(w, err)
+			return
+		}
 		h.notifyDemoEvent(ctx, row.Slug, "appeal.rejected", map[string]string{"reason": reason}, actor.AccountID)
 		writeJSON(w, http.StatusOK, api.AppealReviewResult{
 			Id: int(id), Status: api.AppealReviewResultStatusRejected, DemoSlug: row.Slug,
@@ -213,12 +249,16 @@ func (h *Handler) ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id i
 	}
 }
 
-func (h *Handler) auditAppealDecision(ctx context.Context, actor demo.Actor, row store.GetAppealForReviewRow, afterStatus, reason string, before []byte) {
+func (h *Handler) auditAppealDecision(ctx context.Context, q *store.Queries, actor demo.Actor, row store.GetAppealForReviewRow, afterStatus, reason string, before []byte) error {
+	afterState := row.LifecycleState
+	if afterStatus == "approved" {
+		afterState = "published"
+	}
 	after, _ := json.Marshal(map[string]string{
-		"appeal_status": afterStatus, "lifecycle_state": map[string]string{"approved": "published", "rejected": row.LifecycleState}[afterStatus],
+		"appeal_status": afterStatus, "lifecycle_state": afterState,
 	})
-	if err := h.queries.InsertAuditLog(ctx, store.InsertAuditLogParams{
-		ActorID:    pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+	return q.InsertAuditLog(ctx, store.InsertAuditLogParams{
+		ActorID:    pgtype.Int8{Int64: actor.AccountID, Valid: actor.AccountID != 0},
 		ActorRole:  actor.Role,
 		Action:     "review",
 		EntityType: "demo",
@@ -226,7 +266,5 @@ func (h *Handler) auditAppealDecision(ctx context.Context, actor demo.Actor, row
 		Before:     before,
 		After:      after,
 		Reason:     reason,
-	}); err != nil {
-		slog.Warn("写申诉裁决审计失败", "appeal", row.ID, "err", err)
-	}
+	})
 }

@@ -130,7 +130,7 @@ func (h *Handler) ListCollections(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// 惰性创建默认夹：第一次打开收藏页也要看到它。
-	if _, err := h.queries.EnsureDefaultCollection(ctx, account.ID); err != nil {
+	if err := h.queries.EnsureDefaultCollection(ctx, account.ID); err != nil {
 		unavailable(w, err)
 		return
 	}
@@ -168,6 +168,10 @@ func (h *Handler) CreateCollection(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(body.Name)
 	if name == "" || len([]rune(name)) > collectionNameMax {
 		writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, "名称需要 1–50 个字符")
+		return
+	}
+	if strings.EqualFold(name, "默认收藏") {
+		writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, "「默认收藏」是系统保留名")
 		return
 	}
 	description := ""
@@ -295,6 +299,10 @@ func (h *Handler) UpdateCollection(w http.ResponseWriter, r *http.Request, id in
 		name := strings.TrimSpace(*body.Name)
 		if name == "" || len([]rune(name)) > collectionNameMax {
 			writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, "名称需要 1–50 个字符")
+			return
+		}
+		if strings.EqualFold(name, "默认收藏") {
+			writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, "「默认收藏」是系统保留名")
 			return
 		}
 		params.Name = pgtypeText(name)
