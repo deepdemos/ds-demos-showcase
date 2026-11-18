@@ -243,4 +243,73 @@ func TestIntegrationAccountHistoryHidesUnpublished(t *testing.T) {
 	if got := getHistory(t, h, otherSID); got.Total != 1 || got.Items[0].Slug != public {
 		t.Fatalf("公开作品历史 = %+v，想要 1 条 %s", got.Items, public)
 	}
+
+	// unlisted 也能通过链接打开，应当进历史。
+	unlisted := submitHTML(t, h, sid, "unlisted 历史", "<h1>u</h1>")
+	publishNow(t, pool, unlisted)
+	if _, err := pool.Exec(context.Background(), `
+UPDATE demo_channels SET visibility = 'unlisted'
+WHERE demo_id = (SELECT id FROM demos WHERE slug = $1)`, unlisted); err != nil {
+		t.Fatalf("改 unlisted 失败: %v", err)
+	}
+	viewAs(t, h, otherSID, unlisted)
+
+	// archived 是墓碑，不展示内容，也不该进历史。
+	archived := submitHTML(t, h, sid, "archived 历史", "<h1>a</h1>")
+	publishNow(t, pool, archived)
+	if _, err := pool.Exec(context.Background(), `UPDATE demos SET lifecycle_state='archived' WHERE slug=$1`, archived); err != nil {
+		t.Fatalf("置 archived 失败: %v", err)
+	}
+	viewAs(t, h, otherSID, archived)
+
+	got := getHistory(t, h, otherSID)
+	if got.Total != 2 {
+		t.Fatalf("历史 total = %d，想要 2（公开 + unlisted，archived 不计）：%+v", got.Total, got.Items)
+	}
+	seen := map[string]bool{}
+	for _, item := range got.Items {
+		seen[item.Slug] = true
+	}
+	if !seen[public] || !seen[unlisted] || seen[archived] {
+		t.Fatalf("历史条目 = %+v，想要 public+unlisted、不含 archived", seen)
+	}
+}
+
+// 作者判据必须走 users.id：把 users.id 挪开之后，作者本人仍能看到自己的草稿。
+// 旧实现用 accounts.id 比较，在这条用例下会空历史。
+func TestIntegrationAccountHistoryAuthorIDDrift(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email: "it-history-drift@example.com", Password: "correct-horse-battery",
+		Username: "it-history-drift", DisplayName: "漂移作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+
+	// 人为制造 accounts.id != users.id：删掉注册时那一行，再用 OVERRIDING SYSTEM VALUE
+	// 插一个远离当前序列的 users.id；投稿时 demos.author_id 会写这个新值。
+	tx, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("开事务失败: %v", err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err := tx.Exec(context.Background(), `DELETE FROM users WHERE sub = $1`, author.Sub); err != nil {
+		t.Fatalf("删旧 users 行失败: %v", err)
+	}
+	if _, err := tx.Exec(context.Background(), `
+INSERT INTO users (id, sub) OVERRIDING SYSTEM VALUE VALUES (900000000, $1)`, author.Sub); err != nil {
+		t.Fatalf("插漂移 users 行失败: %v", err)
+	}
+	if err := tx.Commit(context.Background()); err != nil {
+		t.Fatalf("提交漂移失败: %v", err)
+	}
+
+	draft := submitHTML(t, h, sid, "漂移作者的草稿", "<h1>drift</h1>")
+	viewAs(t, h, sid, draft)
+
+	got := getHistory(t, h, sid)
+	if got.Total != 1 || got.Items[0].Slug != draft {
+		t.Fatalf("作者漂移后历史 = %+v，想要 1 条 %s", got.Items, draft)
+	}
 }
