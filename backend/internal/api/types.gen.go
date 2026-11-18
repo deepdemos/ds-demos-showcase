@@ -331,6 +331,16 @@ type AccountHistorySettings struct {
 // AccountStatus 账号状态取值域，见标准对象 §ST-1
 type AccountStatus string
 
+// AdminInbox defines model for AdminInbox.
+type AdminInbox struct {
+	ApprovedUnpublished      []ReviewQueueItem `json:"approvedUnpublished"`
+	ApprovedUnpublishedCount int               `json:"approvedUnpublishedCount"`
+	DemoPending              []ReviewQueueItem `json:"demoPending"`
+	DemoPendingCount         int               `json:"demoPendingCount"`
+	ProposalPendingCount     int               `json:"proposalPendingCount"`
+	Proposals                []InboxProposal   `json:"proposals"`
+}
+
 // Classification defines model for Classification.
 type Classification struct {
 	// Aliases 别名，只有 `subject` 会有（「魔方」有「魔方模拟器」「三阶魔方」）
@@ -880,6 +890,21 @@ type Healthz struct {
 
 // HealthzStatus defines model for Healthz.Status.
 type HealthzStatus string
+
+// InboxProposal defines model for InboxProposal.
+type InboxProposal struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Id        int       `json:"id"`
+
+	// Kind 提案 kind（new_task / merge_model 等，见实体域）
+	Kind string `json:"kind"`
+
+	// Source user / admin / ai / inferred / external / imported
+	Source string `json:"source"`
+
+	// Title 从 payload 摘出的标题；取不到时为空串
+	Title string `json:"title"`
+}
 
 // LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
 // `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
@@ -1661,6 +1686,11 @@ type VerifyEmailRequest struct {
 // VerifyEmailResendRequest defines model for VerifyEmailResendRequest.
 type VerifyEmailResendRequest struct {
 	Email openapi_types.Email `json:"email"`
+}
+
+// GetAdminInboxParams defines parameters for GetAdminInbox.
+type GetAdminInboxParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListModelCatalogParams defines parameters for ListModelCatalog.

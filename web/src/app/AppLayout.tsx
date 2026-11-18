@@ -76,8 +76,8 @@ export function AppLayout() {
                   （`demo.review`）。所以这里用 or 而不是等号：给某个新角色加权限时，
                   最多是入口不显示，不会出现「有权限但被前端挡住」。 */}
               {me.role === 'admin' || me.role === 'moderator' ? (
-                <Link to="/admin/reviews" className="text-sm underline">
-                  待审
+                <Link to="/admin" className="text-sm underline">
+                  管理
                 </Link>
               ) : null}
               {/* 模型导入只有 admin 有 `model.import`。这里同样只是入口可见性，

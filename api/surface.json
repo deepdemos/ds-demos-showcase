@@ -46,6 +46,32 @@
         "optional": false
       }
     },
+    "AdminInbox": {
+      "approvedUnpublished": {
+        "type": "[]ReviewQueueItem",
+        "optional": false
+      },
+      "approvedUnpublishedCount": {
+        "type": "int",
+        "optional": false
+      },
+      "demoPending": {
+        "type": "[]ReviewQueueItem",
+        "optional": false
+      },
+      "demoPendingCount": {
+        "type": "int",
+        "optional": false
+      },
+      "proposalPendingCount": {
+        "type": "int",
+        "optional": false
+      },
+      "proposals": {
+        "type": "[]InboxProposal",
+        "optional": false
+      }
+    },
     "Classification": {
       "aliases": {
         "type": "[]string",
@@ -589,6 +615,28 @@
     "Healthz": {
       "status": {
         "type": "HealthzStatus",
+        "optional": false
+      }
+    },
+    "InboxProposal": {
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "kind": {
+        "type": "string",
+        "optional": false
+      },
+      "source": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
         "optional": false
       }
     },
@@ -1919,6 +1967,11 @@
       "method": "PublishDemo",
       "pathParams": 1,
       "params": null
+    },
+    "GET /api/v1/admin/inbox": {
+      "method": "GetAdminInbox",
+      "pathParams": 0,
+      "params": "GetAdminInboxParams"
     },
     "GET /api/v1/admin/models/catalog": {
       "method": "ListModelCatalog",

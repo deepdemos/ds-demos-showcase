@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 61 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 62 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -3210,6 +3210,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/inbox:
+    get:
+      operationId: getAdminInbox
+      tags: [治理]
+      summary: 聚合收件箱
+      description: |
+        跨 kind 的待办汇总：作品待审、已通过待发布、待处理提案，各自带总数与前 N 条。
+        计数来自 count 查询，不受 limit 截断影响（ENT-022 的「计数与实际一致」）。
+
+        提案摘要额外要求 proposal.review；只有 demo.review 的角色拿不到提案内容。
+        提案的裁决入口与执行下一轮接入。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 收件箱
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminInbox'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有审核权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/reviews/demo:
     get:
       operationId: listDemoReviewQueue
@@ -5218,6 +5261,60 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ReviewQueueItem'
+
+    InboxProposal:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, source, createdAt]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          description: 提案 kind（new_task / merge_model 等，见实体域）
+        title:
+          type: string
+          description: 从 payload 摘出的标题；取不到时为空串
+        source:
+          type: string
+          description: user / admin / ai / inferred / external / imported
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminInbox:
+      type: object
+      additionalProperties: false
+      required:
+        - demoPendingCount
+        - approvedUnpublishedCount
+        - proposalPendingCount
+        - demoPending
+        - approvedUnpublished
+        - proposals
+      properties:
+        demoPendingCount:
+          type: integer
+          minimum: 0
+        approvedUnpublishedCount:
+          type: integer
+          minimum: 0
+        proposalPendingCount:
+          type: integer
+          minimum: 0
+        demoPending:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewQueueItem'
+        approvedUnpublished:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewQueueItem'
+        proposals:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboxProposal'
 
     ReviewQueueItem:
       type: object

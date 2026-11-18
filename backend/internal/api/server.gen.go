@@ -26,6 +26,9 @@ type ServerInterface interface {
 	// 发布作品
 	// (POST /api/v1/admin/demos/{slug}/publish)
 	PublishDemo(w http.ResponseWriter, r *http.Request, slug string)
+	// 聚合收件箱
+	// (GET /api/v1/admin/inbox)
+	GetAdminInbox(w http.ResponseWriter, r *http.Request, params GetAdminInboxParams)
 	// 上游目录镜像（导入页的搜索）
 	// (GET /api/v1/admin/models/catalog)
 	ListModelCatalog(w http.ResponseWriter, r *http.Request, params ListModelCatalogParams)
@@ -224,6 +227,12 @@ func (_ Unimplemented) RemoveDemoChannel(w http.ResponseWriter, r *http.Request,
 // 发布作品
 // (POST /api/v1/admin/demos/{slug}/publish)
 func (_ Unimplemented) PublishDemo(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 聚合收件箱
+// (GET /api/v1/admin/inbox)
+func (_ Unimplemented) GetAdminInbox(w http.ResponseWriter, r *http.Request, params GetAdminInboxParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -702,6 +711,39 @@ func (siw *ServerInterfaceWrapper) PublishDemo(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PublishDemo(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminInbox operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminInbox(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdminInboxParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminInbox(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2445,6 +2487,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/demos/{slug}/publish", wrapper.PublishDemo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/inbox", wrapper.GetAdminInbox)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/models/catalog", wrapper.ListModelCatalog)

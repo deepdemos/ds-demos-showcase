@@ -862,6 +862,15 @@
         }
       }
     ],
+    "GET /api/v1/admin/inbox": [
+      {
+        "case": "没有审核权限返回 403",
+        "test": {
+          "file": "backend/internal/httpapi/inbox_integration_test.go",
+          "name": "TestIntegrationAdminInboxRequiresPermission"
+        }
+      }
+    ],
     "GET /api/v1/notifications": [
       {
         "case": "未登录返回 401，不返回空列表",
