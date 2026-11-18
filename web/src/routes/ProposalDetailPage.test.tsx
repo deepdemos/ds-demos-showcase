@@ -58,14 +58,74 @@ beforeEach(() => {
 
 describe('ProposalDetailPage', () => {
   test('渲染 payload、来源与状态，通过按钮不可用', async () => {
-    vi.mocked(getAdminProposal).mockResolvedValue({ status: 200, data: detail() } as never);
+    vi.mocked(getAdminProposal).mockResolvedValue({
+      status: 200,
+      data: detail({ kind: 'new_model' }),
+    } as never);
 
     renderPage();
 
     expect(await screen.findByRole('heading', { name: '提案标题' })).toBeInTheDocument();
-    expect(screen.getByText(/new_task · user · 待处理/)).toBeInTheDocument();
+    expect(screen.getByText(/new_model · user · 待处理/)).toBeInTheDocument();
     expect(screen.getByText(/一句话说明/)).toBeInTheDocument();
     expect(screen.getByText('通过（执行器未接入）')).toBeInTheDocument();
+  });
+
+  test('new_classification 可以通过，调用 approve', async () => {
+    vi.mocked(getAdminProposal).mockResolvedValue({
+      status: 200,
+      data: detail({
+        kind: 'new_classification',
+        payload: { dimension: 'subject', slug: 's', label: 'x' },
+      }),
+    } as never);
+    vi.mocked(reviewAdminProposal).mockResolvedValue({
+      status: 200,
+      data: { id: 7, status: 'approved' },
+    } as never);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '通过' }));
+
+    await waitFor(() =>
+      expect(reviewAdminProposal).toHaveBeenCalledWith(7, { decision: 'approve' }),
+    );
+  });
+
+  test('new_skill 也可以通过', async () => {
+    vi.mocked(getAdminProposal).mockResolvedValue({
+      status: 200,
+      data: detail({ kind: 'new_skill', payload: { slug: 's', name: 'x' } }),
+    } as never);
+    vi.mocked(reviewAdminProposal).mockResolvedValue({
+      status: 200,
+      data: { id: 7, status: 'approved' },
+    } as never);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '通过' }));
+
+    await waitFor(() =>
+      expect(reviewAdminProposal).toHaveBeenCalledWith(7, { decision: 'approve' }),
+    );
+  });
+
+  test('new_task 也可以通过', async () => {
+    vi.mocked(getAdminProposal).mockResolvedValue({
+      status: 200,
+      data: detail({ kind: 'new_task', payload: { title: '题目标题' } }),
+    } as never);
+    vi.mocked(reviewAdminProposal).mockResolvedValue({
+      status: 200,
+      data: { id: 7, status: 'approved' },
+    } as never);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '通过' }));
+
+    await waitFor(() =>
+      expect(reviewAdminProposal).toHaveBeenCalledWith(7, { decision: 'approve' }),
+    );
   });
 
   test('驳回会调接口并带上原因', async () => {

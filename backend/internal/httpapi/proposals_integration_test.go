@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/entity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 )
 
@@ -126,7 +127,7 @@ func TestIntegrationProposalApproveNotWired(t *testing.T) {
 	var proposalID int64
 	if err := pool.QueryRow(context.Background(), `
 INSERT INTO proposals (kind, payload, source)
-VALUES ('new_task', '{"title":"提案通过未接入"}'::jsonb, 'user')
+VALUES ('new_model', '{"name":"未接入模型提案"}'::jsonb, 'user')
 RETURNING id`).Scan(&proposalID); err != nil {
 		t.Fatalf("插入提案失败: %v", err)
 	}
@@ -146,6 +147,271 @@ RETURNING id`).Scan(&proposalID); err != nil {
 	}
 	if status != "pending" {
 		t.Fatalf("通过失败后 status = %s，必须仍是 pending", status)
+	}
+}
+
+func TestIntegrationProposalApproveClassification(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+	adminSID := mkAdmin(t, pool, idSvc, "pclass")
+
+	slug := "it-executor-classification"
+	if _, err := pool.Exec(context.Background(), `DELETE FROM classifications WHERE dimension = 'subject' AND slug = $1`, slug); err != nil {
+		t.Fatalf("清理旧分类失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM classifications WHERE dimension = 'subject' AND slug = $1`, slug)
+	})
+
+	insert := func(label string) int64 {
+		var id int64
+		if err := pool.QueryRow(context.Background(), `
+INSERT INTO proposals (kind, payload, source)
+VALUES ('new_classification', jsonb_build_object('dimension','subject','slug',$1::text,'label',$2::text), 'user')
+RETURNING id`, slug, label).Scan(&id); err != nil {
+			t.Fatalf("插入提案失败: %v", err)
+		}
+		t.Cleanup(func() {
+			_, _ = pool.Exec(context.Background(), `DELETE FROM proposals WHERE id = $1`, id)
+		})
+		return id
+	}
+
+	firstID := insert("执行器分类")
+	rec := httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(firstID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("通过分类提案 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+	var result api.ProposalReviewResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("通过结果不是合法 JSON: %v", err)
+	}
+	if result.Status != api.ProposalReviewResultStatusApproved {
+		t.Fatalf("通过结果 = %+v", result)
+	}
+
+	var status, resultKind string
+	var resultID int64
+	if err := pool.QueryRow(context.Background(), `
+SELECT status, COALESCE(result_kind,''), COALESCE(result_id,0)
+FROM proposals WHERE id = $1`, firstID).Scan(&status, &resultKind, &resultID); err != nil {
+		t.Fatalf("读提案失败: %v", err)
+	}
+	if status != "approved" || resultKind != "classification" || resultID == 0 {
+		t.Fatalf("提案 = %s / %s / %d，想要 approved / classification / 非零", status, resultKind, resultID)
+	}
+	var classificationID int64
+	var label string
+	if err := pool.QueryRow(context.Background(), `
+SELECT id, label FROM classifications WHERE dimension='subject' AND slug=$1`, slug).Scan(&classificationID, &label); err != nil {
+		t.Fatalf("分类未落库: %v", err)
+	}
+	if classificationID != resultID || label != "执行器分类" {
+		t.Fatalf("分类 = %d/%q，提案 result = %d", classificationID, label, resultID)
+	}
+
+	// 第二次通过同一提案：409。
+	rec = httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(firstID))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("重复通过 = %d，想要 409", rec.Code)
+	}
+
+	// 目标已存在：再提一条同 slug，通过时复用 id、不覆盖已有 label（ENT-021）。
+	secondID := insert("新名字不该覆盖")
+	rec = httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(secondID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("目标已存在时通过 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+	if err := pool.QueryRow(context.Background(), `SELECT label FROM classifications WHERE dimension='subject' AND slug=$1`, slug).Scan(&label); err != nil {
+		t.Fatalf("读分类失败: %v", err)
+	}
+	if label != "执行器分类" {
+		t.Fatalf("已有分类被覆盖成 %q", label)
+	}
+}
+
+func TestIntegrationProposalApproveTask(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+	adminSID := mkAdmin(t, pool, idSvc, "ptask")
+
+	title := "执行器题目"
+	titleKey := entity.TitleKey(title)
+	_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE title_key = $1`, titleKey)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE title_key = $1`, titleKey)
+	})
+
+	insert := func(taskTitle string) int64 {
+		var id int64
+		if err := pool.QueryRow(context.Background(), `
+INSERT INTO proposals (kind, payload, source)
+VALUES ('new_task', jsonb_build_object('title',$1::text,'brief','测一下'), 'user')
+RETURNING id`, taskTitle).Scan(&id); err != nil {
+			t.Fatalf("插入提案失败: %v", err)
+		}
+		t.Cleanup(func() {
+			_, _ = pool.Exec(context.Background(), `DELETE FROM proposals WHERE id = $1`, id)
+		})
+		return id
+	}
+
+	firstID := insert(title)
+	rec := httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(firstID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("通过题目提案 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+
+	var status, resultKind, gotTitle, gotNorm, brief string
+	var resultID int64
+	if err := pool.QueryRow(context.Background(), `
+SELECT status, COALESCE(result_kind,''), COALESCE(result_id,0) FROM proposals WHERE id=$1`, firstID).Scan(&status, &resultKind, &resultID); err != nil {
+		t.Fatalf("读提案失败: %v", err)
+	}
+	if status != "approved" || resultKind != "task" || resultID == 0 {
+		t.Fatalf("提案 = %s / %s / %d", status, resultKind, resultID)
+	}
+	if err := pool.QueryRow(context.Background(), `
+SELECT title, title_norm, brief FROM tasks WHERE id=$1`, resultID).Scan(&gotTitle, &gotNorm, &brief); err != nil {
+		t.Fatalf("题目未落库: %v", err)
+	}
+	if gotTitle != title || gotNorm != entity.TitleNorm(title) || brief != "测一下" {
+		t.Fatalf("题目 = %q / %q / %q", gotTitle, gotNorm, brief)
+	}
+
+	// 同名题（标点不同，title_key 相同）复用，不新建。
+	secondID := insert(title + "！")
+	rec = httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(secondID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("复用题目 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+	var count int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM tasks WHERE title_key=$1 AND deleted_at IS NULL`, titleKey).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("同名题 count=%d err=%v，想要 1", count, err)
+	}
+}
+
+func TestIntegrationProposalApproveSkill(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+	adminSID := mkAdmin(t, pool, idSvc, "pskill")
+
+	slug := "it-executor-skill"
+	_, _ = pool.Exec(context.Background(), `DELETE FROM skills WHERE slug = $1`, slug)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM skills WHERE slug = $1`, slug)
+	})
+
+	insert := func(name string) int64 {
+		var id int64
+		if err := pool.QueryRow(context.Background(), `
+INSERT INTO proposals (kind, payload, source)
+VALUES ('new_skill', jsonb_build_object('slug',$1::text,'name',$2::text,'url','https://example.com/s'), 'user')
+RETURNING id`, slug, name).Scan(&id); err != nil {
+			t.Fatalf("插入提案失败: %v", err)
+		}
+		t.Cleanup(func() {
+			_, _ = pool.Exec(context.Background(), `DELETE FROM proposals WHERE id = $1`, id)
+		})
+		return id
+	}
+
+	firstID := insert("技能一")
+	rec := httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(firstID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("通过技能提案 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+	var status, resultKind, name string
+	var resultID int64
+	if err := pool.QueryRow(context.Background(), `
+SELECT status, COALESCE(result_kind,''), COALESCE(result_id,0) FROM proposals WHERE id=$1`, firstID).Scan(&status, &resultKind, &resultID); err != nil {
+		t.Fatalf("读提案失败: %v", err)
+	}
+	if status != "approved" || resultKind != "skill" || resultID == 0 {
+		t.Fatalf("提案 = %s / %s / %d", status, resultKind, resultID)
+	}
+	if err := pool.QueryRow(context.Background(), `SELECT name FROM skills WHERE id=$1`, resultID).Scan(&name); err != nil || name != "技能一" {
+		t.Fatalf("技能 = %q err=%v", name, err)
+	}
+
+	// 目标已存在：复用，不覆盖 name。
+	secondID := insert("新名字不该覆盖")
+	rec = httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(secondID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("复用技能 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+	if err := pool.QueryRow(context.Background(), `SELECT name FROM skills WHERE slug=$1`, slug).Scan(&name); err != nil || name != "技能一" {
+		t.Fatalf("已有技能被覆盖成 %q err=%v", name, err)
+	}
+}
+
+func TestIntegrationProposalApproveSkillBadPayload(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+	adminSID := mkAdmin(t, pool, idSvc, "pskillbad")
+
+	var proposalID int64
+	if err := pool.QueryRow(context.Background(), `
+INSERT INTO proposals (kind, payload, source)
+VALUES ('new_skill', '{"slug":"bad-skill","name":"坏技能","spec":"bogus"}'::jsonb, 'user')
+RETURNING id`).Scan(&proposalID); err != nil {
+		t.Fatalf("插入提案失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM proposals WHERE id = $1`, proposalID)
+	})
+
+	rec := httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(proposalID))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("非法 spec = %d，想要 422", rec.Code)
+	}
+	var status string
+	if err := pool.QueryRow(context.Background(), `SELECT status FROM proposals WHERE id=$1`, proposalID).Scan(&status); err != nil || status != "pending" {
+		t.Fatalf("非法 spec 后 status = %s err=%v，应保持 pending", status, err)
+	}
+}
+
+func TestIntegrationProposalApproveClassificationBadPayload(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+	adminSID := mkAdmin(t, pool, idSvc, "pclassbad")
+
+	var proposalID int64
+	if err := pool.QueryRow(context.Background(), `
+INSERT INTO proposals (kind, payload, source)
+VALUES ('new_classification', '{"dimension":"bogus","slug":"bad"}'::jsonb, 'user')
+RETURNING id`).Scan(&proposalID); err != nil {
+		t.Fatalf("插入提案失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM proposals WHERE id = $1`, proposalID)
+	})
+
+	rec := httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID,
+		`{"decision":"approve"}`), int(proposalID))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("非法 dimension = %d，想要 422", rec.Code)
+	}
+	var status string
+	if err := pool.QueryRow(context.Background(), `SELECT status FROM proposals WHERE id=$1`, proposalID).Scan(&status); err != nil || status != "pending" {
+		t.Fatalf("非法 payload 后 status = %s err=%v，应保持 pending", status, err)
 	}
 }
 

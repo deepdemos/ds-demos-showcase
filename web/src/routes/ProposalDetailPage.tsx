@@ -14,6 +14,9 @@ import { useAuth } from '@/features/auth/AuthContext';
 
 const REASON_MAX = 500;
 
+// 已经接入执行器的提案 kind；其余 kind 不渲染「通过」按钮，避免注定 422 的点击。
+const APPROVABLE_KINDS = ['new_classification', 'new_skill', 'new_task'];
+
 const STATUS_LABEL: Record<string, string> = {
   pending: '待处理',
   approved: '已通过',
@@ -70,6 +73,27 @@ export function ProposalDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox'] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : '驳回失败'),
+  });
+
+  const approve = useMutation({
+    mutationFn: async () => {
+      const response = await reviewAdminProposal(id, { decision: 'approve' });
+      if (response.status !== 200) {
+        const message =
+          typeof response.data === 'object' && response.data && 'message' in response.data
+            ? String((response.data as { message?: unknown }).message)
+            : '通过失败（' + response.status + '）';
+        throw new Error(message);
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'proposal', id] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'proposals'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox'] });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : '通过失败'),
   });
 
   if (authLoading) return <Skeleton lines={3} />;
@@ -156,10 +180,23 @@ export function ProposalDetailPage() {
             >
               驳回
             </Button>
-            <span className="text-sm text-gray-500 dark:text-gray-400">通过（执行器未接入）</span>
+            {APPROVABLE_KINDS.includes(data.kind) ? (
+              <Button
+                type="button"
+                primary
+                disabled={approve.isPending}
+                onClick={() => approve.mutate()}
+              >
+                通过
+              </Button>
+            ) : (
+              <span className="text-sm text-gray-500 dark:text-gray-400">通过（执行器未接入）</span>
+            )}
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            通过会按 kind 写正式业务表，执行器接入前不提供按钮；驳回只改提案状态并写审计。
+            {APPROVABLE_KINDS.includes(data.kind)
+              ? '通过会写对应的正式表（已存在则复用），并把提案置为已通过。'
+              : '这个 kind 的执行器还没接入；驳回只改提案状态并写审计。'}
           </p>
           {error ? (
             <p role="alert" className="text-sm text-red-600 dark:text-red-400">

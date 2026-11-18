@@ -11,6 +11,207 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const approveClassificationProposal = `-- name: ApproveClassificationProposal :one
+WITH target AS (
+    SELECT p.id AS proposal_id
+    FROM proposals p
+    WHERE p.id = $1 AND p.status = 'pending' AND p.erased_at IS NULL
+    FOR UPDATE
+), ensured AS (
+    INSERT INTO classifications (dimension, slug, label, description)
+    SELECT $2, $3, $4, $5 FROM target
+    ON CONFLICT (dimension, slug) DO UPDATE
+    SET updated_at = classifications.updated_at
+    RETURNING classifications.id
+), updated AS (
+    UPDATE proposals p
+    SET status = 'approved',
+        result_kind = 'classification',
+        result_id = (SELECT e.id FROM ensured e),
+        reviewed_by = $6,
+        reviewed_at = now(),
+        updated_at = now()
+    WHERE p.id = $1 AND p.status = 'pending'
+    RETURNING p.id
+)
+SELECT COALESCE((SELECT e.id FROM ensured e), 0)::bigint AS classification_id,
+       EXISTS (SELECT 1 FROM updated) AS approved
+`
+
+type ApproveClassificationProposalParams struct {
+	ID          int64
+	Dimension   string
+	Slug        string
+	Label       string
+	Description string
+	ReviewedBy  pgtype.Int8
+}
+
+type ApproveClassificationProposalRow struct {
+	ClassificationID int64
+	Approved         bool
+}
+
+// new_classification 的执行器：在**一条语句**里完成「建分类 + 提案置 approved」。
+//
+// 为什么是一条语句而不是 Go 里 begin/commit：handler 没有 pool；而这条 CTE 天然原子——
+// target 先 FOR UPDATE 锁住 pending 提案，ensured 只在锁到行时插分类，
+// updated 只在同一行仍是 pending 时改状态。任何一步不满足，整条语句都不产生副作用。
+//
+// 分类已存在（同 dimension+slug）：ON CONFLICT 做无意义 UPDATE 拿回 id，
+// 对应 ENT-021 的「目标已存在 → 复用」，不是 500、也不覆盖已有 label。
+func (q *Queries) ApproveClassificationProposal(ctx context.Context, arg ApproveClassificationProposalParams) (ApproveClassificationProposalRow, error) {
+	row := q.db.QueryRow(ctx, approveClassificationProposal,
+		arg.ID,
+		arg.Dimension,
+		arg.Slug,
+		arg.Label,
+		arg.Description,
+		arg.ReviewedBy,
+	)
+	var i ApproveClassificationProposalRow
+	err := row.Scan(&i.ClassificationID, &i.Approved)
+	return i, err
+}
+
+const approveNewSkillProposal = `-- name: ApproveNewSkillProposal :one
+WITH target AS (
+    SELECT p.id AS proposal_id
+    FROM proposals p
+    WHERE p.id = $1 AND p.status = 'pending' AND p.erased_at IS NULL
+    FOR UPDATE
+), ensured AS (
+    INSERT INTO skills (slug, name, description, url, spec)
+    SELECT $2, $3, $4, $5::text, $6 FROM target
+    ON CONFLICT (slug) DO UPDATE
+    SET updated_at = skills.updated_at
+    RETURNING skills.id
+), updated AS (
+    UPDATE proposals p
+    SET status = 'approved',
+        result_kind = 'skill',
+        result_id = (SELECT e.id FROM ensured e),
+        reviewed_by = $7,
+        reviewed_at = now(),
+        updated_at = now()
+    WHERE p.id = $1 AND p.status = 'pending'
+    RETURNING p.id
+)
+SELECT COALESCE((SELECT e.id FROM ensured e), 0)::bigint AS skill_id,
+       EXISTS (SELECT 1 FROM updated) AS approved
+`
+
+type ApproveNewSkillProposalParams struct {
+	ID          int64
+	Slug        string
+	Name        string
+	Description string
+	Url         pgtype.Text
+	Spec        string
+	ReviewedBy  pgtype.Int8
+}
+
+type ApproveNewSkillProposalRow struct {
+	SkillID  int64
+	Approved bool
+}
+
+// new_skill 的执行器：与 new_classification 同一骨架。
+// slug 已存在时复用（ENT-021），不覆盖已有 name / url / description。
+func (q *Queries) ApproveNewSkillProposal(ctx context.Context, arg ApproveNewSkillProposalParams) (ApproveNewSkillProposalRow, error) {
+	row := q.db.QueryRow(ctx, approveNewSkillProposal,
+		arg.ID,
+		arg.Slug,
+		arg.Name,
+		arg.Description,
+		arg.Url,
+		arg.Spec,
+		arg.ReviewedBy,
+	)
+	var i ApproveNewSkillProposalRow
+	err := row.Scan(&i.SkillID, &i.Approved)
+	return i, err
+}
+
+const approveNewTaskProposal = `-- name: ApproveNewTaskProposal :one
+WITH target AS (
+    SELECT p.id AS proposal_id
+    FROM proposals p
+    WHERE p.id = $1 AND p.status = 'pending' AND p.erased_at IS NULL
+    FOR UPDATE
+), existing AS (
+    SELECT t.id
+    FROM tasks t
+    CROSS JOIN target
+    WHERE t.title_key = $2
+      AND t.status = 'active'
+      AND t.deleted_at IS NULL
+), ensured AS (
+    INSERT INTO tasks (slug, title, title_key, title_norm, brief, category, created_by)
+    SELECT $3, $4, $2, $5, $6,
+           $7, $8
+    FROM target
+    WHERE NOT EXISTS (SELECT 1 FROM existing)
+    RETURNING tasks.id
+), resolved AS (
+    SELECT e.id FROM existing e
+    UNION ALL
+    SELECT n.id FROM ensured n
+    LIMIT 1
+), updated AS (
+    UPDATE proposals p
+    SET status = 'approved',
+        result_kind = 'task',
+        result_id = (SELECT r.id FROM resolved r),
+        reviewed_by = $9,
+        reviewed_at = now(),
+        updated_at = now()
+    WHERE p.id = $1 AND p.status = 'pending'
+    RETURNING p.id
+)
+SELECT COALESCE((SELECT r.id FROM resolved r), 0)::bigint AS task_id,
+       EXISTS (SELECT 1 FROM updated) AS approved
+`
+
+type ApproveNewTaskProposalParams struct {
+	ID         int64
+	TitleKey   string
+	Slug       string
+	Title      string
+	TitleNorm  string
+	Brief      string
+	Category   pgtype.Text
+	CreatedBy  pgtype.Int8
+	ReviewedBy pgtype.Int8
+}
+
+type ApproveNewTaskProposalRow struct {
+	TaskID   int64
+	Approved bool
+}
+
+// new_task 的执行器：锁 pending 提案 → 已有同名题（title_key）则复用 → 否则建题
+// → 提案置 approved + result_kind=task。
+//
+// 标题键由应用层算好传进来（domain/entity.TitleKey）；这里只负责原子写入。
+// 暂不处理 payload 里的 subject demo（attach_demos 需要 prompt 归类，下一轮）。
+func (q *Queries) ApproveNewTaskProposal(ctx context.Context, arg ApproveNewTaskProposalParams) (ApproveNewTaskProposalRow, error) {
+	row := q.db.QueryRow(ctx, approveNewTaskProposal,
+		arg.ID,
+		arg.TitleKey,
+		arg.Slug,
+		arg.Title,
+		arg.TitleNorm,
+		arg.Brief,
+		arg.Category,
+		arg.CreatedBy,
+		arg.ReviewedBy,
+	)
+	var i ApproveNewTaskProposalRow
+	err := row.Scan(&i.TaskID, &i.Approved)
+	return i, err
+}
+
 const countProposalsForAdmin = `-- name: CountProposalsForAdmin :one
 SELECT count(*)::bigint AS total
 FROM proposals
