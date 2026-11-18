@@ -1,11 +1,25 @@
+import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate } from 'react-router';
 import { Button } from '@/components/ui';
+import { getUnreadNotificationCount } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 import styles from './AppLayout.module.css';
 
 export function AppLayout() {
   const navigate = useNavigate();
   const { me, isLoading, signOut } = useAuth();
+
+  // 导航角标：只数未读，不拉列表；60 秒自动刷新一次，窗口聚焦时 TanStack Query 也会重取。
+  const unread = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: async () => {
+      const response = await getUnreadNotificationCount();
+      if (response.status !== 200) throw new Error('未读数加载失败');
+      return response.data.count;
+    },
+    enabled: me !== null,
+    refetchInterval: 60_000,
+  });
 
   return (
     <div className={styles.shell}>
@@ -36,6 +50,22 @@ export function AppLayout() {
           {me && (
             <Link to="/me/collections" className="text-gray-600 hover:underline dark:text-gray-300">
               我的收藏
+            </Link>
+          )}
+          {me && (
+            <Link
+              to="/notifications"
+              className="flex items-center gap-1 text-gray-600 hover:underline dark:text-gray-300"
+            >
+              通知
+              {unread.data && unread.data > 0 ? (
+                <span
+                  aria-label={'未读通知 ' + unread.data}
+                  className="rounded-full bg-gray-800 px-1.5 text-xs text-white dark:bg-gray-200 dark:text-gray-900"
+                >
+                  {unread.data > 99 ? '99+' : unread.data}
+                </span>
+              ) : null}
             </Link>
           )}
           {/* 会话还没读出来时不渲染任何登录相关按钮：先显示「登录」再换成用户名，
