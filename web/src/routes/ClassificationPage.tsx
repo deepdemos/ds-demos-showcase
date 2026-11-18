@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { EmptyState, ErrorState, Pagination, Select, Skeleton } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Pagination, Select, Skeleton } from '@/components/ui';
 import {
   listClassifications,
   listDemos,
@@ -42,7 +42,8 @@ function parseDimension(raw: string | undefined): Dimension | null {
 
 function parsePage(raw: string | null): number {
   const value = Number(raw);
-  return Number.isInteger(value) && value >= 1 ? value : 1;
+  // 上限防止 (page-1)*pageSize 溢出后端 int32；越界页由空态给出路。
+  return Number.isInteger(value) && value >= 1 ? Math.min(value, 100_000) : 1;
 }
 
 function facetParams(dimension: Dimension, slug: string): ListDemosParams {
@@ -89,6 +90,7 @@ export function ClassificationPage() {
       }
       return response.data;
     },
+    staleTime: 5 * 60_000,
   });
 
   const catalogData = catalog.data ?? null;
@@ -139,7 +141,7 @@ export function ClassificationPage() {
     );
   }
 
-  if (catalog.isError || missing) {
+  if ((catalog.isError && !catalogData) || missing) {
     return (
       <section className="mx-auto w-full max-w-5xl px-4 py-8">
         {catalog.isError ? (
@@ -195,6 +197,15 @@ export function ClassificationPage() {
         </div>
       </div>
 
+      {catalog.isError && catalogData ? (
+        <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">
+          分类目录刷新失败，下面的内容仍可阅读。
+          <Button type="button" className="ml-2" onClick={() => void catalog.refetch()}>
+            重试
+          </Button>
+        </p>
+      ) : null}
+
       {demos.isError ? (
         <div className="mt-6">
           <ErrorState
@@ -214,10 +225,31 @@ export function ClassificationPage() {
 
       {demos.data && demos.data.items.length === 0 ? (
         <div className="mt-6">
-          <EmptyState
-            title="这个分类下还没有作品"
-            description="等有作品挂上这个分类并通过审核，它就会出现在这里。"
-          />
+          {demos.data.total > 0 && page > 1 ? (
+            <EmptyState
+              title="这一页没有作品"
+              description={'共 ' + demos.data.total + ' 个作品，这个页码已经越界。'}
+              action={
+                <Link
+                  className="text-sm underline"
+                  to={
+                    '/classifications/' +
+                    dimension +
+                    '/' +
+                    encodeURIComponent(slug) +
+                    (sort === 'hot' ? '?sort=hot' : '')
+                  }
+                >
+                  回到第 1 页
+                </Link>
+              }
+            />
+          ) : (
+            <EmptyState
+              title="这个分类下还没有作品"
+              description="等有作品挂上这个分类并通过审核，它就会出现在这里。"
+            />
+          )}
         </div>
       ) : null}
 
