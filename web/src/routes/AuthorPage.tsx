@@ -35,10 +35,8 @@ export function AuthorPage() {
     queryKey: ['author', username],
     queryFn: async () => {
       const response = await getUserProfile(username);
-      if (response.status === 404) return null;
-      if (response.status !== 200) {
-        throw new Error('作者资料加载失败（' + response.status + '）');
-      }
+      // 契约只声明 200 / 404；非 200 一律当作「没有这个作者」。
+      if (response.status !== 200) return null;
       return response.data;
     },
     enabled: username !== '',

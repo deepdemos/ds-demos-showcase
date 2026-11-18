@@ -77,6 +77,27 @@ type ServerInterface interface {
 	// 分类目录
 	// (GET /api/v1/classifications)
 	ListClassifications(w http.ResponseWriter, r *http.Request)
+	// 我的收藏夹
+	// (GET /api/v1/collections)
+	ListCollections(w http.ResponseWriter, r *http.Request)
+	// 新建收藏夹
+	// (POST /api/v1/collections)
+	CreateCollection(w http.ResponseWriter, r *http.Request)
+	// 删除收藏夹
+	// (DELETE /api/v1/collections/{id})
+	DeleteCollection(w http.ResponseWriter, r *http.Request, id int)
+	// 收藏夹详情
+	// (GET /api/v1/collections/{id})
+	GetCollection(w http.ResponseWriter, r *http.Request, id int)
+	// 修改收藏夹
+	// (PATCH /api/v1/collections/{id})
+	UpdateCollection(w http.ResponseWriter, r *http.Request, id int)
+	// 收藏一件作品
+	// (POST /api/v1/collections/{id}/items)
+	AddCollectionItem(w http.ResponseWriter, r *http.Request, id int)
+	// 移出收藏夹
+	// (DELETE /api/v1/collections/{id}/items/{slug})
+	RemoveCollectionItem(w http.ResponseWriter, r *http.Request, id int, slug string)
 	// 作品类型目录（含允许的上传形态）
 	// (GET /api/v1/demo-types)
 	ListDemoTypes(w http.ResponseWriter, r *http.Request)
@@ -128,6 +149,9 @@ type ServerInterface interface {
 	// 当前登录者
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// 作品在收藏里的状态
+	// (GET /api/v1/me/collections/status)
+	GetCollectionStatus(w http.ResponseWriter, r *http.Request, params GetCollectionStatusParams)
 	// 我的作品
 	// (GET /api/v1/me/demos)
 	ListMyDemos(w http.ResponseWriter, r *http.Request, params ListMyDemosParams)
@@ -293,6 +317,48 @@ func (_ Unimplemented) ListClassifications(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 我的收藏夹
+// (GET /api/v1/collections)
+func (_ Unimplemented) ListCollections(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 新建收藏夹
+// (POST /api/v1/collections)
+func (_ Unimplemented) CreateCollection(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除收藏夹
+// (DELETE /api/v1/collections/{id})
+func (_ Unimplemented) DeleteCollection(w http.ResponseWriter, r *http.Request, id int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 收藏夹详情
+// (GET /api/v1/collections/{id})
+func (_ Unimplemented) GetCollection(w http.ResponseWriter, r *http.Request, id int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 修改收藏夹
+// (PATCH /api/v1/collections/{id})
+func (_ Unimplemented) UpdateCollection(w http.ResponseWriter, r *http.Request, id int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 收藏一件作品
+// (POST /api/v1/collections/{id}/items)
+func (_ Unimplemented) AddCollectionItem(w http.ResponseWriter, r *http.Request, id int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 移出收藏夹
+// (DELETE /api/v1/collections/{id}/items/{slug})
+func (_ Unimplemented) RemoveCollectionItem(w http.ResponseWriter, r *http.Request, id int, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 作品类型目录（含允许的上传形态）
 // (GET /api/v1/demo-types)
 func (_ Unimplemented) ListDemoTypes(w http.ResponseWriter, r *http.Request) {
@@ -392,6 +458,12 @@ func (_ Unimplemented) PostDemoView(w http.ResponseWriter, r *http.Request, slug
 // 当前登录者
 // (GET /api/v1/me)
 func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 作品在收藏里的状态
+// (GET /api/v1/me/collections/status)
+func (_ Unimplemented) GetCollectionStatus(w http.ResponseWriter, r *http.Request, params GetCollectionStatusParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -958,6 +1030,204 @@ func (siw *ServerInterfaceWrapper) ListClassifications(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListCollections operation middleware
+func (siw *ServerInterfaceWrapper) ListCollections(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCollections(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCollection operation middleware
+func (siw *ServerInterfaceWrapper) CreateCollection(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCollection(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCollection operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCollection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCollection(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCollection operation middleware
+func (siw *ServerInterfaceWrapper) GetCollection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCollection(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCollection operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCollection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCollection(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddCollectionItem operation middleware
+func (siw *ServerInterfaceWrapper) AddCollectionItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddCollectionItem(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveCollectionItem operation middleware
+func (siw *ServerInterfaceWrapper) RemoveCollectionItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveCollectionItem(w, r, id, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListDemoTypes operation middleware
 func (siw *ServerInterfaceWrapper) ListDemoTypes(w http.ResponseWriter, r *http.Request) {
 
@@ -1489,6 +1759,46 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCollectionStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetCollectionStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCollectionStatusParams
+
+	// ------------- Required query parameter "slug" -------------
+
+	if paramValue := r.URL.Query().Get("slug"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "slug"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "slug", r.URL.Query(), &params.Slug)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCollectionStatus(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2040,6 +2350,27 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/classifications", wrapper.ListClassifications)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/collections", wrapper.ListCollections)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/collections", wrapper.CreateCollection)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/collections/{id}", wrapper.DeleteCollection)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/collections/{id}", wrapper.GetCollection)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/api/v1/collections/{id}", wrapper.UpdateCollection)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/collections/{id}/items", wrapper.AddCollectionItem)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/collections/{id}/items/{slug}", wrapper.RemoveCollectionItem)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/demo-types", wrapper.ListDemoTypes)
 	})
 	r.Group(func(r chi.Router) {
@@ -2089,6 +2420,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/me/collections/status", wrapper.GetCollectionStatus)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me/demos", wrapper.ListMyDemos)

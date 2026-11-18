@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 57 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -32,8 +32,16 @@
 import type {
   AccountHistory,
   AccountHistorySettings,
+  Collection,
+  CollectionCreate,
+  CollectionDetail,
+  CollectionItemInput,
+  CollectionList,
+  CollectionStatus,
+  CollectionUpdate,
   EmailCodeRequest,
   Error,
+  GetCollectionStatusParams,
   GetMyHistoryParams,
   LoginRequest,
   Me,
@@ -726,19 +734,14 @@ export type getUserProfileResponse200 = {
 }
 
 export type getUserProfileResponse404 = {
-  data: Error
+  data: void
   status: 404
-}
-
-export type getUserProfileResponse503 = {
-  data: Error
-  status: 503
 }
 
 export type getUserProfileResponseSuccess = (getUserProfileResponse200) & {
   headers: Headers;
 };
-export type getUserProfileResponseError = (getUserProfileResponse404 | getUserProfileResponse503) & {
+export type getUserProfileResponseError = (getUserProfileResponse404) & {
   headers: Headers;
 };
 
@@ -777,6 +780,583 @@ export const getUserProfile = async (username: string, options?: RequestInit): P
 
   const data: getUserProfileResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getUserProfileResponse
+}
+
+
+export type listCollectionsResponse200 = {
+  data: CollectionList
+  status: 200
+}
+
+export type listCollectionsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listCollectionsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listCollectionsResponseSuccess = (listCollectionsResponse200) & {
+  headers: Headers;
+};
+export type listCollectionsResponseError = (listCollectionsResponse401 | listCollectionsResponse503) & {
+  headers: Headers;
+};
+
+export type listCollectionsResponse = (listCollectionsResponseSuccess | listCollectionsResponseError)
+
+export const getListCollectionsUrl = () => {
+
+
+
+
+  return `/api/v1/collections`
+}
+
+/**
+ * 列出自己的收藏夹（含默认夹），按默认夹优先、其余按最近更新排序。
+ * 需要登录；每个夹带 itemCount。
+ *
+ * 默认夹由服务端在第一次访问时惰性创建，不写触发器。
+ * @summary 我的收藏夹
+ */
+export const listCollections = async ( options?: RequestInit): Promise<listCollectionsResponse> => {
+
+  const res = await fetch(getListCollectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listCollectionsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listCollectionsResponse
+}
+
+
+export type createCollectionResponse201 = {
+  data: Collection
+  status: 201
+}
+
+export type createCollectionResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type createCollectionResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type createCollectionResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type createCollectionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type createCollectionResponseSuccess = (createCollectionResponse201) & {
+  headers: Headers;
+};
+export type createCollectionResponseError = (createCollectionResponse400 | createCollectionResponse401 | createCollectionResponse422 | createCollectionResponse503) & {
+  headers: Headers;
+};
+
+export type createCollectionResponse = (createCollectionResponseSuccess | createCollectionResponseError)
+
+export const getCreateCollectionUrl = () => {
+
+
+
+
+  return `/api/v1/collections`
+}
+
+/**
+ * 建一个自定义夹。默认夹已经存在，不通过这个端点创建。
+ *
+ * 上限读设置域 collection.max_per_account（默认 20，不数默认夹）；
+ * 同用户下名称大小写不敏感唯一。超限 / 重名 / 名称为空都回 422。
+ * @summary 新建收藏夹
+ */
+export const createCollection = async (collectionCreate: CollectionCreate, options?: RequestInit): Promise<createCollectionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getCreateCollectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(collectionCreate)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: createCollectionResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as createCollectionResponse
+}
+
+
+export type getCollectionResponse200 = {
+  data: CollectionDetail
+  status: 200
+}
+
+export type getCollectionResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getCollectionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getCollectionResponseSuccess = (getCollectionResponse200) & {
+  headers: Headers;
+};
+export type getCollectionResponseError = (getCollectionResponse404 | getCollectionResponse503) & {
+  headers: Headers;
+};
+
+export type getCollectionResponse = (getCollectionResponseSuccess | getCollectionResponseError)
+
+export const getGetCollectionUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/collections/${id}`
+}
+
+/**
+ * 公开夹任何人可读；私有夹只有主人可读，其他人（含未登录）一律 404——
+ * 404 不承认这个 id 存在。默认夹永远私有。
+ *
+ * 条目带 accessible：不在 demo_public_demos 视图里的作品仍保留在列表里
+ * （COL-014 墓碑），但前端应显示「该作品已不可访问」且不给跳转。
+ * @summary 收藏夹详情
+ */
+export const getCollection = async (id: number, options?: RequestInit): Promise<getCollectionResponse> => {
+
+  const res = await fetch(getGetCollectionUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getCollectionResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getCollectionResponse
+}
+
+
+export type updateCollectionResponse200 = {
+  data: Collection
+  status: 200
+}
+
+export type updateCollectionResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateCollectionResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type updateCollectionResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type updateCollectionResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type updateCollectionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type updateCollectionResponseSuccess = (updateCollectionResponse200) & {
+  headers: Headers;
+};
+export type updateCollectionResponseError = (updateCollectionResponse400 | updateCollectionResponse401 | updateCollectionResponse403 | updateCollectionResponse422 | updateCollectionResponse503) & {
+  headers: Headers;
+};
+
+export type updateCollectionResponse = (updateCollectionResponseSuccess | updateCollectionResponseError)
+
+export const getUpdateCollectionUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/collections/${id}`
+}
+
+/**
+ * 改名 / 改说明 / 改可见性，三个字段都可选（至少传一个，否则 400）。
+ *
+ * 默认夹不可改：改名、改说明、转公开一律 422（COL-002）。
+ * 公开转私有后，之前的分享链接立刻 404（COL-011）：没有缓存，判据是当前行。
+ * @summary 修改收藏夹
+ */
+export const updateCollection = async (id: number,
+    collectionUpdate: CollectionUpdate, options?: RequestInit): Promise<updateCollectionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getUpdateCollectionUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(collectionUpdate)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateCollectionResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateCollectionResponse
+}
+
+
+export type deleteCollectionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteCollectionResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type deleteCollectionResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type deleteCollectionResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type deleteCollectionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type deleteCollectionResponseSuccess = (deleteCollectionResponse204) & {
+  headers: Headers;
+};
+export type deleteCollectionResponseError = (deleteCollectionResponse401 | deleteCollectionResponse403 | deleteCollectionResponse422 | deleteCollectionResponse503) & {
+  headers: Headers;
+};
+
+export type deleteCollectionResponse = (deleteCollectionResponseSuccess | deleteCollectionResponseError)
+
+export const getDeleteCollectionUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/collections/${id}`
+}
+
+/**
+ * 只删夹与夹内条目，**不删作品**（COL-013）。默认夹不可删（422）。
+ * @summary 删除收藏夹
+ */
+export const deleteCollection = async (id: number, options?: RequestInit): Promise<deleteCollectionResponse> => {
+
+  const res = await fetch(getDeleteCollectionUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: deleteCollectionResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as deleteCollectionResponse
+}
+
+
+export type addCollectionItemResponse204 = {
+  data: void
+  status: 204
+}
+
+export type addCollectionItemResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type addCollectionItemResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type addCollectionItemResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type addCollectionItemResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type addCollectionItemResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type addCollectionItemResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type addCollectionItemResponseSuccess = (addCollectionItemResponse204) & {
+  headers: Headers;
+};
+export type addCollectionItemResponseError = (addCollectionItemResponse400 | addCollectionItemResponse401 | addCollectionItemResponse403 | addCollectionItemResponse404 | addCollectionItemResponse422 | addCollectionItemResponse503) & {
+  headers: Headers;
+};
+
+export type addCollectionItemResponse = (addCollectionItemResponseSuccess | addCollectionItemResponseError)
+
+export const getAddCollectionItemUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/collections/${id}/items`
+}
+
+/**
+ * 只接受当前公开作品（demo_public_demos 视图）；重复收藏同一件是幂等成功。
+ * 单夹上限读 collection.max_items（默认 500），超限 422。
+ *
+ * 默认收藏走同一端点：先 GET /collections 找到 isDefault 的 id，再 POST 到这里；
+ * 「加入指定夹」也走它，两条路径不混用（COL-008）。
+ * @summary 收藏一件作品
+ */
+export const addCollectionItem = async (id: number,
+    collectionItemInput: CollectionItemInput, options?: RequestInit): Promise<addCollectionItemResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getAddCollectionItemUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(collectionItemInput)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: addCollectionItemResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as addCollectionItemResponse
+}
+
+
+export type removeCollectionItemResponse204 = {
+  data: void
+  status: 204
+}
+
+export type removeCollectionItemResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type removeCollectionItemResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type removeCollectionItemResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type removeCollectionItemResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type removeCollectionItemResponseSuccess = (removeCollectionItemResponse204) & {
+  headers: Headers;
+};
+export type removeCollectionItemResponseError = (removeCollectionItemResponse401 | removeCollectionItemResponse403 | removeCollectionItemResponse404 | removeCollectionItemResponse503) & {
+  headers: Headers;
+};
+
+export type removeCollectionItemResponse = (removeCollectionItemResponseSuccess | removeCollectionItemResponseError)
+
+export const getRemoveCollectionItemUrl = (id: number,
+    slug: string,) => {
+
+
+
+
+  return `/api/v1/collections/${id}/items/${slug}`
+}
+
+/**
+ * 幂等：本来就不在夹里也回 204。
+ * @summary 移出收藏夹
+ */
+export const removeCollectionItem = async (id: number,
+    slug: string, options?: RequestInit): Promise<removeCollectionItemResponse> => {
+
+  const res = await fetch(getRemoveCollectionItemUrl(id,slug),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: removeCollectionItemResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as removeCollectionItemResponse
+}
+
+
+export type getCollectionStatusResponse200 = {
+  data: CollectionStatus
+  status: 200
+}
+
+export type getCollectionStatusResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getCollectionStatusResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getCollectionStatusResponseSuccess = (getCollectionStatusResponse200) & {
+  headers: Headers;
+};
+export type getCollectionStatusResponseError = (getCollectionStatusResponse401 | getCollectionStatusResponse503) & {
+  headers: Headers;
+};
+
+export type getCollectionStatusResponse = (getCollectionStatusResponseSuccess | getCollectionStatusResponseError)
+
+export const getGetCollectionStatusUrl = (params: GetCollectionStatusParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/me/collections/status?${stringifiedParams}` : `/api/v1/me/collections/status`
+}
+
+/**
+ * 详情页按钮用：这件作品在不在默认夹、在哪些自定义夹里。
+ *
+ * 只读自己的收藏关系；未登录 401。
+ * @summary 作品在收藏里的状态
+ */
+export const getCollectionStatus = async (params: GetCollectionStatusParams, options?: RequestInit): Promise<getCollectionStatusResponse> => {
+
+  const res = await fetch(getGetCollectionStatusUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getCollectionStatusResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getCollectionStatusResponse
 }
 
 

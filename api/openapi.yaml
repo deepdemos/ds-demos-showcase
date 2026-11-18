@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 49 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 57 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -1923,6 +1923,75 @@ paths:
                 $ref: '#/components/schemas/PublicProfile'
         '404':
           description: 用户名不存在，或账号不是 active
+  /api/v1/collections:
+    get:
+      operationId: listCollections
+      tags: [身份]
+      summary: 我的收藏夹
+      description: |
+        列出自己的收藏夹（含默认夹），按默认夹优先、其余按最近更新排序。
+        需要登录；每个夹带 itemCount。
+
+        默认夹由服务端在第一次访问时惰性创建，不写触发器。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 收藏夹列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionList'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: createCollection
+      tags: [身份]
+      summary: 新建收藏夹
+      description: |
+        建一个自定义夹。默认夹已经存在，不通过这个端点创建。
+
+        上限读设置域 collection.max_per_account（默认 20，不数默认夹）；
+        同用户下名称大小写不敏感唯一。超限 / 重名 / 名称为空都回 422。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionCreate'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '400':
+          description: 请求体不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 超限 / 重名 / 名称不合法
           content:
             application/json:
               schema:
@@ -1970,6 +2039,275 @@ paths:
                 $ref: '#/components/schemas/ProfileDemoList'
         '404':
           description: 用户名不存在，或账号不是 active
+  /api/v1/collections/{id}:
+    get:
+      operationId: getCollection
+      tags: [身份]
+      summary: 收藏夹详情
+      description: |
+        公开夹任何人可读；私有夹只有主人可读，其他人（含未登录）一律 404——
+        404 不承认这个 id 存在。默认夹永远私有。
+
+        条目带 accessible：不在 demo_public_demos 视图里的作品仍保留在列表里
+        （COL-014 墓碑），但前端应显示「该作品已不可访问」且不给跳转。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: 收藏夹详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionDetail'
+        '404':
+          description: 不存在，或私有夹但你不是主人
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: updateCollection
+      tags: [身份]
+      summary: 修改收藏夹
+      description: |
+        改名 / 改说明 / 改可见性，三个字段都可选（至少传一个，否则 400）。
+
+        默认夹不可改：改名、改说明、转公开一律 422（COL-002）。
+        公开转私有后，之前的分享链接立刻 404（COL-011）：没有缓存，判据是当前行。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionUpdate'
+      responses:
+        '200':
+          description: 已修改
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '400':
+          description: 请求体不合法 / 没传任何字段
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 不是主人
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 默认夹不可改 / 重名 / 名称不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: deleteCollection
+      tags: [身份]
+      summary: 删除收藏夹
+      description: |
+        只删夹与夹内条目，**不删作品**（COL-013）。默认夹不可删（422）。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '204':
+          description: 已删除
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 不是主人
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 默认夹不可删
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/collections/{id}/items:
+    post:
+      operationId: addCollectionItem
+      tags: [身份]
+      summary: 收藏一件作品
+      description: |
+        只接受当前公开作品（demo_public_demos 视图）；重复收藏同一件是幂等成功。
+        单夹上限读 collection.max_items（默认 500），超限 422。
+
+        默认收藏走同一端点：先 GET /collections 找到 isDefault 的 id，再 POST 到这里；
+        「加入指定夹」也走它，两条路径不混用（COL-008）。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionItemInput'
+      responses:
+        '204':
+          description: 已收藏（重复收藏也是 204）
+        '400':
+          description: 请求体不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 不是主人
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 夹不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 超过单夹上限 / 作品不可收藏
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/collections/{id}/items/{slug}:
+    delete:
+      operationId: removeCollectionItem
+      tags: [身份]
+      summary: 移出收藏夹
+      description: 幂等：本来就不在夹里也回 204。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '204':
+          description: 已移出（不在夹里也是 204）
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 不是主人
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 夹不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/me/collections/status:
+    get:
+      operationId: getCollectionStatus
+      tags: [身份]
+      summary: 作品在收藏里的状态
+      description: |
+        详情页按钮用：这件作品在不在默认夹、在哪些自定义夹里。
+
+        只读自己的收藏关系；未登录 401。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slug
+          in: query
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: 收藏状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionStatus'
+        '401':
+          description: 未登录
           content:
             application/json:
               schema:
@@ -4548,6 +4886,133 @@ components:
         pageSize:
           type: integer
           minimum: 1
+
+    Collection:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, isDefault, visibility, itemCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 500
+        isDefault:
+          type: boolean
+          description: 默认夹每人一个、永远私有、不可改名/删除/转公开
+        visibility:
+          type: string
+          enum: [private, public]
+        itemCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CollectionList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Collection'
+
+    CollectionCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 500
+
+    CollectionUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 500
+        visibility:
+          type: string
+          enum: [private, public]
+
+    CollectionItemInput:
+      type: object
+      additionalProperties: false
+      required: [slug]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+
+    CollectionItem:
+      type: object
+      additionalProperties: false
+      required: [slug, title, coverUrl, addedAt, accessible]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        addedAt:
+          type: string
+          format: date-time
+        accessible:
+          type: boolean
+          description: false = 作品已下架/删除；前端显示「该作品已不可访问」且不给跳转（COL-014）
+
+    CollectionDetail:
+      type: object
+      additionalProperties: false
+      required: [collection, items]
+      properties:
+        collection:
+          $ref: '#/components/schemas/Collection'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionItem'
+
+    CollectionStatus:
+      type: object
+      additionalProperties: false
+      required: [slug, inDefault, collectionIds]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        inDefault:
+          type: boolean
+        collectionIds:
+          type: array
+          items:
+            type: integer
+          description: 包含这件作品的自定义夹 id（不含默认夹）
 
     AccountStatus:
       type: string

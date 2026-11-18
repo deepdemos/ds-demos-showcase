@@ -790,6 +790,78 @@
         }
       }
     ],
+    "GET /api/v1/collections": [
+      {
+        "case": "未登录返回 401，不返回空列表当成功",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollectionsRequiresLogin"
+        }
+      }
+    ],
+    "POST /api/v1/collections": [
+      {
+        "case": "超过 collection.max_per_account 返回 422",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollectionLimits"
+        }
+      }
+    ],
+    "GET /api/v1/collections/{id}": [
+      {
+        "case": "私有夹对非主人返回 404，不承认存在",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollections"
+        }
+      }
+    ],
+    "PATCH /api/v1/collections/{id}": [
+      {
+        "case": "默认夹改名/转公开 422；他人写 403",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollections"
+        }
+      }
+    ],
+    "DELETE /api/v1/collections/{id}": [
+      {
+        "case": "默认夹不可删除（422）",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollections"
+        }
+      }
+    ],
+    "POST /api/v1/collections/{id}/items": [
+      {
+        "case": "只能收藏当前公开作品：草稿 422；他人夹 403",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollections"
+        }
+      }
+    ],
+    "DELETE /api/v1/collections/{id}/items/{slug}": [
+      {
+        "case": "他人夹移出 403",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollections"
+        }
+      }
+    ],
+    "GET /api/v1/me/collections/status": [
+      {
+        "case": "未登录返回 401",
+        "test": {
+          "file": "backend/internal/httpapi/collections_integration_test.go",
+          "name": "TestIntegrationCollectionsRequiresLogin"
+        }
+      }
+    ],
     "GET /api/v1/me/history": [
       {
         "case": "未登录返回 401，不把「没有会话」当成空历史",

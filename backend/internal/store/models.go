@@ -8,6 +8,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// 收藏夹（COL-001–014）：默认夹每人一个、永远私有、不可改名/删除/转公开。
+type Collection struct {
+	ID          int64
+	AccountID   int64
+	Name        string
+	Description string
+	IsDefault   bool
+	Visibility  string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type ModelCheckpoint struct {
 	ID         int64
 	ModelID    int64
