@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { submitDemo } from '@/api';
-import { SubmitPage } from './SubmitPage';
+import { SubmitPage, SubmitReceipt } from './SubmitPage';
 
 const auth = vi.hoisted(() => ({
   me: null as null | { sub: string; username: string; displayName: string },
@@ -216,6 +216,8 @@ describe('SubmitPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '提交投稿' }));
 
     await waitFor(() => expect(screen.getByText('投稿已提交')).toBeInTheDocument());
+    // #459：回执要有「我的作品」这个出口，不能只给预览与作品库。
+    expect(screen.getByRole('link', { name: '我的作品' })).toHaveAttribute('href', '/my/demos');
   });
 
   // 一个都没勾时不要塞一个空数组：契约里 modelIds 可省略，空数组和不传语义相同，
@@ -339,6 +341,36 @@ test('外链类型填地址就能投，请求里带 externalUrl', async () => {
  * 服务端只收 http/https（javascript: 会把「点一个作品」变成执行脚本），
  * 这里挡的是「明明写了协议却被放过」这一类。
  */
+/**
+ * 回执的两个会话状态（#459 的验收）。
+ *
+ * 会话过期时「我的作品」少一个出口，但预览与作品库必须照常可点——不能因为
+ * 一个依赖会话的链接把整张回执变成登录页。
+ */
+test('会话有效时回执给「我的作品」出口', () => {
+  render(
+    <MemoryRouter>
+      <SubmitReceipt slug="demo-a" signedIn />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('link', { name: '我的作品' })).toHaveAttribute('href', '/my/demos');
+  expect(screen.getByRole('link', { name: '预览这条作品' })).toHaveAttribute(
+    'href',
+    '/preview/demo-a/',
+  );
+});
+
+test('会话失效时回执仍然可用，只是没有「我的作品」', () => {
+  render(
+    <MemoryRouter>
+      <SubmitReceipt slug="demo-a" signedIn={false} />
+    </MemoryRouter>,
+  );
+  expect(screen.getByText('投稿已提交')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '去作品库' })).toHaveAttribute('href', '/demos');
+  expect(screen.queryByRole('link', { name: '我的作品' })).toBeNull();
+});
+
 test('外链地址不是 http(s) 时本地就挡住，不发请求', async () => {
   auth.me = { sub: 'x', username: 'u', displayName: 'U' };
   auth.isLoading = false;

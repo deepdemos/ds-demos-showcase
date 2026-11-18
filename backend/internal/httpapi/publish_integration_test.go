@@ -13,11 +13,11 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
-// 发布端点的鉴权：`demo.publish` 只绑了 admin（审核员没有）。
+// 发布端点的鉴权：`demo.publish` 绑在 admin 与 moderator（Discussion #464 d1 B）。
 //
-// 这条测试钉的是「发布与审核是两个权限」这个决定：审核员来了也必须 403。
-// 如果哪天有人图省事把两者合并，这里会先红，而不是等到某个审核员
-// 把一条没上首页资格的作品挂出去之后才发现。
+// 这条测试钉的是「没有 demo.publish 一律 403」：普通用户 403，审核员与管理员能过鉴权
+// （作品不存在时是 404，不是 403）。发布与审核仍是两个权限键——只是默认同一个人持有，
+// 想拆开时不用改端点。
 func TestIntegrationPublishPermission(t *testing.T) {
 	pool := integrationPool(t)
 	q := store.New(pool)
@@ -66,7 +66,7 @@ func TestIntegrationPublishPermission(t *testing.T) {
 	}{
 		{"未登录", "", http.StatusUnauthorized},
 		{"普通用户", userSID, http.StatusForbidden},
-		{"审核员没有发布权", modSID, http.StatusForbidden},
+		{"审核员可以发布", modSID, http.StatusNotFound},
 		// admin 有权限，但没有这条作品 → 404（证明它过了鉴权、走到底了）。
 		{"admin", adminSID, http.StatusNotFound},
 	}
