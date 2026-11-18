@@ -209,7 +209,14 @@ export function DemoDetailPage() {
             {displayTitle(data.demo)}
           </h1>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            作者 {data.demo.author.displayName || data.demo.author.username}
+            作者{' '}
+            {data.demo.author.username ? (
+              <Link to={'/u/' + data.demo.author.username} className="underline">
+                {data.demo.author.displayName || data.demo.author.username}
+              </Link>
+            ) : (
+              data.demo.author.displayName || '（未知作者）'
+            )}
           </p>
           {/*
             发布时间取渠道最早的那一次（publishedAt），不是 demos.created_at：

@@ -1154,6 +1154,68 @@
         "optional": false
       }
     },
+    "ProfileDemo": {
+      "coverUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "ProfileDemoList": {
+      "items": {
+        "type": "[]ProfileDemo",
+        "optional": false
+      },
+      "page": {
+        "type": "int",
+        "optional": false
+      },
+      "pageSize": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "PublicProfile": {
+      "avatarUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "bio": {
+        "type": "string",
+        "optional": false
+      },
+      "demoCount": {
+        "type": "int",
+        "optional": false
+      },
+      "displayName": {
+        "type": "string",
+        "optional": false
+      },
+      "joinedAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "username": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "PublishRequest": {
       "channel": {
         "type": "string",
@@ -1605,6 +1667,7 @@
       "reject"
     ],
     "ReviewQueueItemModerationState": [
+      "approved",
       "pending"
     ],
     "ReviewResultModerationState": [
@@ -1615,6 +1678,10 @@
       "approved",
       "pending",
       "rejected"
+    ],
+    "ListDemoReviewQueueParamsState": [
+      "approved_unpublished",
+      "pending"
     ],
     "ListDemosParamsSort": [
       "hot",
@@ -1876,6 +1943,16 @@
       "method": "ListRecommendations",
       "pathParams": 0,
       "params": "ListRecommendationsParams"
+    },
+    "GET /api/v1/users/{username}": {
+      "method": "GetUserProfile",
+      "pathParams": 1,
+      "params": null
+    },
+    "GET /api/v1/users/{username}/demos": {
+      "method": "ListUserDemos",
+      "pathParams": 1,
+      "params": "ListUserDemosParams"
     },
     "GET /healthz": {
       "method": "GetHealthz",
