@@ -260,6 +260,9 @@ func (h *Handler) reviewProposalOne(ctx context.Context, actor demo.Actor, id in
 		if reason != nil {
 			text = strings.TrimSpace(*reason)
 		}
+		if len([]rune(text)) > 500 {
+			return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "驳回原因最多 500 个字符")
+		}
 		rejected, err := h.queries.RejectProposal(ctx, store.RejectProposalParams{
 			ID:           id,
 			ReviewedBy:   pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
@@ -285,9 +288,10 @@ func (h *Handler) reviewProposalOne(ctx context.Context, actor demo.Actor, id in
 			if title == "" {
 				return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "new_task 的标题不能为空")
 			}
+			titleKey := entity.TitleKey(title)
 			approved, err := h.queries.ApproveNewTaskProposal(ctx, store.ApproveNewTaskProposalParams{
 				ID:         id,
-				TitleKey:   entity.TitleKey(title),
+				TitleKey:   titleKey,
 				Slug:       taskSlug(title),
 				Title:      title,
 				TitleNorm:  entity.TitleNorm(title),
@@ -297,6 +301,9 @@ func (h *Handler) reviewProposalOne(ctx context.Context, actor demo.Actor, id in
 				ReviewedBy: pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
 			})
 			if err != nil {
+				if isUniqueViolation(err) {
+					return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "同名题目刚被另一条提案创建，请重试")
+				}
 				return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 			}
 			if !approved.Approved {
@@ -485,7 +492,7 @@ func (h *Handler) auditProposalReview(ctx context.Context, actor demo.Actor, id 
 	}
 	afterJSON, _ := json.Marshal(after)
 	if err := h.queries.InsertAuditLog(ctx, store.InsertAuditLogParams{
-		ActorID:    pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+		ActorID:    pgtype.Int8{Int64: actor.AccountID, Valid: actor.AccountID != 0},
 		ActorRole:  actor.Role,
 		Action:     "review",
 		EntityType: "proposal",

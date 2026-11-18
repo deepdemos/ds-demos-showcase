@@ -53,6 +53,23 @@ func TestIntegrationPublishPermission(t *testing.T) {
 		`UPDATE accounts SET role = 'moderator' WHERE sub = $1`, modSub); err != nil {
 		t.Fatalf("提权失败: %v", err)
 	}
+	reviewSub, reviewSID := mk("reviewonly")
+	if _, err := pool.Exec(context.Background(), `
+INSERT INTO roles (key, name, is_builtin, description) VALUES ('it-review-only', '仅审核', false, '测试：只有 demo.review')
+ON CONFLICT (key) DO NOTHING`); err != nil {
+		t.Fatalf("建测试角色失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM roles WHERE key = 'it-review-only'`)
+	})
+	if _, err := pool.Exec(context.Background(), `
+INSERT INTO role_permissions (role_key, permission_key) VALUES ('it-review-only', 'demo.review')
+ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatalf("绑定权限失败: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE accounts SET role = 'it-review-only' WHERE sub = $1`, reviewSub); err != nil {
+		t.Fatalf("提权失败: %v", err)
+	}
 	adminSub, adminSID := mk("admin")
 	if _, err := pool.Exec(context.Background(),
 		`UPDATE accounts SET role = 'admin' WHERE sub = $1`, adminSub); err != nil {
@@ -67,6 +84,7 @@ func TestIntegrationPublishPermission(t *testing.T) {
 		{"未登录", "", http.StatusUnauthorized},
 		{"普通用户", userSID, http.StatusForbidden},
 		{"审核员可以发布", modSID, http.StatusNotFound},
+		{"只有 demo.review 的角色不能发布", reviewSID, http.StatusForbidden},
 		// admin 有权限，但没有这条作品 → 404（证明它过了鉴权、走到底了）。
 		{"admin", adminSID, http.StatusNotFound},
 	}
