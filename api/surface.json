@@ -46,6 +46,62 @@
         "optional": false
       }
     },
+    "AdminAppeal": {
+      "authorName": {
+        "type": "string",
+        "optional": false
+      },
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "decisionReason": {
+        "type": "string",
+        "optional": true
+      },
+      "demoSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "demoTitle": {
+        "type": "string",
+        "optional": false
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": false
+      },
+      "reviewedAt": {
+        "type": "time.Time",
+        "optional": true
+      },
+      "status": {
+        "type": "AdminAppealStatus",
+        "optional": false
+      }
+    },
+    "AdminAppealList": {
+      "items": {
+        "type": "[]AdminAppeal",
+        "optional": false
+      },
+      "page": {
+        "type": "int",
+        "optional": false
+      },
+      "pageSize": {
+        "type": "int",
+        "optional": false
+      },
+      "total": {
+        "type": "int",
+        "optional": false
+      }
+    },
     "AdminInbox": {
       "approvedUnpublished": {
         "type": "[]ReviewQueueItem",
@@ -69,6 +125,30 @@
       },
       "proposals": {
         "type": "[]InboxProposal",
+        "optional": false
+      }
+    },
+    "AppealDecision": {
+      "decision": {
+        "type": "AppealDecisionDecision",
+        "optional": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "AppealReviewResult": {
+      "demoSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "status": {
+        "type": "AppealReviewResultStatus",
         "optional": false
       }
     },
@@ -1953,6 +2033,19 @@
       "pending",
       "suspended"
     ],
+    "AdminAppealStatus": [
+      "approved",
+      "pending",
+      "rejected"
+    ],
+    "AppealDecisionDecision": [
+      "approve",
+      "reject"
+    ],
+    "AppealReviewResultStatus": [
+      "approved",
+      "rejected"
+    ],
     "ClassificationDimension": [
       "genre",
       "subject",
@@ -2179,6 +2272,11 @@
       "pending",
       "rejected"
     ],
+    "ListAdminAppealsParamsStatus": [
+      "approved",
+      "pending",
+      "rejected"
+    ],
     "ListAdminProposalsParamsStatus": [
       "approved",
       "pending",
@@ -2233,6 +2331,16 @@
     ]
   },
   "endpoints": {
+    "GET /api/v1/admin/appeals": {
+      "method": "ListAdminAppeals",
+      "pathParams": 0,
+      "params": "ListAdminAppealsParams"
+    },
+    "POST /api/v1/admin/appeals/{id}/review": {
+      "method": "ReviewAdminAppeal",
+      "pathParams": 1,
+      "params": null
+    },
     "GET /api/v1/admin/demos/{slug}/channels": {
       "method": "ListDemoChannels",
       "pathParams": 1,

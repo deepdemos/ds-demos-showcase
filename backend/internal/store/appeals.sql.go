@@ -11,6 +11,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const approveAppealStatus = `-- name: ApproveAppealStatus :one
+UPDATE demo_appeals a
+SET status = 'approved',
+    reviewed_by = $1,
+    reviewed_at = now(),
+    decision_reason = $2,
+    updated_at = now()
+WHERE a.id = $3
+  AND a.status = 'pending'
+  AND EXISTS (
+      SELECT 1 FROM demos d
+      WHERE d.id = a.demo_id
+        AND d.lifecycle_state = 'removed'
+        AND d.deleted_at IS NULL
+        AND d.erased_at IS NULL
+  )
+RETURNING a.demo_id
+`
+
+type ApproveAppealStatusParams struct {
+	ReviewedBy     pgtype.Int8
+	DecisionReason string
+	ID             int64
+}
+
+// 只改申诉状态；作品恢复走 TransitionDemoLifecycle（生命周期唯一写入口）。
+// 条件里要求作品仍 removed：不满足时 0 行，调用方回滚并 409。
+func (q *Queries) ApproveAppealStatus(ctx context.Context, arg ApproveAppealStatusParams) (int64, error) {
+	row := q.db.QueryRow(ctx, approveAppealStatus, arg.ReviewedBy, arg.DecisionReason, arg.ID)
+	var demo_id int64
+	err := row.Scan(&demo_id)
+	return demo_id, err
+}
+
+const countAdminAppeals = `-- name: CountAdminAppeals :one
+SELECT count(*)::bigint AS total
+FROM demo_appeals a
+WHERE ($1::text = '' OR a.status = $1)
+`
+
+func (q *Queries) CountAdminAppeals(ctx context.Context, status string) (int64, error) {
+	row := q.db.QueryRow(ctx, countAdminAppeals, status)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
 const createDemoAppeal = `-- name: CreateDemoAppeal :one
 INSERT INTO demo_appeals (demo_id, appellant_account_id, reason)
 SELECT d.id, $1, $2
@@ -58,6 +105,39 @@ func (q *Queries) CreateDemoAppeal(ctx context.Context, arg CreateDemoAppealPara
 		&i.ReviewedAt,
 		&i.DecisionReason,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getAppealForReview = `-- name: GetAppealForReview :one
+SELECT a.id, a.demo_id, a.status, a.reason,
+       d.slug, d.lifecycle_state, COALESCE(d.title, '')::text AS demo_title
+FROM demo_appeals a
+JOIN demos d ON d.id = a.demo_id
+WHERE a.id = $1
+`
+
+type GetAppealForReviewRow struct {
+	ID             int64
+	DemoID         int64
+	Status         string
+	Reason         string
+	Slug           string
+	LifecycleState string
+	DemoTitle      string
+}
+
+func (q *Queries) GetAppealForReview(ctx context.Context, id int64) (GetAppealForReviewRow, error) {
+	row := q.db.QueryRow(ctx, getAppealForReview, id)
+	var i GetAppealForReviewRow
+	err := row.Scan(
+		&i.ID,
+		&i.DemoID,
+		&i.Status,
+		&i.Reason,
+		&i.Slug,
+		&i.LifecycleState,
+		&i.DemoTitle,
 	)
 	return i, err
 }
@@ -144,4 +224,93 @@ func (q *Queries) GetPendingAppealBySlug(ctx context.Context, slug string) (int6
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listAdminAppeals = `-- name: ListAdminAppeals :many
+SELECT a.id, a.demo_id, d.slug, COALESCE(d.title, '')::text AS demo_title,
+       a.reason, a.status, a.created_at, a.reviewed_at, a.decision_reason,
+       COALESCE(NULLIF(p.display_name, ''), p.username, '')::text AS author_name
+FROM demo_appeals a
+JOIN demos d ON d.id = a.demo_id
+LEFT JOIN users u ON u.id = d.author_id
+LEFT JOIN accounts ac ON ac.sub = u.sub
+LEFT JOIN profiles p ON p.account_id = ac.id
+WHERE ($1::text = '' OR a.status = $1)
+ORDER BY a.created_at ASC, a.id ASC
+LIMIT $3 OFFSET $2
+`
+
+type ListAdminAppealsParams struct {
+	Status    string
+	RowOffset int32
+	RowLimit  int32
+}
+
+type ListAdminAppealsRow struct {
+	ID             int64
+	DemoID         int64
+	Slug           string
+	DemoTitle      string
+	Reason         string
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	ReviewedAt     pgtype.Timestamptz
+	DecisionReason string
+	AuthorName     string
+}
+
+// 管理员列表：默认 pending；带作品 slug / 标题 / 作者显示名，减少二次跳转。
+func (q *Queries) ListAdminAppeals(ctx context.Context, arg ListAdminAppealsParams) ([]ListAdminAppealsRow, error) {
+	rows, err := q.db.Query(ctx, listAdminAppeals, arg.Status, arg.RowOffset, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdminAppealsRow{}
+	for rows.Next() {
+		var i ListAdminAppealsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DemoID,
+			&i.Slug,
+			&i.DemoTitle,
+			&i.Reason,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ReviewedAt,
+			&i.DecisionReason,
+			&i.AuthorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rejectAppeal = `-- name: RejectAppeal :one
+UPDATE demo_appeals a
+SET status = 'rejected',
+    reviewed_by = $1,
+    reviewed_at = now(),
+    decision_reason = $2,
+    updated_at = now()
+WHERE a.id = $3 AND a.status = 'pending'
+RETURNING a.demo_id
+`
+
+type RejectAppealParams struct {
+	ReviewedBy     pgtype.Int8
+	DecisionReason string
+	ID             int64
+}
+
+func (q *Queries) RejectAppeal(ctx context.Context, arg RejectAppealParams) (int64, error) {
+	row := q.db.QueryRow(ctx, rejectAppeal, arg.ReviewedBy, arg.DecisionReason, arg.ID)
+	var demo_id int64
+	err := row.Scan(&demo_id)
+	return demo_id, err
 }

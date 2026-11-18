@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 69 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 71 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -3387,6 +3387,128 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/appeals:
+    get:
+      operationId: listAdminAppeals
+      tags: [治理]
+      summary: 申诉列表
+      description: |
+        按状态筛，默认 pending；按提交时间正序（先来先处理）。
+        带作品 slug / 标题 / 作者显示名，列表可直接决策。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+            default: pending
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 申诉列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAppealList'
+        '400':
+          description: status 不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有审核权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/appeals/{id}/review:
+    post:
+      operationId: reviewAdminAppeal
+      tags: [治理]
+      summary: 裁决申诉
+      description: |
+        approve：申诉置 approved，作品 removed → published（渠道行保留）。
+        reject：申诉置 rejected，作品保持 removed。
+
+        作品已不是 removed、或申诉已被处理时返回 409；不会出现「申诉通过了但作品没恢复」。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppealDecision'
+      responses:
+        '200':
+          description: 已裁决
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppealReviewResult'
+        '400':
+          description: 裁决值不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有审核权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 申诉不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 已处理 / 作品已不是 removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/proposals:
     get:
       operationId: listAdminProposals
@@ -5915,6 +6037,82 @@ components:
         status:
           type: string
           enum: [approved, rejected]
+
+    AdminAppeal:
+      type: object
+      additionalProperties: false
+      required: [id, demoSlug, demoTitle, reason, status, authorName, createdAt, reviewedAt, decisionReason]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        demoSlug:
+          type: string
+        demoTitle:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        authorName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        decisionReason:
+          type: string
+          nullable: true
+
+    AdminAppealList:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAppeal'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+
+    AppealDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: string
+          maxLength: 500
+          description: 给作者看的裁决说明（可选）
+
+    AppealReviewResult:
+      type: object
+      additionalProperties: false
+      required: [id, status, demoSlug]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [approved, rejected]
+        demoSlug:
+          type: string
 
     AdminInbox:
       type: object

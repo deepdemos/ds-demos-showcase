@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
 	"log/slog"
 	"net/http"
@@ -62,6 +63,7 @@ type Pinger interface {
 // Handler 实现 api.ServerInterface。
 type Handler struct {
 	pinger   Pinger
+	pool     *pgxpool.Pool     // 需要显式事务的写路径（申诉恢复）用它
 	queries  *store.Queries    // nil 表示未配置数据库
 	identity *identity.Service // nil 表示身份域未接线
 	mailer   mailer.Mailer     // nil 表示不投递（验证码请求仍然返回 204）
@@ -85,6 +87,12 @@ func New(pinger Pinger, queries *store.Queries, identitySvc *identity.Service, m
 //
 // 用可选注入而不是扩 `New` 的签名：模型域目前只有一个端点用得上，
 // 改签名会让 30 多个测试调用点跟着改，收益为零。
+// WithPool 注入连接池：只在「必须多语句同一事务」的写路径上使用。
+func (h *Handler) WithPool(pool *pgxpool.Pool) *Handler {
+	h.pool = pool
+	return h
+}
+
 func (h *Handler) WithModels(s *model.Service) *Handler {
 	h.models = s
 	return h

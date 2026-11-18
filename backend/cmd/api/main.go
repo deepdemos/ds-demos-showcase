@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"net/http"
 	"os"
@@ -62,6 +63,7 @@ func main() {
 	logger.Info("storage ready", "root", files.Root())
 
 	var pinger httpapi.Pinger
+	var dbPool *pgxpool.Pool
 	var queries *store.Queries
 	var identitySvc *identity.Service
 	var demoSvc *demo.Service
@@ -75,6 +77,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer pool.Close()
+		dbPool = pool
 		pinger = pool
 		queries = store.New(pool)
 		identitySvc = identity.New(pool, ipSecret, verification.New(queries, verificationSecret))
@@ -98,7 +101,7 @@ func main() {
 	}
 
 	router := httpapi.NewRouter(
-		httpapi.New(pinger, queries, identitySvc, mail, demoSvc).WithModels(modelSvc),
+		httpapi.New(pinger, queries, identitySvc, mail, demoSvc).WithPool(dbPool).WithModels(modelSvc),
 		httpapi.NewPreview(queries, files, identitySvc),
 		httpapi.NewDownload(queries, files),
 	)
