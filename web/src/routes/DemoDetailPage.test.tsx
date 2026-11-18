@@ -308,10 +308,13 @@ test('详情显示作品分类，并链到对应筛选', async () => {
   renderPage();
 
   expect(await screen.findByText('分类')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '小游戏' })).toHaveAttribute('href', '/demos?genre=game');
+  expect(screen.getByRole('link', { name: '小游戏' })).toHaveAttribute(
+    'href',
+    '/classifications/genre/game',
+  );
   expect(screen.getByRole('link', { name: '3D建模' })).toHaveAttribute(
     'href',
-    `/demos?technique=${encodeURIComponent('3D建模')}`,
+    '/classifications/technique/' + encodeURIComponent('3D建模'),
   );
 });
 
