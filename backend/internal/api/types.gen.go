@@ -49,6 +49,18 @@ const (
 	Technique ClassificationRefDimension = "technique"
 )
 
+// Defines values for CollectionVisibility.
+const (
+	CollectionVisibilityPrivate CollectionVisibility = "private"
+	CollectionVisibilityPublic  CollectionVisibility = "public"
+)
+
+// Defines values for CollectionUpdateVisibility.
+const (
+	CollectionUpdateVisibilityPrivate CollectionUpdateVisibility = "private"
+	CollectionUpdateVisibilityPublic  CollectionUpdateVisibility = "public"
+)
+
 // Defines values for DemoChannelLang.
 const (
 	DemoChannelLangEn DemoChannelLang = "en"
@@ -396,6 +408,73 @@ type ClassificationRef struct {
 
 // ClassificationRefDimension 维度的合法取值由 `classification_dimensions` 定义，不是开放字符串
 type ClassificationRefDimension string
+
+// Collection defines model for Collection.
+type Collection struct {
+	CreatedAt   time.Time `json:"createdAt"`
+	Description string    `json:"description"`
+	Id          int       `json:"id"`
+
+	// IsDefault 默认夹每人一个、永远私有、不可改名/删除/转公开
+	IsDefault  bool                 `json:"isDefault"`
+	ItemCount  int                  `json:"itemCount"`
+	Name       string               `json:"name"`
+	UpdatedAt  time.Time            `json:"updatedAt"`
+	Visibility CollectionVisibility `json:"visibility"`
+}
+
+// CollectionVisibility defines model for Collection.Visibility.
+type CollectionVisibility string
+
+// CollectionCreate defines model for CollectionCreate.
+type CollectionCreate struct {
+	Description *string `json:"description,omitempty"`
+	Name        string  `json:"name"`
+}
+
+// CollectionDetail defines model for CollectionDetail.
+type CollectionDetail struct {
+	Collection Collection       `json:"collection"`
+	Items      []CollectionItem `json:"items"`
+}
+
+// CollectionItem defines model for CollectionItem.
+type CollectionItem struct {
+	// Accessible false = 作品已下架/删除；前端显示「该作品已不可访问」且不给跳转（COL-014）
+	Accessible bool      `json:"accessible"`
+	AddedAt    time.Time `json:"addedAt"`
+	CoverUrl   *string   `json:"coverUrl"`
+	Slug       string    `json:"slug"`
+	Title      *string   `json:"title"`
+}
+
+// CollectionItemInput defines model for CollectionItemInput.
+type CollectionItemInput struct {
+	Slug string `json:"slug"`
+}
+
+// CollectionList defines model for CollectionList.
+type CollectionList struct {
+	Items []Collection `json:"items"`
+}
+
+// CollectionStatus defines model for CollectionStatus.
+type CollectionStatus struct {
+	// CollectionIds 包含这件作品的自定义夹 id（不含默认夹）
+	CollectionIds []int  `json:"collectionIds"`
+	InDefault     bool   `json:"inDefault"`
+	Slug          string `json:"slug"`
+}
+
+// CollectionUpdate defines model for CollectionUpdate.
+type CollectionUpdate struct {
+	Description *string                     `json:"description,omitempty"`
+	Name        *string                     `json:"name,omitempty"`
+	Visibility  *CollectionUpdateVisibility `json:"visibility,omitempty"`
+}
+
+// CollectionUpdateVisibility defines model for CollectionUpdate.Visibility.
+type CollectionUpdateVisibility string
 
 // DemoAuthor defines model for DemoAuthor.
 type DemoAuthor struct {
@@ -1793,6 +1872,11 @@ type ListRelatedDemosParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetCollectionStatusParams defines parameters for GetCollectionStatus.
+type GetCollectionStatusParams struct {
+	Slug string `form:"slug" json:"slug"`
+}
+
 // ListMyDemosParams defines parameters for ListMyDemos.
 type ListMyDemosParams struct {
 	// Page 页码，从 1 开始
@@ -1910,6 +1994,15 @@ type PostAuthVerifyEmailJSONRequestBody = VerifyEmailRequest
 
 // PostAuthVerifyEmailResendJSONRequestBody defines body for PostAuthVerifyEmailResend for application/json ContentType.
 type PostAuthVerifyEmailResendJSONRequestBody = VerifyEmailResendRequest
+
+// CreateCollectionJSONRequestBody defines body for CreateCollection for application/json ContentType.
+type CreateCollectionJSONRequestBody = CollectionCreate
+
+// UpdateCollectionJSONRequestBody defines body for UpdateCollection for application/json ContentType.
+type UpdateCollectionJSONRequestBody = CollectionUpdate
+
+// AddCollectionItemJSONRequestBody defines body for AddCollectionItem for application/json ContentType.
+type AddCollectionItemJSONRequestBody = CollectionItemInput
 
 // SubmitDemoMultipartRequestBody defines body for SubmitDemo for multipart/form-data ContentType.
 type SubmitDemoMultipartRequestBody SubmitDemoMultipartBody

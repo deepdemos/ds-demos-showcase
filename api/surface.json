@@ -96,6 +96,122 @@
         "optional": false
       }
     },
+    "Collection": {
+      "createdAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "description": {
+        "type": "string",
+        "optional": false
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "isDefault": {
+        "type": "bool",
+        "optional": false
+      },
+      "itemCount": {
+        "type": "int",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "updatedAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "visibility": {
+        "type": "CollectionVisibility",
+        "optional": false
+      }
+    },
+    "CollectionCreate": {
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "CollectionDetail": {
+      "collection": {
+        "type": "Collection",
+        "optional": false
+      },
+      "items": {
+        "type": "[]CollectionItem",
+        "optional": false
+      }
+    },
+    "CollectionItem": {
+      "accessible": {
+        "type": "bool",
+        "optional": false
+      },
+      "addedAt": {
+        "type": "time.Time",
+        "optional": false
+      },
+      "coverUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
+      }
+    },
+    "CollectionItemInput": {
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "CollectionList": {
+      "items": {
+        "type": "[]Collection",
+        "optional": false
+      }
+    },
+    "CollectionStatus": {
+      "collectionIds": {
+        "type": "[]int",
+        "optional": false
+      },
+      "inDefault": {
+        "type": "bool",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "CollectionUpdate": {
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "name": {
+        "type": "string",
+        "optional": true
+      },
+      "visibility": {
+        "type": "CollectionUpdateVisibility",
+        "optional": true
+      }
+    },
     "DemoAuthor": {
       "displayName": {
         "type": "string",
@@ -1536,6 +1652,14 @@
       "subject",
       "technique"
     ],
+    "CollectionVisibility": [
+      "private",
+      "public"
+    ],
+    "CollectionUpdateVisibility": [
+      "private",
+      "public"
+    ],
     "DemoChannelLang": [
       "en",
       "zh"
@@ -1819,6 +1943,41 @@
       "pathParams": 0,
       "params": null
     },
+    "GET /api/v1/collections": {
+      "method": "ListCollections",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/collections": {
+      "method": "CreateCollection",
+      "pathParams": 0,
+      "params": null
+    },
+    "DELETE /api/v1/collections/{id}": {
+      "method": "DeleteCollection",
+      "pathParams": 1,
+      "params": null
+    },
+    "GET /api/v1/collections/{id}": {
+      "method": "GetCollection",
+      "pathParams": 1,
+      "params": null
+    },
+    "PATCH /api/v1/collections/{id}": {
+      "method": "UpdateCollection",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/collections/{id}/items": {
+      "method": "AddCollectionItem",
+      "pathParams": 1,
+      "params": null
+    },
+    "DELETE /api/v1/collections/{id}/items/{slug}": {
+      "method": "RemoveCollectionItem",
+      "pathParams": 2,
+      "params": null
+    },
     "GET /api/v1/demo-types": {
       "method": "ListDemoTypes",
       "pathParams": 0,
@@ -1903,6 +2062,11 @@
       "method": "GetMe",
       "pathParams": 0,
       "params": null
+    },
+    "GET /api/v1/me/collections/status": {
+      "method": "GetCollectionStatus",
+      "pathParams": 0,
+      "params": "GetCollectionStatusParams"
     },
     "GET /api/v1/me/demos": {
       "method": "ListMyDemos",

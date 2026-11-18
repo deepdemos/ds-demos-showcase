@@ -156,6 +156,38 @@ func (s *stub) UpdateMyHistorySettings(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "history-settings")
 }
 
+func (s *stub) ListCollections(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "collections")
+}
+
+func (s *stub) CreateCollection(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "create-collection")
+}
+
+func (s *stub) GetCollection(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "collection:"+strconv.Itoa(id))
+}
+
+func (s *stub) UpdateCollection(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "update-collection:"+strconv.Itoa(id))
+}
+
+func (s *stub) DeleteCollection(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "delete-collection:"+strconv.Itoa(id))
+}
+
+func (s *stub) AddCollectionItem(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "add-item:"+strconv.Itoa(id))
+}
+
+func (s *stub) RemoveCollectionItem(_ http.ResponseWriter, _ *http.Request, id int, slug string) {
+	s.hits = append(s.hits, "remove-item:"+strconv.Itoa(id)+":"+slug)
+}
+
+func (s *stub) GetCollectionStatus(_ http.ResponseWriter, _ *http.Request, params api.GetCollectionStatusParams) {
+	s.hits = append(s.hits, "collection-status:"+params.Slug)
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -220,6 +252,14 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/me/history", "my-history"},
 		{http.MethodDelete, "/api/v1/me/history", "delete-my-history"},
 		{http.MethodPut, "/api/v1/me/history/settings", "history-settings"},
+		{http.MethodGet, "/api/v1/collections", "collections"},
+		{http.MethodPost, "/api/v1/collections", "create-collection"},
+		{http.MethodGet, "/api/v1/collections/7", "collection:7"},
+		{http.MethodPatch, "/api/v1/collections/7", "update-collection:7"},
+		{http.MethodDelete, "/api/v1/collections/7", "delete-collection:7"},
+		{http.MethodPost, "/api/v1/collections/7/items", "add-item:7"},
+		{http.MethodDelete, "/api/v1/collections/7/items/demo-a", "remove-item:7:demo-a"},
+		{http.MethodGet, "/api/v1/me/collections/status?slug=demo-a", "collection-status:demo-a"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

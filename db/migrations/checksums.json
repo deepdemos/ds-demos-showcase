@@ -41,5 +41,6 @@
   "db/migrations/0030_model_merge_targets.sql": "82243370a5693869929a9ad09d4773fc8dc31f3035e6d13d87ed8b8c6c93cad6",
   "db/migrations/0031_endpoint_offerings.sql": "3bf67d8fe0aebdd9132ecc186882a819a93f4884c89c9e891c5422852dd4510e",
   "db/migrations/0032_moderator_publish_permission.sql": "37d700ddecbc34bbe691154c10e0682548538bf3699d455221bd6b877fea51c5",
-  "db/migrations/0033_account_view_history.sql": "32fc92c04a1e224e800bfb99dc5e1e9918f3ad9e2d7b49ff7ac9cb583cb3e51a"
+  "db/migrations/0033_account_view_history.sql": "32fc92c04a1e224e800bfb99dc5e1e9918f3ad9e2d7b49ff7ac9cb583cb3e51a",
+  "db/migrations/0034_collections.sql": "1b1c723a295b5530df3e7a5da59b0b2843c861baebf05672e4e30d12c6e76aad"
 }
