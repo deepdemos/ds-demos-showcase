@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { getAdminProposal, reviewAdminProposal } from '@/api';
+import { getAdminProposal, reviewEntity } from '@/api';
 import { ProposalDetailPage } from './ProposalDetailPage';
 
 const auth = vi.hoisted(() => ({
@@ -15,7 +15,7 @@ vi.mock('@/features/auth/AuthContext', () => ({
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
-  return { ...actual, getAdminProposal: vi.fn(), reviewAdminProposal: vi.fn() };
+  return { ...actual, getAdminProposal: vi.fn(), reviewEntity: vi.fn() };
 });
 
 const detail = (over: Record<string, unknown> = {}) => ({
@@ -53,7 +53,7 @@ function renderPage() {
 beforeEach(() => {
   auth.me = { sub: 'u1', username: 'alice' };
   vi.mocked(getAdminProposal).mockReset();
-  vi.mocked(reviewAdminProposal).mockReset();
+  vi.mocked(reviewEntity).mockReset();
 });
 
 describe('ProposalDetailPage', () => {
@@ -79,7 +79,7 @@ describe('ProposalDetailPage', () => {
         payload: { dimension: 'subject', slug: 's', label: 'x' },
       }),
     } as never);
-    vi.mocked(reviewAdminProposal).mockResolvedValue({
+    vi.mocked(reviewEntity).mockResolvedValue({
       status: 200,
       data: { id: 7, status: 'approved' },
     } as never);
@@ -88,7 +88,7 @@ describe('ProposalDetailPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '通过' }));
 
     await waitFor(() =>
-      expect(reviewAdminProposal).toHaveBeenCalledWith(7, { decision: 'approve' }),
+      expect(reviewEntity).toHaveBeenCalledWith('proposal', '7', { decision: 'approve' }),
     );
   });
 
@@ -97,7 +97,7 @@ describe('ProposalDetailPage', () => {
       status: 200,
       data: detail({ kind: 'new_skill', payload: { slug: 's', name: 'x' } }),
     } as never);
-    vi.mocked(reviewAdminProposal).mockResolvedValue({
+    vi.mocked(reviewEntity).mockResolvedValue({
       status: 200,
       data: { id: 7, status: 'approved' },
     } as never);
@@ -106,7 +106,7 @@ describe('ProposalDetailPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '通过' }));
 
     await waitFor(() =>
-      expect(reviewAdminProposal).toHaveBeenCalledWith(7, { decision: 'approve' }),
+      expect(reviewEntity).toHaveBeenCalledWith('proposal', '7', { decision: 'approve' }),
     );
   });
 
@@ -115,7 +115,7 @@ describe('ProposalDetailPage', () => {
       status: 200,
       data: detail({ kind: 'new_task', payload: { title: '题目标题' } }),
     } as never);
-    vi.mocked(reviewAdminProposal).mockResolvedValue({
+    vi.mocked(reviewEntity).mockResolvedValue({
       status: 200,
       data: { id: 7, status: 'approved' },
     } as never);
@@ -124,13 +124,13 @@ describe('ProposalDetailPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '通过' }));
 
     await waitFor(() =>
-      expect(reviewAdminProposal).toHaveBeenCalledWith(7, { decision: 'approve' }),
+      expect(reviewEntity).toHaveBeenCalledWith('proposal', '7', { decision: 'approve' }),
     );
   });
 
   test('驳回会调接口并带上原因', async () => {
     vi.mocked(getAdminProposal).mockResolvedValue({ status: 200, data: detail() } as never);
-    vi.mocked(reviewAdminProposal).mockResolvedValue({
+    vi.mocked(reviewEntity).mockResolvedValue({
       status: 200,
       data: { id: 7, status: 'rejected' },
     } as never);
@@ -142,7 +142,7 @@ describe('ProposalDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '驳回' }));
 
     await waitFor(() =>
-      expect(reviewAdminProposal).toHaveBeenCalledWith(7, {
+      expect(reviewEntity).toHaveBeenCalledWith('proposal', '7', {
         decision: 'reject',
         reason: '重复提案',
       }),

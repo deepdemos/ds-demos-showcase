@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { getAdminInbox } from '@/api';
+import { batchReviewAdminProposals, getAdminInbox } from '@/api';
 import { AdminInboxPage } from './AdminInboxPage';
 
 const auth = vi.hoisted(() => ({
@@ -15,7 +15,7 @@ vi.mock('@/features/auth/AuthContext', () => ({
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
-  return { ...actual, getAdminInbox: vi.fn() };
+  return { ...actual, getAdminInbox: vi.fn(), batchReviewAdminProposals: vi.fn() };
 });
 
 const queueItem = (slug: string, title: string) => ({
@@ -45,6 +45,7 @@ function renderPage() {
 beforeEach(() => {
   auth.me = { sub: 'u1', username: 'alice' };
   vi.mocked(getAdminInbox).mockReset();
+  vi.mocked(batchReviewAdminProposals).mockReset();
 });
 
 describe('AdminInboxPage', () => {
@@ -80,6 +81,55 @@ describe('AdminInboxPage', () => {
       '/demos/demo-b',
     );
     await waitFor(() => expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1));
+  });
+
+  test('勾选两条后批量驳回，逐条显示结果', async () => {
+    vi.mocked(getAdminInbox).mockResolvedValue({
+      status: 200,
+      data: {
+        demoPendingCount: 0,
+        approvedUnpublishedCount: 0,
+        proposalPendingCount: 2,
+        demoPending: [],
+        approvedUnpublished: [],
+        proposals: [
+          {
+            id: 1,
+            kind: 'new_skill',
+            title: '提案一',
+            source: 'user',
+            createdAt: '2026-11-18T00:00:00Z',
+          },
+          {
+            id: 2,
+            kind: 'new_model',
+            title: '提案二',
+            source: 'user',
+            createdAt: '2026-11-18T00:00:00Z',
+          },
+        ],
+      },
+    } as never);
+    vi.mocked(batchReviewAdminProposals).mockResolvedValue({
+      status: 200,
+      data: {
+        results: [
+          { id: 1, ok: true, status: 'rejected' },
+          { id: 2, ok: false, error: '提案已经处理过了' },
+        ],
+      },
+    } as never);
+
+    renderPage();
+    const boxes = await screen.findAllByRole('checkbox');
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    fireEvent.click(screen.getByRole('button', { name: '批量驳回' }));
+
+    await waitFor(() =>
+      expect(batchReviewAdminProposals).toHaveBeenCalledWith({ ids: [1, 2], decision: 'reject' }),
+    );
+    expect(await screen.findByText(/提案 #2：提案已经处理过了/)).toBeInTheDocument();
   });
 
   test('403 显示没有审核权限', async () => {

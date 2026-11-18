@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 66 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 67 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -48,6 +48,8 @@ import type {
   ModelImportRef,
   ModelSyncResult,
   ModelSyncStatus,
+  ProposalBatchResult,
+  ProposalBatchReview,
   ProposalDecision,
   ProposalDetail,
   ProposalList,
@@ -891,7 +893,7 @@ export type reviewEntityResponseError = (reviewEntityResponse400 | reviewEntityR
 
 export type reviewEntityResponse = (reviewEntityResponseSuccess | reviewEntityResponseError)
 
-export const getReviewEntityUrl = (kind: 'demo',
+export const getReviewEntityUrl = (kind: 'demo' | 'proposal',
     id: string,) => {
 
 
@@ -901,14 +903,16 @@ export const getReviewEntityUrl = (kind: 'demo',
 }
 
 /**
- * 按 review_kinds 注册表分派的统一裁决入口（GOV-006）。当前只接 demo：
- * id 是作品 slug；裁决语义与旧的 demo 专用路径完全一致。
+ * 按 review_kinds 注册表分派的统一裁决入口（GOV-006）。
  *
- * 旧路径保留为兼容别名，前端已改走这里；新增 kind 时只加一个分派分支，
- * 不再新开端点。提案（kind=proposal）的裁决与执行下一轮接入。
+ * - kind=demo：id 是作品 slug，委托作品审核（含权限、状态机、通知）。
+ * - kind=proposal：id 是提案编号，委托提案裁决（含权限、执行器、审计）。
+ *
+ * 旧路径保留为兼容别名，前端走这里；新增 kind 时只加一个分派分支，不再新开端点。
+ * 响应里的 slug 是「对象标识」：demo 是 slug，proposal 是编号字符串（kind 字段可区分）。
  * @summary 统一审核裁决入口
  */
-export const reviewEntity = async (kind: 'demo',
+export const reviewEntity = async (kind: 'demo' | 'proposal',
     id: string,
     reviewDecision: ReviewDecision, options?: RequestInit): Promise<reviewEntityResponse> => {
 
@@ -1079,6 +1083,89 @@ export const getAdminProposal = async (id: number, options?: RequestInit): Promi
 
   const data: getAdminProposalResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getAdminProposalResponse
+}
+
+
+export type batchReviewAdminProposalsResponse200 = {
+  data: ProposalBatchResult
+  status: 200
+}
+
+export type batchReviewAdminProposalsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type batchReviewAdminProposalsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type batchReviewAdminProposalsResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type batchReviewAdminProposalsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type batchReviewAdminProposalsResponseSuccess = (batchReviewAdminProposalsResponse200) & {
+  headers: Headers;
+};
+export type batchReviewAdminProposalsResponseError = (batchReviewAdminProposalsResponse400 | batchReviewAdminProposalsResponse401 | batchReviewAdminProposalsResponse403 | batchReviewAdminProposalsResponse503) & {
+  headers: Headers;
+};
+
+export type batchReviewAdminProposalsResponse = (batchReviewAdminProposalsResponseSuccess | batchReviewAdminProposalsResponseError)
+
+export const getBatchReviewAdminProposalsUrl = () => {
+
+
+
+
+  return `/api/v1/admin/proposals/batch`
+}
+
+/**
+ * 一次提交多条提案，逐条返回结果（GOV-010 / ENT-022）。
+ * 不是「部分成功就整体失败」：每条独立处理，失败的行带 error 返回。
+ *
+ * 最多 50 条；重复 id 直接 400。通过仍受各 kind 执行器约束，
+ * 未接入的 kind 在对应行返回 422 文案。
+ * @summary 批量裁决提案
+ */
+export const batchReviewAdminProposals = async (proposalBatchReview: ProposalBatchReview, options?: RequestInit): Promise<batchReviewAdminProposalsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getBatchReviewAdminProposalsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(proposalBatchReview)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: batchReviewAdminProposalsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as batchReviewAdminProposalsResponse
 }
 
 

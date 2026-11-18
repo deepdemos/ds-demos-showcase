@@ -50,6 +50,9 @@ type ServerInterface interface {
 	// 提案列表
 	// (GET /api/v1/admin/proposals)
 	ListAdminProposals(w http.ResponseWriter, r *http.Request, params ListAdminProposalsParams)
+	// 批量裁决提案
+	// (POST /api/v1/admin/proposals/batch)
+	BatchReviewAdminProposals(w http.ResponseWriter, r *http.Request)
 	// 提案详情
 	// (GET /api/v1/admin/proposals/{id})
 	GetAdminProposal(w http.ResponseWriter, r *http.Request, id int)
@@ -287,6 +290,12 @@ func (_ Unimplemented) SyncModelCatalog(w http.ResponseWriter, r *http.Request) 
 // 提案列表
 // (GET /api/v1/admin/proposals)
 func (_ Unimplemented) ListAdminProposals(w http.ResponseWriter, r *http.Request, params ListAdminProposalsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 批量裁决提案
+// (POST /api/v1/admin/proposals/batch)
+func (_ Unimplemented) BatchReviewAdminProposals(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1002,6 +1011,26 @@ func (siw *ServerInterfaceWrapper) ListAdminProposals(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAdminProposals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BatchReviewAdminProposals operation middleware
+func (siw *ServerInterfaceWrapper) BatchReviewAdminProposals(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BatchReviewAdminProposals(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2714,6 +2743,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/proposals", wrapper.ListAdminProposals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/proposals/batch", wrapper.BatchReviewAdminProposals)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/proposals/{id}", wrapper.GetAdminProposal)

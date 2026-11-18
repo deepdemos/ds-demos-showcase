@@ -186,6 +186,18 @@ const (
 	MyDemoSummaryModerationStateRejected MyDemoSummaryModerationState = "rejected"
 )
 
+// Defines values for ProposalBatchItemStatus.
+const (
+	ProposalBatchItemStatusApproved ProposalBatchItemStatus = "approved"
+	ProposalBatchItemStatusRejected ProposalBatchItemStatus = "rejected"
+)
+
+// Defines values for ProposalBatchReviewDecision.
+const (
+	ProposalBatchReviewDecisionApprove ProposalBatchReviewDecision = "approve"
+	ProposalBatchReviewDecisionReject  ProposalBatchReviewDecision = "reject"
+)
+
 // Defines values for ProposalDecisionDecision.
 const (
 	ProposalDecisionDecisionApprove ProposalDecisionDecision = "approve"
@@ -287,14 +299,20 @@ const (
 
 // Defines values for ReviewDecisionDecision.
 const (
-	ReviewDecisionDecisionApprove ReviewDecisionDecision = "approve"
-	ReviewDecisionDecisionReject  ReviewDecisionDecision = "reject"
+	Approve ReviewDecisionDecision = "approve"
+	Reject  ReviewDecisionDecision = "reject"
 )
 
 // Defines values for ReviewQueueItemModerationState.
 const (
 	ReviewQueueItemModerationStateApproved ReviewQueueItemModerationState = "approved"
 	ReviewQueueItemModerationStatePending  ReviewQueueItemModerationState = "pending"
+)
+
+// Defines values for ReviewResultKind.
+const (
+	ReviewResultKindDemo     ReviewResultKind = "demo"
+	ReviewResultKindProposal ReviewResultKind = "proposal"
 )
 
 // Defines values for ReviewResultModerationState.
@@ -337,7 +355,8 @@ const (
 
 // Defines values for ReviewEntityParamsKind.
 const (
-	Demo ReviewEntityParamsKind = "demo"
+	ReviewEntityParamsKindDemo     ReviewEntityParamsKind = "demo"
+	ReviewEntityParamsKindProposal ReviewEntityParamsKind = "proposal"
 )
 
 // Defines values for ListDemosParamsSort.
@@ -349,9 +368,9 @@ const (
 
 // Defines values for ListMyDemosParamsModeration.
 const (
-	ListMyDemosParamsModerationApproved ListMyDemosParamsModeration = "approved"
-	ListMyDemosParamsModerationPending  ListMyDemosParamsModeration = "pending"
-	ListMyDemosParamsModerationRejected ListMyDemosParamsModeration = "rejected"
+	Approved ListMyDemosParamsModeration = "approved"
+	Pending  ListMyDemosParamsModeration = "pending"
+	Rejected ListMyDemosParamsModeration = "rejected"
 )
 
 // Defines values for ListModelsParamsStatus.
@@ -1540,6 +1559,35 @@ type ProfileDemoList struct {
 	Total    int           `json:"total"`
 }
 
+// ProposalBatchItem defines model for ProposalBatchItem.
+type ProposalBatchItem struct {
+	// Error 失败原因（可直接展示）；成功时不出现
+	Error  *string                  `json:"error,omitempty"`
+	Id     int                      `json:"id"`
+	Ok     bool                     `json:"ok"`
+	Status *ProposalBatchItemStatus `json:"status,omitempty"`
+}
+
+// ProposalBatchItemStatus defines model for ProposalBatchItem.Status.
+type ProposalBatchItemStatus string
+
+// ProposalBatchResult defines model for ProposalBatchResult.
+type ProposalBatchResult struct {
+	Results []ProposalBatchItem `json:"results"`
+}
+
+// ProposalBatchReview defines model for ProposalBatchReview.
+type ProposalBatchReview struct {
+	Decision ProposalBatchReviewDecision `json:"decision"`
+	Ids      []int                       `json:"ids"`
+
+	// Reason 驳回原因（approve 时忽略）
+	Reason *string `json:"reason,omitempty"`
+}
+
+// ProposalBatchReviewDecision defines model for ProposalBatchReview.Decision.
+type ProposalBatchReviewDecision string
+
 // ProposalDecision defines model for ProposalDecision.
 type ProposalDecision struct {
 	Decision ProposalDecisionDecision `json:"decision"`
@@ -1793,9 +1841,16 @@ type ReviewQueueItemModerationState string
 
 // ReviewResult defines model for ReviewResult.
 type ReviewResult struct {
+	// Kind 统一入口的分派种类；旧 demo 专用端点可省略
+	Kind            *ReviewResultKind           `json:"kind,omitempty"`
 	ModerationState ReviewResultModerationState `json:"moderationState"`
-	Slug            string                      `json:"slug"`
+
+	// Slug 对象标识：demo 是作品 slug；proposal 是提案编号字符串
+	Slug string `json:"slug"`
 }
+
+// ReviewResultKind 统一入口的分派种类；旧 demo 专用端点可省略
+type ReviewResultKind string
 
 // ReviewResultModerationState defines model for ReviewResult.ModerationState.
 type ReviewResultModerationState string
@@ -2206,6 +2261,9 @@ type ApplyModelImportBatchJSONRequestBody = ModelImportBatchRequest
 
 // PreviewModelImportJSONRequestBody defines body for PreviewModelImport for application/json ContentType.
 type PreviewModelImportJSONRequestBody = ModelImportRef
+
+// BatchReviewAdminProposalsJSONRequestBody defines body for BatchReviewAdminProposals for application/json ContentType.
+type BatchReviewAdminProposalsJSONRequestBody = ProposalBatchReview
 
 // ReviewAdminProposalJSONRequestBody defines body for ReviewAdminProposal for application/json ContentType.
 type ReviewAdminProposalJSONRequestBody = ProposalDecision

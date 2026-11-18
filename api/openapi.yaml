@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 66 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 67 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -3216,11 +3216,13 @@ paths:
       tags: [治理]
       summary: 统一审核裁决入口
       description: |
-        按 review_kinds 注册表分派的统一裁决入口（GOV-006）。当前只接 demo：
-        id 是作品 slug；裁决语义与旧的 demo 专用路径完全一致。
+        按 review_kinds 注册表分派的统一裁决入口（GOV-006）。
 
-        旧路径保留为兼容别名，前端已改走这里；新增 kind 时只加一个分派分支，
-        不再新开端点。提案（kind=proposal）的裁决与执行下一轮接入。
+        - kind=demo：id 是作品 slug，委托作品审核（含权限、状态机、通知）。
+        - kind=proposal：id 是提案编号，委托提案裁决（含权限、执行器、审计）。
+
+        旧路径保留为兼容别名，前端走这里；新增 kind 时只加一个分派分支，不再新开端点。
+        响应里的 slug 是「对象标识」：demo 是 slug，proposal 是编号字符串（kind 字段可区分）。
       security:
         - sessionCookie: []
       parameters:
@@ -3229,8 +3231,8 @@ paths:
           required: true
           schema:
             type: string
-            enum: [demo]
-          description: review_kinds.key；目前只有 demo 已接入
+            enum: [demo, proposal]
+          description: review_kinds.key；demo 的 id 是 slug，proposal 的 id 是编号
         - name: id
           in: path
           required: true
@@ -3384,6 +3386,57 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: 提案不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/proposals/batch:
+    post:
+      operationId: batchReviewAdminProposals
+      tags: [治理]
+      summary: 批量裁决提案
+      description: |
+        一次提交多条提案，逐条返回结果（GOV-010 / ENT-022）。
+        不是「部分成功就整体失败」：每条独立处理，失败的行带 error 返回。
+
+        最多 50 条；重复 id 直接 400。通过仍受各 kind 执行器约束，
+        未接入的 kind 在对应行返回 422 文案。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalBatchReview'
+      responses:
+        '200':
+          description: 逐条结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalBatchResult'
+        '400':
+          description: ids 为空 / 超过 50 / 重复 / 裁决值不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 没有提案审核权限
           content:
             application/json:
               schema:
@@ -5644,6 +5697,53 @@ components:
           type: string
           format: date-time
 
+    ProposalBatchReview:
+      type: object
+      additionalProperties: false
+      required: [ids, decision]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: integer
+            minimum: 1
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: string
+          maxLength: 500
+          description: 驳回原因（approve 时忽略）
+
+    ProposalBatchItem:
+      type: object
+      additionalProperties: false
+      required: [id, ok]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        ok:
+          type: boolean
+        status:
+          type: string
+          enum: [approved, rejected]
+        error:
+          type: string
+          description: 失败原因（可直接展示）；成功时不出现
+
+    ProposalBatchResult:
+      type: object
+      additionalProperties: false
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProposalBatchItem'
+
     ProposalDecision:
       type: object
       additionalProperties: false
@@ -5756,9 +5856,14 @@ components:
       properties:
         slug:
           type: string
+          description: 对象标识：demo 是作品 slug；proposal 是提案编号字符串
         moderationState:
           type: string
           enum: [approved, rejected]
+        kind:
+          type: string
+          enum: [demo, proposal]
+          description: 统一入口的分派种类；旧 demo 专用端点可省略
 
     PublishRequest:
       type: object

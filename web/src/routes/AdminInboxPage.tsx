@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
-import { ErrorState, Skeleton } from '@/components/ui';
-import { getAdminInbox } from '@/api';
+import { Button, Checkbox, ErrorState, Skeleton } from '@/components/ui';
+import { batchReviewAdminProposals, getAdminInbox, type ProposalBatchItem } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
 /**
@@ -18,6 +19,10 @@ function formatAt(iso: string): string {
 
 export function AdminInboxPage() {
   const { me, isLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<number[]>([]);
+  const [batchResults, setBatchResults] = useState<ProposalBatchItem[] | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
 
   const inbox = useQuery({
     queryKey: ['admin', 'inbox'],
@@ -28,6 +33,27 @@ export function AdminInboxPage() {
       return response.data;
     },
     enabled: me !== null,
+  });
+
+  const batch = useMutation({
+    mutationFn: async (decision: 'approve' | 'reject') => {
+      const response = await batchReviewAdminProposals({ ids: selected, decision });
+      if (response.status !== 200) {
+        const message =
+          typeof response.data === 'object' && response.data && 'message' in response.data
+            ? String((response.data as { message?: unknown }).message)
+            : '批量裁决失败（' + response.status + '）';
+        throw new Error(message);
+      }
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setBatchError(null);
+      setBatchResults(data.results);
+      setSelected([]);
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox'] });
+    },
+    onError: (err) => setBatchError(err instanceof Error ? err.message : '批量裁决失败'),
   });
 
   if (isLoading) return <Skeleton lines={4} />;
@@ -147,7 +173,47 @@ export function AdminInboxPage() {
           </section>
 
           <section id="proposals" className="mt-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">待处理提案</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">待处理提案</h2>
+              {data.proposals.length > 0 ? (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  已选 {selected.length} 条
+                </span>
+              ) : null}
+            </div>
+            {selected.length > 0 ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  disabled={batch.isPending}
+                  onClick={() => batch.mutate('approve')}
+                >
+                  批量通过
+                </Button>
+                <Button
+                  type="button"
+                  danger
+                  disabled={batch.isPending}
+                  onClick={() => batch.mutate('reject')}
+                >
+                  批量驳回
+                </Button>
+              </div>
+            ) : null}
+            {batchError ? (
+              <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+                {batchError}
+              </p>
+            ) : null}
+            {batchResults ? (
+              <ul className="mt-2 list-none space-y-1 p-0 text-sm">
+                {batchResults.map((result) => (
+                  <li key={result.id} data-ok={result.ok}>
+                    提案 #{result.id}：{result.ok ? '已处理' : result.error}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {data.proposals.length === 0 ? (
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">没有待处理提案。</p>
             ) : (
@@ -157,7 +223,20 @@ export function AdminInboxPage() {
                     key={proposal.id}
                     className="rounded border border-gray-200 p-3 dark:border-gray-800"
                   >
-                    <p className="text-sm">
+                    <Checkbox
+                      label={'选择：' + (proposal.title || '提案 #' + proposal.id)}
+                      checked={selected.includes(proposal.id)}
+                      indeterminate={false}
+                      disabled={batch.isPending}
+                      onChange={(event) =>
+                        setSelected((current) =>
+                          event.target.checked
+                            ? [...current, proposal.id]
+                            : current.filter((id) => id !== proposal.id),
+                        )
+                      }
+                    />
+                    <p className="mt-1 text-sm">
                       <Link className="underline" to={'/admin/proposals/' + proposal.id}>
                         {proposal.title || '（没有标题）'}
                       </Link>

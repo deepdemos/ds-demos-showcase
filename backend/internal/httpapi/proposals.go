@@ -227,6 +227,166 @@ func (h *Handler) GetAdminProposal(w http.ResponseWriter, r *http.Request, id in
 	writeJSON(w, http.StatusOK, proposalDetail(row))
 }
 
+// proposalFailure 是提案裁决的失败态：带上 HTTP 状态与机器码，
+// 单条入口直接写响应，批量入口把 message 塞进对应行。
+type proposalFailure struct {
+	status  int
+	code    api.ErrorCode
+	message string
+}
+
+func (f *proposalFailure) Error() string { return f.message }
+
+func proposalFail(status int, code api.ErrorCode, message string) *proposalFailure {
+	return &proposalFailure{status: status, code: code, message: message}
+}
+
+// reviewProposalOne 是单条与批量共用的裁决核心。
+func (h *Handler) reviewProposalOne(ctx context.Context, actor demo.Actor, id int64, decision api.ProposalDecisionDecision, reason *string) (api.ProposalReviewResult, *proposalFailure) {
+	row, err := h.queries.GetProposalByID(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.ProposalReviewResult{}, proposalFail(http.StatusNotFound, api.NotFound, "提案不存在")
+	}
+	if err != nil {
+		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+	}
+	if row.Status != "pending" {
+		return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
+	}
+
+	switch decision {
+	case api.ProposalDecisionDecisionReject:
+		text := ""
+		if reason != nil {
+			text = strings.TrimSpace(*reason)
+		}
+		rejected, err := h.queries.RejectProposal(ctx, store.RejectProposalParams{
+			ID:           id,
+			ReviewedBy:   pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+			RejectReason: pgtype.Text{String: text, Valid: text != ""},
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
+		}
+		if err != nil {
+			return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		}
+		h.auditProposalReview(ctx, actor, id, row.Status, "rejected", "", 0, text)
+		return api.ProposalReviewResult{Id: int(rejected.ID), Status: api.ProposalReviewResultStatusRejected}, nil
+
+	case api.ProposalDecisionDecisionApprove:
+		switch row.Kind {
+		case "new_task":
+			payload := proposalPayloadMap(row.Payload)
+			title, _ := payload["title"].(string)
+			brief, _ := payload["brief"].(string)
+			category, _ := payload["category"].(string)
+			title = strings.TrimSpace(title)
+			if title == "" {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "new_task 的标题不能为空")
+			}
+			approved, err := h.queries.ApproveNewTaskProposal(ctx, store.ApproveNewTaskProposalParams{
+				ID:         id,
+				TitleKey:   entity.TitleKey(title),
+				Slug:       taskSlug(title),
+				Title:      title,
+				TitleNorm:  entity.TitleNorm(title),
+				Brief:      strings.TrimSpace(brief),
+				Category:   pgtype.Text{String: strings.TrimSpace(category), Valid: strings.TrimSpace(category) != ""},
+				CreatedBy:  pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+				ReviewedBy: pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+			})
+			if err != nil {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+			}
+			if !approved.Approved {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
+			}
+			h.auditProposalReview(ctx, actor, id, row.Status, "approved", "task", approved.TaskID, "")
+			return api.ProposalReviewResult{Id: int(id), Status: api.ProposalReviewResultStatusApproved}, nil
+
+		case "new_skill":
+			payload := proposalPayloadMap(row.Payload)
+			slug, _ := payload["slug"].(string)
+			name, _ := payload["name"].(string)
+			description, _ := payload["description"].(string)
+			spec, _ := payload["spec"].(string)
+			url, _ := payload["url"].(string)
+			slug = strings.TrimSpace(slug)
+			name = strings.TrimSpace(name)
+			if spec == "" {
+				spec = "agentskills.io"
+			}
+			if spec != "agentskills.io" && spec != "other" {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "new_skill 的 spec 只能是 agentskills.io 或 other")
+			}
+			if slug == "" || name == "" {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "new_skill 的 slug 与 name 不能为空")
+			}
+			approved, err := h.queries.ApproveNewSkillProposal(ctx, store.ApproveNewSkillProposalParams{
+				ID:          id,
+				Slug:        slug,
+				Name:        name,
+				Description: description,
+				Url:         pgtype.Text{String: strings.TrimSpace(url), Valid: strings.TrimSpace(url) != ""},
+				Spec:        spec,
+				ReviewedBy:  pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+			})
+			if err != nil {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+			}
+			if !approved.Approved {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
+			}
+			h.auditProposalReview(ctx, actor, id, row.Status, "approved", "skill", approved.SkillID, "")
+			return api.ProposalReviewResult{Id: int(id), Status: api.ProposalReviewResultStatusApproved}, nil
+
+		case "new_classification":
+			payload := proposalPayloadMap(row.Payload)
+			dimension, _ := payload["dimension"].(string)
+			slug, _ := payload["slug"].(string)
+			label, _ := payload["label"].(string)
+			description, _ := payload["description"].(string)
+			slug = strings.TrimSpace(slug)
+			label = strings.TrimSpace(label)
+			switch dimension {
+			case "genre", "technique", "subject":
+			default:
+				return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "new_classification 的 dimension 只能是 genre / technique / subject")
+			}
+			if slug == "" {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "提案缺少 slug")
+			}
+			if label == "" {
+				label = slug
+			}
+			approved, err := h.queries.ApproveClassificationProposal(ctx, store.ApproveClassificationProposalParams{
+				ID:          id,
+				Dimension:   dimension,
+				Slug:        slug,
+				Label:       label,
+				Description: description,
+				ReviewedBy:  pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+			})
+			if err != nil {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+			}
+			if !approved.Approved {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
+			}
+			h.auditProposalReview(ctx, actor, id, row.Status, "approved", "classification", approved.ClassificationID, "")
+			return api.ProposalReviewResult{Id: int(id), Status: api.ProposalReviewResultStatusApproved}, nil
+
+		default:
+			return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam,
+				"该 kind 的执行器尚未接入（目前只接 new_classification / new_skill / new_task）")
+		}
+
+	default:
+		return api.ProposalReviewResult{}, proposalFail(http.StatusBadRequest, api.InvalidParam, "decision 只能是 approve 或 reject")
+	}
+}
+
 // ReviewAdminProposal 对应 POST /api/v1/admin/proposals/{id}/review。
 func (h *Handler) ReviewAdminProposal(w http.ResponseWriter, r *http.Request, id int) {
 	if h.queries == nil || h.identity == nil {
@@ -249,213 +409,81 @@ func (h *Handler) ReviewAdminProposal(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	row, err := h.queries.GetProposalByID(ctx, int64(id))
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, api.NotFound, "提案不存在")
+	result, failure := h.reviewProposalOne(ctx, actor, int64(id), body.Decision, body.Reason)
+	if failure != nil {
+		writeError(w, failure.status, failure.code, failure.message)
 		return
 	}
-	if err != nil {
-		unavailable(w, err)
-		return
-	}
-	if row.Status != "pending" {
-		writeError(w, http.StatusConflict, api.Conflict, "提案已经处理过了")
-		return
-	}
-
-	switch body.Decision {
-	case api.ProposalDecisionDecisionReject:
-		reason := ""
-		if body.Reason != nil {
-			reason = strings.TrimSpace(*body.Reason)
-		}
-		rejected, err := h.queries.RejectProposal(ctx, store.RejectProposalParams{
-			ID:           int64(id),
-			ReviewedBy:   pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
-			RejectReason: pgtype.Text{String: reason, Valid: reason != ""},
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusConflict, api.Conflict, "提案已经处理过了")
-			return
-		}
-		if err != nil {
-			unavailable(w, err)
-			return
-		}
-
-		before, _ := json.Marshal(map[string]string{"status": row.Status})
-		after, _ := json.Marshal(map[string]string{"status": rejected.Status, "reason": reason})
-		if err := h.queries.InsertAuditLog(ctx, store.InsertAuditLogParams{
-			ActorID:    pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
-			ActorRole:  actor.Role,
-			Action:     "review",
-			EntityType: "proposal",
-			EntityID:   int64(id),
-			Before:     before,
-			After:      after,
-			Reason:     reason,
-		}); err != nil {
-			// 状态已经落库；审计补写失败只记日志，不能回 503 让调用方重试（会撞 409）。
-			// 严格口径需要同一事务，这一轮保持与 demo 审核一致的「先改后记」。
-			slog.Warn("写提案审核审计失败", "proposal", id, "err", err)
-		}
-		writeJSON(w, http.StatusOK, api.ProposalReviewResult{
-			Id: int(rejected.ID), Status: api.ProposalReviewResultStatusRejected,
-		})
-	case api.ProposalDecisionDecisionApprove:
-		if row.Kind == "new_task" {
-			payload := proposalPayloadMap(row.Payload)
-			title, _ := payload["title"].(string)
-			brief, _ := payload["brief"].(string)
-			category, _ := payload["category"].(string)
-			title = strings.TrimSpace(title)
-			if title == "" {
-				writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, "new_task 的标题不能为空")
-				return
-			}
-			slug := taskSlug(title)
-			approved, err := h.queries.ApproveNewTaskProposal(ctx, store.ApproveNewTaskProposalParams{
-				ID:         int64(id),
-				TitleKey:   entity.TitleKey(title),
-				Slug:       slug,
-				Title:      title,
-				TitleNorm:  entity.TitleNorm(title),
-				Brief:      strings.TrimSpace(brief),
-				Category:   pgtype.Text{String: strings.TrimSpace(category), Valid: strings.TrimSpace(category) != ""},
-				CreatedBy:  pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
-				ReviewedBy: pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
-			})
-			if err != nil {
-				unavailable(w, err)
-				return
-			}
-			if !approved.Approved {
-				writeError(w, http.StatusConflict, api.Conflict, "提案已经处理过了")
-				return
-			}
-			h.writeProposalApproval(ctx, w, actor, int64(id), row.Status, "task", approved.TaskID)
-			return
-		}
-		if row.Kind == "new_skill" {
-			payload := proposalPayloadMap(row.Payload)
-			slug, _ := payload["slug"].(string)
-			name, _ := payload["name"].(string)
-			description, _ := payload["description"].(string)
-			spec, _ := payload["spec"].(string)
-			url, _ := payload["url"].(string)
-			slug = strings.TrimSpace(slug)
-			name = strings.TrimSpace(name)
-			if spec == "" {
-				spec = "agentskills.io"
-			}
-			if spec != "agentskills.io" && spec != "other" {
-				writeError(w, http.StatusUnprocessableEntity, api.InvalidParam,
-					"new_skill 的 spec 只能是 agentskills.io 或 other")
-				return
-			}
-			if slug == "" || name == "" {
-				writeError(w, http.StatusUnprocessableEntity, api.InvalidParam,
-					"new_skill 的 slug 与 name 不能为空")
-				return
-			}
-			approved, err := h.queries.ApproveNewSkillProposal(ctx, store.ApproveNewSkillProposalParams{
-				ID:          int64(id),
-				Slug:        slug,
-				Name:        name,
-				Description: description,
-				Url:         pgtype.Text{String: strings.TrimSpace(url), Valid: strings.TrimSpace(url) != ""},
-				Spec:        spec,
-				ReviewedBy:  pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
-			})
-			if err != nil {
-				unavailable(w, err)
-				return
-			}
-			if !approved.Approved {
-				writeError(w, http.StatusConflict, api.Conflict, "提案已经处理过了")
-				return
-			}
-			h.writeProposalApproval(ctx, w, actor, int64(id), row.Status, "skill", approved.SkillID)
-			return
-		}
-		if row.Kind != "new_classification" {
-			writeError(w, http.StatusUnprocessableEntity, api.InvalidParam,
-				"该 kind 的执行器尚未接入（目前只接 new_classification / new_skill）")
-			return
-		}
-		payload := proposalPayloadMap(row.Payload)
-		dimension, _ := payload["dimension"].(string)
-		slug, _ := payload["slug"].(string)
-		label, _ := payload["label"].(string)
-		description, _ := payload["description"].(string)
-		slug = strings.TrimSpace(slug)
-		label = strings.TrimSpace(label)
-		switch dimension {
-		case "genre", "technique", "subject":
-		default:
-			writeError(w, http.StatusUnprocessableEntity, api.InvalidParam,
-				"new_classification 的 dimension 只能是 genre / technique / subject")
-			return
-		}
-		if slug == "" {
-			writeError(w, http.StatusUnprocessableEntity, api.InvalidParam, "提案缺少 slug")
-			return
-		}
-		if label == "" {
-			label = slug
-		}
-
-		approved, err := h.queries.ApproveClassificationProposal(ctx, store.ApproveClassificationProposalParams{
-			ID:          int64(id),
-			Dimension:   dimension,
-			Slug:        slug,
-			Label:       label,
-			Description: description,
-			ReviewedBy:  pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
-		})
-		if err != nil {
-			unavailable(w, err)
-			return
-		}
-		if !approved.Approved {
-			writeError(w, http.StatusConflict, api.Conflict, "提案已经处理过了")
-			return
-		}
-
-		before, _ := json.Marshal(map[string]string{"status": row.Status})
-		after, _ := json.Marshal(map[string]any{
-			"status":      "approved",
-			"result_kind": "classification",
-			"result_id":   approved.ClassificationID,
-		})
-		if err := h.queries.InsertAuditLog(ctx, store.InsertAuditLogParams{
-			ActorID:    pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
-			ActorRole:  actor.Role,
-			Action:     "review",
-			EntityType: "proposal",
-			EntityID:   int64(id),
-			Before:     before,
-			After:      after,
-			Reason:     "",
-		}); err != nil {
-			slog.Warn("写提案审核审计失败", "proposal", id, "err", err)
-		}
-		writeJSON(w, http.StatusOK, api.ProposalReviewResult{
-			Id: int(id), Status: api.ProposalReviewResultStatusApproved,
-		})
-	default:
-		writeError(w, http.StatusBadRequest, api.InvalidParam, "decision 只能是 approve 或 reject")
-	}
+	writeJSON(w, http.StatusOK, result)
 }
 
-// writeProposalApproval 统一「审批通过」的审计与响应。
-//
-// 审计写失败只记日志：状态与正式数据已经在同一条 CTE 里提交，回 503 会让调用方重试并撞 409。
-func (h *Handler) writeProposalApproval(ctx context.Context, w http.ResponseWriter, actor demo.Actor, id int64, beforeStatus, resultKind string, resultID int64) {
+// BatchReviewAdminProposals 对应 POST /api/v1/admin/proposals/batch（GOV-010 / ENT-022）。
+func (h *Handler) BatchReviewAdminProposals(w http.ResponseWriter, r *http.Request) {
+	if h.queries == nil || h.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+
+	actor, err := h.proposalReviewer(ctx, r)
+	if err != nil {
+		h.writeReviewError(w, err)
+		return
+	}
+
+	var body api.ProposalBatchReview
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "请求体不是合法的 JSON")
+		return
+	}
+	if len(body.Ids) == 0 || len(body.Ids) > 50 {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "ids 需要 1–50 条")
+		return
+	}
+	seen := make(map[int]bool, len(body.Ids))
+	for _, id := range body.Ids {
+		if id < 1 || seen[id] {
+			writeError(w, http.StatusBadRequest, api.InvalidParam, "ids 里有重复或非法编号")
+			return
+		}
+		seen[id] = true
+	}
+	if body.Decision != api.ProposalBatchReviewDecisionApprove && body.Decision != api.ProposalBatchReviewDecisionReject {
+		writeError(w, http.StatusBadRequest, api.InvalidParam, "decision 只能是 approve 或 reject")
+		return
+	}
+
+	results := make([]api.ProposalBatchItem, 0, len(body.Ids))
+	for _, rawID := range body.Ids {
+		decision := api.ProposalDecisionDecision(body.Decision)
+		result, failure := h.reviewProposalOne(ctx, actor, int64(rawID), decision, body.Reason)
+		item := api.ProposalBatchItem{Id: rawID, Ok: failure == nil}
+		if failure != nil {
+			message := failure.message
+			item.Error = &message
+		} else {
+			status := api.ProposalBatchItemStatus(result.Status)
+			item.Status = &status
+		}
+		results = append(results, item)
+	}
+	writeJSON(w, http.StatusOK, api.ProposalBatchResult{Results: results})
+}
+
+// auditProposalReview 写提案审核审计；失败只记日志（状态已经落库）。
+func (h *Handler) auditProposalReview(ctx context.Context, actor demo.Actor, id int64, beforeStatus, afterStatus, resultKind string, resultID int64, reason string) {
 	before, _ := json.Marshal(map[string]string{"status": beforeStatus})
-	after, _ := json.Marshal(map[string]any{
-		"status": "approved", "result_kind": resultKind, "result_id": resultID,
-	})
+	after := map[string]any{"status": afterStatus}
+	if resultKind != "" {
+		after["result_kind"] = resultKind
+		after["result_id"] = resultID
+	}
+	if reason != "" {
+		after["reason"] = reason
+	}
+	afterJSON, _ := json.Marshal(after)
 	if err := h.queries.InsertAuditLog(ctx, store.InsertAuditLogParams{
 		ActorID:    pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
 		ActorRole:  actor.Role,
@@ -463,13 +491,11 @@ func (h *Handler) writeProposalApproval(ctx context.Context, w http.ResponseWrit
 		EntityType: "proposal",
 		EntityID:   id,
 		Before:     before,
-		After:      after,
+		After:      afterJSON,
+		Reason:     reason,
 	}); err != nil {
 		slog.Warn("写提案审核审计失败", "proposal", id, "err", err)
 	}
-	writeJSON(w, http.StatusOK, api.ProposalReviewResult{
-		Id: int(id), Status: api.ProposalReviewResultStatusApproved,
-	})
 }
 
 // taskSlug 用标题生成 slug；纯中文标题折不出 ASCII 时退化成随机后缀。
