@@ -94,7 +94,9 @@ export function SubmitPage() {
   const [done, setDone] = useState<{ slug: string } | null>(null);
 
   // 会话还在读时不判，避免刷新瞬间把已登录的人弹去登录页。
-  if (!isLoading && !me) {
+  // 已经交完稿的回执不受会话影响：会话过期时只是少一个「我的作品」入口，
+  // 不能让作者连回执都看不到（#459 的验收）。
+  if (!done && !isLoading && !me) {
     return <Navigate to="/login?return_to=/submit" replace />;
   }
 
@@ -156,32 +158,7 @@ export function SubmitPage() {
   };
 
   if (done) {
-    return (
-      <section className="mx-auto w-full max-w-2xl px-4 py-12">
-        <h1 className="text-2xl font-semibold">投稿已提交</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          作品处于待审核状态，通过并发布后才会出现在作品库里。你可以先自己预览一下：
-        </p>
-        <p className="mt-4 flex gap-3">
-          {/*
-            这里是预览地址而不是 /demos/{slug}：作品还是 draft + pending，
-            而详情页对 draft/pending/rejected 一律返回 404——作者点「查看」会撞死路。
-            预览地址对作者本人与审核员开放，正是这个阶段的查看入口。
-          */}
-          <Link
-            to={`/preview/${encodeURIComponent(done.slug)}/`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 dark:text-blue-400"
-          >
-            预览这条作品
-          </Link>
-          <Link to="/demos" className="text-blue-600 dark:text-blue-400">
-            去作品库
-          </Link>
-        </p>
-      </section>
-    );
+    return <SubmitReceipt slug={done.slug} signedIn={me !== null} />;
   }
 
   return (
@@ -298,6 +275,48 @@ export function SubmitPage() {
           {busy ? '提交中…（大文件需要一点时间）' : '提交投稿'}
         </Button>
       </form>
+    </section>
+  );
+}
+
+/**
+ * 投稿回执。
+ *
+ * # 为什么单独抽出来
+ *
+ * 回执要在「会话刚过期」时仍然可用：三个出口里只有「我的作品」依赖会话，
+ * 少了它预览与作品库照样能点。抽成组件才测得了这两个状态（#459）。
+ *
+ * # 为什么主入口是预览
+ *
+ * 作者这时最想看的是刚上传的内容本身。详情页对作者也开放（#462），但它给的是
+ * 元信息与动态，不是作品的渲染结果——预览才是这个阶段的查看入口。
+ */
+export function SubmitReceipt({ slug, signedIn }: { slug: string; signedIn: boolean }) {
+  return (
+    <section className="mx-auto w-full max-w-2xl px-4 py-12">
+      <h1 className="text-2xl font-semibold">投稿已提交</h1>
+      <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+        作品处于待审核状态，审核通过并发布前，只有你自己能看到这件作品。
+      </p>
+      <p className="mt-4 flex flex-wrap gap-3">
+        <Link
+          to={`/preview/${encodeURIComponent(slug)}/`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-blue-600 dark:text-blue-400"
+        >
+          预览这条作品
+        </Link>
+        {signedIn ? (
+          <Link to="/my/demos" className="text-blue-600 dark:text-blue-400">
+            我的作品
+          </Link>
+        ) : null}
+        <Link to="/demos" className="text-blue-600 dark:text-blue-400">
+          去作品库
+        </Link>
+      </p>
     </section>
   );
 }

@@ -16,11 +16,11 @@ import { useAuth } from '@/features/auth/AuthContext';
  * 而「已上线 + 新版本待审」恰恰说明它还能点。
  * 所以这里先看 `deletedAt`，再看生命周期与审核态的组合。
  *
- * # 为什么草稿不给 `/demos/{slug}` 链接
+ * # 草稿的两个入口
  *
- * 详情接口对没有对外版本的作品回 404（作者也一样，那边只认 `published`）。
- * 作者要看自己的草稿只有一个入口：`/preview/{slug}/`。给错链接的症状是
- * 「刚投完稿点进去 404」——批次 1 真的发生过。
+ * 主链接仍给 `/preview/{slug}/`：作者最想看的是内容本身。详情页对作者也开放
+ * （#462：`GetDemo` 按身份放行，驳回理由在详情页的动态里），所以另给一个
+ * 「查看详情」入口；访客看同一份详情仍是 404。
  */
 
 const PAGE_SIZE = 20;
@@ -54,7 +54,7 @@ const FILTER_OPTIONS = [
   { value: 'all', label: '全部状态' },
   { value: 'pending', label: '待审核' },
   { value: 'rejected', label: '被驳回' },
-  { value: 'ready', label: '已通过 · 待发布' },
+  { value: 'ready', label: '已通过审核 · 等待发布' },
   { value: 'published', label: '已上线' },
   { value: 'reviewing', label: '已上线 · 新版待审' },
   { value: 'archived', label: '已下架' },
@@ -83,6 +83,11 @@ export interface RowState {
   href: string | null;
   /** 附在标签下面的一句解释，没有就不渲染。 */
   note: string | null;
+  /**
+   * 第二个入口：草稿的详情页。主链接给预览，详情单独给一个（#462）。
+   * null = 主链接已经是详情，不需要第二个。
+   */
+  detailHref: string | null;
 }
 
 /**
@@ -115,14 +120,20 @@ const STATE_TEXT: Record<Combo, { label: string; note: string | null }> = {
   'removed:rejected': { label: '已下架（违规）', note: '这一状态不能自己重新上架。' },
   'draft:pending': { label: '待审核', note: '通过之前不会出现在作品库里。' },
   'draft:rejected': { label: '被驳回', note: '按审核意见改好再提交。' },
-  'draft:approved': { label: '已通过 · 待发布', note: '可以发布到渠道了。' },
+  // 发布权在 moderator / admin 手里（Discussion #464 d1 B），作者没有 `demo.publish`。
+  // 这里必须说事实，不能说「你可以发布了」——文案指向一个作者做不到的动作，
+  // 他就会去找按钮、找不到、再问客服（#461）。
+  'draft:approved': {
+    label: '已通过审核 · 等待发布',
+    note: '审核员或管理员发布后才会出现在作品库，你无需操作。',
+  },
 };
 
 /**
- * 详情链接只在「有对外版本」时才成立。
+ * 列表的主链接：有对外版本的点详情，草稿点预览。
  *
- * 其它三种（草稿）只能走 `/preview/{slug}/`——详情接口对没有对外版本的作品
- * 一律 404，作者也一样。给错链接的症状是「刚投完稿点进去 404」。
+ * 草稿详情对作者也通（#462），但主链接保留预览——那是作者此刻最想看的东西；
+ * 详情作为第二个入口由 `rowState` 的 `detailHref` 给出。
  */
 const DETAIL_OR_PREVIEW: Record<string, string> = {
   published: 'detail',
@@ -146,7 +157,7 @@ export function rowState(demo: MyDemoSummary): RowState {
     const until = demo.purgeAfter
       ? `内容将在 ${formatDate(demo.purgeAfter)} 清空，之前可以恢复。`
       : '内容将在恢复期结束后清空。';
-    return { label: '已删除', href: `/demos/${demo.slug}`, note: until };
+    return { label: '已删除', href: `/demos/${demo.slug}`, note: until, detailHref: null };
   }
 
   const text = STATE_TEXT[`${demo.lifecycleState}:${demo.moderationState}`] ?? {
@@ -155,7 +166,12 @@ export function rowState(demo: MyDemoSummary): RowState {
   };
   const kind = DETAIL_OR_PREVIEW[demo.lifecycleState] ?? 'preview';
   const href = kind === 'detail' ? `/demos/${demo.slug}` : `/preview/${demo.slug}/`;
-  return { label: text.label, href, note: text.note ?? null };
+  return {
+    label: text.label,
+    href,
+    note: text.note ?? null,
+    detailHref: kind === 'detail' ? null : `/demos/${demo.slug}`,
+  };
 }
 
 function formatDate(iso: string): string {
@@ -294,6 +310,16 @@ export function MyDemosPage() {
                   </div>
                   {state.note ? (
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{state.note}</p>
+                  ) : null}
+                  {state.detailHref ? (
+                    <p className="mt-1 text-xs">
+                      <Link
+                        to={state.detailHref}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        查看详情
+                      </Link>
+                    </p>
                   ) : null}
                   <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                     {demo.slug} · 更新于 {formatDate(demo.updatedAt)}
