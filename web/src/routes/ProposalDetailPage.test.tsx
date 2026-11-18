@@ -36,11 +36,11 @@ const detail = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function renderPage() {
+function renderPage(path = '/admin/proposals/7') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/admin/proposals/7']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/admin/proposals/:id" element={<ProposalDetailPage />} />
           <Route path="/login" element={<div>登录页</div>} />
@@ -57,6 +57,12 @@ beforeEach(() => {
 });
 
 describe('ProposalDetailPage', () => {
+  test('编号不合法时给出口，不永久骨架', async () => {
+    renderPage('/admin/proposals/abc');
+    expect(await screen.findByText('地址里的提案编号不合法')).toBeInTheDocument();
+    expect(getAdminProposal).not.toHaveBeenCalled();
+  });
+
   test('渲染 payload、来源与状态，通过按钮不可用', async () => {
     vi.mocked(getAdminProposal).mockResolvedValue({
       status: 200,

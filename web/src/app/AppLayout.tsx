@@ -55,14 +55,14 @@ export function AppLayout() {
           {me && (
             <Link
               to="/notifications"
+              aria-label={
+                unread.data && unread.data > 0 ? '通知，' + unread.data + ' 条未读' : '通知'
+              }
               className="flex items-center gap-1 text-gray-600 hover:underline dark:text-gray-300"
             >
               通知
               {unread.data && unread.data > 0 ? (
-                <span
-                  aria-label={'未读通知 ' + unread.data}
-                  className="rounded-full bg-gray-800 px-1.5 text-xs text-white dark:bg-gray-200 dark:text-gray-900"
-                >
+                <span className="rounded-full bg-gray-800 px-1.5 text-xs text-white dark:bg-gray-200 dark:text-gray-900">
                   {unread.data > 99 ? '99+' : unread.data}
                 </span>
               ) : null}
@@ -75,14 +75,15 @@ export function AppLayout() {
               {/* 这只是「入口可见性」的提示，不是权限判定——真正的判定在服务端
                   （`demo.review`）。所以这里用 or 而不是等号：给某个新角色加权限时，
                   最多是入口不显示，不会出现「有权限但被前端挡住」。 */}
-              {me.role === 'admin' || me.role === 'moderator' ? (
+              {(me.permissions ?? []).includes('demo.review') ||
+              (me.permissions ?? []).includes('demo.publish') ? (
                 <Link to="/admin" className="text-sm underline">
                   管理
                 </Link>
               ) : null}
               {/* 模型导入只有 admin 有 `model.import`。这里同样只是入口可见性，
                   不是权限判定——moderator 点进来会看到「没有导入权限」。 */}
-              {me.role === 'admin' ? (
+              {(me.permissions ?? []).includes('model.import') ? (
                 <Link to="/admin/models" className="text-sm underline">
                   模型
                 </Link>

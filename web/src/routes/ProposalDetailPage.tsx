@@ -97,6 +97,13 @@ export function ProposalDetailPage() {
   });
 
   if (authLoading) return <Skeleton lines={3} />;
+  if (!Number.isInteger(id) || id < 1) {
+    return (
+      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+        <EmptyState title="地址里的提案编号不合法" description="编号必须是正整数。" />
+      </section>
+    );
+  }
   if (me === null) return <Navigate to={'/login?return_to=/admin/proposals/' + id} replace />;
 
   if (detail.isPending) {

@@ -72,6 +72,21 @@ export function AppealBox({ slug }: { slug: string }) {
 
       {me !== null && state.isPending ? <Skeleton lines={1} /> : null}
 
+      {me !== null && state.isError ? (
+        <p role="alert" className="text-red-600 dark:text-red-400">
+          申诉状态加载失败。
+          <Button type="button" className="ml-2" onClick={() => void state.refetch()}>
+            重试
+          </Button>
+        </p>
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+
       {me !== null && state.data ? (
         <>
           {state.data.appeal ? (
@@ -118,12 +133,6 @@ export function AppealBox({ slug }: { slug: string }) {
                 提交申诉
               </Button>
             </div>
-          ) : null}
-
-          {error ? (
-            <p role="alert" className="text-red-600 dark:text-red-400">
-              {error}
-            </p>
           ) : null}
         </>
       ) : null}
