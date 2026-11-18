@@ -15,6 +15,7 @@ import { ModelPage } from '@/routes/ModelPage';
 import { RankingsPage } from '@/routes/RankingsPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
 import { MyDemosPage } from '@/routes/MyDemosPage';
+import { HistoryPage } from '@/routes/HistoryPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
 import { RouteError } from './RouteError';
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
       page('password-reset', <PasswordResetPage />),
       page('submit', <SubmitPage />),
       page('my/demos', <MyDemosPage />),
+      page('me/history', <HistoryPage />),
       page('admin/reviews', <AdminReviewPage />),
       page('admin/models', <AdminModelsPage />),
       page('*', <NotFoundPage />),
