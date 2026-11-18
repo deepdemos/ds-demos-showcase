@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -138,4 +139,105 @@ func TestIntegrationReviewRejectsUnknownDecision(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("非法 decision：expected 400，got %d（body=%s）", rec.Code, rec.Body.String())
 	}
+}
+
+// 审核队列的两段：待审与「已通过待发布」。
+//
+// 这条测试钉住已知松点第 28 条的修复：通过之后作品必须出现在待发布那段，
+// 而不是只活在点了「通过」的那个人的会话里。用 slug 过滤而不是断言总数——
+// 测试库可能残留其他用例的数据，数量断言会把失败原因搅在一起。
+func TestIntegrationApprovedUnpublishedQueue(t *testing.T) {
+	pool := integrationPool(t)
+	q := store.New(pool)
+	idSvc := integrationIdentity(t, pool)
+	files, err := storage.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatalf("初始化存储失败: %v", err)
+	}
+	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
+	h := New(pool, q, idSvc, nil, demoSvc)
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-queue-author@example.com",
+		Password:    "correct-horse-battery",
+		Username:    "it-queue-author",
+		DisplayName: "队列作者",
+	})
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE sub = $1", author.Sub)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM accounts WHERE sub = $1", author.Sub)
+	})
+	adminSID := mkAdmin(t, pool, idSvc, "queue")
+	slug := submitHTML(t, h, sid, "待发布队列", "<h1>queue</h1>")
+
+	pending := fetchReviewQueue(t, h, adminSID, api.ListDemoReviewQueueParamsStatePending)
+	item, ok := queueHas(pending, slug)
+	if !ok {
+		t.Fatalf("待审队列里没有 %s", slug)
+	}
+	if item.ModerationState != api.ReviewQueueItemModerationStatePending {
+		t.Fatalf("待审队列的 moderationState = %q，想要 pending", item.ModerationState)
+	}
+	if _, ok := queueHas(fetchReviewQueue(t, h, adminSID, api.ListDemoReviewQueueParamsStateApprovedUnpublished), slug); ok {
+		t.Fatalf("%s 还没通过就进了待发布队列", slug)
+	}
+
+	reviewReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/reviews/demo/"+slug,
+		strings.NewReader(`{"decision":"approve"}`))
+	reviewReq.AddCookie(&http.Cookie{Name: sessionCookie, Value: adminSID})
+	reviewRec := httptest.NewRecorder()
+	h.ReviewDemo(reviewRec, reviewReq, slug)
+	if reviewRec.Code != http.StatusOK {
+		t.Fatalf("通过 = %d，想要 200（body=%s）", reviewRec.Code, reviewRec.Body.String())
+	}
+
+	approved := fetchReviewQueue(t, h, adminSID, api.ListDemoReviewQueueParamsStateApprovedUnpublished)
+	item, ok = queueHas(approved, slug)
+	if !ok {
+		t.Fatalf("通过之后没有出现在待发布队列里：%+v", approved.Items)
+	}
+	if item.ModerationState != api.ReviewQueueItemModerationStateApproved {
+		t.Fatalf("待发布队列的 moderationState = %q，想要 approved", item.ModerationState)
+	}
+	if !strings.HasPrefix(item.PreviewPath, "/preview/"+slug+"/v") {
+		t.Fatalf("待发布队列的 previewPath = %q，想要版本化路径", item.PreviewPath)
+	}
+	if _, ok := queueHas(fetchReviewQueue(t, h, adminSID, api.ListDemoReviewQueueParamsStatePending), slug); ok {
+		t.Fatalf("通过之后 %s 还在待审队列里", slug)
+	}
+
+	// 未知 state 必须 400，不能悄悄当成 pending——那会让前端以为待发布队列是空的。
+	bad := api.ListDemoReviewQueueParamsState("bogus")
+	badReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/reviews/demo?state=bogus", nil)
+	badReq.AddCookie(&http.Cookie{Name: sessionCookie, Value: adminSID})
+	badRec := httptest.NewRecorder()
+	h.ListDemoReviewQueue(badRec, badReq, api.ListDemoReviewQueueParams{State: &bad})
+	if badRec.Code != http.StatusBadRequest {
+		t.Fatalf("未知 state = %d，想要 400（body=%s）", badRec.Code, badRec.Body.String())
+	}
+}
+
+func fetchReviewQueue(t *testing.T, h *Handler, sid string, state api.ListDemoReviewQueueParamsState) api.ReviewQueue {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/reviews/demo", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
+	rec := httptest.NewRecorder()
+	h.ListDemoReviewQueue(rec, req, api.ListDemoReviewQueueParams{State: &state})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("读队列（%s）= %d，想要 200（body=%s）", state, rec.Code, rec.Body.String())
+	}
+	var out api.ReviewQueue
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("队列响应不是合法 JSON: %v（body=%s）", err, rec.Body.String())
+	}
+	return out
+}
+
+func queueHas(q api.ReviewQueue, slug string) (api.ReviewQueueItem, bool) {
+	for _, item := range q.Items {
+		if item.Slug == slug {
+			return item, true
+		}
+	}
+	return api.ReviewQueueItem{}, false
 }

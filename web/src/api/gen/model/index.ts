@@ -76,6 +76,7 @@ export * from './healthz';
 export * from './healthzStatus';
 export * from './lifecycleState';
 export * from './listDemoReviewQueueParams';
+export * from './listDemoReviewQueueState';
 export * from './listDemosParams';
 export * from './listDemosSort';
 export * from './listModelCatalogParams';

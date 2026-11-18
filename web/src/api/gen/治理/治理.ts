@@ -885,14 +885,20 @@ export const getListDemoReviewQueueUrl = (params?: ListDemoReviewQueueParams,) =
 }
 
 /**
- * 只列 `moderation_state = 'pending'` 的作品，按提交时间正序（先来先审）。
+ * 同一端点按 `state` 返回两段队列：
+ *
+ * - `pending`（默认）：只列 `moderation_state = 'pending'` 的作品，按提交时间正序
+ *   （先来先审）。
+ * - `approved_unpublished`：已通过审核、但 `lifecycle_state` 还是 `draft` 的作品，
+ *   按进入待发布的时间正序（先通过先发布）。审核页用它给「通过 ≠ 已发布」一个
+ *   固定的家——刷新页面、或者换一个审核员来发布，都能在这里找到。
  *
  * 需要 `demo.review` 权限。权限来自 `accounts.role` 经 `role_permissions` 展开，
  * **不是**「登录了就能看」——审核队列里有未公开内容，见预览端口径。
  *
  * 队列项带 `previewPath`：审核员用它打开作品内容（该路径对持 `demo.review`
  * 的角色开放未发布作品，见 `GET /preview/{slug}/v{rev}/{path}`）。
- * @summary 待审作品队列
+ * @summary 审核队列（待审 / 已通过待发布）
  */
 export const listDemoReviewQueue = async (params?: ListDemoReviewQueueParams, options?: RequestInit): Promise<listDemoReviewQueueResponse> => {
 
