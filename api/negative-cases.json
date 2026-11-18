@@ -862,6 +862,42 @@
         }
       }
     ],
+    "GET /api/v1/notifications": [
+      {
+        "case": "未登录返回 401，不返回空列表",
+        "test": {
+          "file": "backend/internal/httpapi/notifications_integration_test.go",
+          "name": "TestIntegrationNotificationsRequireLogin"
+        }
+      }
+    ],
+    "GET /api/v1/notifications/unread-count": [
+      {
+        "case": "未登录返回 401",
+        "test": {
+          "file": "backend/internal/httpapi/notifications_integration_test.go",
+          "name": "TestIntegrationNotificationsRequireLogin"
+        }
+      }
+    ],
+    "POST /api/v1/notifications/{id}/read": [
+      {
+        "case": "标记别人的通知返回 404",
+        "test": {
+          "file": "backend/internal/httpapi/notifications_integration_test.go",
+          "name": "TestIntegrationNotificationsFromReviewAndRating"
+        }
+      }
+    ],
+    "POST /api/v1/notifications/read-all": [
+      {
+        "case": "未登录返回 401",
+        "test": {
+          "file": "backend/internal/httpapi/notifications_integration_test.go",
+          "name": "TestIntegrationNotificationsRequireLogin"
+        }
+      }
+    ],
     "GET /api/v1/me/history": [
       {
         "case": "未登录返回 401，不把「没有会话」当成空历史",

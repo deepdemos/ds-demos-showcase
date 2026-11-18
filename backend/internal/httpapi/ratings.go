@@ -49,10 +49,15 @@ func (h *Handler) PutDemoRating(w http.ResponseWriter, r *http.Request, slug str
 	// 范围校验在领域层（`demo.Rate`）：写两处的话，改了一处另一处还在，
 	// 而反向验证会证明「删掉其中一处照样绿」——判断就没被真正压住。
 	accountID, viewerKey := h.raterOf(ctx, r)
+	// 第一次打分才通知作者：改分是 UPDATE，同一个人反复改分不该刷屏。
+	before := h.demos.RatingOf(ctx, slug, viewerKey)
 	rating, err := h.demos.Rate(ctx, slug, viewerKey, accountID, body.Score)
 	if err != nil {
 		h.writeRatingError(w, err)
 		return
+	}
+	if before.Mine == nil {
+		h.notifyDemoEvent(ctx, slug, "rating.received", map[string]int{"score": body.Score}, accountID)
 	}
 	writeJSON(w, http.StatusOK, ratingOf(rating))
 }

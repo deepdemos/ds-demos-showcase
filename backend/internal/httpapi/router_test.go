@@ -188,6 +188,22 @@ func (s *stub) GetCollectionStatus(_ http.ResponseWriter, _ *http.Request, param
 	s.hits = append(s.hits, "collection-status:"+params.Slug)
 }
 
+func (s *stub) ListNotifications(_ http.ResponseWriter, _ *http.Request, _ api.ListNotificationsParams) {
+	s.hits = append(s.hits, "notifications")
+}
+
+func (s *stub) GetUnreadNotificationCount(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "unread-count")
+}
+
+func (s *stub) MarkNotificationRead(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "read-notification:"+strconv.Itoa(id))
+}
+
+func (s *stub) MarkAllNotificationsRead(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "read-all-notifications")
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -260,6 +276,10 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/collections/7/items", "add-item:7"},
 		{http.MethodDelete, "/api/v1/collections/7/items/demo-a", "remove-item:7:demo-a"},
 		{http.MethodGet, "/api/v1/me/collections/status?slug=demo-a", "collection-status:demo-a"},
+		{http.MethodGet, "/api/v1/notifications", "notifications"},
+		{http.MethodGet, "/api/v1/notifications/unread-count", "unread-count"},
+		{http.MethodPost, "/api/v1/notifications/read-all", "read-all-notifications"},
+		{http.MethodPost, "/api/v1/notifications/5/read", "read-notification:5"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

@@ -170,6 +170,18 @@ type ServerInterface interface {
 	// 模型页
 	// (GET /api/v1/models/{slug})
 	GetModel(w http.ResponseWriter, r *http.Request, slug string)
+	// 我的通知
+	// (GET /api/v1/notifications)
+	ListNotifications(w http.ResponseWriter, r *http.Request, params ListNotificationsParams)
+	// 全部标记已读
+	// (POST /api/v1/notifications/read-all)
+	MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request)
+	// 未读通知数
+	// (GET /api/v1/notifications/unread-count)
+	GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request)
+	// 标记一条通知已读
+	// (POST /api/v1/notifications/{id}/read)
+	MarkNotificationRead(w http.ResponseWriter, r *http.Request, id int)
 	// 作品榜（六个口径）
 	// (GET /api/v1/rankings)
 	ListRankings(w http.ResponseWriter, r *http.Request, params ListRankingsParams)
@@ -500,6 +512,30 @@ func (_ Unimplemented) ListModels(w http.ResponseWriter, r *http.Request, params
 // 模型页
 // (GET /api/v1/models/{slug})
 func (_ Unimplemented) GetModel(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 我的通知
+// (GET /api/v1/notifications)
+func (_ Unimplemented) ListNotifications(w http.ResponseWriter, r *http.Request, params ListNotificationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 全部标记已读
+// (POST /api/v1/notifications/read-all)
+func (_ Unimplemented) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 未读通知数
+// (GET /api/v1/notifications/unread-count)
+func (_ Unimplemented) GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 标记一条通知已读
+// (POST /api/v1/notifications/{id}/read)
+func (_ Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Request, id int) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2012,6 +2048,118 @@ func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListNotifications operation middleware
+func (siw *ServerInterfaceWrapper) ListNotifications(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNotificationsParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "pageSize", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotifications(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkAllNotificationsRead operation middleware
+func (siw *ServerInterfaceWrapper) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkAllNotificationsRead(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUnreadNotificationCount operation middleware
+func (siw *ServerInterfaceWrapper) GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUnreadNotificationCount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkNotificationRead operation middleware
+func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkNotificationRead(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRankings operation middleware
 func (siw *ServerInterfaceWrapper) ListRankings(w http.ResponseWriter, r *http.Request) {
 
@@ -2441,6 +2589,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/models/{slug}", wrapper.GetModel)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/notifications", wrapper.ListNotifications)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/notifications/read-all", wrapper.MarkAllNotificationsRead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/notifications/unread-count", wrapper.GetUnreadNotificationCount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/notifications/{id}/read", wrapper.MarkNotificationRead)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/rankings", wrapper.ListRankings)
