@@ -4,7 +4,9 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { AdminReviewPage } from './AdminReviewPage';
 
-const auth = vi.hoisted(() => ({ me: null as null | { sub: string; username: string } }));
+const auth = vi.hoisted(() => ({
+  me: null as null | { sub: string; username: string; permissions?: string[] },
+}));
 
 vi.mock('@/features/auth/AuthContext', () => ({
   useAuth: () => ({ ...auth, isLoading: false, isError: false, setMe: vi.fn(), signOut: vi.fn() }),
@@ -17,6 +19,18 @@ const reviewDemo = vi.hoisted(() => vi.fn());
 const publishDemo = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api', () => ({ listDemoReviewQueue, reviewDemo, publishDemo }));
+
+function queueItem() {
+  return {
+    slug: 'demo-abc',
+    title: '一个作品',
+    description: null,
+    authorName: 'someone',
+    moderationState: 'pending',
+    submittedAt: '2026-11-01T00:00:00Z',
+    previewPath: '/preview/demo-abc/v1/',
+  };
+}
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -171,5 +185,31 @@ describe('AdminReviewPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('作品不处于待审状态');
     });
+  });
+
+  // #460：发布卡片按会话里的权限键渲染，不按角色字符串猜（IA §7.2）。
+  test('有 demo.publish 时，通过后出发布卡片', async () => {
+    auth.me = { sub: 'm', username: 'mod', permissions: ['demo.publish', 'demo.review'] };
+    listDemoReviewQueue.mockResolvedValue({ status: 200, data: { items: [queueItem()] } });
+    reviewDemo.mockResolvedValue({ status: 200, data: {} });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '通过' }));
+
+    expect(await screen.findByRole('button', { name: '发布' })).toBeInTheDocument();
+  });
+
+  test('没有 demo.publish 时，通过后不见发布按钮', async () => {
+    auth.me = { sub: 'm', username: 'mod', permissions: ['demo.review'] };
+    listDemoReviewQueue.mockResolvedValue({ status: 200, data: { items: [queueItem()] } });
+    reviewDemo.mockResolvedValue({ status: 200, data: {} });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '通过' }));
+
+    expect(await screen.findByText('刚通过 · 待发布')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发布' })).toBeNull();
+    // 说明为什么没有按钮，而不是让人以为发布功能坏了。
+    expect(screen.getByText(/没有发布权限/)).toBeInTheDocument();
   });
 });

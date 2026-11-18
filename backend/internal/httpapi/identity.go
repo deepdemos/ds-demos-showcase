@@ -32,12 +32,19 @@ func readSessionCookie(r *http.Request) string {
 }
 
 func toMe(a identity.Account) api.Me {
+	// 空权限给空数组而不是 null：契约里是 required 数组，前端不该为「没有权限」
+	// 多一条分支，而「没有权限」在 user 角色上是常态。
+	perms := a.Permissions
+	if perms == nil {
+		perms = []string{}
+	}
 	return api.Me{
 		Sub:         a.Sub,
 		Username:    a.Username,
 		DisplayName: a.DisplayName,
 		Email:       openapi_types.Email(a.Email),
 		Role:        a.Role,
+		Permissions: perms,
 		Status:      api.AccountStatus(a.Status),
 		Level:       int(a.Level),
 		CreatedAt:   a.CreatedAt,

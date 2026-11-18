@@ -799,6 +799,12 @@ type Me struct {
 	// Level 等级投影镜像，级数不封顶（EXP-001）
 	Level int `json:"level"`
 
+	// Permissions 角色经 `role_permissions` 展开出的权限键（如 `demo.review` / `demo.publish`）。
+	// 前端按权限键判，不按角色字符串（IA §7.2）。它是**会话时刻的快照**：
+	// 改绑之后要等下一次 /me 才生效，与 `role` 同一条口径。
+	// 空权限是空数组，不是 null——前端不该为「没有权限」多一条分支。
+	Permissions []string `json:"permissions"`
+
 	// Role 角色快照，权限判定不只看它
 	Role string `json:"role"`
 

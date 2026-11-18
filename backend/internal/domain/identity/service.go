@@ -78,6 +78,10 @@ func (s *Service) Me(ctx context.Context, sessionID string) (Account, error) {
 	if row.Status == "banned" {
 		return Account{}, ErrAccountBanned
 	}
+	perms, err := s.permissionsOf(ctx, row.Role)
+	if err != nil {
+		return Account{}, err
+	}
 	return Account{
 		ID:          row.ID,
 		UserID:      row.UserID,
@@ -86,8 +90,25 @@ func (s *Service) Me(ctx context.Context, sessionID string) (Account, error) {
 		DisplayName: row.DisplayName,
 		Email:       row.Email,
 		Role:        row.Role,
+		Permissions: perms,
 		Status:      row.Status,
 		Level:       int32(row.Level),
 		CreatedAt:   row.CreatedAt.Time,
 	}, nil
+}
+
+// permissionsOf 把角色展开成权限键。
+//
+// 会话（Me）与登录（Login）两条出口都要它：只给 /me 而不给登录响应的话，
+// 管理员登录后第一屏没有发布按钮，直到下一次 /me 才回来——同一个事实的两份快照。
+// 排序由 SQL 固定，前端与测试都按它断言；没有权限的角色得到空切片而不是 nil。
+func (s *Service) permissionsOf(ctx context.Context, role string) ([]string, error) {
+	perms, err := s.q.ListPermissionsByRole(ctx, role)
+	if err != nil {
+		return nil, fmt.Errorf("identity: 查权限失败: %w", err)
+	}
+	if perms == nil {
+		perms = []string{}
+	}
+	return perms, nil
 }
