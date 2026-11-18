@@ -15,6 +15,7 @@ import {
 } from '@/api';
 import { DemoTimeline } from '@/features/demo/timeline-section';
 import { CollectionControls } from '@/features/collections/collection-controls';
+import { AppealBox } from '@/features/appeals/appeal-box';
 import { recordView } from '@/features/history/local-history';
 import { RelatedSection } from '@/features/demo/related-section';
 
@@ -200,6 +201,7 @@ export function DemoDetailPage() {
             </h1>
           ) : null}
           <EmptyState {...tombstoneText(data.demo)} />
+          {data.demo.lifecycleState === 'removed' ? <AppealBox slug={slug} /> : null}
           <LifecycleBar slug={slug} demo={data.demo} />
         </>
       )}
