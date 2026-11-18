@@ -176,4 +176,68 @@ describe('ClassificationPage', () => {
       '/classifications/genre/puzzle',
     );
   });
+
+  test('页码越界时给出回到第 1 页的出路', async () => {
+    vi.mocked(listClassifications).mockResolvedValue(catalog() as never);
+    vi.mocked(listDemos).mockResolvedValue({
+      status: 200,
+      data: { items: [], total: 13, page: 9, pageSize: 12 },
+    } as never);
+
+    renderPage('/classifications/genre/game?page=9');
+
+    expect(await screen.findByText('这一页没有作品')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '回到第 1 页' })).toHaveAttribute(
+      'href',
+      '/classifications/genre/game',
+    );
+  });
+
+  test('technique 与 subject 维度映射到同名 facet 参数', async () => {
+    const withExtra = catalog({
+      items: [
+        {
+          dimension: 'technique',
+          slug: 'coding',
+          label: '编程',
+          demoCount: 2,
+          description: null,
+          aliases: [],
+          parentSlug: null,
+        },
+        {
+          dimension: 'subject',
+          slug: 'space',
+          label: '太空',
+          demoCount: 1,
+          description: null,
+          aliases: [],
+          parentSlug: null,
+        },
+      ],
+    });
+    vi.mocked(listClassifications).mockResolvedValue(withExtra as never);
+    vi.mocked(listDemos).mockResolvedValue(demoList([]) as never);
+
+    const first = renderPage('/classifications/technique/coding');
+    await waitFor(() =>
+      expect(listDemos).toHaveBeenCalledWith(expect.objectContaining({ technique: ['coding'] })),
+    );
+    first.unmount();
+
+    renderPage('/classifications/subject/space');
+    await waitFor(() =>
+      expect(listDemos).toHaveBeenCalledWith(expect.objectContaining({ subject: ['space'] })),
+    );
+  });
+
+  test('列表加载失败时给出重试入口', async () => {
+    vi.mocked(listClassifications).mockResolvedValue(catalog() as never);
+    vi.mocked(listDemos).mockResolvedValue({ status: 503, data: {} } as never);
+
+    renderPage();
+    expect(await screen.findByText('作品列表加载失败')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /重试/ }));
+    await waitFor(() => expect(listDemos).toHaveBeenCalledTimes(2));
+  });
 });
