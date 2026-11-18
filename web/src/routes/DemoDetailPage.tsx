@@ -264,7 +264,7 @@ export function DemoDetailPage() {
               {data.demo.classifications.map((c) => (
                 <Link
                   key={`${c.dimension}:${c.slug}`}
-                  to={`/demos?${c.dimension}=${encodeURIComponent(c.slug)}`}
+                  to={`/classifications/${c.dimension}/${encodeURIComponent(c.slug)}`}
                   className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-700 no-underline hover:border-gray-300 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700"
                 >
                   {c.label}

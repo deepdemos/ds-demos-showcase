@@ -16,6 +16,7 @@ import { RankingsPage } from '@/routes/RankingsPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
 import { MyDemosPage } from '@/routes/MyDemosPage';
 import { HistoryPage } from '@/routes/HistoryPage';
+import { ClassificationPage } from '@/routes/ClassificationPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
 import { RouteError } from './RouteError';
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage />, errorElement: <RouteError /> },
       page('demos', <DemosPage />),
+      page('classifications/:dimension/:slug', <ClassificationPage />),
       page('demos/:slug', <DemoDetailPage />),
       page('demos/:slug/edit', <EditDemoPage />),
       page('models/:slug', <ModelPage />),
