@@ -208,6 +208,10 @@ func (s *stub) GetAdminInbox(_ http.ResponseWriter, _ *http.Request, _ api.GetAd
 	s.hits = append(s.hits, "admin-inbox")
 }
 
+func (s *stub) ReviewEntity(_ http.ResponseWriter, _ *http.Request, kind api.ReviewEntityParamsKind, id string) {
+	s.hits = append(s.hits, "review-entity:"+string(kind)+":"+id)
+}
+
 func (s *stub) PostAuthVerifyEmail(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "verify-email")
 }
@@ -285,6 +289,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/notifications/read-all", "read-all-notifications"},
 		{http.MethodPost, "/api/v1/notifications/5/read", "read-notification:5"},
 		{http.MethodGet, "/api/v1/admin/inbox", "admin-inbox"},
+		// demo 的具体路径由旧端点（兼容别名）接住；泛化路由用另一个 kind 验证存在。
+		{http.MethodPost, "/api/v1/admin/reviews/proposal/9", "review-entity:proposal:9"},
 		{http.MethodPost, "/api/v1/auth/register", "register"},
 		{http.MethodPost, "/api/v1/auth/login", "login"},
 		{http.MethodPost, "/api/v1/auth/email-code", "email-code"},

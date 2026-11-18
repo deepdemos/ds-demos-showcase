@@ -1917,6 +1917,9 @@
       "approved_unpublished",
       "pending"
     ],
+    "ReviewEntityParamsKind": [
+      "demo"
+    ],
     "ListDemosParamsSort": [
       "hot",
       "latest",
@@ -2011,6 +2014,11 @@
     "POST /api/v1/admin/reviews/demo/{slug}": {
       "method": "ReviewDemo",
       "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/admin/reviews/{kind}/{id}": {
+      "method": "ReviewEntity",
+      "pathParams": 2,
       "params": null
     },
     "POST /api/v1/auth/email-code": {

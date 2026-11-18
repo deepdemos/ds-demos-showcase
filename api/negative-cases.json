@@ -862,6 +862,15 @@
         }
       }
     ],
+    "POST /api/v1/admin/reviews/{kind}/{id}": [
+      {
+        "case": "未知 kind 返回 400，不落到默认分支",
+        "test": {
+          "file": "backend/internal/httpapi/reviews_unified_test.go",
+          "name": "TestIntegrationUnifiedReviewDemo"
+        }
+      }
+    ],
     "GET /api/v1/admin/inbox": [
       {
         "case": "没有审核权限返回 403",

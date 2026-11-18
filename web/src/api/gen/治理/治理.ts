@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 62 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 63 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -839,6 +839,102 @@ const res = await fetch(getApplyModelImportBatchUrl(),
 
   const data: applyModelImportBatchResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as applyModelImportBatchResponse
+}
+
+
+export type reviewEntityResponse200 = {
+  data: ReviewResult
+  status: 200
+}
+
+export type reviewEntityResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type reviewEntityResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type reviewEntityResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type reviewEntityResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type reviewEntityResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type reviewEntityResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type reviewEntityResponseSuccess = (reviewEntityResponse200) & {
+  headers: Headers;
+};
+export type reviewEntityResponseError = (reviewEntityResponse400 | reviewEntityResponse401 | reviewEntityResponse403 | reviewEntityResponse404 | reviewEntityResponse409 | reviewEntityResponse503) & {
+  headers: Headers;
+};
+
+export type reviewEntityResponse = (reviewEntityResponseSuccess | reviewEntityResponseError)
+
+export const getReviewEntityUrl = (kind: 'demo',
+    id: string,) => {
+
+
+
+
+  return `/api/v1/admin/reviews/${kind}/${id}`
+}
+
+/**
+ * 按 review_kinds 注册表分派的统一裁决入口（GOV-006）。当前只接 demo：
+ * id 是作品 slug；裁决语义与旧的 demo 专用路径完全一致。
+ *
+ * 旧路径保留为兼容别名，前端已改走这里；新增 kind 时只加一个分派分支，
+ * 不再新开端点。提案（kind=proposal）的裁决与执行下一轮接入。
+ * @summary 统一审核裁决入口
+ */
+export const reviewEntity = async (kind: 'demo',
+    id: string,
+    reviewDecision: ReviewDecision, options?: RequestInit): Promise<reviewEntityResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getReviewEntityUrl(kind,id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reviewDecision)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reviewEntityResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reviewEntityResponse
 }
 
 
