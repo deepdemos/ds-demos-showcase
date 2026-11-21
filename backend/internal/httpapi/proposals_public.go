@@ -219,10 +219,14 @@ func normalizeBenchmarkPayload(raw map[string]interface{}) (map[string]interface
 
 	out := map[string]interface{}{"name": name}
 
-	if value, ok := optionalText(raw, "publisher", proposalPublisherMax, "发布方"); ok {
+	if value, err := optionalText(raw, "publisher", proposalPublisherMax, "发布方"); err != nil {
+		return nil, "", err
+	} else if value != "" {
 		out["publisher"] = value
 	}
-	if value, ok := optionalText(raw, "description", proposalDescriptionMax, "简介"); ok {
+	if value, err := optionalText(raw, "description", proposalDescriptionMax, "简介"); err != nil {
+		return nil, "", err
+	} else if value != "" {
 		out["description"] = value
 	}
 	if value, err := optionalURL(raw, "homepage_url", proposalHomepageMax); err != nil {
@@ -265,24 +269,27 @@ func requiredText(raw map[string]interface{}, field string, max int, label strin
 	return text, nil
 }
 
-// optionalText 取可选字符串；没给或空串时返回 ok=false（不往 payload 里塞空字段）。
-func optionalText(raw map[string]interface{}, field string, max int, label string) (string, bool) {
+// optionalText 取可选字符串；没给或空串时返回空串（不往 payload 里塞空字段）。
+//
+// 超长与类型不对都要报错，不能静默丢弃：提交人看到 202，会以为「发布方」已经填上并入库了，
+// 而审核员看到的是一条少字段的提案 —— 中间没有任何人知道字段丢了。
+func optionalText(raw map[string]interface{}, field string, max int, label string) (string, error) {
 	value, exists := raw[field]
 	if !exists || value == nil {
-		return "", false
+		return "", nil
 	}
 	text, isString := value.(string)
 	if !isString {
-		return "", false
+		return "", fmt.Errorf("%s必须是字符串", label)
 	}
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return "", false
+		return "", nil
 	}
 	if len([]rune(text)) > max {
-		return "", false
+		return "", fmt.Errorf("%s最多 %d 字", label, max)
 	}
-	return text, true
+	return text, nil
 }
 
 // optionalURL 取可选 URL，并只放行 http(s)。

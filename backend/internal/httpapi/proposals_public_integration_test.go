@@ -99,7 +99,19 @@ func TestIntegrationSubmitProposalRejects(t *testing.T) {
 		t.Fatalf("javascript: 地址 = %d，想要 400：%s", rec.Code, rec.Body.String())
 	}
 
-	// 6) 枚举外的方向标签。
+	// 6) 可选字段超长：必须报错，不能静默丢弃 —— 202 会让提交人以为它入库了。
+	overlongPublisher := `{"kind":"new_benchmark","payload":{"name":"X","publisher":"ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"}}`
+	if rec := submitProposal(t, h, sid, overlongPublisher); rec.Code != http.StatusBadRequest {
+		t.Fatalf("发布方超长 = %d，想要 400：%s", rec.Code, rec.Body.String())
+	}
+
+	// 7) 可选字段类型不对：同上，静默忽略等于把它悄悄删掉。
+	wrongType := `{"kind":"new_benchmark","payload":{"name":"X","publisher":123}}`
+	if rec := submitProposal(t, h, sid, wrongType); rec.Code != http.StatusBadRequest {
+		t.Fatalf("发布方不是字符串 = %d，想要 400：%s", rec.Code, rec.Body.String())
+	}
+
+	// 8) 枚举外的方向标签。
 	badCategory := `{"kind":"new_benchmark","payload":{"name":"X","category":"vibes"}}`
 	if rec := submitProposal(t, h, sid, badCategory); rec.Code != http.StatusBadRequest {
 		t.Fatalf("枚举外的 category = %d，想要 400：%s", rec.Code, rec.Body.String())
