@@ -1,19 +1,24 @@
 package httpapi
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
-	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/entity"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -38,6 +43,10 @@ const (
 	proposalDescriptionMax = 2000
 	proposalHomepageMax    = 500
 	proposalCategoryMax    = 64
+
+	// 频控兜底：设置键 `proposal.max_per_day` 缺行时用这个数。
+	proposalDailyCapFallback = 10
+	proposalRateWindow       = 24 * time.Hour
 )
 
 // submittableKinds 是可被登录用户提交的 kind 白名单。
@@ -90,6 +99,25 @@ func (h *Handler) SubmitProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 撞车即拒（#515 决议第 6 条）：目录里已有同名 slug 或同主页域名的条目时，
+	// 收下这条提案只会让审核员去裁决一件已经成立的事。
+	if kind == "new_benchmark" {
+		homepage, _ := payload["homepage_url"].(string)
+		collision, collisionErr := h.queries.FindBenchmarkCollision(ctx, store.FindBenchmarkCollisionParams{
+			Slug:         dedupeKey,
+			HomepageHost: homepageHost(homepage),
+		})
+		if collisionErr == nil {
+			writeError(w, http.StatusConflict, api.Conflict,
+				fmt.Sprintf("这个榜已经在目录里：/benchmarks/%s", collision))
+			return
+		}
+		if !errors.Is(collisionErr, pgx.ErrNoRows) {
+			unavailable(w, collisionErr)
+			return
+		}
+	}
+
 	createdBy := pgtype.Int8{Int64: account.UserID, Valid: true}
 	dedupe := pgtype.Text{String: dedupeKey, Valid: dedupeKey != ""}
 	findParams := store.FindPendingProposalByDedupeParams{Kind: kind, DedupeKey: dedupe}
@@ -100,6 +128,25 @@ func (h *Handler) SubmitProposal(w http.ResponseWriter, r *http.Request) {
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		unavailable(w, err)
 		return
+	}
+
+	// 频控：同一账号 24 小时内最多 cap 条。**放在去重之后**：重复提交不会新建行，
+	// 也就不该吃配额 —— 否则「已经提过了」会先被报成「今天提太多了」。
+	// 驳回不退还配额，否则「提交-被驳-再提交」就是无限次。限额走设置域，改上限不必发版。
+	if limit := h.proposalDailyCap(ctx); limit > 0 {
+		count, countErr := h.queries.CountProposalsByCreatorSince(ctx, store.CountProposalsByCreatorSinceParams{
+			CreatedBy: createdBy,
+			Since:     pgtype.Timestamptz{Time: time.Now().Add(-proposalRateWindow), Valid: true},
+		})
+		if countErr != nil {
+			unavailable(w, countErr)
+			return
+		}
+		if count >= limit {
+			writeError(w, http.StatusTooManyRequests, api.RateLimited,
+				fmt.Sprintf("24 小时内最多提交 %d 条提案，请明天再来", limit))
+			return
+		}
 	}
 
 	row, err := h.queries.InsertProposal(ctx, store.InsertProposalParams{
@@ -240,13 +287,9 @@ func normalizeBenchmarkPayload(raw map[string]interface{}) (map[string]interface
 		out["category"] = value
 	}
 
-	// 去重键：与题目名同一套归一键（实体域 §3.8）。
-	// 复用而不是另写一份：两个「差不多」的归一键迟早会给出两种重复判定。
-	key := entity.TitleKey(name)
-	if key == "" {
-		return nil, "", fmt.Errorf("名称去掉符号后为空，换一个写法")
-	}
-	return out, key, nil
+	// 去重键 = 执行器将要写进 `benchmarks.slug` 的那一段（#515 决议第 2 条）。
+	// 校验与执行共用一把尺，就不会出现「去重说不一样、入库却撞 UNIQUE」的分裂。
+	return out, benchmarkSlug(name), nil
 }
 
 // requiredText 取必填字符串并裁到上限。
@@ -352,4 +395,43 @@ func optionalCategory(raw map[string]interface{}) (string, error) {
 		parts = append(parts, piece)
 	}
 	return strings.Join(parts, ","), nil
+}
+
+// benchmarkSlug 折出 `/benchmarks/<slug>` 的那一段，也是提案的去重键。
+//
+// ASCII 名字走与作品 slug 同一套规则（`demo.SlugifyForImport`）；纯中文折不出 ASCII 时
+// 退化成「benchmark-<名字摘要前 8 位>」。**不能用随机后缀**：slug 同时是去重键，
+// 随机的话同一个中文榜每提一次都会变成一条新提案，执行器再建出两个条目。
+func benchmarkSlug(name string) string {
+	if base := demo.SlugifyForImport(name); base != "" {
+		return base
+	}
+	sum := sha256.Sum256([]byte(name))
+	return "benchmark-" + hex.EncodeToString(sum[:4])
+}
+
+// homepageHost 取主页 URL 的主机名；解析不了返回空串（此时撞车判定只按 slug）。
+//
+// 不剥 `www.`、不忽略端口：SQL 那边是拿同一个 URL 子串比的，两边规则只要有一点不一样，
+// 「同一个榜」就会被判成两个。宁可少判，也不要两处各有一套归一化。
+func homepageHost(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Host
+}
+
+// proposalDailyCap 读设置域的每日提交上限；键缺行时兜默认值（缺行是数据事故，
+// 不该让整个提交入口不可用）。
+func (h *Handler) proposalDailyCap(ctx context.Context) int64 {
+	raw, err := h.queries.GetSiteSettingNumber(ctx, "proposal.max_per_day")
+	if err != nil {
+		return proposalDailyCapFallback
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 0 {
+		return proposalDailyCapFallback
+	}
+	return value
 }

@@ -132,7 +132,7 @@ func TestIntegrationSubmitProposalDedupes(t *testing.T) {
 	author, sid := registerVerified(t, pool, idSvc, registerInputFor(t, "prop-dup"))
 	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM proposals WHERE dedupe_key = $1", "swe-benchverified")
+		_, _ = pool.Exec(context.Background(), "DELETE FROM proposals WHERE dedupe_key = $1", "swe-bench-verified")
 	})
 
 	first := decodeProposalJSON[api.ProposalSubmissionResult](t, submitProposal(t, h, sid, validBenchmarkProposal))
@@ -149,7 +149,7 @@ func TestIntegrationSubmitProposalDedupes(t *testing.T) {
 	}
 
 	var rows int
-	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM proposals WHERE dedupe_key = $1 AND status = 'pending'", "swe-benchverified").Scan(&rows); err != nil {
+	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM proposals WHERE dedupe_key = $1 AND status = 'pending'", "swe-bench-verified").Scan(&rows); err != nil {
 		t.Fatalf("查提案行数失败: %v", err)
 	}
 	if rows != 1 {
@@ -174,7 +174,7 @@ func TestIntegrationWithdrawProposal(t *testing.T) {
 	other, otherSID := registerVerified(t, pool, idSvc, registerInputFor(t, "prop-oth"))
 	t.Cleanup(func() { cleanupAuthor(t, pool, other.Sub) })
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM proposals WHERE dedupe_key = $1", "swe-benchverified")
+		_, _ = pool.Exec(context.Background(), "DELETE FROM proposals WHERE dedupe_key = $1", "swe-bench-verified")
 	})
 
 	created := decodeProposalJSON[api.ProposalSubmissionResult](t, submitProposal(t, h, ownerSID, validBenchmarkProposal))
@@ -206,5 +206,122 @@ func TestIntegrationWithdrawProposal(t *testing.T) {
 	}
 	if status != "withdrawn" {
 		t.Fatalf("库里状态 = %q，想要 withdrawn", status)
+	}
+}
+
+// TestIntegrationSubmitBenchmarkCollision 目录里已有的榜不再收提案。
+//
+// 判据是「这个榜已经在目录里」而不是「有人提过了」：前者再收一条只会让审核员去裁决
+// 一件已经成立的事，而 409 的文案必须直接给出已有条目的地址，否则提交人只能猜。
+func TestIntegrationSubmitBenchmarkCollision(t *testing.T) {
+	h, idSvc, pool := newSortHandler(t)
+	author, sid := registerVerified(t, pool, idSvc, registerInputFor(t, "bench-clash"))
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+
+	var id int64
+	if err := pool.QueryRow(context.Background(),
+		"INSERT INTO benchmarks (slug, name) VALUES ($1, $2) RETURNING id",
+		"swe-bench-verified", "SWE-bench Verified").Scan(&id); err != nil {
+		t.Fatalf("预置基准失败: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), "DELETE FROM benchmarks WHERE id = $1", id) })
+
+	rec := submitProposal(t, h, sid, validBenchmarkProposal)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("撞车提交 = %d，想要 409：%s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "/benchmarks/swe-bench-verified") {
+		t.Fatalf("409 文案没指向已有条目：%s", body)
+	}
+
+	var count int
+	if err := pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM proposals WHERE dedupe_key = $1", "swe-bench-verified").Scan(&count); err != nil {
+		t.Fatalf("查提案失败: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("撞车的提交不该落库，实际 %d 行", count)
+	}
+}
+
+// TestIntegrationSubmitProposalRateLimited 同一账号 24 小时内有上限。
+//
+// 重复提交走的是幂等 202（不新建行，也就不该吃配额），所以这条用例故意用**第二个不同的**
+// 榜名来撞限额 —— 否则验的就不是频控而是去重。
+func TestIntegrationSubmitProposalRateLimited(t *testing.T) {
+	h, idSvc, pool := newSortHandler(t)
+	author, sid := registerVerified(t, pool, idSvc, registerInputFor(t, "bench-rate"))
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM site_settings WHERE key = $1", "proposal.max_per_day")
+		_, _ = pool.Exec(context.Background(), "DELETE FROM proposals WHERE dedupe_key IN ($1, $2)", "swe-bench-verified", "another-board")
+	})
+
+	if _, err := pool.Exec(context.Background(), `
+INSERT INTO site_settings (key, scope, value_type, value)
+VALUES ('proposal.max_per_day', 'site', 'number', '1'::jsonb)
+ON CONFLICT (key) DO UPDATE SET value = '1'::jsonb`); err != nil {
+		t.Fatalf("压低上限失败: %v", err)
+	}
+
+	first := submitProposal(t, h, sid, validBenchmarkProposal)
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("第一条 = %d，想要 202：%s", first.Code, first.Body.String())
+	}
+
+	// 同一条内容再提一次：去重优先，仍然是 202 —— 不新建行，也就不该被判超额。
+	again := submitProposal(t, h, sid, validBenchmarkProposal)
+	if again.Code != http.StatusAccepted {
+		t.Fatalf("重复提交 = %d，想要 202（去重先于频控）：%s", again.Code, again.Body.String())
+	}
+
+	// 换一个榜名：这才真的会新建行，于是撞上限。
+	other := submitProposal(t, h, sid, `{"kind":"new_benchmark","payload":{"name":"Another Board"}}`)
+	if other.Code != http.StatusTooManyRequests {
+		t.Fatalf("超额提交 = %d，想要 429：%s", other.Code, other.Body.String())
+	}
+}
+
+// TestIntegrationApproveNewBenchmarkProposal 通过之后落成 benchmarks 一行。
+func TestIntegrationApproveNewBenchmarkProposal(t *testing.T) {
+	h, idSvc, pool := newSortHandler(t)
+	author, sid := registerVerified(t, pool, idSvc, registerInputFor(t, "bench-ok"))
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+	admin := mkAdmin(t, pool, idSvc, "bench-adm")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM benchmarks WHERE slug = $1", "swe-bench-verified")
+	})
+
+	created := decodeProposalJSON[api.ProposalSubmissionResult](t, submitProposal(t, h, sid, validBenchmarkProposal))
+
+	rec := httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", admin,
+		`{"decision":"approve"}`), created.Id)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("通过基准提案 = %d，想要 200（body=%s）", rec.Code, rec.Body.String())
+	}
+
+	var status, resultKind string
+	var resultID int64
+	if err := pool.QueryRow(context.Background(),
+		`SELECT status, COALESCE(result_kind,''), COALESCE(result_id,0) FROM proposals WHERE id=$1`, created.Id).
+		Scan(&status, &resultKind, &resultID); err != nil {
+		t.Fatalf("读提案失败: %v", err)
+	}
+	if status != "approved" || resultKind != "benchmark" || resultID == 0 {
+		t.Fatalf("提案 = %s / %s / %d，想要 approved / benchmark / 非零", status, resultKind, resultID)
+	}
+
+	var slug, name, publisher, homepage, category, description string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT slug, name, publisher, homepage_url, category, description FROM benchmarks WHERE id=$1`, resultID).
+		Scan(&slug, &name, &publisher, &homepage, &category, &description); err != nil {
+		t.Fatalf("基准条目未落库: %v", err)
+	}
+	if slug != "swe-bench-verified" || name != "SWE-bench Verified" || publisher != "OpenAI" || category != "coding" {
+		t.Fatalf("条目 = %q / %q / %q / %q", slug, name, publisher, category)
+	}
+	if homepage == "" || description == "" {
+		t.Fatalf("主页或简介丢了: %q / %q", homepage, description)
 	}
 }

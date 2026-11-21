@@ -877,3 +877,17 @@ WHERE k.key = @key::text
   AND k.scope = 'site'
   AND k.value_type = 'boolean'
   AND k.is_active;
+
+-- name: FindBenchmarkCollision :one
+-- 撞车即拒（#515 决议第 6 条）：同名 slug 或同主页域名都算「这个榜已经在目录里」。
+--
+-- 域名用正则从 URL 里截出来比较，而不是在 Go 侧解析完再传完整 URL —— 后者会把
+-- `https://x.com/` 与 `http://x.com` 当成两个不同的榜，而它们其实是同一个。
+-- `slug` 命中优先返回，好让 409 的文案直接指向那一条。
+SELECT slug
+FROM benchmarks
+WHERE slug = @slug
+   OR (sqlc.arg(homepage_host)::text <> ''
+       AND substring(homepage_url from '^[a-z]+://([^/?#]+)') = sqlc.arg(homepage_host)::text)
+ORDER BY (slug = @slug) DESC
+LIMIT 1;

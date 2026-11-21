@@ -384,9 +384,48 @@ func (h *Handler) reviewProposalOne(ctx context.Context, actor demo.Actor, id in
 			h.auditProposalReview(ctx, actor, id, row.Status, "approved", "classification", approved.ClassificationID, "")
 			return api.ProposalReviewResult{Id: int(id), Status: api.ProposalReviewResultStatusApproved}, nil
 
+		case "new_benchmark":
+			payload := proposalPayloadMap(row.Payload)
+			name, _ := payload["name"].(string)
+			name = strings.TrimSpace(name)
+			if name == "" {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam, "new_benchmark 的名称不能为空")
+			}
+			publisher, _ := payload["publisher"].(string)
+			homepage, _ := payload["homepage_url"].(string)
+			description, _ := payload["description"].(string)
+			category, _ := payload["category"].(string)
+			category = strings.TrimSpace(category)
+			if category == "" {
+				// 目录里「测什么」缺省就是 general（`benchmarks.category` 的列默认值同此）。
+				// 空串不能进库：列表按逗号枚举解析，空值会让这个条目在按方向筛选时消失。
+				category = "general"
+			}
+			approved, err := h.queries.ApproveNewBenchmarkProposal(ctx, store.ApproveNewBenchmarkProposalParams{
+				ID:          id,
+				Slug:        benchmarkSlug(name),
+				Name:        name,
+				Publisher:   strings.TrimSpace(publisher),
+				HomepageUrl: strings.TrimSpace(homepage),
+				Category:    category,
+				Description: strings.TrimSpace(description),
+				ReviewedBy:  pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0},
+			})
+			if err != nil {
+				if isUniqueViolation(err) {
+					return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "同名基准条目刚被另一条提案创建，请重试")
+				}
+				return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
+			}
+			if !approved.Approved {
+				return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
+			}
+			h.auditProposalReview(ctx, actor, id, row.Status, "approved", "benchmark", approved.BenchmarkID, "")
+			return api.ProposalReviewResult{Id: int(id), Status: api.ProposalReviewResultStatusApproved}, nil
+
 		default:
 			return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam,
-				"该 kind 的执行器尚未接入（目前只接 new_classification / new_skill / new_task）")
+				"该 kind 的执行器尚未接入（目前只接 new_benchmark / new_classification / new_skill / new_task）")
 		}
 
 	default:
