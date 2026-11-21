@@ -65,7 +65,8 @@ func cleanupBenchmark(t *testing.T, h *Handler) {
 }
 
 func TestIntegrationImportBenchmarksDryRunDoesNotWrite(t *testing.T) {
-	h, idSvc, _ := newSortHandler(t)
+	h, idSvc, pool := newSortHandler(t)
+	h = h.WithPool(pool)
 	admin := mkAdmin(t, h.pool, idSvc, "benchimp")
 	t.Cleanup(func() { cleanupBenchmark(t, h) })
 
@@ -82,7 +83,8 @@ func TestIntegrationImportBenchmarksDryRunDoesNotWrite(t *testing.T) {
 }
 
 func TestIntegrationImportBenchmarksIsIdempotent(t *testing.T) {
-	h, idSvc, _ := newSortHandler(t)
+	h, idSvc, pool := newSortHandler(t)
+	h = h.WithPool(pool)
 	admin := mkAdmin(t, h.pool, idSvc, "benchimp2")
 	t.Cleanup(func() { cleanupBenchmark(t, h) })
 
@@ -104,7 +106,8 @@ func TestIntegrationImportBenchmarksIsIdempotent(t *testing.T) {
 }
 
 func TestIntegrationImportBenchmarksRejectsCiteTierScores(t *testing.T) {
-	h, idSvc, _ := newSortHandler(t)
+	h, idSvc, pool := newSortHandler(t)
+	h = h.WithPool(pool)
 	admin := mkAdmin(t, h.pool, idSvc, "benchimp3")
 	t.Cleanup(func() { cleanupBenchmark(t, h) })
 
@@ -121,7 +124,8 @@ func TestIntegrationImportBenchmarksRejectsCiteTierScores(t *testing.T) {
 }
 
 func TestIntegrationImportBenchmarksUnmatchedModel(t *testing.T) {
-	h, idSvc, _ := newSortHandler(t)
+	h, idSvc, pool := newSortHandler(t)
+	h = h.WithPool(pool)
 	admin := mkAdmin(t, h.pool, idSvc, "benchimp4")
 	t.Cleanup(func() { cleanupBenchmark(t, h) })
 
@@ -144,7 +148,8 @@ SELECT bs.match_status FROM benchmark_scores bs
 }
 
 func TestIntegrationImportBenchmarksRequiresPermission(t *testing.T) {
-	h, idSvc, _ := newSortHandler(t)
+	h, idSvc, pool := newSortHandler(t)
+	h = h.WithPool(pool)
 	author, sid := registerVerified(t, h.pool, idSvc, registerInputFor(t, "benchimp5"))
 	t.Cleanup(func() { cleanupAuthor(t, h.pool, author.Sub) })
 
