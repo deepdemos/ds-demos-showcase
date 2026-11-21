@@ -1,10 +1,10 @@
-# Demo 运行能力契约 v0.1（前瞻设计 · 不在 P0）
+# Demo 运行能力契约 v0.2（已拍定 · 第一版 Step 1）
 
-> **状态：前瞻设计，未排期，不实现。**
+> **状态：已拍定（#506，2026-11-21）。** 能力清单 7 条冻结、配额四键族、计数落 `demo_usage` 表；第一版只实现 Step 1（`identity.read`）。
 > 本文件回答一个未来的问题：用户的 demo 会从「静态网页」长成「小游戏」「带后端」「多人联机」，平台如何在**不改架构**的前提下把能力一个个发下去。
-> 它不是当前阶段的施工单——当前的施工单在 [`设计决策台账`](设计决策台账.md)。本文件只在有人要动 demo 运行形态时被翻开。
+> 它是第一版沙箱域的**运行时契约**：能力清单与配额单位由 #506 拍定，Step 1 的施工单在对应规格票里，不再等这个域「设计完」。
 
-版本：**v0.1 · 前瞻（2026-10-30）**
+版本：**v0.2 · 已定（2026-11-21）**
 适用范围：UGC demo（用户上传、运行在平台上）与平台之间的能力边界。
 不适用范围：主站前后端自身的 API（那是 `api/openapi.yaml` 的事）、IdP 与下游（Discourse）之间的 OIDC（那是 [`身份服务模型设计`](身份服务模型设计.md) §7 的事）。
 
@@ -131,6 +131,8 @@ INSERT INTO demo_capabilities (key, summary, kind, needs_review, quota_default, 
 
 注意 `net.proxy` 与 `realtime` 的 `needs_review = true`：**能给平台打开外网出口、能占用长连接的，必须人审**。`net.proxy` 否则就是一台免费代理 / SSRF 跳板；`realtime` 否则是一条免费的长连接矿。
 
+> **`storage.write` 的总量上限（#506 补）**：种子里的 `{"per_minute": 60}` 只管速率，管不住总量 —— 每分钟写 60 次连写一个月就能把盘写满。配额族因此定为**四键**（见 §7），`storage.write` 要补 `max_bytes`。注意 `db/schema/30-demo.sql` 是**冻结基线**，种子行不改；`max_bytes` 由一条迁移 `UPDATE demo_capabilities SET quota_default = ...` 补上，随 Step 1 的规格票一起落。
+
 ---
 
 ## 4 端点与网关
@@ -244,14 +246,38 @@ flowchart LR
 
 ## 7 配额与限流
 
-配额分两层，都按 `(demo_id, capability)` 计：
+配额分两层，都按 `(demo_id, capability)` 计。
+
+**配额单位（#506 拍定）**：`quota_default` 是 jsonb，只允许四个键。别的键名一律视为拼错，不静默忽略。
+
+| 键 | 单位 | 用在谁身上 | 示例 |
+| --- | --- | --- | --- |
+| `per_minute` | 次 / 分钟 | 有速率的调用 | `leaderboard.write` 6 |
+| `per_day` | 次 / 24 小时 | 需要日内总额的攻击面 | `leaderboard.write` 200 |
+| `max_connections` | 条并发长连接 | `realtime` | `realtime` 20 |
+| `max_bytes` | 字节总量（累计，不是每请求） | 任何写存储的能力 | `storage.write` 1 MiB |
+
+为什么要有 `max_bytes`：前三个键都是**速率**，管不住总量。`storage.write` 若只写 `per_minute`，一个 demo 每分钟写 60 次、连写一个月就能把盘写满 —— 存储类能力的上限本来就是总量，不是速率。
 
 | 层 | 位置 | 作用 |
 | --- | --- | --- |
 | 静态默认 | `demo_capabilities.quota_default` | 进令牌的 `quota` claim，业务端点据此限流 |
 | 单 demo 覆盖 | `demo_grants` 之外的一张扩展表（Step 2 引入） | 给个别 demo 放宽/收紧 |
 
-计数落地建议与旧栈一致，**不引 Redis**：用 `demo_usage (demo_id, capability, window_start, count)` 按分钟窗口 upsert，超阈值拒绝即可。真到扛不住再上 Redis——和治理域 #11 权限缓存是同一个判断。
+**计数落地（#506 拍定）**：不引 Redis，用一张 `demo_usage` 表按窗口 upsert，超阈值直接 429 `quota_exceeded`。
+
+```text
+demo_usage (                        -- 四键族里三类速率键的计数；max_bytes 记用量不记窗口
+  demo_id     bigint  NOT NULL,
+  capability  text    NOT NULL,     -- FK → demo_capabilities.key
+  window_kind text    NOT NULL,     -- 'minute' / 'day'（max_bytes 走另一列，不占窗口）
+  window_start timestamptz NOT NULL,
+  count       bigint  NOT NULL DEFAULT 0,
+  PRIMARY KEY (demo_id, capability, window_kind, window_start)
+)
+```
+
+`max_bytes` 不按窗口计数，用同一张表的另一种行（或以 `demo_storage_usage` 记累计字节，Step 3 引入 `storage.*` 时再定）。真到扛不住再上 Redis —— 和治理域 #11 权限缓存是同一个判断。
 
 ---
 
@@ -262,7 +288,7 @@ flowchart LR
 1. **IdP 登录页永远不可被嵌**：`Content-Security-Policy: frame-ancestors 'none'` + `X-Frame-Options: DENY`。
 2. **禁止动态客户端注册**，`clients` 只有手工插入的行。
 3. **UGC 域与 `id.`、主站不同 origin，cookie host-only**，谁也读不到谁的会话。
-4. **沙箱子域每 demo 一个**（`{slug}.sandbox.deepdemos.top`），demo 之间不同源，一个 demo 的 XSS 横向不到另一个 demo。
+4. **作品页永远不是主站源**：判据以 `项目需求.md` SBX-005 为准 —— 「不透明源，或独立于主站的源」。本文件示例里的 `{slug}.sandbox.deepdemos.top` 是**独立源那条路**（Step 3 才可能用到）；第一版走的是同源路径 + 服务端 `CSP: sandbox`（不给 `allow-same-origin`），作品文档因此是不透明源 —— 那不是「模拟同源」。
 5. **令牌不下发给其他 demo**（`aud` 校验），也不下发给第三方域名。
 6. **`caps` 只减不增**：宿主可以少给，不能把没被授予的能力塞进令牌。
 7. **审核门槛在目录表里**（`needs_review`），不靠人记。
@@ -329,14 +355,16 @@ flowchart LR
 
 ## 13 待拍板
 
+> **编号说明**：本表的条目从 **Q1** 起编，不复用 `C` 前缀 —— `项目需求.md` 附录 C 已经占用了 C1–C7，两处都叫 C2 会指代不明（#506 核事实时撞到过）。
+
 | # | 问题 | 我的倾向 |
 | --- | --- | --- |
-| C1 | 令牌有效期 60 分钟是否合适 | 是；宿主重签成本极低 |
-| C2 | 是否允许宿主按场景「少给」能力 | 允许，只减不增 |
-| C3 | `demo_scores` 归属 Demo 域还是本文件 | 归 Demo 域（它有 `demo_id` 与作品生命周期） |
-| C4 | 排行榜是否需要「匿名玩家可上榜」 | 不需要；未登录不上榜，避免刷榜与冒名 |
-| C5 | 能力授予的审计动作名 | `demo.grant` / `demo.revoke`，随治理域 §16 接入 |
-| C6 | `demo_usage` 计数表还是 Redis | 先表；与治理域 #11 同一判断 |
+| Q1 | 令牌有效期 60 分钟是否合适 | 是；宿主重签成本极低 |
+| Q2 | 是否允许宿主按场景「少给」能力 | 允许，只减不增 |
+| Q3 | `demo_scores` 归属 Demo 域还是本文件 | 归 Demo 域（它有 `demo_id` 与作品生命周期） |
+| Q4 | 排行榜是否需要「匿名玩家可上榜」 | 不需要；未登录不上榜，避免刷榜与冒名 |
+| Q5 | 能力授予的审计动作名 | `demo.grant` / `demo.revoke`，随治理域 §16 接入 |
+| ~~Q6~~ | ~~`demo_usage` 计数表还是 Redis~~ | **已定（#506）**：先表，见 §7 |
 
 ---
 
@@ -364,3 +392,4 @@ flowchart LR
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
 | v0.1 | 2026-10-30 | 首版：三层拆分、令牌契约、能力目录表、端点与网关、三形态接入、落地三步。状态为前瞻设计，未排期。 |
+| v0.2 | 2026-11-21 | **#506 拍定后升级**：① 状态从「前瞻 · 未排期」改为「已拍定 · 第一版 Step 1」；② 能力清单 7 条**冻结**；③ 配额族定为四键 `per_minute` / `per_day` / `max_connections` / `max_bytes`，并给出 `demo_usage` 的列；④ §8 第 4 条按 SBX-005 新判据改写（不透明源或独立源）；⑤ §13 编号从 C1–C6 改为 Q1–Q6，避开与附录 C 撞车。 |
