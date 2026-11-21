@@ -48,6 +48,8 @@ const EXPECTED_KEYS = [
   ['notify.retention_days', 'user', 'number', '90'],
   ['history.record', 'user', 'boolean', 'true'],
   ['collection.public_default', 'user', 'boolean', 'false'],
+  // 提案频控（#525 / 迁移 0039）：上限是运营参数，改它不该发版。
+  ['proposal.max_per_day', 'site', 'number', '10'],
 ];
 // demo.cover_inline 的内联上限（db/schema/30-demo.sql 的两条 CHECK 必须同值）
 const COVER_INLINE_LIMIT = 32768;
