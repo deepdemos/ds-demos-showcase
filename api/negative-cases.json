@@ -1115,6 +1115,45 @@
           "name": "TestIntegrationListDemoTypes"
         }
       }
+    ],
+    "POST /api/v1/proposals": [
+      {
+        "case": "白名单之外的 kind 一律 422，不假装受理（report 已作废、merge_* 属管理员场景）",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_public_integration_test.go",
+          "name": "TestIntegrationSubmitProposalRejects"
+        }
+      },
+      {
+        "case": "非 http(s) 的 homepage_url 被拒 —— 这个值会被渲染成页面上的链接",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_public_integration_test.go",
+          "name": "TestIntegrationSubmitProposalRejects"
+        }
+      },
+      {
+        "case": "未登录提交一律 401，不做匿名受理",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_public_integration_test.go",
+          "name": "TestIntegrationSubmitProposalRejects"
+        }
+      }
+    ],
+    "POST /api/v1/proposals/{id}/withdraw": [
+      {
+        "case": "不能撤回别人的提案（404，不承认存在）",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_public_integration_test.go",
+          "name": "TestIntegrationWithdrawProposal"
+        }
+      },
+      {
+        "case": "已经裁决过的提案不能撤回（409，不是 404）",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_public_integration_test.go",
+          "name": "TestIntegrationWithdrawProposal"
+        }
+      }
     ]
   },
   "outsideContract": {

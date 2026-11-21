@@ -256,6 +256,11 @@ const (
 	ProposalReviewResultStatusRejected ProposalReviewResultStatus = "rejected"
 )
 
+// Defines values for ProposalSubmissionResultStatus.
+const (
+	ProposalSubmissionResultStatusPending ProposalSubmissionResultStatus = "pending"
+)
+
 // Defines values for ProposalSummarySource.
 const (
 	ProposalSummarySourceAdmin    ProposalSummarySource = "admin"
@@ -273,6 +278,11 @@ const (
 	ProposalSummaryStatusRejected   ProposalSummaryStatus = "rejected"
 	ProposalSummaryStatusSuperseded ProposalSummaryStatus = "superseded"
 	ProposalSummaryStatusWithdrawn  ProposalSummaryStatus = "withdrawn"
+)
+
+// Defines values for ProposalWithdrawnStatus.
+const (
+	ProposalWithdrawnStatusWithdrawn ProposalWithdrawnStatus = "withdrawn"
 )
 
 // Defines values for PublishRequestLang.
@@ -1748,6 +1758,27 @@ type ProposalReviewResult struct {
 // ProposalReviewResultStatus defines model for ProposalReviewResult.Status.
 type ProposalReviewResultStatus string
 
+// ProposalSubmission defines model for ProposalSubmission.
+type ProposalSubmission struct {
+	// Kind 提案 kind；当前白名单只有 `new_benchmark`
+	Kind string `json:"kind"`
+
+	// Payload 按 kind 的形状（与 `ck_proposals_payload` 同源的必填子集，应用层再收窄）。
+	// `new_benchmark` 要求 `name`；`homepage_url` / `publisher` / `description` / `category` 可选。
+	Payload map[string]interface{} `json:"payload"`
+}
+
+// ProposalSubmissionResult defines model for ProposalSubmissionResult.
+type ProposalSubmissionResult struct {
+	// Created false = 已存在同一条 pending 提案，`id` 是它的
+	Created bool                           `json:"created"`
+	Id      int                            `json:"id"`
+	Status  ProposalSubmissionResultStatus `json:"status"`
+}
+
+// ProposalSubmissionResultStatus defines model for ProposalSubmissionResult.Status.
+type ProposalSubmissionResultStatus string
+
 // ProposalSummary defines model for ProposalSummary.
 type ProposalSummary struct {
 	CreatedAt time.Time `json:"createdAt"`
@@ -1768,6 +1799,15 @@ type ProposalSummarySource string
 
 // ProposalSummaryStatus defines model for ProposalSummary.Status.
 type ProposalSummaryStatus string
+
+// ProposalWithdrawn defines model for ProposalWithdrawn.
+type ProposalWithdrawn struct {
+	Id     int                     `json:"id"`
+	Status ProposalWithdrawnStatus `json:"status"`
+}
+
+// ProposalWithdrawnStatus defines model for ProposalWithdrawn.Status.
+type ProposalWithdrawnStatus string
 
 // PublicProfile defines model for PublicProfile.
 type PublicProfile struct {
@@ -2440,3 +2480,6 @@ type PutDemoRatingJSONRequestBody = DemoRatingInput
 
 // UpdateMyHistorySettingsJSONRequestBody defines body for UpdateMyHistorySettings for application/json ContentType.
 type UpdateMyHistorySettingsJSONRequestBody = AccountHistorySettings
+
+// SubmitProposalJSONRequestBody defines body for SubmitProposal for application/json ContentType.
+type SubmitProposalJSONRequestBody = ProposalSubmission

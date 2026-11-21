@@ -1666,6 +1666,30 @@
         "optional": false
       }
     },
+    "ProposalSubmission": {
+      "kind": {
+        "type": "string",
+        "optional": false
+      },
+      "payload": {
+        "type": "map[string]interface{}",
+        "optional": false
+      }
+    },
+    "ProposalSubmissionResult": {
+      "created": {
+        "type": "bool",
+        "optional": false
+      },
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "status": {
+        "type": "ProposalSubmissionResultStatus",
+        "optional": false
+      }
+    },
     "ProposalSummary": {
       "createdAt": {
         "type": "time.Time",
@@ -1693,6 +1717,16 @@
       },
       "updatedAt": {
         "type": "time.Time",
+        "optional": false
+      }
+    },
+    "ProposalWithdrawn": {
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "status": {
+        "type": "ProposalWithdrawnStatus",
         "optional": false
       }
     },
@@ -2201,6 +2235,9 @@
       "approved",
       "rejected"
     ],
+    "ProposalSubmissionResultStatus": [
+      "pending"
+    ],
     "ProposalSummarySource": [
       "admin",
       "ai",
@@ -2214,6 +2251,9 @@
       "pending",
       "rejected",
       "superseded",
+      "withdrawn"
+    ],
+    "ProposalWithdrawnStatus": [
       "withdrawn"
     ],
     "PublishRequestLang": [
@@ -2658,6 +2698,16 @@
     },
     "POST /api/v1/notifications/{id}/read": {
       "method": "MarkNotificationRead",
+      "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/proposals": {
+      "method": "SubmitProposal",
+      "pathParams": 0,
+      "params": null
+    },
+    "POST /api/v1/proposals/{id}/withdraw": {
+      "method": "WithdrawProposal",
       "pathParams": 1,
       "params": null
     },
