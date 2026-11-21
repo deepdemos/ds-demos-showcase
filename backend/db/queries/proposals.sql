@@ -150,3 +150,24 @@ WITH target AS (
 )
 SELECT COALESCE((SELECT r.id FROM resolved r), 0)::bigint AS task_id,
        EXISTS (SELECT 1 FROM updated) AS approved;
+-- ---------- 用户提交（#524）----------
+
+-- name: FindPendingProposalByDedupe :one
+-- 去重只查 pending：同一份内容被驳回或撤回之后，应该允许重新提交。
+-- 唯一索引 `uq_proposals_pending_dedupe` 兜住并发，这里查一次只是为了给出「已存在」的原话。
+SELECT id
+FROM proposals
+WHERE kind = @kind AND dedupe_key = @dedupe_key AND status = 'pending' AND erased_at IS NULL;
+
+-- name: InsertProposal :one
+-- `created_by` 是**用户**外键（不是账号）：提案是站内行为，跟作品作者同一个身份轴。
+INSERT INTO proposals (kind, payload, created_by, source, dedupe_key)
+VALUES (@kind, @payload::jsonb, @created_by, 'user', @dedupe_key)
+RETURNING id, status, created_at;
+
+-- name: WithdrawProposal :one
+-- 条件写进 WHERE：别人的、非 pending 的一律 0 行，由调用方区分 404 / 409。
+UPDATE proposals
+SET status = 'withdrawn', updated_at = now()
+WHERE id = @id AND created_by = @created_by AND status = 'pending' AND erased_at IS NULL
+RETURNING id, status;

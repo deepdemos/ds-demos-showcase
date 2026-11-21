@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 71 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 73 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -3575,6 +3575,107 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/proposals:
+    post:
+      operationId: submitProposal
+      tags: [实体]
+      summary: 提交一条提案
+      description: |
+        登录用户提交一条提案（实体域 §4.9）。**当前只开放 `kind=new_benchmark`** ——
+        `report` 已作废（治理域 §2.2：论坛外置后不建举报队列），`merge_*` / `retag_demo` /
+        `task_match` 属管理员或 agent 场景，其余 kind 随各自的规格票逐个放开。
+        白名单之外的 kind 一律 `422`，不假装受理。
+
+        去重按 `(kind, dedupe_key)` **只查 `pending`**：同一份内容被驳回或撤回之后可以重新提交。
+        命中已有 pending 时返回 `202` + 原 id + `created=false`，**不新建行**（幂等，不是错误）。
+
+        通过之后的执行器按 kind 接入（`new_benchmark` 见 #525）；未接入的 kind 在裁决时明确 `422`。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalSubmission'
+      responses:
+        '202':
+          description: 受理（新建 `created=true`；已存在同一条 pending 时 `created=false` 并返回原 id）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalSubmissionResult'
+        '400':
+          description: payload 形状不对（缺必填字段 / 字段超长 / 不认识的字段）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 这个 kind 尚未开放提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/proposals/{id}/withdraw:
+    post:
+      operationId: withdrawProposal
+      tags: [实体]
+      summary: 撤回自己提交的提案
+      description: |
+        只能撤回**自己**的、仍是 `pending` 的提案。别人的提案与不存在的提案都回 `404`
+        （不泄露存在性）；已经裁决过的回 `409` —— 那时候该走的是裁决链路，不是撤回。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: 已撤回
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalWithdrawn'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 提案不存在，或不是你提交的
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 提案已经不在 pending（已通过 / 已驳回 / 已撤回）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/admin/proposals/{id}:
     get:
       operationId: getAdminProposal
@@ -5865,6 +5966,39 @@ components:
           type: string
           format: date-time
 
+    ProposalSubmission:
+      type: object
+      additionalProperties: false
+      required: [kind, payload]
+      properties:
+        kind:
+          type: string
+          description: 提案 kind；当前白名单只有 `new_benchmark`
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            按 kind 的形状（与 `ck_proposals_payload` 同源的必填子集，应用层再收窄）。
+            `new_benchmark` 要求 `name`；`homepage_url` / `publisher` / `description` / `category` 可选。
+
+    ProposalSubmissionResult:
+      type: object
+      additionalProperties: false
+      required: [id, status, created]
+      properties:
+        id: { type: integer, minimum: 1 }
+        status: { type: string, enum: [pending] }
+        created:
+          type: boolean
+          description: false = 已存在同一条 pending 提案，`id` 是它的
+
+    ProposalWithdrawn:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id: { type: integer, minimum: 1 }
+        status: { type: string, enum: [withdrawn] }
     ProposalSummary:
       type: object
       additionalProperties: false

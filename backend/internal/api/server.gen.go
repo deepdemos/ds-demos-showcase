@@ -212,6 +212,12 @@ type ServerInterface interface {
 	// 标记一条通知已读
 	// (POST /api/v1/notifications/{id}/read)
 	MarkNotificationRead(w http.ResponseWriter, r *http.Request, id int)
+	// 提交一条提案
+	// (POST /api/v1/proposals)
+	SubmitProposal(w http.ResponseWriter, r *http.Request)
+	// 撤回自己提交的提案
+	// (POST /api/v1/proposals/{id}/withdraw)
+	WithdrawProposal(w http.ResponseWriter, r *http.Request, id int)
 	// 作品榜（六个口径）
 	// (GET /api/v1/rankings)
 	ListRankings(w http.ResponseWriter, r *http.Request, params ListRankingsParams)
@@ -626,6 +632,18 @@ func (_ Unimplemented) GetUnreadNotificationCount(w http.ResponseWriter, r *http
 // 标记一条通知已读
 // (POST /api/v1/notifications/{id}/read)
 func (_ Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Request, id int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 提交一条提案
+// (POST /api/v1/proposals)
+func (_ Unimplemented) SubmitProposal(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 撤回自己提交的提案
+// (POST /api/v1/proposals/{id}/withdraw)
+func (_ Unimplemented) WithdrawProposal(w http.ResponseWriter, r *http.Request, id int) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2612,6 +2630,57 @@ func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// SubmitProposal operation middleware
+func (siw *ServerInterfaceWrapper) SubmitProposal(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SubmitProposal(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// WithdrawProposal operation middleware
+func (siw *ServerInterfaceWrapper) WithdrawProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.WithdrawProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRankings operation middleware
 func (siw *ServerInterfaceWrapper) ListRankings(w http.ResponseWriter, r *http.Request) {
 
@@ -3083,6 +3152,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/notifications/{id}/read", wrapper.MarkNotificationRead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/proposals", wrapper.SubmitProposal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/proposals/{id}/withdraw", wrapper.WithdrawProposal)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/rankings", wrapper.ListRankings)

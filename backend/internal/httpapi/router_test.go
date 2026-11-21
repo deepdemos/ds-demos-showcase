@@ -228,6 +228,14 @@ func (s *stub) BatchReviewAdminProposals(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "batch-proposals")
 }
 
+func (s *stub) SubmitProposal(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "submit-proposal")
+}
+
+func (s *stub) WithdrawProposal(_ http.ResponseWriter, _ *http.Request, id int) {
+	s.hits = append(s.hits, "withdraw-proposal:"+strconv.Itoa(id))
+}
+
 func (s *stub) GetDemoAppeal(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "demo-appeal:"+slug)
 }
@@ -327,6 +335,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/admin/proposals/7", "admin-proposal:7"},
 		{http.MethodPost, "/api/v1/admin/proposals/7/review", "review-proposal:7"},
 		{http.MethodPost, "/api/v1/admin/proposals/batch", "batch-proposals"},
+		{http.MethodPost, "/api/v1/proposals", "submit-proposal"},
+		{http.MethodPost, "/api/v1/proposals/12/withdraw", "withdraw-proposal:12"},
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
 		{http.MethodGet, "/api/v1/admin/appeals", "admin-appeals"},

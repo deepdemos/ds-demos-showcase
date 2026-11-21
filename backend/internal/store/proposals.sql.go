@@ -234,6 +234,28 @@ func (q *Queries) CountProposalsForAdmin(ctx context.Context, arg CountProposals
 	return total, err
 }
 
+const findPendingProposalByDedupe = `-- name: FindPendingProposalByDedupe :one
+
+SELECT id
+FROM proposals
+WHERE kind = $1 AND dedupe_key = $2 AND status = 'pending' AND erased_at IS NULL
+`
+
+type FindPendingProposalByDedupeParams struct {
+	Kind      string
+	DedupeKey pgtype.Text
+}
+
+// ---------- 用户提交（#524）----------
+// 去重只查 pending：同一份内容被驳回或撤回之后，应该允许重新提交。
+// 唯一索引 `uq_proposals_pending_dedupe` 兜住并发，这里查一次只是为了给出「已存在」的原话。
+func (q *Queries) FindPendingProposalByDedupe(ctx context.Context, arg FindPendingProposalByDedupeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, findPendingProposalByDedupe, arg.Kind, arg.DedupeKey)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getProposalByID = `-- name: GetProposalByID :one
 SELECT id, kind, status, payload, source, confidence,
        created_by, created_at,
@@ -279,6 +301,38 @@ func (q *Queries) GetProposalByID(ctx context.Context, id int64) (GetProposalByI
 		&i.ResultID,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const insertProposal = `-- name: InsertProposal :one
+INSERT INTO proposals (kind, payload, created_by, source, dedupe_key)
+VALUES ($1, $2::jsonb, $3, 'user', $4)
+RETURNING id, status, created_at
+`
+
+type InsertProposalParams struct {
+	Kind      string
+	Payload   []byte
+	CreatedBy pgtype.Int8
+	DedupeKey pgtype.Text
+}
+
+type InsertProposalRow struct {
+	ID        int64
+	Status    string
+	CreatedAt pgtype.Timestamptz
+}
+
+// `created_by` 是**用户**外键（不是账号）：提案是站内行为，跟作品作者同一个身份轴。
+func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) (InsertProposalRow, error) {
+	row := q.db.QueryRow(ctx, insertProposal,
+		arg.Kind,
+		arg.Payload,
+		arg.CreatedBy,
+		arg.DedupeKey,
+	)
+	var i InsertProposalRow
+	err := row.Scan(&i.ID, &i.Status, &i.CreatedAt)
 	return i, err
 }
 
@@ -377,6 +431,31 @@ type RejectProposalRow struct {
 func (q *Queries) RejectProposal(ctx context.Context, arg RejectProposalParams) (RejectProposalRow, error) {
 	row := q.db.QueryRow(ctx, rejectProposal, arg.ReviewedBy, arg.RejectReason, arg.ID)
 	var i RejectProposalRow
+	err := row.Scan(&i.ID, &i.Status)
+	return i, err
+}
+
+const withdrawProposal = `-- name: WithdrawProposal :one
+UPDATE proposals
+SET status = 'withdrawn', updated_at = now()
+WHERE id = $1 AND created_by = $2 AND status = 'pending' AND erased_at IS NULL
+RETURNING id, status
+`
+
+type WithdrawProposalParams struct {
+	ID        int64
+	CreatedBy pgtype.Int8
+}
+
+type WithdrawProposalRow struct {
+	ID     int64
+	Status string
+}
+
+// 条件写进 WHERE：别人的、非 pending 的一律 0 行，由调用方区分 404 / 409。
+func (q *Queries) WithdrawProposal(ctx context.Context, arg WithdrawProposalParams) (WithdrawProposalRow, error) {
+	row := q.db.QueryRow(ctx, withdrawProposal, arg.ID, arg.CreatedBy)
+	var i WithdrawProposalRow
 	err := row.Scan(&i.ID, &i.Status)
 	return i, err
 }

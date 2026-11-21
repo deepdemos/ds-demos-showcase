@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 71 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 73 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -168,9 +168,15 @@ export * from './proposalDetailStatus';
 export * from './proposalList';
 export * from './proposalReviewResult';
 export * from './proposalReviewResultStatus';
+export * from './proposalSubmission';
+export * from './proposalSubmissionPayload';
+export * from './proposalSubmissionResult';
+export * from './proposalSubmissionResultStatus';
 export * from './proposalSummary';
 export * from './proposalSummarySource';
 export * from './proposalSummaryStatus';
+export * from './proposalWithdrawn';
+export * from './proposalWithdrawnStatus';
 export * from './publicProfile';
 export * from './publishRequest';
 export * from './publishRequestLang';
