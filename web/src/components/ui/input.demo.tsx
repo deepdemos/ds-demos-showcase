@@ -4,6 +4,14 @@ export function InputDefaultDemo() {
   return <Input placeholder="请输入内容" />;
 }
 
+export function InputFullDemo() {
+  return (
+    <div className="w-72">
+      <Input fullWidth placeholder="填满父容器" />
+    </div>
+  );
+}
+
 export function InputErrorDemo() {
   return <Input defaultValue="错误内容" error="示例错误信息" />;
 }
