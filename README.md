@@ -57,7 +57,8 @@ backend/
   cmd/api/                  HTTP 入口
   internal/platform/        config / httpserver（后续加 db、auth、storage、jobs）
 web/
-  src/app/                  路由、Provider、布局
+  src/app/                  路由清单、Provider、布局
+  src/app/routes.ts         页面清单（路由/标题/区/门槛/宽度的唯一事实源）
   src/components/ui/        控件库（页面唯一控件来源）
   src/dev-room/             Dev Room（站内 /dev-room，生产不注册）
   src/features/             业务功能（空）
@@ -65,6 +66,7 @@ web/
   src/routes/               页面
   src/styles/               全局样式
   scripts/check-ui-contract.mjs  ui-contract 检查
+docs/信息架构与页面设计.md    前端页面清单、导航与页面结构规则
 docs/development-workflow.md  开发 / 评审 / 合并门禁
 scripts/check-file-size.mjs   单文件行数门禁
 scripts/check-pr.mjs          PR issue / 类型 / 规模门禁
