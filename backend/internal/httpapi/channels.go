@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -8,17 +9,47 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
 // 渠道上架 / 撤下：给已经对外发布的作品追加或移除一个渠道。
 //
-// 权限用 `demo.publish`——这是「让作品出现在某个渠道上」的动作，与首次发布同一件事的
-// 后续步骤，不另立权限键（多一个键就多一处要维护、多一种配置错法）。松点 26 结案。
+// 权限用 `demo.curate`（#508 统一）。渠道行回答的是「这件作品在这个渠道里露不露」，
+// 那是**策展**动作；`demo.publish` 只管状态跃迁（`draft`/`archived` → `published`）。
+// 这三个端点原来用 `demo.publish`，与标准对象 §EN-1、治理域 §4.3 两处文档相反，
+// 而 `demo.curate` 当时全仓没有使用者 —— 改用它是把文档与代码收口，不是新授权：
+// 加渠道本身仍要求内容已审核、作品已有对外版本。
+
+// curator 是渠道链路上唯一的鉴权点。
+func (h *Handler) curator(ctx context.Context, r *http.Request) (demo.Actor, error) {
+	if h.identity == nil || h.queries == nil {
+		return demo.Actor{}, errNotWired
+	}
+	account, err := h.identity.Me(ctx, readSessionCookie(r))
+	if err != nil {
+		return demo.Actor{}, err
+	}
+	ok, err := h.queries.HasPermission(ctx, store.HasPermissionParams{
+		Sub:           account.Sub,
+		PermissionKey: "demo.curate",
+	})
+	if err != nil {
+		return demo.Actor{}, err
+	}
+	if !ok {
+		return demo.Actor{}, errForbidden
+	}
+	return demo.Actor{
+		AccountID: account.ID,
+		UserID:    account.UserID,
+		Role:      account.Role,
+	}, nil
+}
 
 // AddDemoChannel 给作品追加一个渠道，或改某个渠道的可见性。
 func (h *Handler) AddDemoChannel(w http.ResponseWriter, r *http.Request, slug string) {
-	actor, err := h.publisher(r.Context(), r)
+	actor, err := h.curator(r.Context(), r)
 	if err != nil {
 		writeChannelError(w, r, err)
 		return
@@ -59,7 +90,7 @@ func (h *Handler) AddDemoChannel(w http.ResponseWriter, r *http.Request, slug st
 
 // RemoveDemoChannel 从某个渠道撤下，作品可以仍有别的渠道。
 func (h *Handler) RemoveDemoChannel(w http.ResponseWriter, r *http.Request, slug string, channel string) {
-	actor, err := h.publisher(r.Context(), r)
+	actor, err := h.curator(r.Context(), r)
 	if err != nil {
 		writeChannelError(w, r, err)
 		return
@@ -78,7 +109,7 @@ func writeChannelError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, identity.ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, api.Unauthorized, "请先登录")
 	case errors.Is(err, errForbidden):
-		writeError(w, http.StatusForbidden, api.Forbidden, "没有发布权限")
+		writeError(w, http.StatusForbidden, api.Forbidden, "没有渠道策展权限")
 	case errors.Is(err, errNotWired):
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	case errors.Is(err, demo.ErrInvalidInput),
@@ -109,7 +140,7 @@ func langPtrOf(v *api.DemoChannelRequestLang) string {
 // 不塞进详情：详情是公开读的出口，字段面讲的是「读者看到的这一件作品」，
 // 渠道是运营视角。混在一起要么让公开字段变胖，要么要按角色裁剪同一份 schema。
 func (h *Handler) ListDemoChannels(w http.ResponseWriter, r *http.Request, slug string) {
-	if _, err := h.publisher(r.Context(), r); err != nil {
+	if _, err := h.curator(r.Context(), r); err != nil {
 		writeChannelError(w, r, err)
 		return
 	}

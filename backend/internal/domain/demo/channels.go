@@ -68,10 +68,10 @@ func (s *Service) AddChannel(ctx context.Context, actor Actor, in ChannelInput) 
 	default:
 		return out, fmt.Errorf("%w: lang 只能是 zh 或 en", ErrInvalidInput)
 	}
-	// 与 Publish 同一张表判定：渠道的语言硬要求不能因为换了个入口就失效。
-	if req, ok := channelRequiredLang[in.Channel]; ok && in.Lang != req {
-		return out, fmt.Errorf("%w: 渠道 %s 只收 %s 作品，当前是 %s",
-			ErrInvalidInput, in.Channel, req, in.Lang)
+	// 与 Publish 同一张表判定：渠道规则不能因为换了个入口就失效
+	// （语言要求 + 允许的可见性，见 channelRules）。
+	if err := channelRuleViolation(in.Channel, in.Visibility, in.Lang); err != nil {
+		return out, err
 	}
 	if actor.Role == "" {
 		return out, fmt.Errorf("%w: 缺少角色", ErrInvalidInput)

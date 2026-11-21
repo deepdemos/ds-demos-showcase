@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -30,13 +31,55 @@ const (
 	publishLangDefault = "zh"
 )
 
-// channelRequiredLang 是「这个渠道只收哪种语言」的唯一登记处。
+// channelRule 是一个渠道的硬规则：语言要求 + 允许的可见性。
 //
-// 为什么不查库：渠道的语言要求是产品约定，不是运营数据——`channels` 表里
-// 没有这一列，为一个稳定的两行映射加一列 + 一次迁移不划算。等渠道多到
-// 需要运营自己配的时候，再把它挪进 `channels.required_lang`。
-var channelRequiredLang = map[string]string{
-	"astra": "en",
+// 两条都是**产品约定**，不是运营数据。存在性不在这里判（那是 activeChannel 查
+// `channels` 表的事）—— 这里只回答「这个渠道收什么」。
+type channelRule struct {
+	requiredLang        string   // "" = 不限语言
+	allowedVisibilities []string // 空 = 三档全允许
+}
+
+// channelRules 是「渠道规则」的唯一登记处（#508）。
+//
+// 为什么不查库：渠道的语言与可见性要求是产品约定，不是运营数据——`channels` 表里
+// 没有这两列，为两个稳定渠道加列 + 迁移 + 运营界面不划算。等渠道多到需要运营自己配
+// 的时候，再把它们一起挪进 `channels`。未登记的渠道不设限。
+//
+// astra 为什么不收 hidden（#508）：橱窗里「在但看不见」与「删掉这行」的结果完全相同，
+// 两种写法并存只会让运维挑错那个 —— 设了 hidden 以为撤下了，其实行还在，谁看
+// `demo_channels` 都会以为它还挂在橱窗上。禁止比解释便宜。
+var channelRules = map[string]channelRule{
+	"astra": {requiredLang: "en", allowedVisibilities: []string{"listed", "unlisted"}},
+	"deep":  {allowedVisibilities: []string{"listed", "unlisted", "hidden"}},
+}
+
+// channelRuleViolation 判这次写入是否守住渠道规则。渠道未登记 = 不设限（存在性另有判定）。
+func channelRuleViolation(channel, visibility, lang string) error {
+	rule, ok := channelRules[channel]
+	if !ok {
+		return nil
+	}
+	if rule.requiredLang != "" && lang != rule.requiredLang {
+		return fmt.Errorf("%w: 渠道 %s 只收 %s 作品，当前是 %s",
+			ErrInvalidInput, channel, rule.requiredLang, lang)
+	}
+	if len(rule.allowedVisibilities) == 0 {
+		return nil
+	}
+	for _, v := range rule.allowedVisibilities {
+		if v == visibility {
+			return nil
+		}
+	}
+	allowed := strings.Join(rule.allowedVisibilities, " / ")
+	// 文案要能指导动作：只说「取值非法」等于让调用方自己去猜下一步。
+	if visibility == "hidden" {
+		return fmt.Errorf("%w: 渠道 %s 不支持 hidden —— 要撤下请删掉这个渠道行（允许：%s）",
+			ErrInvalidVisibility, channel, allowed)
+	}
+	return fmt.Errorf("%w: 渠道 %s 不接受可见性 %q（允许：%s）",
+		ErrInvalidVisibility, channel, visibility, allowed)
 }
 
 var (
@@ -92,14 +135,13 @@ func (s *Service) Publish(ctx context.Context, actor Actor, in PublishInput) (Pu
 	default:
 		return out, fmt.Errorf("%w: lang 只能是 zh 或 en", ErrInvalidInput)
 	}
-	// 渠道对语言有硬要求：Astra 橱窗只收英文作品（Demo 域 §3.5 / §7.4）。
+	// 渠道规则：语言与可见性（Demo 域 §7.4 / #508）。Astra 只收英文、且不收 hidden。
 	//
-	// 以前这条只在发布表单里挡着（前端把语言锁成 en 并禁用下拉），后端不判——
+	// 以前语言这条只在发布表单里挡着（前端把语言锁成 en 并禁用下拉），后端不判——
 	// 一道只在浏览器里存在的校验等于没有：curl 一次就能把中文作品发到英文橱窗，
 	// 而那个橱窗的读者一个字也读不懂。
-	if req, ok := channelRequiredLang[in.Channel]; ok && in.Lang != req {
-		return out, fmt.Errorf("%w: 渠道 %s 只收 %s 作品，当前是 %s",
-			ErrInvalidInput, in.Channel, req, in.Lang)
+	if err := channelRuleViolation(in.Channel, in.Visibility, in.Lang); err != nil {
+		return out, err
 	}
 	if actor.Role == "" {
 		return out, fmt.Errorf("%w: 缺少角色", ErrInvalidInput)

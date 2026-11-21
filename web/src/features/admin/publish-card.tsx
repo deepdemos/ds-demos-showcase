@@ -39,6 +39,16 @@ const LANGS = [
 ] as const satisfies readonly SelectOption[];
 
 const VISIBILITY_VALUES = VISIBILITIES.map((item) => item.value);
+
+/**
+ * 渠道规则（Demo 域 §7.4 / #508）：Astra 是橱窗，只收公开列出与有链接可见 ——
+ * 「隐藏」在橱窗上等价于删掉渠道行，后端会 400。所以这里直接把这一档从选项里拿掉，
+ * 而不是让用户选完再吃一个错误。
+ */
+function visibilityOptionsFor(channel: string): SelectOption[] {
+  if (channel !== 'astra') return [...VISIBILITIES];
+  return VISIBILITIES.filter((item) => item.value !== 'hidden');
+}
 const LANG_VALUES = LANGS.map((item) => item.value);
 
 /**
@@ -125,9 +135,12 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
             options={CHANNELS}
             onChange={(value) => {
               setChannel(value);
-              // 渠道规则：astra 是英文橱窗。切过去的同时把语言摆正，
-              // 免得用户先看到一个不成立的组合。
-              if (value === 'astra') setLang('en');
+              // 渠道规则：astra 是英文橱窗，且不收「隐藏」。切过去的同时把两个值
+              // 摆正，免得用户先看到一个不成立的组合（后端会 400，来不及解释）。
+              if (value === 'astra') {
+                setLang('en');
+                setVisibility((current) => (current === 'hidden' ? 'listed' : current));
+              }
             }}
             disabled={publish.isPending}
           />
@@ -138,7 +151,7 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
           <Select
             id={`publish-visibility-${slug}`}
             value={visibility}
-            options={VISIBILITIES}
+            options={visibilityOptionsFor(channel)}
             onChange={(value) => {
               if (isOneOf(VISIBILITY_VALUES, value)) setVisibility(value);
             }}
@@ -162,7 +175,7 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
 
       {channel === 'astra' ? (
         <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-          Astra 是英文橱窗，渠道规则要求语言为英文，已自动切到 en。
+          Astra 是英文橱窗：语言已自动切到 en，可见性不收「隐藏」（要撤下请删掉这个渠道行）。
         </p>
       ) : null}
 
