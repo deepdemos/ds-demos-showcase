@@ -74,6 +74,71 @@ func (q *Queries) ApproveClassificationProposal(ctx context.Context, arg Approve
 	return i, err
 }
 
+const approveNewBenchmarkProposal = `-- name: ApproveNewBenchmarkProposal :one
+
+WITH target AS (
+    SELECT p.id AS proposal_id
+    FROM proposals p
+    WHERE p.id = $1 AND p.status = 'pending' AND p.erased_at IS NULL
+    FOR UPDATE
+), ensured AS (
+    INSERT INTO benchmarks (slug, name, publisher, homepage_url, category, description)
+    SELECT $2, $3, $4, $5, $6, $7
+    FROM target
+    RETURNING benchmarks.id
+), updated AS (
+    UPDATE proposals p
+    SET status = 'approved',
+        result_kind = 'benchmark',
+        result_id = (SELECT e.id FROM ensured e),
+        reviewed_by = $8,
+        reviewed_at = now(),
+        updated_at = now()
+    WHERE p.id = $1 AND p.status = 'pending'
+    RETURNING p.id
+)
+SELECT COALESCE((SELECT e.id FROM ensured e), 0)::bigint AS benchmark_id,
+       EXISTS (SELECT 1 FROM updated) AS approved
+`
+
+type ApproveNewBenchmarkProposalParams struct {
+	ID          int64
+	Slug        string
+	Name        string
+	Publisher   string
+	HomepageUrl string
+	Category    string
+	Description string
+	ReviewedBy  pgtype.Int8
+}
+
+type ApproveNewBenchmarkProposalRow struct {
+	BenchmarkID int64
+	Approved    bool
+}
+
+// ---------- new_benchmark 执行器（#525）----------
+// `new_benchmark` 的执行器：锁 pending 提案 → 插一行 benchmarks → 提案置 approved。
+//
+// **不写 ON CONFLICT**：slug 已被占用时让 INSERT 抛 23505，handler 映射成 409。
+// 用 ON CONFLICT DO NOTHING 会静默返回 0 行，再由调用方猜是哪一步没成 —— 而这里
+// 「榜已经存在」与「提案已经不是 pending」是两种完全不同的答复。
+func (q *Queries) ApproveNewBenchmarkProposal(ctx context.Context, arg ApproveNewBenchmarkProposalParams) (ApproveNewBenchmarkProposalRow, error) {
+	row := q.db.QueryRow(ctx, approveNewBenchmarkProposal,
+		arg.ID,
+		arg.Slug,
+		arg.Name,
+		arg.Publisher,
+		arg.HomepageUrl,
+		arg.Category,
+		arg.Description,
+		arg.ReviewedBy,
+	)
+	var i ApproveNewBenchmarkProposalRow
+	err := row.Scan(&i.BenchmarkID, &i.Approved)
+	return i, err
+}
+
 const approveNewSkillProposal = `-- name: ApproveNewSkillProposal :one
 WITH target AS (
     SELECT p.id AS proposal_id
@@ -210,6 +275,26 @@ func (q *Queries) ApproveNewTaskProposal(ctx context.Context, arg ApproveNewTask
 	var i ApproveNewTaskProposalRow
 	err := row.Scan(&i.TaskID, &i.Approved)
 	return i, err
+}
+
+const countProposalsByCreatorSince = `-- name: CountProposalsByCreatorSince :one
+SELECT count(*)::bigint AS total
+FROM proposals
+WHERE created_by = $1 AND created_at >= $2
+`
+
+type CountProposalsByCreatorSinceParams struct {
+	CreatedBy pgtype.Int8
+	Since     pgtype.Timestamptz
+}
+
+// 频控：同一账号在过去 N 小时内提交了多少条（被驳回的也算 —— 驳回不退还配额，
+// 否则「提交-被驳-再提交」就成了无限次）。
+func (q *Queries) CountProposalsByCreatorSince(ctx context.Context, arg CountProposalsByCreatorSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProposalsByCreatorSince, arg.CreatedBy, arg.Since)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
 }
 
 const countProposalsForAdmin = `-- name: CountProposalsForAdmin :one

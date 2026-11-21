@@ -1137,6 +1137,20 @@
           "file": "backend/internal/httpapi/proposals_public_integration_test.go",
           "name": "TestIntegrationSubmitProposalRejects"
         }
+      },
+      {
+        "case": "目录里已经有的榜不再收提案（409 且指向已有条目）",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_public_integration_test.go",
+          "name": "TestIntegrationSubmitBenchmarkCollision"
+        }
+      },
+      {
+        "case": "同一账号 24 小时内提交过多返回 429，重复提交不吃配额",
+        "test": {
+          "file": "backend/internal/httpapi/proposals_public_integration_test.go",
+          "name": "TestIntegrationSubmitProposalRateLimited"
+        }
       }
     ],
     "POST /api/v1/proposals/{id}/withdraw": [

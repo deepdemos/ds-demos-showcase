@@ -133,6 +133,33 @@ func (q *Queries) DeleteCatalogItemsNotIn(ctx context.Context, arg DeleteCatalog
 	return err
 }
 
+const findBenchmarkCollision = `-- name: FindBenchmarkCollision :one
+SELECT slug
+FROM benchmarks
+WHERE slug = $1
+   OR ($2::text <> ''
+       AND substring(homepage_url from '^[a-z]+://([^/?#]+)') = $2::text)
+ORDER BY (slug = $1) DESC
+LIMIT 1
+`
+
+type FindBenchmarkCollisionParams struct {
+	Slug         string
+	HomepageHost string
+}
+
+// 撞车即拒（#515 决议第 6 条）：同名 slug 或同主页域名都算「这个榜已经在目录里」。
+//
+// 域名用正则从 URL 里截出来比较，而不是在 Go 侧解析完再传完整 URL —— 后者会把
+// `https://x.com/` 与 `http://x.com` 当成两个不同的榜，而它们其实是同一个。
+// `slug` 命中优先返回，好让 409 的文案直接指向那一条。
+func (q *Queries) FindBenchmarkCollision(ctx context.Context, arg FindBenchmarkCollisionParams) (string, error) {
+	row := q.db.QueryRow(ctx, findBenchmarkCollision, arg.Slug, arg.HomepageHost)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
+}
+
 const findModelCheckpoint = `-- name: FindModelCheckpoint :one
 SELECT id
 FROM model_checkpoints
