@@ -11,6 +11,7 @@ import {
   Select,
   Skeleton,
 } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { RecommendationStrip } from '@/features/demo/recommendation-strip';
 import {
   listClassifications,
@@ -224,16 +225,10 @@ export function DemosPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">作品库</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {q ? `搜索「${q}」，` : ''}
-          {SORT_NOTES[sort]}
-        </p>
-
+    <Page width="wide" title="作品库" description={(q ? `搜索「${q}」，` : '') + SORT_NOTES[sort]}>
+      <div className="mt-6">
         {/* 排序：三种口径（SCH-006）。放 URL 里，刷新/后退都保持同一个视角。 */}
-        <div className="mt-4 flex max-w-xs flex-col gap-1 text-sm">
+        <div className="flex max-w-xs flex-col gap-1 text-sm">
           <label htmlFor="demos-sort">排序</label>
           <Select
             id="demos-sort"
@@ -277,7 +272,7 @@ export function DemosPage() {
         */}
         {catalog.data ? (
           <details className="mt-4 max-w-xl" open={activeFacets > 0}>
-            <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-300">
+            <summary className="cursor-pointer text-sm text-gray-600">
               筛选{activeFacets > 0 ? `（已选 ${activeFacets} 项）` : ''}
               {activeFacets > 0 ? (
                 <span className="ml-3">
@@ -298,7 +293,7 @@ export function DemosPage() {
                 if (options.length === 0) return null;
                 return (
                   <div key={dim.dimension} className="flex flex-col gap-1">
-                    <p className="m-0 text-xs text-gray-600 dark:text-gray-400">{dim.label}</p>
+                    <p className="m-0 text-xs text-gray-600">{dim.label}</p>
                     <div className="flex flex-wrap gap-x-4 gap-y-1">
                       {options.map((c) => (
                         <Checkbox
@@ -318,7 +313,7 @@ export function DemosPage() {
               {/* 模型维度不在分类目录里：它来自 models 表，与分类是两套数据。 */}
               {models.data && models.data.length > 0 ? (
                 <div className="flex flex-col gap-1">
-                  <p className="m-0 text-xs text-gray-600 dark:text-gray-400">模型</p>
+                  <p className="m-0 text-xs text-gray-600">模型</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     {models.data.map((m) => (
                       <Checkbox
@@ -336,7 +331,7 @@ export function DemosPage() {
             </div>
           </details>
         ) : null}
-      </header>
+      </div>
 
       {isPending && <Skeleton lines={6} lineHeight="h-24" />}
 
@@ -375,25 +370,25 @@ export function DemosPage() {
               <li key={demo.slug}>
                 <Link
                   to={`/demos/${demo.slug}`}
-                  className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
+                  className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300"
                 >
                   {/* 封面区固定 16:9：有没有封面都占同样高度，否则网格会参差不齐 */}
-                  <div className="mb-3 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-xs text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+                  <div className="mb-3 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-xs text-gray-400">
                     {demo.coverUrl ? (
                       <img src={demo.coverUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
                       '无封面'
                     )}
                   </div>
-                  <h2 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900 dark:text-gray-100">
+                  <h2 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900">
                     {demo.title ?? '（无标题）'}
                   </h2>
                   {demo.matchedIn === 'description' ? (
                     // 只有简介命中的时候，标题里根本看不到关键词——
                     // 不标出来，用户会以为「搜出来的东西不相关」。
-                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">简介命中</p>
+                    <p className="mt-1 text-xs text-amber-700">简介命中</p>
                   ) : null}
-                  <p className="mt-auto pt-3 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-auto pt-3 text-xs text-gray-500">
                     {new Date(demo.createdAt).toLocaleDateString('zh-CN')}
                   </p>
                 </Link>
@@ -401,8 +396,10 @@ export function DemosPage() {
             ))}
           </ul>
 
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-sm text-gray-500 dark:text-gray-400">共 {data.total} 个作品</span>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="whitespace-nowrap text-sm text-gray-500">共 {data.total} 个作品</span>
+
             <Pagination
               page={data.page}
               pageCount={Math.max(1, Math.ceil(data.total / data.pageSize))}
@@ -412,6 +409,6 @@ export function DemosPage() {
           </div>
         </>
       )}
-    </section>
+    </Page>
   );
 }

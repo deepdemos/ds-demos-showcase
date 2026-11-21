@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import { Button, EmptyState, ErrorState, Select, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { listRankings } from '@/api';
 import type { ListRankingsParams, RankingEntry } from '@/api';
 
@@ -44,13 +45,13 @@ const RATING_BOARDS: readonly Board[] = ['avg', 'god', 'ghost', 'net'];
 function formatValue(board: Board, value: number): string {
   switch (board) {
     case 'avg':
-      return `${value.toFixed(2)} 分`;
+      return value.toFixed(2) + ' 分';
     case 'heat':
-      return `热度 ${Math.round(value)}`;
+      return '热度 ' + Math.round(value);
     case 'net':
-      return `净票 ${value > 0 ? '+' : ''}${Math.round(value)}`;
+      return '净票 ' + (value > 0 ? '+' : '') + Math.round(value);
     default:
-      return `${Math.round(value)} 票`;
+      return Math.round(value) + ' 票';
   }
 }
 
@@ -64,24 +65,24 @@ function readRange(raw: string | null): Range {
 
 function Row({ entry, board }: { entry: RankingEntry; board: Board }) {
   return (
-    <li className="flex items-start gap-3 border-b border-gray-200 py-3 last:border-b-0 dark:border-gray-800">
-      <span className="w-8 shrink-0 text-right text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">
+    <li className="flex items-start gap-3 border-b border-gray-200 py-3 last:border-b-0">
+      <span className="w-8 shrink-0 text-right text-sm font-semibold tabular-nums text-gray-500">
         {entry.rank}
       </span>
       <div className="min-w-0 flex-1">
         <Link
-          to={`/demos/${entry.demo.slug}`}
-          className="font-medium text-gray-900 hover:underline dark:text-gray-100"
+          to={'/demos/' + entry.demo.slug}
+          className="font-medium text-gray-900 hover:underline"
         >
           {entry.demo.title ?? entry.demo.slug}
         </Link>
         {entry.demo.classifications?.length ? (
-          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+          <span className="ml-2 text-xs text-gray-500">
             {entry.demo.classifications.map((c) => c.label).join(' · ')}
           </span>
         ) : null}
       </div>
-      <span className="shrink-0 text-sm tabular-nums text-gray-700 dark:text-gray-300">
+      <span className="shrink-0 text-sm tabular-nums text-gray-700">
         {formatValue(board, entry.value)}
       </span>
     </li>
@@ -102,7 +103,7 @@ export function RankingsPage() {
       if (board !== 'avg') request.board = board;
       if (range !== 'all') request.range = range;
       const response = await listRankings(request);
-      if (response.status !== 200) throw new Error(`榜单加载失败（HTTP ${response.status}）`);
+      if (response.status !== 200) throw new Error('榜单加载失败（HTTP ' + response.status + '）');
       return response.data;
     },
   });
@@ -118,15 +119,12 @@ export function RankingsPage() {
   const items = query.data?.items ?? [];
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-4 py-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">作品榜</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          只统计当前已上架的作品；并列按「平均分 → 评分人数 → 5 分票」，最后比较晚上架。
-        </p>
-      </header>
-
-      <div className="mb-6 flex flex-wrap items-center gap-2">
+    <Page
+      width="narrow"
+      title="作品榜"
+      description="只统计当前已上架的作品；并列按「平均分 → 评分人数 → 5 分票」，最后比较晚上架。"
+    >
+      <div className="mt-6 flex flex-wrap items-center gap-2">
         {BOARD_OPTIONS.map((option) => (
           <Button
             key={option.value}
@@ -149,35 +147,39 @@ export function RankingsPage() {
         </div>
       </div>
 
-      {query.isPending ? <Skeleton lines={6} /> : null}
+      <div className="mt-6">
+        {query.isPending ? <Skeleton lines={6} /> : null}
 
-      {query.isError ? (
-        <ErrorState
-          title="榜单加载失败"
-          description={query.error instanceof Error ? query.error.message : '网络异常，请稍后再试'}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
-      ) : null}
+        {query.isError ? (
+          <ErrorState
+            title="榜单加载失败"
+            description={
+              query.error instanceof Error ? query.error.message : '网络异常，请稍后再试'
+            }
+            onRetry={() => void query.refetch()}
+            retrying={query.isFetching}
+          />
+        ) : null}
 
-      {query.data && items.length === 0 ? (
-        <EmptyState
-          title={RATING_BOARDS.includes(board) ? '还没有人评分' : '还没有作品'}
-          description={
-            RATING_BOARDS.includes(board)
-              ? '这个榜只统计已经有人评分的作品，所以现在还是空的。'
-              : '等作品上架之后，这里会按综合热度排序。'
-          }
-        />
-      ) : null}
+        {query.data && items.length === 0 ? (
+          <EmptyState
+            title={RATING_BOARDS.includes(board) ? '还没有人评分' : '还没有作品'}
+            description={
+              RATING_BOARDS.includes(board)
+                ? '这个榜只统计已经有人评分的作品，所以现在还是空的。'
+                : '等作品上架之后，这里会按综合热度排序。'
+            }
+          />
+        ) : null}
 
-      {items.length > 0 ? (
-        <ol className="list-none">
-          {items.map((entry) => (
-            <Row key={entry.demo.slug} entry={entry} board={board} />
-          ))}
-        </ol>
-      ) : null}
-    </section>
+        {items.length > 0 ? (
+          <ol className="list-none">
+            {items.map((entry) => (
+              <Row key={entry.demo.slug} entry={entry} board={board} />
+            ))}
+          </ol>
+        ) : null}
+      </div>
+    </Page>
   );
 }
