@@ -152,6 +152,254 @@
         "optional": false
       }
     },
+    "BenchmarkImportBenchmark": {
+      "attribution": {
+        "type": "string",
+        "optional": true
+      },
+      "category": {
+        "type": "string",
+        "optional": true
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "displayTier": {
+        "type": "BenchmarkImportBenchmarkDisplayTier",
+        "optional": true
+      },
+      "homepageUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "license": {
+        "type": "string",
+        "optional": true
+      },
+      "licenseUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "publisher": {
+        "type": "string",
+        "optional": true
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "BenchmarkImportCounts": {
+      "benchmarks": {
+        "type": "int",
+        "optional": false
+      },
+      "metrics": {
+        "type": "int",
+        "optional": false
+      },
+      "scores": {
+        "type": "int",
+        "optional": false
+      },
+      "versions": {
+        "type": "int",
+        "optional": false
+      }
+    },
+    "BenchmarkImportMetric": {
+      "benchmarkSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "higherIsBetter": {
+        "type": "bool",
+        "optional": true
+      },
+      "isPrimary": {
+        "type": "bool",
+        "optional": true
+      },
+      "key": {
+        "type": "string",
+        "optional": false
+      },
+      "label": {
+        "type": "string",
+        "optional": false
+      },
+      "metricKind": {
+        "type": "string",
+        "optional": true
+      },
+      "note": {
+        "type": "string",
+        "optional": true
+      },
+      "scaleMax": {
+        "type": "float64",
+        "optional": true
+      },
+      "scaleMin": {
+        "type": "float64",
+        "optional": true
+      },
+      "sort": {
+        "type": "int",
+        "optional": true
+      },
+      "unit": {
+        "type": "string",
+        "optional": true
+      },
+      "version": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "BenchmarkImportPayload": {
+      "benchmarks": {
+        "type": "[]BenchmarkImportBenchmark",
+        "optional": true
+      },
+      "metrics": {
+        "type": "[]BenchmarkImportMetric",
+        "optional": true
+      },
+      "scores": {
+        "type": "[]BenchmarkImportScore",
+        "optional": true
+      },
+      "versions": {
+        "type": "[]BenchmarkImportVersion",
+        "optional": true
+      }
+    },
+    "BenchmarkImportRequest": {
+      "dryRun": {
+        "type": "bool",
+        "optional": true
+      },
+      "payload": {
+        "type": "BenchmarkImportPayload",
+        "optional": false
+      }
+    },
+    "BenchmarkImportResult": {
+      "created": {
+        "type": "BenchmarkImportCounts",
+        "optional": false
+      },
+      "dryRun": {
+        "type": "bool",
+        "optional": false
+      },
+      "unmatchedModels": {
+        "type": "[]string",
+        "optional": false
+      },
+      "updated": {
+        "type": "BenchmarkImportCounts",
+        "optional": false
+      }
+    },
+    "BenchmarkImportScore": {
+      "benchmarkSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "externalName": {
+        "type": "string",
+        "optional": false
+      },
+      "metricKey": {
+        "type": "string",
+        "optional": false
+      },
+      "note": {
+        "type": "string",
+        "optional": true
+      },
+      "rank": {
+        "type": "int",
+        "optional": true
+      },
+      "ranked": {
+        "type": "bool",
+        "optional": true
+      },
+      "rawScore": {
+        "type": "float64",
+        "optional": false
+      },
+      "sampleSize": {
+        "type": "int",
+        "optional": true
+      },
+      "sourceUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "uncertaintyLower": {
+        "type": "float64",
+        "optional": true
+      },
+      "uncertaintyUpper": {
+        "type": "float64",
+        "optional": true
+      },
+      "version": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "BenchmarkImportVersion": {
+      "asOf": {
+        "type": "openapi_types.Date",
+        "optional": false
+      },
+      "benchmarkSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "coverage": {
+        "type": "string",
+        "optional": true
+      },
+      "note": {
+        "type": "string",
+        "optional": true
+      },
+      "participantCount": {
+        "type": "int",
+        "optional": true
+      },
+      "scoreMax": {
+        "type": "float64",
+        "optional": true
+      },
+      "scoreMin": {
+        "type": "float64",
+        "optional": true
+      },
+      "sourceType": {
+        "type": "string",
+        "optional": true
+      },
+      "sourceUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "version": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "Classification": {
       "aliases": {
         "type": "[]string",
@@ -2080,6 +2328,11 @@
       "approved",
       "rejected"
     ],
+    "BenchmarkImportBenchmarkDisplayTier": [
+      "cite",
+      "link",
+      "table"
+    ],
     "ClassificationDimension": [
       "genre",
       "subject",
@@ -2379,6 +2632,11 @@
     "POST /api/v1/admin/appeals/{id}/review": {
       "method": "ReviewAdminAppeal",
       "pathParams": 1,
+      "params": null
+    },
+    "POST /api/v1/admin/benchmarks/import": {
+      "method": "ImportBenchmarks",
+      "pathParams": 0,
       "params": null
     },
     "GET /api/v1/admin/demos/{slug}/channels": {

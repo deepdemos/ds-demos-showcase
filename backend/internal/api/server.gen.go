@@ -20,6 +20,9 @@ type ServerInterface interface {
 	// 裁决申诉
 	// (POST /api/v1/admin/appeals/{id}/review)
 	ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id int)
+	// 导入一份第三方基准快照
+	// (POST /api/v1/admin/benchmarks/import)
+	ImportBenchmarks(w http.ResponseWriter, r *http.Request)
 	// 看这个作品挂在哪些渠道上
 	// (GET /api/v1/admin/demos/{slug}/channels)
 	ListDemoChannels(w http.ResponseWriter, r *http.Request, slug string)
@@ -248,6 +251,12 @@ func (_ Unimplemented) ListAdminAppeals(w http.ResponseWriter, r *http.Request, 
 // 裁决申诉
 // (POST /api/v1/admin/appeals/{id}/review)
 func (_ Unimplemented) ReviewAdminAppeal(w http.ResponseWriter, r *http.Request, id int) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 导入一份第三方基准快照
+// (POST /api/v1/admin/benchmarks/import)
+func (_ Unimplemented) ImportBenchmarks(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -757,6 +766,26 @@ func (siw *ServerInterfaceWrapper) ReviewAdminAppeal(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReviewAdminAppeal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportBenchmarks operation middleware
+func (siw *ServerInterfaceWrapper) ImportBenchmarks(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportBenchmarks(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2960,6 +2989,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/appeals/{id}/review", wrapper.ReviewAdminAppeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/benchmarks/import", wrapper.ImportBenchmarks)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/demos/{slug}/channels", wrapper.ListDemoChannels)

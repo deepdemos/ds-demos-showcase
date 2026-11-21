@@ -426,6 +426,8 @@ const contractDocs = () => ({
   lifecycle: CONTRACT_LIFECYCLE,
   // 目录表种子与 CHECK 取值域的事实源已搬到 db/schema；测试用同一份 fixture 喂给 schema 位
   schema: CONTRACT_STD,
+  // 迁移默认为空：fixture 只描述基线，不许被仓库里真实迁移的追加行污染。
+  migrations: '',
 });
 
 test('标准对象门禁：章节级锚点必须写在副本之前', () => {

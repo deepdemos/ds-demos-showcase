@@ -1168,6 +1168,22 @@
           "name": "TestIntegrationWithdrawProposal"
         }
       }
+    ],
+    "POST /api/v1/admin/benchmarks/import": [
+      {
+        "case": "没有 benchmark.import 权限一律 403，不做「先导入再说」",
+        "test": {
+          "file": "backend/internal/httpapi/benchmarks_import_integration_test.go",
+          "name": "TestIntegrationImportBenchmarksRequiresPermission"
+        }
+      },
+      {
+        "case": "cite 档带分数整批 422 —— 这类源禁止经 API 分发结构化数据",
+        "test": {
+          "file": "backend/internal/httpapi/benchmarks_import_integration_test.go",
+          "name": "TestIntegrationImportBenchmarksRejectsCiteTierScores"
+        }
+      }
     ]
   },
   "outsideContract": {

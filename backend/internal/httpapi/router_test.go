@@ -232,6 +232,10 @@ func (s *stub) SubmitProposal(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "submit-proposal")
 }
 
+func (s *stub) ImportBenchmarks(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "import-benchmarks")
+}
+
 func (s *stub) WithdrawProposal(_ http.ResponseWriter, _ *http.Request, id int) {
 	s.hits = append(s.hits, "withdraw-proposal:"+strconv.Itoa(id))
 }
@@ -337,6 +341,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/admin/proposals/batch", "batch-proposals"},
 		{http.MethodPost, "/api/v1/proposals", "submit-proposal"},
 		{http.MethodPost, "/api/v1/proposals/12/withdraw", "withdraw-proposal:12"},
+		{http.MethodPost, "/api/v1/admin/benchmarks/import", "import-benchmarks"},
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
 		{http.MethodGet, "/api/v1/admin/appeals", "admin-appeals"},

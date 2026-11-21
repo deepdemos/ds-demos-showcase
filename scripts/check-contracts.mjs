@@ -66,12 +66,26 @@ export function parsePermissionRefs(text, prefixes, verbs) {
 }
 
 /** 解析 `INSERT INTO <table> (...) VALUES (...), (...);` 里的首列。 */
+/**
+ * 抽某张目录表的全部种子键。
+ *
+ * **跨多个 INSERT 块累加**是有意的：基线种子在 `db/schema/*.sql`，而基线之后新增的取值
+ * 只能来自 `db/migrations/*.sql`（基线冻结，不再改）。早先只取第一块，于是「加一个审计实体
+ * 类型」这种合法动作永远过不了门禁 —— 门禁把唯一合法的扩法判成了违规。
+ */
 export function parseSeeds(text, table) {
-  const start = text.indexOf(`INSERT INTO ${table}`);
-  if (start < 0) return null;
-  const end = text.indexOf(';', start);
-  const block = text.slice(start, end < 0 ? text.length : end);
-  return [...block.matchAll(/\(\s*'([^']+)'/g)].map((m) => m[1]);
+  const marker = `INSERT INTO ${table}`;
+  const keys = [];
+  let from = 0;
+  for (;;) {
+    const start = text.indexOf(marker, from);
+    if (start < 0) break;
+    const end = text.indexOf(';', start);
+    const block = text.slice(start, end < 0 ? text.length : end);
+    keys.push(...[...block.matchAll(/\(\s*'([^']+)'/g)].map((m) => m[1]));
+    from = end < 0 ? text.length : end + 1;
+  }
+  return keys.length > 0 ? keys : null;
 }
 
 /** 正文里「**N 条**」这种声明（取离 `anchor` 最近的那一处）。 */
@@ -135,8 +149,19 @@ export function inspectContracts(docs, root = process.cwd()) {
     }
   })()].join('\n');
 
+  // 目录表的取值可能由迁移追加（基线冻结），所以种子解析要连迁移一起看。
+  // 测试可以注入 `migrations`（空串 = 只看基线）；生产路径从仓库读。
+  const migrations = docs.migrations ?? [...(function* () {
+    const dir = path.join(root, 'db', 'migrations');
+    if (!fs.existsSync(dir)) return;
+    for (const f of fs.readdirSync(dir).sort()) {
+      if (f.endsWith('.sql')) yield fs.readFileSync(path.join(dir, f), 'utf8');
+    }
+  })()].join('\n');
+  const seedSource = schema + '\n' + migrations;
+
   // B 审计动作
-  const actions = parseSeeds(schema, 'audit_actions');
+  const actions = parseSeeds(seedSource, 'audit_actions');
   if (!actions) push('db/schema/20-governance.sql: 没有解析到 audit_actions 种子');
   else {
     const dup = actions.filter((k, i) => actions.indexOf(k) !== i);
@@ -151,7 +176,7 @@ export function inspectContracts(docs, root = process.cwd()) {
   }
 
   // C 审计实体类型
-  const entities = parseSeeds(schema, 'audit_entity_types');
+  const entities = parseSeeds(seedSource, 'audit_entity_types');
   if (!entities) push('db/schema/20-governance.sql: 没有解析到 audit_entity_types 种子');
   else {
     const dup = entities.filter((k, i) => entities.indexOf(k) !== i);
@@ -163,7 +188,7 @@ export function inspectContracts(docs, root = process.cwd()) {
   }
 
   // D GC 对象类型 + 注册表引用
-  const gcKinds = parseSeeds(schema, 'gc_kinds');
+  const gcKinds = parseSeeds(seedSource, 'gc_kinds');
   if (!gcKinds) push('标准对象 §EN-7: 没有解析到 gc_kinds 种子（别再写成散文了，散文没法被机器校验）');
   const registry = parseRegistryRefs(docs.lifecycle);
   if (gcKinds) {
