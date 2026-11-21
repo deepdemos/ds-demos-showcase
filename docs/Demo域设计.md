@@ -315,7 +315,9 @@ INDEX  (channel, visibility, featured_order)
 **渠道与可见性正交**：
 
 - 作品可以在 `deep` 上 `listed`，同时在 `astra` 上不存在（无行）
-- `astra` 要求 `lang='en'`，这是**渠道规则**，由发布时校验，不是全局字段。校验点在 `backend/internal/domain/demo/publish.go` 的 `channelRequiredLang`（`Publish` 里判，不只在发布表单里判）——只在浏览器里挡的校验等于没有，`curl` 一次就能绕过去
+- **渠道规则**由发布与上渠道时校验，不是全局字段。现在的实现是 `backend/internal/domain/demo/publish.go` 的 `channelRequiredLang`（只有语言一条）；**#508 拍定扩成 `channelRules{requiredLang, allowedVisibilities}`**，实现在 [#529](https://github.com/deepdemos/ds-demos-showcase/issues/529)。判定口径以这段代码为**唯一真相点** —— 只在浏览器里挡的校验等于没有，`curl` 一次就能绕过去
+  - `astra` 要求 `lang='en'`；`astra` 只允许 `listed` / `unlisted`，**`hidden` 一律 400**（橱窗里「在但看不见」等价于删行）；
+  - `deep` 没有语言要求，三档可见性都可以。
 - 首页精选 = `featured=true` + `visibility='listed'`
 
 **预览与下载的可见性口径**（实现约定，不是新增字段）：
@@ -1098,13 +1100,13 @@ sequenceDiagram
 **落地状态（2026-11-09）——渠道的读与写都齐了**
 
 写侧是 `POST` / `DELETE /admin/demos/{slug}/channels`；读侧补 `GET /admin/demos/{slug}/channels`
-（只给 `demo.publish`）。三个「空」必须分开回答，否则界面只能猜：
+（只给 `demo.curate`）。三个「空」必须分开回答，否则界面只能猜：
 
 | 情况 | 回答 | 为什么不是别的 |
 |---|---|---|
 | 作品不存在 / 已擦除 | `404` | 与公开读口径一致：不泄露存在性 |
 | 作品存在但没有渠道 | `200` + `items: []` | 「一条都没有」是答案，不是错误 |
-| 没有 `demo.publish` | `403` | 与写侧同一权限键——看得见写不了是没有意义的状态 |
+| 没有 `demo.curate` | `403` | 与写侧同一权限键——看得见写不了是没有意义的状态 |
 
 **为什么不塞进详情**：详情是公开读的出口，字段面讲的是「读者看到的这一件作品」；
 渠道是运营视角。混在一起要么让公开字段变胖，要么要按角色裁剪同一份 schema。
@@ -1122,7 +1124,7 @@ sequenceDiagram
 
 | 端点 | 做什么 | 关键判据 |
 |---|---|---|
-| `POST /admin/demos/{slug}/channels` | 追加渠道 / 改某渠道可见性 | 必须已有对外版本（否则 409）；内容 `approved`（否则 409）；渠道已登记且启用（否则 400）；`astra` 只收 `lang=en` |
+| `POST /admin/demos/{slug}/channels` | 追加渠道 / 改某渠道可见性 | 必须已有对外版本（否则 409）；内容 `approved`（否则 409）；渠道已登记且启用（否则 400）；**渠道规则**：`astra` 只收 `lang=en`，且不接受 `hidden`（要撤下请走 DELETE） |
 | `DELETE /admin/demos/{slug}/channels/{channel}` | 从某渠道撤下 | 作品可以仍有别的渠道；**仍是 `published` 却只剩这一个渠道 → 409** |
 
 - **同渠道重复 POST 不新增行**：返回 200 且 `created=false`，改的是可见性 / 语言。
@@ -1540,7 +1542,7 @@ MODEL-001~021 里也没有「作者可以造模型名」这一条。灰测模型
 ## 13. 待定
 
 1. ~~软删除保留期~~（**已定：30 天**，治理域 §9.2 与生命周期 L1 = A，2026-10-30）
-2. `astra` 渠道是否允许 `unlisted`（现在只有 `listed` / 不存在）
+2. ~~`astra` 渠道是否允许 `unlisted`~~（**已定 #508，2026-11-21**：允许 `listed` / `unlisted`，**禁止 `hidden`**；渠道规则见 §7.4）
 3. `Blob` 是否引入引用计数列（现在靠 `DemoRevisionFile` 反查，量大时再引入）
 
 **已定（G15，2026-10-28）**：历史 `version-of` 快照**合并成原作的一个 revision**，**不再引入 `demos.version_of_id`**（`version-of` 只有 2 条引用、其中 1 条已断链 `lofi-studio-32d3fa31`）。Demo 域从此是**作品版本链的唯一事实源**；「A 是 B 的二创 / 衍生」这类跨作品关系若将来需要，另立引用表，不复用 `version_of`。
