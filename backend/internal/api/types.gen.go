@@ -41,6 +41,13 @@ const (
 	AppealReviewResultStatusRejected AppealReviewResultStatus = "rejected"
 )
 
+// Defines values for BenchmarkImportBenchmarkDisplayTier.
+const (
+	Cite  BenchmarkImportBenchmarkDisplayTier = "cite"
+	Link  BenchmarkImportBenchmarkDisplayTier = "link"
+	Table BenchmarkImportBenchmarkDisplayTier = "table"
+)
+
 // Defines values for ClassificationDimension.
 const (
 	ClassificationDimensionGenre     ClassificationDimension = "genre"
@@ -522,6 +529,116 @@ type AppealReviewResult struct {
 
 // AppealReviewResultStatus defines model for AppealReviewResult.Status.
 type AppealReviewResultStatus string
+
+// BenchmarkImportBenchmark defines model for BenchmarkImportBenchmark.
+type BenchmarkImportBenchmark struct {
+	Attribution *string `json:"attribution,omitempty"`
+
+	// Category 逗号分隔的多值枚举（coding / math / agent / general / multimodal / safety / other）
+	Category    *string `json:"category,omitempty"`
+	Description *string `json:"description,omitempty"`
+
+	// DisplayTier 只有 table 允许带分数；cite / link 带了分数整批 422
+	DisplayTier *BenchmarkImportBenchmarkDisplayTier `json:"displayTier,omitempty"`
+	HomepageUrl *string                              `json:"homepageUrl,omitempty"`
+	License     *string                              `json:"license,omitempty"`
+	LicenseUrl  *string                              `json:"licenseUrl,omitempty"`
+	Name        string                               `json:"name"`
+	Publisher   *string                              `json:"publisher,omitempty"`
+
+	// Slug 站内地址段；同 slug 视为同一张榜（upsert）
+	Slug string `json:"slug"`
+}
+
+// BenchmarkImportBenchmarkDisplayTier 只有 table 允许带分数；cite / link 带了分数整批 422
+type BenchmarkImportBenchmarkDisplayTier string
+
+// BenchmarkImportCounts defines model for BenchmarkImportCounts.
+type BenchmarkImportCounts struct {
+	Benchmarks int `json:"benchmarks"`
+	Metrics    int `json:"metrics"`
+	Scores     int `json:"scores"`
+	Versions   int `json:"versions"`
+}
+
+// BenchmarkImportMetric defines model for BenchmarkImportMetric.
+type BenchmarkImportMetric struct {
+	BenchmarkSlug  string   `json:"benchmarkSlug"`
+	HigherIsBetter *bool    `json:"higherIsBetter,omitempty"`
+	IsPrimary      *bool    `json:"isPrimary,omitempty"`
+	Key            string   `json:"key"`
+	Label          string   `json:"label"`
+	MetricKind     *string  `json:"metricKind,omitempty"`
+	Note           *string  `json:"note,omitempty"`
+	ScaleMax       *float64 `json:"scaleMax,omitempty"`
+	ScaleMin       *float64 `json:"scaleMin,omitempty"`
+	Sort           *int     `json:"sort,omitempty"`
+	Unit           *string  `json:"unit,omitempty"`
+	Version        string   `json:"version"`
+}
+
+// BenchmarkImportPayload 一份快照的四个层级。父行用 slug / version / key 引用，不传库内 id。
+type BenchmarkImportPayload struct {
+	Benchmarks *[]BenchmarkImportBenchmark `json:"benchmarks,omitempty"`
+	Metrics    *[]BenchmarkImportMetric    `json:"metrics,omitempty"`
+	Scores     *[]BenchmarkImportScore     `json:"scores,omitempty"`
+	Versions   *[]BenchmarkImportVersion   `json:"versions,omitempty"`
+}
+
+// BenchmarkImportRequest defines model for BenchmarkImportRequest.
+type BenchmarkImportRequest struct {
+	// DryRun true 时只返回「将会发生什么」，不写库
+	DryRun *bool `json:"dryRun,omitempty"`
+
+	// Payload 一份快照的四个层级。父行用 slug / version / key 引用，不传库内 id。
+	Payload BenchmarkImportPayload `json:"payload"`
+}
+
+// BenchmarkImportResult defines model for BenchmarkImportResult.
+type BenchmarkImportResult struct {
+	Created BenchmarkImportCounts `json:"created"`
+	DryRun  bool                  `json:"dryRun"`
+
+	// UnmatchedModels 解析不到站内模型的上游名（去重、按出现顺序）
+	UnmatchedModels []string              `json:"unmatchedModels"`
+	Updated         BenchmarkImportCounts `json:"updated"`
+}
+
+// BenchmarkImportScore defines model for BenchmarkImportScore.
+type BenchmarkImportScore struct {
+	BenchmarkSlug string `json:"benchmarkSlug"`
+
+	// ExternalName 上游榜单里的写法；解析不到站内模型时保留原样并标 unmatched
+	ExternalName     string   `json:"externalName"`
+	MetricKey        string   `json:"metricKey"`
+	Note             *string  `json:"note,omitempty"`
+	Rank             *int     `json:"rank,omitempty"`
+	Ranked           *bool    `json:"ranked,omitempty"`
+	RawScore         float64  `json:"rawScore"`
+	SampleSize       *int     `json:"sampleSize,omitempty"`
+	SourceUrl        *string  `json:"sourceUrl,omitempty"`
+	UncertaintyLower *float64 `json:"uncertaintyLower,omitempty"`
+	UncertaintyUpper *float64 `json:"uncertaintyUpper,omitempty"`
+	Version          string   `json:"version"`
+}
+
+// BenchmarkImportVersion defines model for BenchmarkImportVersion.
+type BenchmarkImportVersion struct {
+	AsOf          openapi_types.Date `json:"asOf"`
+	BenchmarkSlug string             `json:"benchmarkSlug"`
+
+	// Coverage full / partial
+	Coverage         *string  `json:"coverage,omitempty"`
+	Note             *string  `json:"note,omitempty"`
+	ParticipantCount *int     `json:"participantCount,omitempty"`
+	ScoreMax         *float64 `json:"scoreMax,omitempty"`
+	ScoreMin         *float64 `json:"scoreMin,omitempty"`
+
+	// SourceType leaderboard / paper / self_reported …
+	SourceType *string `json:"sourceType,omitempty"`
+	SourceUrl  *string `json:"sourceUrl,omitempty"`
+	Version    string  `json:"version"`
+}
 
 // Classification defines model for Classification.
 type Classification struct {
@@ -2405,6 +2522,9 @@ type ListUserDemosParams struct {
 
 // ReviewAdminAppealJSONRequestBody defines body for ReviewAdminAppeal for application/json ContentType.
 type ReviewAdminAppealJSONRequestBody = AppealDecision
+
+// ImportBenchmarksJSONRequestBody defines body for ImportBenchmarks for application/json ContentType.
+type ImportBenchmarksJSONRequestBody = BenchmarkImportRequest
 
 // AddDemoChannelJSONRequestBody defines body for AddDemoChannel for application/json ContentType.
 type AddDemoChannelJSONRequestBody = DemoChannelRequest
