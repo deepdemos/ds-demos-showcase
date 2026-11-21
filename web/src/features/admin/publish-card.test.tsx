@@ -63,6 +63,22 @@ describe('PublishCard', () => {
     expect(screen.getByText(/Astra 是英文橱窗/)).toBeInTheDocument();
   });
 
+  test('astra 不收「隐藏」——这一档消失，已选的会被摆正', async () => {
+    renderCard();
+
+    // deep 上三档都在（主站要「隐藏」：违规作品留档但不可见）。
+    expect(screen.getByRole('option', { name: '隐藏' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('可见性'), { target: { value: 'hidden' } });
+    expect(screen.getByLabelText('可见性')).toHaveValue('hidden');
+
+    fireEvent.change(screen.getByLabelText('渠道'), { target: { value: 'astra' } });
+
+    // 渠道规则（#508）：橱窗里「在但看不见」等价于删渠道行，后端会 400。
+    // 所以这里既要把选项拿掉，也要把已经选中的值摆回一个能成立的组合。
+    expect(screen.queryByRole('option', { name: '隐藏' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('可见性')).toHaveValue('listed');
+  });
+
   test('非 2xx 要报错并带上后端 message——orval 非 2xx 不 throw', async () => {
     // 409 = 这条作品此刻不在可发布状态（例如刚被退回审核）。
     publishDemo.mockResolvedValue({ status: 409, data: { message: '作品不处于可发布状态' } });

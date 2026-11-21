@@ -205,7 +205,9 @@ export const getAddDemoChannelUrl = (slug: string,) => {
  * - 作品必须已有对外版本（`published_revision_id` 非空），否则 409——先从 `publishDemo` 发布；
  * - 内容必须 `approved`，否则 409；
  * - 渠道必须在 `channels` 里且 `status='active'`，否则 400；
- * - `astra` 只收 `lang='en'`，与 `publishDemo` 同一张表判定。
+ * - 渠道规则与 `publishDemo` **同一张表判定**（`backend/internal/domain/demo/publish.go`
+ *   的 `channelRules`）：`astra` 只收 `lang='en'`，且**不接受 `hidden`** ——
+ *   橱窗里「在但看不见」与删掉渠道行等价，要撤下请走 `DELETE`（#508）。
  *
  * 同渠道重复调用不会新增行，而是改可见性（返回 200 且 `created=false`）；
  * 新建渠道返回 201 且 `created=true`。

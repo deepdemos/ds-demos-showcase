@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -178,9 +179,9 @@ func TestIntegrationRemoveChannel(t *testing.T) {
 	}
 }
 
-func TestIntegrationChannelRequiresPublishPermission(t *testing.T) {
+func TestIntegrationChannelRequiresCuratePermission(t *testing.T) {
 	h, idSvc, pool := newChannelHandler(t)
-	// 普通作者自己投稿（有会话，但没有 demo.publish）。
+	// 普通作者自己投稿（有会话，但没有 demo.curate —— 渠道是策展动作，不是投稿动作）。
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
 		Email:       "it-ch-e@example.com",
 		Password:    "channeltest123",
@@ -194,7 +195,49 @@ func TestIntegrationChannelRequiresPublishPermission(t *testing.T) {
 	rec := channelCall(t, h, http.MethodPost, "/api/v1/admin/demos/"+slug+"/channels", sid,
 		map[string]any{"channel": "astra", "visibility": "listed", "lang": "en"})
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("没有 demo.publish 就追加渠道 = %d，想要 403：%s", rec.Code, rec.Body.String())
+		t.Fatalf("没有 demo.curate 就追加渠道 = %d，想要 403：%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestIntegrationChannelVisibilityRules 钉住渠道规则（#508）。
+//
+// 这一条不是「多一个 400」，而是「同一个结果不允许有两种写法」：astra 上 hidden
+// 与删掉渠道行完全等价，留着它只会让人以为撤下了 —— 行还在，谁看 demo_channels
+// 都以为它还挂在橱窗上。
+func TestIntegrationChannelVisibilityRules(t *testing.T) {
+	h, idSvc, pool := newChannelHandler(t)
+	admin := mkAdmin(t, pool, idSvc, "ch-v")
+	slug := publishedDemo(t, h, pool, admin, "渠道规则用例")
+
+	// astra + hidden → 400，而且库里不留行。
+	rec := channelCall(t, h, http.MethodPost, "/api/v1/admin/demos/"+slug+"/channels", admin,
+		map[string]any{"channel": "astra", "visibility": "hidden", "lang": "en"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("astra + hidden = %d，想要 400：%s", rec.Code, rec.Body.String())
+	}
+	if got := channelsOf(t, pool, slug); len(got) != 1 || got["deep"] != "listed" {
+		t.Fatalf("被拒之后渠道 = %v，想要仍然只有 deep/listed", got)
+	}
+	// 文案要指出下一步做什么，而不是只说「取值非法」。
+	if body := rec.Body.String(); !strings.Contains(body, "删掉这个渠道行") {
+		t.Fatalf("astra + hidden 的文案 = %s，想要指向「删掉这个渠道行」", body)
+	}
+
+	// 同一个渠道的 unlisted 仍然允许（这是 #508 追认的那一档）。
+	rec = channelCall(t, h, http.MethodPost, "/api/v1/admin/demos/"+slug+"/channels", admin,
+		map[string]any{"channel": "astra", "visibility": "unlisted", "lang": "en"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("astra + unlisted = %d，想要 201：%s", rec.Code, rec.Body.String())
+	}
+
+	// deep + hidden 不受影响：主站三档都要。
+	rec = channelCall(t, h, http.MethodPost, "/api/v1/admin/demos/"+slug+"/channels", admin,
+		map[string]any{"channel": "deep", "visibility": "hidden", "lang": "zh"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deep + hidden = %d，想要 200（同渠道重复调用 = 改可见性）：%s", rec.Code, rec.Body.String())
+	}
+	if got := channelsOf(t, pool, slug); got["deep"] != "hidden" || got["astra"] != "unlisted" {
+		t.Fatalf("渠道 = %v，想要 deep=hidden / astra=unlisted", got)
 	}
 }
 
@@ -276,7 +319,7 @@ func TestIntegrationListDemoChannels(t *testing.T) {
 		t.Fatalf("不存在的作品 = %d，想要 404", rec.Code)
 	}
 
-	// 没权限 → 403（作者没有 demo.publish）。
+	// 没权限 → 403（作者没有 demo.curate）。
 	rec = channelCall(t, h, http.MethodGet, "/api/v1/admin/demos/"+slug+"/channels", sid, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("作者读渠道列表 = %d，想要 403", rec.Code)
