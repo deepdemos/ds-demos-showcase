@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState, type KeyboardEvent } from 'react';
 
 /**
  * 五颗星评分控件。
@@ -14,7 +14,7 @@ import { useId, useState } from 'react';
  * 这里用 `role="radiogroup"` + 每个按钮 `role="radio"`：既保住语义（读屏会说
  * 「第 3 颗，共 5 颗，已选中」），也让点击直接落到具体分值上。
  *
- * # 为什么支持 again-点击撤销
+ * # 为什么支持再次点击撤销
  *
  * 点已经选中的那颗星表示「我不想打这个分了」。没有这个动作，用户改主意的唯一办法
  * 是去找页面别处的「取消评分」——而评分区通常没有那个按钮。
@@ -49,6 +49,7 @@ export function Rating({ value, onChange, disabled, label, showValueText }: Rati
 
   // 悬停预览：鼠标经过第 4 颗星时，前面四颗都亮。移开后回到真实分值。
   const shown = hover || value;
+  const focusValue = value > 0 ? value : 1;
 
   function pick(score: number) {
     if (disabled) return;
@@ -57,14 +58,28 @@ export function Rating({ value, onChange, disabled, label, showValueText }: Rati
     onChange(score === value ? 0 : score);
   }
 
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, score: number) {
+    let next: number | null = null;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = Math.min(5, score + 1);
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = Math.max(1, score - 1);
+    if (event.key === 'Home') next = 1;
+    if (event.key === 'End') next = 5;
+    if (next === null) return;
+    event.preventDefault();
+    // 键盘只负责“移到下一颗星”；边界上 next === value，不能走 pick() 的
+    // “再点一次撤销”分支，否则 5 分局按 → 会把评分清成 0（issue #538）。
+    if (next !== value) onChange(next);
+    document.getElementById(id + '-star-' + next)?.focus();
+  }
+
   return (
     <div className="flex items-center gap-2">
-      <span id={`${id}-label`} className="text-sm text-gray-600 dark:text-gray-400">
+      <span id={id + '-label'} className="text-sm text-gray-600 dark:text-gray-400">
         {label}
       </span>
       <div
         role="radiogroup"
-        aria-labelledby={`${id}-label`}
+        aria-labelledby={id + '-label'}
         aria-disabled={disabled || undefined}
         className="flex items-center gap-0.5"
         onMouseLeave={() => setHover(0)}
@@ -74,17 +89,22 @@ export function Rating({ value, onChange, disabled, label, showValueText }: Rati
           return (
             <button
               key={score}
+              id={id + '-star-' + score}
               type="button"
               role="radio"
               aria-checked={score === value}
-              aria-label={score === value ? `取消评分（当前 ${score} 分）` : `打 ${score} 分`}
+              aria-label={
+                score === value ? '取消评分（当前 ' + score + ' 分）' : '打 ' + score + ' 分'
+              }
               disabled={disabled}
+              tabIndex={score === focusValue ? 0 : -1}
               onMouseEnter={() => setHover(score)}
               onFocus={() => setHover(score)}
               onBlur={() => setHover(0)}
+              onKeyDown={(event) => onKeyDown(event, score)}
               onClick={() => pick(score)}
               className={[
-                'rounded p-0.5 transition-colors',
+                'appearance-none rounded border-0 bg-transparent p-0.5 transition-colors',
                 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
                 'focus-visible:outline-blue-500',
                 disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
@@ -100,7 +120,7 @@ export function Rating({ value, onChange, disabled, label, showValueText }: Rati
         <span className="text-sm tabular-nums text-gray-600 dark:text-gray-400">
           {/* 「你还没评分」说的是我自己的票；页面旁边那句「还没有人评分」说的是全站。
               两句话原本都写成「未评分」，看起来像自相矛盾（issue #377）。 */}
-          {value > 0 ? `${value} 分` : '你还没评分'}
+          {value > 0 ? value + ' 分' : '你还没评分'}
         </span>
       ) : null}
     </div>
