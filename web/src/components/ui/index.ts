@@ -6,6 +6,8 @@ export { EmptyState, type EmptyStateProps } from './empty-state';
 export { FileInput, type FileInputProps } from './file-input';
 export { ErrorState, type ErrorStateProps } from './error-state';
 export { Input, type InputProps } from './input';
+export { Menu, type MenuItem, type MenuProps } from './menu';
+export { NavList, type NavListItem, type NavListProps } from './nav-list';
 export { Pagination, type PaginationProps } from './pagination';
 export { Rating, type RatingProps } from './rating';
 export { Select, type SelectOption, type SelectProps } from './select';
