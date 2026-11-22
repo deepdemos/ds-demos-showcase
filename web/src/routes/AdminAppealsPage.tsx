@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, EmptyState, ErrorState, Skeleton, Textarea } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { listAdminAppeals, reviewAdminAppeal } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -51,18 +52,19 @@ export function AdminAppealsPage() {
   const items = list.data?.items ?? [];
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        <Link className="underline" to="/admin">
-          管理
-        </Link>{' '}
-        · 申诉
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">待处理申诉</h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        通过会立刻把作品恢复为 published；驳回保持 removed。裁决说明会显示给作者。
-      </p>
-
+    <Page
+      width="wide"
+      title="待处理申诉"
+      eyebrow={
+        <>
+          <Link className="underline" to="/admin/inbox">
+            管理
+          </Link>{' '}
+          · 申诉
+        </>
+      }
+      description="通过会立刻把作品恢复为 published；驳回保持 removed。裁决说明会显示给作者。"
+    >
       {list.isPending ? (
         <div className="mt-4">
           <Skeleton lines={3} />
@@ -81,7 +83,7 @@ export function AdminAppealsPage() {
       ) : null}
 
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-3 text-sm text-red-600">
           {error}
         </p>
       ) : null}
@@ -97,19 +99,19 @@ export function AdminAppealsPage() {
           <li
             key={item.id}
             data-appeal-id={item.id}
-            className="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+            className="rounded-lg border border-gray-200 p-4"
           >
             <Link className="font-medium underline" to={'/demos/' + item.demoSlug}>
               {item.demoTitle || item.demoSlug}
             </Link>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-xs text-gray-500">
               {item.authorName || '（未知作者）'} ·{' '}
               {new Date(item.createdAt).toLocaleString('zh-CN', { hour12: false })}
             </p>
             <p className="mt-2 text-sm">申诉说明：{item.reason}</p>
 
             <label className="mt-3 block text-sm">
-              <span className="text-gray-500 dark:text-gray-400">裁决说明（可选，给作者看）</span>
+              <span className="text-gray-500">裁决说明（可选，给作者看）</span>
               <Textarea
                 className="mt-1"
                 rows={2}
@@ -141,6 +143,6 @@ export function AdminAppealsPage() {
           </li>
         ))}
       </ul>
-    </section>
+    </Page>
   );
 }

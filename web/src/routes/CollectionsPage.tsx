@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, EmptyState, ErrorState, Input, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { createCollection, listCollections } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -55,14 +56,11 @@ export function CollectionsPage() {
   const custom = items.filter((item) => !item.isDefault);
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">我的收藏夹</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          默认收藏夹始终私有；自定义夹可以选择公开，公开后访客可读（但不能写）。
-        </p>
-      </header>
-
+    <Page
+      width="narrow"
+      title="我的收藏夹"
+      description="默认收藏夹始终私有；自定义夹可以选择公开，公开后访客可读（但不能写）。"
+    >
       <form
         className="mt-4 flex flex-wrap items-end gap-2"
         onSubmit={(event) => {
@@ -76,8 +74,9 @@ export function CollectionsPage() {
         }}
       >
         <label className="min-w-48 flex-1 text-sm">
-          <span className="text-gray-500 dark:text-gray-400">新建收藏夹</span>
+          <span className="text-gray-500">新建收藏夹</span>
           <Input
+            fullWidth
             className="mt-1"
             value={name}
             maxLength={50}
@@ -85,13 +84,13 @@ export function CollectionsPage() {
             onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <Button type="submit" disabled={create.isPending || name.trim() === ''}>
+        <Button type="submit" primary disabled={create.isPending || name.trim() === ''}>
           新建
         </Button>
       </form>
 
       {error ? (
-        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-2 text-sm text-red-600">
           {error}
         </p>
       ) : null}
@@ -126,22 +125,22 @@ export function CollectionsPage() {
               <li key={collection.id}>
                 <Link
                   to={'/me/collections/' + collection.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-4 text-inherit no-underline hover:border-gray-300 dark:border-gray-800 dark:hover:border-gray-700"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-4 text-inherit no-underline hover:border-gray-300"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900 dark:text-gray-100">
+                    <p className="truncate font-medium text-gray-900">
                       {collection.name}
                       {collection.isDefault ? (
                         <span className="ml-2 text-xs text-gray-500">默认</span>
                       ) : null}
                     </p>
                     {collection.description ? (
-                      <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">
+                      <p className="mt-1 truncate text-sm text-gray-500">
                         {collection.description}
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex flex-none items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="flex flex-none items-center gap-3 text-xs text-gray-500">
                     <span>{collection.visibility === 'public' ? '公开' : '私密'}</span>
                     <span>{collection.itemCount} 件</span>
                   </div>
@@ -151,6 +150,6 @@ export function CollectionsPage() {
           )}
         </ul>
       ) : null}
-    </section>
+    </Page>
   );
 }

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, EmptyState, ErrorState, Pagination, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -93,21 +94,18 @@ export function NotificationsPage() {
   });
 
   if (isLoading) return <Skeleton lines={4} />;
-  if (me === null) return <Navigate to="/login?return_to=/notifications" replace />;
+  if (me === null) return <Navigate to="/login?return_to=/me/notifications" replace />;
 
   const items = list.data?.items ?? [];
   const unreadCount = list.data?.unreadCount ?? 0;
   const pageCount = Math.max(1, Math.ceil((list.data?.total ?? 0) / PAGE_SIZE));
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">通知</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            审核结果与收到评分会出现在这里；已读之后仍可回看。
-          </p>
-        </div>
+    <Page
+      width="narrow"
+      title="通知"
+      description="审核结果与收到评分会出现在这里；已读之后仍可回看。"
+      actions={
         <Button
           type="button"
           disabled={unreadCount === 0 || markAll.isPending}
@@ -115,10 +113,10 @@ export function NotificationsPage() {
         >
           全部已读
         </Button>
-      </div>
-
+      }
+    >
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-3 text-sm text-red-600">
           {error}
         </p>
       ) : null}
@@ -160,29 +158,21 @@ export function NotificationsPage() {
                 data-read={item.readAt !== null}
                 className={
                   'rounded-lg border p-4 ' +
-                  (item.readAt === null
-                    ? 'border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900'
-                    : 'border-gray-200 dark:border-gray-800')
+                  (item.readAt === null ? 'border-gray-300 bg-gray-50' : 'border-gray-200')
                 }
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <p className="text-sm font-medium text-gray-900">
                       {item.readAt === null ? (
-                        <span className="mr-2 rounded bg-gray-200 px-1 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                        <span className="mr-2 rounded bg-gray-200 px-1 text-xs text-gray-700">
                           未读
                         </span>
                       ) : null}
                       {notificationTitle(item)}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {formatAt(item.createdAt)}
-                    </p>
-                    {reason ? (
-                      <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-                        理由：{reason}
-                      </p>
-                    ) : null}
+                    <p className="mt-1 text-xs text-gray-500">{formatAt(item.createdAt)}</p>
+                    {reason ? <p className="mt-2 text-sm text-gray-700">理由：{reason}</p> : null}
                     {item.accessible ? (
                       <Link
                         className="mt-2 inline-block text-sm underline"
@@ -191,9 +181,7 @@ export function NotificationsPage() {
                         查看作品
                       </Link>
                     ) : (
-                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                        该作品已不可访问
-                      </p>
+                      <p className="mt-2 text-sm text-gray-500">该作品已不可访问</p>
                     )}
                   </div>
                   {item.readAt === null ? (
@@ -216,6 +204,6 @@ export function NotificationsPage() {
       {items.length > 0 ? (
         <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
       ) : null}
-    </section>
+    </Page>
   );
 }

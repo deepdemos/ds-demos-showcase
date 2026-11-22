@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { Page } from '@/components/layout/page';
 import { PublishCard } from '@/features/admin/publish-card';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -97,13 +98,7 @@ export function AdminReviewPage() {
   // 权限键来自会话（#460）。没有它就只能按角色字符串猜，而 IA §7.2 明令不许。
   const canPublish = me?.permissions?.includes('demo.publish') ?? false;
 
-  if (authLoading) {
-    return (
-      <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
-        <Skeleton lines={3} />
-      </div>
-    );
-  }
+  if (authLoading) return <Skeleton lines={3} />;
   if (me === null) return <Navigate to="/login?return_to=/admin/reviews" replace />;
 
   const forbidden = queue.data?.status === 403;
@@ -114,14 +109,11 @@ export function AdminReviewPage() {
   const expired = queue.data?.status === 401;
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">待审作品</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          按提交时间正序。预览会在新标签页打开——那是作者上传的代码，不在本页里跑。
-        </p>
-      </header>
-
+    <Page
+      width="wide"
+      title="待审作品"
+      description="按提交时间正序。预览会在新标签页打开——那是作者上传的代码，不在本页里跑。"
+    >
       {queue.isPending ? <Skeleton lines={3} /> : null}
 
       {queue.isError || queue.data?.status === 503 ? (
@@ -147,7 +139,7 @@ export function AdminReviewPage() {
           />
           <Link
             to="/login?return_to=/admin/reviews"
-            className="text-sm text-neutral-600 underline hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100"
+            className="text-sm text-neutral-600 underline hover:text-neutral-900"
           >
             去登录
           </Link>
@@ -166,7 +158,7 @@ export function AdminReviewPage() {
       {decide.isError ? (
         // 裁决失败不用 ErrorState：那不是「整块内容加载失败」，
         // 而是一次操作的反馈；给整页错误态会让已加载的队列看起来也没了。
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-red-600">
           {decide.error instanceof Error ? decide.error.message : '裁决失败，请重试'}
         </p>
       ) : null}
@@ -174,13 +166,13 @@ export function AdminReviewPage() {
       <section className="space-y-3">
         <div className="space-y-1">
           <h2 className="text-lg font-medium">已通过 · 待发布</h2>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="text-sm text-neutral-500">
             通过 ≠ 已发布。这里列出所有已通过审核、还没发布的作品；刷新或换人发布都还在。
           </p>
         </div>
         {publishQueue.isPending ? <Skeleton lines={1} /> : null}
         {publishQueue.isError ? (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="text-sm text-red-600">
             待发布列表加载失败，请刷新重试。
           </p>
         ) : null}
@@ -197,12 +189,12 @@ export function AdminReviewPage() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              <p className="text-sm text-neutral-500">
                 已经通过审核，但当前账号没有发布权限；由有发布权限的审核员或管理员发布。
               </p>
             )
           ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">没有待发布的作品。</p>
+            <p className="text-sm text-neutral-500">没有待发布的作品。</p>
           )
         ) : null}
       </section>
@@ -225,7 +217,7 @@ export function AdminReviewPage() {
           ))}
         </ul>
       ) : null}
-    </div>
+    </Page>
   );
 }
 
@@ -243,18 +235,16 @@ function ReviewCard({
   busy: boolean;
 }) {
   return (
-    <li className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <li className="rounded-lg border border-neutral-200 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <h2 className="truncate font-medium">{item.title ?? '（无标题）'}</h2>
-          <p className="truncate text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="truncate text-sm text-neutral-500">
             {item.authorName ?? '（未知作者）'} ·{' '}
             {new Date(item.submittedAt).toLocaleString('zh-CN')}
           </p>
           {item.description ? (
-            <p className="line-clamp-2 text-sm text-neutral-600 dark:text-neutral-300">
-              {item.description}
-            </p>
+            <p className="line-clamp-2 text-sm text-neutral-600">{item.description}</p>
           ) : null}
         </div>
         <Link
@@ -268,7 +258,7 @@ function ReviewCard({
       </div>
 
       <label className="mt-3 block text-sm">
-        <span className="text-neutral-500 dark:text-neutral-400">说明（可选，驳回时建议写）</span>
+        <span className="text-neutral-500">说明（可选，驳回时建议写）</span>
         <Textarea
           className="mt-1"
           rows={2}
