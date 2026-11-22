@@ -265,6 +265,17 @@ export const pages: readonly PageEntry[] = [
     nav: { area: 'user', label: '浏览历史', order: 30 },
   },
   {
+    id: 'settings',
+    path: '/me/settings',
+    title: '设置',
+    description: '账号资料、偏好与内容管理入口。',
+    group: 'me',
+    access: { kind: 'auth' },
+    width: 'narrow',
+    availability: 'ready',
+    nav: { area: 'user', label: '设置', order: 50 },
+  },
+  {
     id: 'login',
     path: '/login',
     title: '登录',
