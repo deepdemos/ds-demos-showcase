@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Button, EmptyState, ErrorState, Pagination, Select, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import {
   listClassifications,
   listDemos,
@@ -135,15 +136,15 @@ export function ClassificationPage() {
 
   if (catalog.isPending) {
     return (
-      <section className="mx-auto w-full max-w-5xl px-4 py-8">
+      <Page width="wide" title="分类">
         <Skeleton lines={4} />
-      </section>
+      </Page>
     );
   }
 
   if ((catalog.isError && !catalogData) || missing) {
     return (
-      <section className="mx-auto w-full max-w-5xl px-4 py-8">
+      <Page width="wide" title="分类">
         {catalog.isError ? (
           <ErrorState
             title="分类目录加载失败"
@@ -162,7 +163,7 @@ export function ClassificationPage() {
             }
           />
         )}
-      </section>
+      </Page>
     );
   }
 
@@ -175,18 +176,18 @@ export function ClassificationPage() {
   );
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-4 py-8">
-      <header className="space-y-1">
-        <p className="text-sm text-gray-500 dark:text-gray-400">{dimensionMeta.label}分类</p>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{value.label}</h1>
-        {value.description ? (
-          <p className="max-w-2xl text-sm text-gray-600 dark:text-gray-300">{value.description}</p>
-        ) : null}
-        <p className="text-sm text-gray-500 dark:text-gray-400">共 {total} 个作品</p>
-      </header>
+    <Page
+      width="wide"
+      title={value.label}
+      eyebrow={dimensionMeta.label + '分类'}
+      description={'共 ' + total + ' 个作品'}
+    >
+      {value.description ? (
+        <p className="mt-2 max-w-2xl text-sm text-gray-600">{value.description}</p>
+      ) : null}
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-sm text-gray-500 dark:text-gray-400">筛选与作品库同源</span>
+        <span className="text-sm text-gray-500">筛选与作品库同源</span>
         <div className="w-32">
           <Select
             ariaLabel="排序"
@@ -198,7 +199,7 @@ export function ClassificationPage() {
       </div>
 
       {catalog.isError && catalogData ? (
-        <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-4 text-sm text-red-600">
           分类目录刷新失败，下面的内容仍可阅读。
           <Button type="button" className="ml-2" onClick={() => void catalog.refetch()}>
             重试
@@ -260,19 +261,19 @@ export function ClassificationPage() {
               <li key={demo.slug}>
                 <Link
                   to={'/demos/' + demo.slug}
-                  className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
+                  className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300"
                 >
-                  <div className="mb-3 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-xs text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+                  <div className="mb-3 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-xs text-gray-400">
                     {demo.coverUrl ? (
                       <img src={demo.coverUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
                       '无封面'
                     )}
                   </div>
-                  <h2 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900 dark:text-gray-100">
+                  <h2 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900">
                     {demo.title ?? '（无标题）'}
                   </h2>
-                  <p className="mt-auto pt-3 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-auto pt-3 text-xs text-gray-500">
                     {new Date(demo.createdAt).toLocaleDateString('zh-CN')}
                   </p>
                 </Link>
@@ -281,7 +282,7 @@ export function ClassificationPage() {
           </ul>
 
           <div className="mt-4 flex items-center justify-between">
-            <span className="text-sm text-gray-500 dark:text-gray-400">共 {total} 个作品</span>
+            <span className="text-sm text-gray-500">共 {total} 个作品</span>
             <Pagination
               page={demos.data.page}
               pageCount={Math.max(1, Math.ceil(demos.data.total / demos.data.pageSize))}
@@ -294,7 +295,7 @@ export function ClassificationPage() {
 
       {siblings.length > 0 ? (
         <section className="mt-10 space-y-2">
-          <h2 className="text-sm font-medium text-gray-600 dark:text-gray-300">
+          <h2 className="text-sm font-medium text-gray-600">
             同一{dimensionMeta.label}下的其他分类
           </h2>
           <ul className="flex list-none flex-wrap gap-2 p-0">
@@ -302,16 +303,16 @@ export function ClassificationPage() {
               <li key={item.slug}>
                 <Link
                   to={'/classifications/' + item.dimension + '/' + encodeURIComponent(item.slug)}
-                  className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-700 no-underline hover:border-gray-300 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700"
+                  className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-700 no-underline hover:border-gray-300"
                 >
                   {item.label}
-                  <span className="text-gray-400 dark:text-gray-500">{item.demoCount}</span>
+                  <span className="text-gray-400">{item.demoCount}</span>
                 </Link>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
-    </section>
+    </Page>
   );
 }

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 
 import { getModel, type ModelProfile, type ModelSpecs } from '@/api';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { useAuth } from '@/features/auth/AuthContext';
 
 /**
@@ -40,16 +41,16 @@ export function ModelPage() {
 
   if (query.isPending) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-10">
+      <Page width="default" title="模型">
         <Skeleton lines={8} />
-      </div>
+      </Page>
     );
   }
 
   if (query.isError) {
     if (query.error instanceof NotFoundError) {
       return (
-        <div className="mx-auto w-full max-w-3xl px-4 py-10">
+        <Page width="default" title="模型">
           <EmptyState
             title="没有这个模型"
             description="链接可能过期了，或者这个模型还没进目录。"
@@ -60,18 +61,18 @@ export function ModelPage() {
               </Link>
             }
           />
-        </div>
+        </Page>
       );
     }
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-10">
+      <Page width="default" title="模型">
         <ErrorState
           title="模型页加载失败"
           description={query.error instanceof Error ? query.error.message : undefined}
           onRetry={() => void query.refetch()}
           retrying={query.isFetching}
         />
-      </div>
+      </Page>
     );
   }
 
@@ -79,40 +80,35 @@ export function ModelPage() {
   const { model, specs, site } = profile;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10">
-      <p className="mb-4">
+    <Page
+      width="default"
+      title={model.name}
+      description={
+        (model.vendor || '厂商未知') + ' · ' + model.slug + ' · ' + statusLabel(model.status)
+      }
+      actions={
         <Link className="text-sm underline" to="/demos">
           ← 返回作品库
         </Link>
-      </p>
-
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{model.name}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {model.vendor || '厂商未知'} · <code className="text-xs">{model.slug}</code>
-          {' · '}
-          {statusLabel(model.status)}
+      }
+    >
+      {model.description && <p className="mt-2 text-sm text-gray-700">{model.description}</p>}
+      {model.mergedIntoSlug && (
+        <p className="mt-1 text-sm text-amber-700">
+          这个模型已合并到{' '}
+          <Link className="underline" to={`/models/${model.mergedIntoSlug}`}>
+            {model.mergedIntoSlug}
+          </Link>
+          ，本页只保留历史。
         </p>
-        {model.description && (
-          <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{model.description}</p>
-        )}
-        {model.mergedIntoSlug && (
-          <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
-            这个模型已合并到{' '}
-            <Link className="underline" to={`/models/${model.mergedIntoSlug}`}>
-              {model.mergedIntoSlug}
-            </Link>
-            ，本页只保留历史。
-          </p>
-        )}
-      </header>
+      )}
 
       <Section title="档案">
         {specs === null ? (
           // 「管理员可以从导入页补录」是对着管理员说的；普通用户读到的是一句
           // 自己无从来执行的指示（issue #374）。所以按角色分开写，并给管理员一个
           // 带模型名的搜索入口，省得再手敲一遍。
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-gray-500">
             还没有这个模型的档案。
             {me?.role === 'admin' ? (
               <>
@@ -158,12 +154,10 @@ export function ModelPage() {
 
         {profile.providers.length > 0 && (
           <div className="mt-4">
-            <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200">来源分布</h3>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              只做展示，不改变上面的社区分。
-            </p>
+            <h3 className="text-sm font-medium text-gray-800">来源分布</h3>
+            <p className="mt-1 text-xs text-gray-500">只做展示，不改变上面的社区分。</p>
             <table className="mt-2 w-full text-left text-sm">
-              <thead className="text-xs text-gray-500 dark:text-gray-400">
+              <thead className="text-xs text-gray-500">
                 <tr>
                   <th className="py-1 font-normal">服务方</th>
                   <th className="py-1 font-normal">作品</th>
@@ -174,7 +168,7 @@ export function ModelPage() {
                 {profile.providers.map((slice) => (
                   <tr
                     key={slice.providerSlug || 'unspecified'}
-                    className="border-t border-gray-100 dark:border-gray-800"
+                    className="border-t border-gray-100"
                   >
                     <td className="py-1">
                       {slice.providerSlug ? slice.providerName : '来源未标注'}
@@ -189,13 +183,9 @@ export function ModelPage() {
         )}
 
         <div className="mt-5">
-          <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200">
-            用了这个模型的作品
-          </h3>
+          <h3 className="text-sm font-medium text-gray-800">用了这个模型的作品</h3>
           {profile.demos.length === 0 ? (
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              还没有公开作品声明使用这个模型。
-            </p>
+            <p className="mt-1 text-sm text-gray-500">还没有公开作品声明使用这个模型。</p>
           ) : (
             <ul className="mt-2 flex flex-col gap-1">
               {profile.demos.map((demo) => (
@@ -203,7 +193,7 @@ export function ModelPage() {
                   <Link className="underline" to={`/demos/${demo.slug}`}>
                     {demo.title}
                   </Link>
-                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span className="ml-2 text-xs text-gray-500">
                     {demo.ratingCount > 0
                       ? `${demo.ratingAverage.toFixed(1)} 分 · ${demo.ratingCount} 票`
                       : '还没有人评分'}
@@ -217,12 +207,12 @@ export function ModelPage() {
 
       <Section title="第三方基准">
         {profile.benchmarks.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-gray-500">
             还没有接入任何基准榜。我们不自己造分数——榜单一律等归一化方案定下来再算。
           </p>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="text-xs text-gray-500 dark:text-gray-400">
+            <thead className="text-xs text-gray-500">
               <tr>
                 <th className="py-1 font-normal">榜单</th>
                 <th className="py-1 font-normal">指标</th>
@@ -235,7 +225,7 @@ export function ModelPage() {
               {profile.benchmarks.map((b) => (
                 <tr
                   key={`${b.benchmarkSlug}-${b.version}-${b.metricKey}`}
-                  className="border-t border-gray-100 dark:border-gray-800"
+                  className="border-t border-gray-100"
                 >
                   <td className="py-1">{b.benchmarkName}</td>
                   <td className="py-1">{b.metricLabel}</td>
@@ -251,7 +241,7 @@ export function ModelPage() {
           </table>
         )}
       </Section>
-    </div>
+    </Page>
   );
 }
 
@@ -275,7 +265,7 @@ function statusLabel(status: ModelProfile['model']['status']): string {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-8">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -284,9 +274,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
     <div>
-      <dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt>
-      <dd className="text-sm text-gray-900 dark:text-gray-100">{value}</dd>
-      {hint && <dd className="text-xs text-gray-400 dark:text-gray-500">{hint}</dd>}
+      <dt className="text-xs text-gray-500">{label}</dt>
+      <dd className="text-sm text-gray-900">{value}</dd>
+      {hint && <dd className="text-xs text-gray-400">{hint}</dd>}
     </div>
   );
 }
@@ -312,9 +302,9 @@ function SpecTable({ specs }: { specs: ModelSpecs }) {
     <table className="w-full text-left text-sm">
       <tbody>
         {rows.map(([label, value]) => (
-          <tr key={label} className="border-t border-gray-100 dark:border-gray-800">
-            <th className="w-40 py-1 font-normal text-gray-500 dark:text-gray-400">{label}</th>
-            <td className="py-1 text-gray-900 dark:text-gray-100">{value}</td>
+          <tr key={label} className="border-t border-gray-100">
+            <th className="w-40 py-1 font-normal text-gray-500">{label}</th>
+            <td className="py-1 text-gray-900">{value}</td>
           </tr>
         ))}
       </tbody>

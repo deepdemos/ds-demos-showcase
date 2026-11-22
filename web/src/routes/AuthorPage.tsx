@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, Pagination, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { getUserProfile, listUserDemos } from '@/api';
 
 /**
@@ -63,28 +64,28 @@ export function AuthorPage() {
 
   if (profile.isPending) {
     return (
-      <section className="mx-auto w-full max-w-5xl px-4 py-8">
+      <Page width="narrow" title="作者">
         <Skeleton lines={4} />
-      </section>
+      </Page>
     );
   }
 
   if (profile.isError) {
     return (
-      <section className="mx-auto w-full max-w-5xl px-4 py-8">
+      <Page width="narrow" title="作者">
         <ErrorState
           title="作者资料加载失败"
           description="请稍后重试。"
           onRetry={() => void profile.refetch()}
           retrying={profile.isFetching}
         />
-      </section>
+      </Page>
     );
   }
 
   if (profile.data === null) {
     return (
-      <section className="mx-auto w-full max-w-5xl px-4 py-8">
+      <Page width="narrow" title="作者">
         <EmptyState
           title="没有这个作者"
           description="用户名不存在，或者这个账号已经不可见。"
@@ -94,7 +95,7 @@ export function AuthorPage() {
             </Link>
           }
         />
-      </section>
+      </Page>
     );
   }
 
@@ -102,8 +103,18 @@ export function AuthorPage() {
   const total = demos.data?.total ?? author.demoCount;
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-4 py-8">
-      <header className="flex flex-wrap items-center gap-4">
+    <Page
+      width="narrow"
+      title={author.displayName || author.username}
+      description={
+        '加入于 ' +
+        new Date(author.joinedAt).toLocaleDateString('zh-CN') +
+        ' · 公开作品 ' +
+        total +
+        ' 件'
+      }
+    >
+      <div className="mt-4 flex items-center gap-3">
         {author.avatarUrl ? (
           <img
             src={author.avatarUrl}
@@ -111,31 +122,19 @@ export function AuthorPage() {
             className="h-16 w-16 flex-none rounded-full object-cover"
           />
         ) : (
-          <div
-            aria-hidden="true"
-            className="h-16 w-16 flex-none rounded-full bg-gray-100 dark:bg-gray-800"
-          />
+          <div aria-hidden="true" className="h-16 w-16 flex-none rounded-full bg-gray-100" />
         )}
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold text-gray-900 dark:text-gray-100">
-            {author.displayName || author.username}
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">@{author.username}</p>
-        </div>
-      </header>
+        <p className="text-sm text-gray-500">@{author.username}</p>
+      </div>
 
       {author.bio ? (
-        <p className="mt-4 max-w-3xl whitespace-pre-line text-sm leading-6 text-gray-700 dark:text-gray-300">
+        <p className="mt-4 max-w-3xl whitespace-pre-line text-sm leading-6 text-gray-700">
           {author.bio}
         </p>
       ) : null}
 
-      <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-        加入于 {new Date(author.joinedAt).toLocaleDateString('zh-CN')} · 公开作品 {total} 件
-      </p>
-
       <section className="mt-8 space-y-3">
-        <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">公开作品</h2>
+        <h2 className="text-lg font-medium text-gray-900">公开作品</h2>
 
         {demos.isError ? (
           <ErrorState
@@ -159,19 +158,19 @@ export function AuthorPage() {
                 <li key={demo.slug}>
                   <Link
                     to={'/demos/' + demo.slug}
-                    className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
+                    className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300"
                   >
-                    <div className="mb-3 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-xs text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+                    <div className="mb-3 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-xs text-gray-400">
                       {demo.coverUrl ? (
                         <img src={demo.coverUrl} alt="" className="h-full w-full object-cover" />
                       ) : (
                         '无封面'
                       )}
                     </div>
-                    <h3 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900 dark:text-gray-100">
+                    <h3 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900">
                       {demo.title ?? '（无标题）'}
                     </h3>
-                    <p className="mt-auto pt-3 text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-auto pt-3 text-xs text-gray-500">
                       {new Date(demo.createdAt).toLocaleDateString('zh-CN')}
                     </p>
                   </Link>
@@ -180,7 +179,7 @@ export function AuthorPage() {
             </ul>
 
             <div className="mt-4 flex items-center justify-between">
-              <span className="text-sm text-gray-500 dark:text-gray-400">共 {total} 个作品</span>
+              <span className="text-sm text-gray-500">共 {total} 个作品</span>
               <Pagination
                 page={demos.data.page}
                 pageCount={Math.max(1, Math.ceil(demos.data.total / demos.data.pageSize))}
@@ -191,6 +190,6 @@ export function AuthorPage() {
           </>
         ) : null}
       </section>
-    </section>
+    </Page>
   );
 }
