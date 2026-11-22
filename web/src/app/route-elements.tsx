@@ -1,7 +1,6 @@
 import { AdminAppealsPage } from '@/routes/AdminAppealsPage';
 import { AdminInboxPage } from '@/routes/AdminInboxPage';
 import { AdminModelsPage } from '@/routes/AdminModelsPage';
-import { AdminPage } from '@/routes/AdminPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
 import { AuthorPage } from '@/routes/AuthorPage';
 import { ClassificationPage } from '@/routes/ClassificationPage';
@@ -52,7 +51,6 @@ export const routeElements: RouteElementMap = {
   register: <RegisterPage />,
   'verify-email': <VerifyEmailPage />,
   'password-reset': <PasswordResetPage />,
-  admin: <AdminPage />,
   'admin-inbox': <AdminInboxPage />,
   'admin-reviews': <AdminReviewPage />,
   'admin-proposal': <ProposalDetailPage />,

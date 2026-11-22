@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { childPath, pages } from './routes';
+import { childPath, pages, redirects } from './routes';
 import { routeElements } from './route-elements';
 
 const WIDTHS = ['auth', 'form', 'narrow', 'default', 'wide'];
@@ -29,6 +29,20 @@ describe('路由清单', () => {
     }
     expect(pages.filter((page) => page.path === '*')).toHaveLength(1);
     expect(pages.find((page) => page.path === '*')?.group).toBe('system');
+  });
+
+  test('旧地址都有落点，且不再占一条页面路由', () => {
+    expect(new Set(redirects.map((entry) => entry.from)).size).toBe(redirects.length);
+    for (const entry of redirects) {
+      expect(
+        pages.some((page) => page.path === entry.to),
+        entry.from + ' -> ' + entry.to,
+      ).toBe(true);
+      expect(
+        pages.some((page) => page.path === entry.from),
+        entry.from,
+      ).toBe(false);
+    }
   });
 
   test('childPath 把绝对路径转成嵌套路由的相对路径', () => {

@@ -30,8 +30,12 @@ export interface NavEntry {
   area: NavArea;
   label: string;
   order: number;
-  /** 只有持管理权限的人能看到（用于 /admin 入口）。 */
+  /** 管理区里的分组名，例如「待办」「内容」。 */
+  group?: string;
+  /** 只有持管理权限的人能看到（用于管理入口）。 */
   requiresAdmin?: boolean;
+  /** 至少要有其中一个权限键才显示；空 = 不做权限过滤。 */
+  permissions?: readonly string[];
 }
 
 export interface PageEntry {
@@ -187,7 +191,7 @@ export const pages: readonly PageEntry[] = [
   },
   {
     id: 'notifications',
-    path: '/notifications',
+    path: '/me/notifications',
     title: '通知',
     description: '审核结果、评分与站内消息。',
     group: 'me',
@@ -198,7 +202,7 @@ export const pages: readonly PageEntry[] = [
   },
   {
     id: 'my-demos',
-    path: '/my/demos',
+    path: '/me/demos',
     title: '我的作品',
     description: '自己作品的状态、预览与编辑入口。',
     group: 'me',
@@ -259,17 +263,6 @@ export const pages: readonly PageEntry[] = [
     availability: 'ready',
   },
   {
-    id: 'admin',
-    path: '/admin',
-    title: '管理',
-    description: '审核与治理的入口。',
-    group: 'admin',
-    access: { kind: 'auth' },
-    width: 'narrow',
-    availability: 'ready',
-    nav: { area: 'user', label: '管理', order: 90, requiresAdmin: true },
-  },
-  {
     id: 'admin-inbox',
     path: '/admin/inbox',
     title: '收件箱',
@@ -278,6 +271,14 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'wide',
     availability: 'ready',
+    nav: {
+      area: 'admin',
+      label: '收件箱',
+      order: 10,
+      group: '待办',
+      requiresAdmin: true,
+      permissions: ['demo.review', 'proposal.review'],
+    },
   },
   {
     id: 'admin-reviews',
@@ -288,6 +289,14 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'wide',
     availability: 'ready',
+    nav: {
+      area: 'admin',
+      label: '作品审核',
+      order: 20,
+      group: '待办',
+      requiresAdmin: true,
+      permissions: ['demo.review', 'demo.publish'],
+    },
   },
   {
     id: 'admin-proposal',
@@ -308,6 +317,14 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'wide',
     availability: 'ready',
+    nav: {
+      area: 'admin',
+      label: '申诉',
+      order: 30,
+      group: '待办',
+      requiresAdmin: true,
+      permissions: ['content.erase', 'proposal.review'],
+    },
   },
   {
     id: 'admin-models',
@@ -318,6 +335,14 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'wide',
     availability: 'ready',
+    nav: {
+      area: 'admin',
+      label: '模型导入',
+      order: 10,
+      group: '内容',
+      requiresAdmin: true,
+      permissions: ['model.import'],
+    },
   },
   {
     id: 'not-found',
@@ -329,6 +354,28 @@ export const pages: readonly PageEntry[] = [
     width: 'narrow',
     availability: 'ready',
   },
+];
+
+/** 旧地址 → 新地址。跳转时保留查询串；参数在 RedirectPage 里替换。 */
+export interface RedirectEntry {
+  from: string;
+  to: string;
+}
+
+/**
+ * 兼容入口。
+ *
+ * 只列已经有落点的地址：`/settings/*` 等页面还没做，先不登记一个会 404 的跳转。
+ * `/admin` 的落点是收件箱；`/me` 的落点是「我的作品」。
+ */
+export const redirects: readonly RedirectEntry[] = [
+  { from: '/me', to: '/me/demos' },
+  { from: '/my/demos', to: '/me/demos' },
+  { from: '/notifications', to: '/me/notifications' },
+  { from: '/collections', to: '/me/collections' },
+  { from: '/collections/:id', to: '/me/collections/:id' },
+  { from: '/history', to: '/me/history' },
+  { from: '/admin', to: '/admin/inbox' },
 ];
 
 export function findPage(id: string): PageEntry {
