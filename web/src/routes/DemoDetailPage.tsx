@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Button, EmptyState, ErrorState, Rating, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import {
   archiveDemo,
   deleteDemo,
@@ -161,6 +162,8 @@ export function DemoDetailPage() {
 
   // 本机浏览历史（#426）：只记能打开的作品；墓碑与不存在不是「看过」。
   // 写失败由 recordView 自己吞掉——存不下历史不能挡住看作品。
+  const title = data?.kind === 'ok' ? displayTitle(data.demo) : '作品';
+
   useEffect(() => {
     if (data?.kind !== 'ok' || isTombstone(data.demo)) return;
     recordView({
@@ -171,7 +174,7 @@ export function DemoDetailPage() {
   }, [data]);
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
+    <Page width="default" title={title}>
       <p className="mb-4">
         <Button type="button" inline onClick={goBack}>
           ← 返回上一页
@@ -195,11 +198,6 @@ export function DemoDetailPage() {
 
       {data?.kind === 'ok' && isTombstone(data.demo) && (
         <>
-          {data.demo.title ? (
-            <h1 className="mb-4 text-center text-xl font-semibold text-gray-900 dark:text-gray-100">
-              {data.demo.title}
-            </h1>
-          ) : null}
           <EmptyState {...tombstoneText(data.demo)} />
           {data.demo.lifecycleState === 'removed' ? <AppealBox slug={slug} /> : null}
           <LifecycleBar slug={slug} demo={data.demo} />
@@ -208,10 +206,7 @@ export function DemoDetailPage() {
 
       {data?.kind === 'ok' && !isTombstone(data.demo) && (
         <article>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-            {displayTitle(data.demo)}
-          </h1>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-xs text-gray-500">
             作者{' '}
             {data.demo.author.username ? (
               <Link to={'/u/' + data.demo.author.username} className="underline">
@@ -362,7 +357,7 @@ export function DemoDetailPage() {
           <RelatedSection slug={slug} />
         </article>
       )}
-    </section>
+    </Page>
   );
 }
 
