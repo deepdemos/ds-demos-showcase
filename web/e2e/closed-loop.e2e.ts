@@ -132,8 +132,8 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
   await screen.getByLabel('邮箱或用户名').fill(email);
   await screen.getByLabel('密码').fill(authorPassword);
   await screen.getByRole('button', { name: '登录' }).last().click();
-  // 登录成功的判据是页头换成「登出」——停在哪一页都不能说明成功。
-  await expect(screen.getByRole('button', { name: '登出' })).toBeVisible();
+  // 登录成功的判据是页头出现用户菜单；停在哪一页都不能说明成功。
+  await expect(screen.getByTestId('user-menu-trigger')).toBeVisible();
 
   // ---- 2. 投稿（真上传一个文件）------------------------------------------
   await app.open('/submit');
@@ -152,12 +152,13 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
   await expect(screen.getByRole('heading', { name: '投稿已提交' })).toBeVisible();
 
   // ---- 3. 换管理员登录 ---------------------------------------------------
-  await screen.getByRole('button', { name: '登出' }).click();
+  await screen.getByTestId('user-menu-trigger').click();
+  await screen.getByRole('menuitem', { name: '登出' }).click();
   await app.open('/login');
   await screen.getByLabel('邮箱或用户名').fill(ADMIN_EMAIL);
   await screen.getByLabel('密码').fill(ADMIN_PASSWORD);
   await screen.getByRole('button', { name: '登录' }).last().click();
-  await expect(screen.getByRole('button', { name: '登出' })).toBeVisible();
+  await expect(screen.getByTestId('user-menu-trigger')).toBeVisible();
 
   // ---- 4. 待审队列里能找到它 --------------------------------------------
   await app.open('/admin/reviews');
@@ -165,17 +166,11 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
 
   // ---- 5. 通过 -----------------------------------------------------------
   //
-  // 队列里可能不止一条（本地反复跑会留下旧的待审/驳回记录），所以要按标题定位到
-  // 那一条。Locator 没有 getByRole，只能先取全部列表项的文字算出序号，再点第 N 个
-  // 「通过」——顺序与队列顺序一致（同一个 ul 渲染）。
-  const items = await screen.getByRole('listitem').allTextContents();
-  const index = items.findIndex((text) => text.includes(title));
-  if (index < 0) {
-    throw new Error(
-      `待审队列里找不到「${title}」，队列共 ${items.length} 条：${items.join(' | ')}`,
-    );
-  }
-  await screen.getByRole('button', { name: '通过' }).nth(index).click();
+  // 队列里可能不止一条（本地反复跑会留下旧的待审/驳回记录），按标题把范围缩到
+  // 那一条，再点它自己的「通过」。不要按列表项序号找全局按钮：队列可能因分页 /
+  // 状态过滤少渲染几个按钮，序号会越界。
+  const reviewItem = screen.getByRole('listitem').filter({ hasText: title });
+  await reviewItem.getByRole('button', { name: '通过' }).click();
 
   // ---- 6. 发布（通过 ≠ 发布，这一步是单独的动作）-------------------------
   await expect(screen.getByText('已通过 · 待发布')).toBeVisible();
@@ -183,7 +178,8 @@ test('投稿 → 待审 → 通过 → 发布 → 公开可见 → 可下载', a
   await expect(screen.getByText(/已发布到「主站」/)).toBeVisible();
 
   // ---- 7. 匿名访问者在作品库里看得到 ------------------------------------
-  await screen.getByRole('button', { name: '登出' }).click();
+  await screen.getByTestId('user-menu-trigger').click();
+  await screen.getByRole('menuitem', { name: '登出' }).click();
   await app.open('/demos');
   await expect(screen.getByText(title)).toBeVisible();
 

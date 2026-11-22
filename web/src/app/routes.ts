@@ -23,6 +23,17 @@ export type RouteAccess =
 /** 页面是否已接真实数据。fixture 只允许出现在 DEV。 */
 export type PageAvailability = 'ready' | 'fixture';
 
+/** 页面出现在哪一组导航里。 */
+export type NavArea = 'primary' | 'user' | 'me' | 'admin';
+
+export interface NavEntry {
+  area: NavArea;
+  label: string;
+  order: number;
+  /** 只有持管理权限的人能看到（用于 /admin 入口）。 */
+  requiresAdmin?: boolean;
+}
+
 export interface PageEntry {
   /** 稳定 id，用于路由元素表、导航与测试；不随文案变化。 */
   id: string;
@@ -36,6 +47,8 @@ export interface PageEntry {
   access: RouteAccess;
   width: PageWidth;
   availability: PageAvailability;
+  /** 可选的导航登记；没登记的页面只能从别的页面进入。 */
+  nav?: NavEntry;
 }
 
 /**
@@ -67,6 +80,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'public' },
     width: 'wide',
     availability: 'ready',
+    nav: { area: 'primary', label: '作品库', order: 10 },
   },
   {
     id: 'demo-detail',
@@ -107,6 +121,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'public' },
     width: 'narrow',
     availability: 'ready',
+    nav: { area: 'primary', label: '排行榜', order: 20 },
   },
   {
     id: 'author',
@@ -147,6 +162,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'form',
     availability: 'ready',
+    nav: { area: 'primary', label: '投稿', order: 30 },
   },
   {
     id: 'collections',
@@ -157,6 +173,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'narrow',
     availability: 'ready',
+    nav: { area: 'user', label: '收藏夹', order: 20 },
   },
   {
     id: 'collection-detail',
@@ -177,6 +194,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'narrow',
     availability: 'ready',
+    nav: { area: 'user', label: '通知', order: 40 },
   },
   {
     id: 'my-demos',
@@ -187,6 +205,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'wide',
     availability: 'ready',
+    nav: { area: 'user', label: '我的作品', order: 10 },
   },
   {
     id: 'history',
@@ -197,6 +216,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'narrow',
     availability: 'ready',
+    nav: { area: 'user', label: '浏览历史', order: 30 },
   },
   {
     id: 'login',
@@ -247,6 +267,7 @@ export const pages: readonly PageEntry[] = [
     access: { kind: 'auth' },
     width: 'narrow',
     availability: 'ready',
+    nav: { area: 'user', label: '管理', order: 90, requiresAdmin: true },
   },
   {
     id: 'admin-inbox',

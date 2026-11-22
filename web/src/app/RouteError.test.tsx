@@ -15,7 +15,7 @@ function Boom(): never {
   throw new Error('boom-123');
 }
 
-/** 与 AppLayout 同形的外壳：有 Outlet 才会渲染子路由——没有它，子路由根本不会跑。 */
+/** 与 AppShell 同形的外壳：有 Outlet 才会渲染子路由——没有它，子路由根本不会跑。 */
 function Shell() {
   return (
     <div>

@@ -74,6 +74,7 @@ export function Menu({ label, items, ariaLabel, align = 'right', onOpenChange }:
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
+        data-testid="user-menu-trigger"
         onClick={() => {
           const next = !open;
           setOpen(next);
