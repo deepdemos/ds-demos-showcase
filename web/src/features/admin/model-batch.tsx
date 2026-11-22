@@ -57,7 +57,7 @@ export function ModelBatch({ queue, onRemove, onClear }: ModelBatchProps) {
 
   if (queue.length === 0 && !results) {
     return (
-      <section className="rounded-xl border border-dashed border-gray-200 p-4 dark:border-gray-800">
+      <section className="rounded-xl border border-dashed border-gray-200 p-4">
         <EmptyState
           title="待导入清单还是空的"
           description="在右侧勾好字段后点「加入待导入」，可以攒多条一起提交。"
@@ -70,13 +70,11 @@ export function ModelBatch({ queue, onRemove, onClear }: ModelBatchProps) {
   const failed = results?.filter((r) => r.status === 'failed') ?? [];
 
   return (
-    <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+    <section className="rounded-xl border border-gray-200 p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-          待导入 {queue.length} 条
-        </h2>
+        <h2 className="text-sm font-medium text-gray-900">待导入 {queue.length} 条</h2>
         {queue.length > BATCH_LIMIT ? (
-          <span role="alert" className="text-xs text-red-700 dark:text-red-400">
+          <span role="alert" className="text-xs text-red-700">
             一次最多 {BATCH_LIMIT} 条，先提交一批
           </span>
         ) : null}
@@ -93,16 +91,14 @@ export function ModelBatch({ queue, onRemove, onClear }: ModelBatchProps) {
       </div>
 
       {queue.length > 0 ? (
-        <ul className="mt-3 flex flex-col divide-y divide-gray-100 dark:divide-gray-800">
+        <ul className="mt-3 flex flex-col divide-y divide-gray-100">
           {queue.map((q, i) => (
             <li
               key={`${q.ref.providerId}/${q.ref.externalId}`}
               className="flex items-center gap-3 py-2"
             >
-              <span className="truncate text-sm text-gray-900 dark:text-gray-100">{q.label}</span>
-              <span className="truncate text-xs text-gray-500 dark:text-gray-400">
-                {q.fields.length} 个字段
-              </span>
+              <span className="truncate text-sm text-gray-900">{q.label}</span>
+              <span className="truncate text-xs text-gray-500">{q.fields.length} 个字段</span>
               <span className="ml-auto" />
               <Button onClick={() => onRemove(i)} disabled={apply.isPending}>
                 移除
@@ -113,31 +109,25 @@ export function ModelBatch({ queue, onRemove, onClear }: ModelBatchProps) {
       ) : null}
 
       {apply.isError ? (
-        <p role="alert" className="mt-3 text-xs text-red-700 dark:text-red-400">
+        <p role="alert" className="mt-3 text-xs text-red-700">
           {apply.error instanceof Error ? apply.error.message : '批量导入失败'}
         </p>
       ) : null}
 
       {results ? (
         <div className="mt-3">
-          <p role="status" className="text-xs text-gray-700 dark:text-gray-300">
+          <p role="status" className="text-xs text-gray-700">
             成功 {okCount} 条{failed.length > 0 ? `，失败 ${failed.length} 条` : ''}
           </p>
           <ul className="mt-2 flex flex-col gap-1">
             {results.map((r) => (
               <li key={`${r.providerId}/${r.externalId}`} className="text-xs">
-                <span
-                  className={
-                    r.status === 'failed'
-                      ? 'text-red-700 dark:text-red-400'
-                      : 'text-green-700 dark:text-green-400'
-                  }
-                >
+                <span className={r.status === 'failed' ? 'text-red-700' : 'text-green-700'}>
                   {r.status === 'created' ? '新建' : r.status === 'completed' ? '补全' : '失败'}
                 </span>
-                <span className="ml-2 text-gray-700 dark:text-gray-300">{r.externalId}</span>
+                <span className="ml-2 text-gray-700">{r.externalId}</span>
                 {r.status === 'failed' && r.error ? (
-                  <span className="ml-2 text-gray-500 dark:text-gray-400">{r.error}</span>
+                  <span className="ml-2 text-gray-500">{r.error}</span>
                 ) : null}
               </li>
             ))}

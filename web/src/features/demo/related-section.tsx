@@ -38,13 +38,11 @@ export function RelatedSection({ slug }: { slug: string }) {
           <li key={item.slug}>
             <Link
               to={`/demos/${item.slug}`}
-              className="block rounded-lg border border-gray-200 p-3 hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
+              className="block rounded-lg border border-gray-200 p-3 hover:border-gray-400"
             >
-              <span className="font-medium text-gray-900 dark:text-gray-100">
-                {item.title ?? item.slug}
-              </span>
+              <span className="font-medium text-gray-900">{item.title ?? item.slug}</span>
               {item.classifications?.length ? (
-                <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                <span className="mt-1 block text-xs text-gray-500">
                   {item.classifications.map((c) => c.label).join(' · ')}
                 </span>
               ) : null}

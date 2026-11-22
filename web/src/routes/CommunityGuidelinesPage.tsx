@@ -1,14 +1,14 @@
 import { Link } from 'react-router';
+import { Page } from '@/components/layout/page';
 
 /** 社区规范（#463）：静态页，给 removed 墓碑与页脚一个稳定落点。 */
 export function CommunityGuidelinesPage() {
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">社区规范</h1>
-      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-        本站展示 AI 生成与 AI 辅助创作的作品。发布或参与之前，请先确认下面几条。
-      </p>
-
+    <Page
+      width="narrow"
+      title="社区规范"
+      description="本站展示 AI 生成与 AI 辅助创作的作品。发布或参与之前，请先确认下面几条。"
+    >
       <h2 className="mt-6 text-lg font-semibold">不允许的内容</h2>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
         <li>违反法律法规的内容，以及协助规避监管的用法。</li>
@@ -41,6 +41,6 @@ export function CommunityGuidelinesPage() {
           返回作品库
         </Link>
       </p>
-    </section>
+    </Page>
   );
 }

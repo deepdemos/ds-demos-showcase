@@ -88,7 +88,7 @@ export function ModelSearch({
   const page = Math.floor(offset / LIMIT) + 1;
 
   return (
-    <section className="flex min-h-0 flex-col gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+    <section className="flex min-h-0 flex-col gap-3 rounded-xl border border-gray-200 p-4">
       <div className="flex flex-col gap-2">
         <Input
           aria-label="搜索上游模型"
@@ -103,7 +103,7 @@ export function ModelSearch({
           indeterminate={false}
           onChange={(e) => onSearch({ q, includeDeprecated: e.target.checked })}
         />
-        <p className="text-xs text-gray-500 dark:text-gray-400">
+        <p className="text-xs text-gray-500">
           {catalog.data ? `共 ${catalog.data.total.toLocaleString('zh-CN')} 条` : '正在读取目录…'}
         </p>
       </div>
@@ -128,18 +128,18 @@ export function ModelSearch({
             }
           />
         ) : (
-          <ul className="flex flex-col divide-y divide-gray-100 dark:divide-gray-800">
+          <ul className="flex flex-col divide-y divide-gray-100">
             {catalog.data.items.map((item) => {
               const ref = refOf(item);
               const active = ref === selectedRef;
               const chip = item.imported
                 ? {
                     text: '已导入',
-                    cls: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300',
+                    cls: 'bg-green-50 text-green-700',
                   }
                 : {
                     text: '可导入',
-                    cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+                    cls: 'bg-gray-100 text-gray-600',
                   };
               return (
                 <li key={ref}>
@@ -151,25 +151,21 @@ export function ModelSearch({
                     aria-current={active ? 'true' : undefined}
                     className={[
                       'w-full !justify-start px-2 py-2 text-left font-normal',
-                      active
-                        ? 'bg-blue-50 dark:bg-blue-950'
-                        : 'hover:bg-gray-50 dark:hover:bg-gray-900',
+                      active ? 'bg-blue-50' : 'hover:bg-gray-50',
                     ].join(' ')}
                   >
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm text-gray-900 dark:text-gray-100">
-                        {item.name}
-                      </span>
+                      <span className="truncate text-sm text-gray-900">{item.name}</span>
                       <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] ${chip.cls}`}>
                         {chip.text}
                       </span>
                       {item.upstreamStatus === 'deprecated' ? (
-                        <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                        <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700">
                           上游弃用
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
+                    <span className="mt-0.5 block truncate text-xs text-gray-500">
                       {item.providerName} · {item.externalId}
                     </span>
                   </Button>

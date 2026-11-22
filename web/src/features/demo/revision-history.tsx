@@ -101,7 +101,7 @@ export function RevisionHistory({ slug }: { slug: string }) {
     return (
       <section className="mt-10">
         <h2 className="text-lg font-medium">版本历史</h2>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">读不到这件作品的版本。</p>
+        <p className="mt-2 text-sm text-gray-600">读不到这件作品的版本。</p>
       </section>
     );
   }
@@ -109,12 +109,12 @@ export function RevisionHistory({ slug }: { slug: string }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">版本历史</h2>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      <p className="mt-1 text-sm text-gray-500">
         回滚不是撤销：它会追加一个新版本，同样要过复审才会对外生效。
       </p>
 
       {error && (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+        <p className="mt-2 text-sm text-red-600" role="alert">
           {error}
         </p>
       )}
@@ -123,31 +123,31 @@ export function RevisionHistory({ slug }: { slug: string }) {
         {state.items.map((rev) => (
           <li
             key={rev.revNo}
-            className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-800"
+            className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm"
           >
             <span className="font-medium">第 {rev.revNo} 版</span>
             {rev.isCurrent && (
-              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700">
                 当前版本
               </span>
             )}
             {rev.isPublished && (
-              <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700 dark:bg-green-950 dark:text-green-300">
+              <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
                 对外版本
               </span>
             )}
             {rev.deleted && (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
                 已删除
               </span>
             )}
             {rev.erased && (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
                 已擦除
               </span>
             )}
-            <span className="text-gray-600 dark:text-gray-300">{rev.title || '（无标题）'}</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="text-gray-600">{rev.title || '（无标题）'}</span>
+            <span className="text-xs text-gray-500">
               {SOURCE_LABEL[rev.source] ?? rev.source} ·{' '}
               {new Date(rev.createdAt).toLocaleString('zh-CN')}
             </span>

@@ -59,7 +59,7 @@ export function AppealBox({ slug }: { slug: string }) {
       {isLoading ? <Skeleton lines={1} /> : null}
 
       {!isLoading && me === null ? (
-        <p className="text-gray-500 dark:text-gray-400">
+        <p className="text-gray-500">
           登录后可以提交申诉。
           <Link
             className="ml-2 underline"
@@ -73,7 +73,7 @@ export function AppealBox({ slug }: { slug: string }) {
       {me !== null && state.isPending ? <Skeleton lines={1} /> : null}
 
       {me !== null && state.isError ? (
-        <p role="alert" className="text-red-600 dark:text-red-400">
+        <p role="alert" className="text-red-600">
           申诉状态加载失败。
           <Button type="button" className="ml-2" onClick={() => void state.refetch()}>
             重试
@@ -82,7 +82,7 @@ export function AppealBox({ slug }: { slug: string }) {
       ) : null}
 
       {error ? (
-        <p role="alert" className="text-red-600 dark:text-red-400">
+        <p role="alert" className="text-red-600">
           {error}
         </p>
       ) : null}
@@ -90,7 +90,7 @@ export function AppealBox({ slug }: { slug: string }) {
       {me !== null && state.data ? (
         <>
           {state.data.appeal ? (
-            <div className="rounded border border-gray-200 p-3 dark:border-gray-800">
+            <div className="rounded border border-gray-200 p-3">
               {state.data.appeal.status === 'pending' ? (
                 <p>
                   申诉处理中（提交于{' '}
@@ -107,16 +107,14 @@ export function AppealBox({ slug }: { slug: string }) {
                     : '管理员未填写说明。'}
                 </p>
               ) : null}
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                申诉说明：{state.data.appeal.reason}
-              </p>
+              <p className="mt-1 text-xs text-gray-500">申诉说明：{state.data.appeal.reason}</p>
             </div>
           ) : null}
 
           {state.data.canSubmit ? (
             <div className="space-y-2">
               <label className="block">
-                <span className="text-gray-500 dark:text-gray-400">申诉说明（1–2000 字）</span>
+                <span className="text-gray-500">申诉说明（1–2000 字）</span>
                 <Textarea
                   className="mt-1"
                   rows={3}

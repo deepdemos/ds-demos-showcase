@@ -32,17 +32,14 @@ type Loaded = { kind: 'ok'; demo: DemoDetail } | { kind: 'missing' };
 function ModelVersion({ checkpoint }: { checkpoint: DemoDetail['models'][number]['checkpoint'] }) {
   if (!checkpoint) {
     return (
-      <span
-        className="ml-1 text-xs text-gray-500 dark:text-gray-500"
-        title="作者没有说明用的是哪一版"
-      >
+      <span className="ml-1 text-xs text-gray-500" title="作者没有说明用的是哪一版">
         未固定
       </span>
     );
   }
   return (
     <span
-      className="ml-1 text-xs text-gray-500 dark:text-gray-500"
+      className="ml-1 text-xs text-gray-500"
       title={checkpoint.releasedOn ? `发布于 ${checkpoint.releasedOn}` : '发布日期未知'}
     >
       {checkpoint.label} 版
@@ -222,7 +219,7 @@ export function DemoDetailPage() {
             所以 publishedAt 为空时不能把 created_at 写成「发布」——那是创建时间，
             草稿页上会变成「未发布却写着发布日」（issue #375）。
           */}
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-xs text-gray-500">
             {data.demo.publishedAt
               ? `发布 ${formatDay(data.demo.publishedAt)}`
               : `创建于 ${formatDay(data.demo.createdAt)}`}
@@ -233,7 +230,7 @@ export function DemoDetailPage() {
           {/* 业务统计：服务端只在「已发布且有对外版本」时给这两个数，
               墓碑与未发布一律为 0，所以这里不用再判状态。 */}
           {data.demo.viewCount > 0 || data.demo.downloadCount > 0 ? (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-xs text-gray-500">
               浏览 {data.demo.viewCount.toLocaleString('zh-CN')} 次 · 下载{' '}
               {data.demo.downloadCount.toLocaleString('zh-CN')} 次
             </p>
@@ -247,32 +244,32 @@ export function DemoDetailPage() {
             <img
               src={data.demo.coverUrl}
               alt=""
-              className="mt-4 w-full rounded-xl border border-gray-200 object-cover dark:border-gray-800"
+              className="mt-4 w-full rounded-xl border border-gray-200 object-cover"
             />
           ) : (
-            <div className="mt-4 flex h-48 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500">
+            <div className="mt-4 flex h-48 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-400">
               这个作品没有封面
             </div>
           )}
 
           {data.demo.lifecycleActions.restore ? (
-            <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               这件作品已删除，恢复期内可以恢复。过了恢复期，就只有你自己能打开这个页面了。
             </p>
           ) : null}
 
-          <p className="mt-4 whitespace-pre-line text-base leading-7 text-gray-700 dark:text-gray-300">
+          <p className="mt-4 whitespace-pre-line text-base leading-7 text-gray-700">
             {data.demo.description ?? '作者没有填写简介。'}
           </p>
 
           {data.demo.classifications.length > 0 ? (
-            <p className="mt-4 flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mt-4 flex flex-wrap items-center gap-2 text-sm text-gray-600">
               分类
               {data.demo.classifications.map((c) => (
                 <Link
                   key={`${c.dimension}:${c.slug}`}
                   to={`/classifications/${c.dimension}/${encodeURIComponent(c.slug)}`}
-                  className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-700 no-underline hover:border-gray-300 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700"
+                  className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-700 no-underline hover:border-gray-300"
                 >
                   {c.label}
                 </Link>
@@ -286,7 +283,7 @@ export function DemoDetailPage() {
               每一项带「用的是哪一版」：没有就是「未固定」，**不能**省略、也不能
               默认成最新版。作者没说的事，界面不替他补。 */}
           {data.demo.models.length > 0 ? (
-            <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mt-4 text-sm text-gray-600">
               模型声明：
               {data.demo.models.map((m, i) => (
                 <span key={m.slug}>
@@ -297,16 +294,14 @@ export function DemoDetailPage() {
                   <ModelVersion checkpoint={m.checkpoint} />
                 </span>
               ))}
-              <span className="ml-2 text-xs text-gray-500 dark:text-gray-500">
-                （作者自述，未经核验）
-              </span>
+              <span className="ml-2 text-xs text-gray-500">（作者自述，未经核验）</span>
             </p>
           ) : null}
 
           {/* 审核态只对作者有意义：访客看到的详情一定来自已通过的那一版，
               服务端对他们恒回 approved（见 handlers.go 的 detailOf）。 */}
           {data.demo.canEdit && data.demo.moderationState !== 'approved' ? (
-            <p className="mt-4 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
+            <p className="mt-4 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900">
               {moderationBanner(data.demo.moderationState, data.demo.lifecycleState)}
             </p>
           ) : null}
@@ -317,7 +312,7 @@ export function DemoDetailPage() {
             {data.demo.canEdit ? (
               <Link
                 to={`/demos/${encodeURIComponent(slug)}/edit`}
-                className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
               >
                 编辑作品
               </Link>
@@ -336,14 +331,14 @@ export function DemoDetailPage() {
             data.demo.demoType === 'link' ? (
               <section className="mt-6 space-y-2">
                 <h2 className="text-base font-semibold">作品在外部站点</h2>
-                <p className="m-0 text-sm text-gray-600 dark:text-gray-300">
+                <p className="m-0 text-sm text-gray-600">
                   这类作品的内容不在本站，点下面的按钮会跳转到作者提供的地址。
                 </p>
                 <Link
                   to={`/preview/${encodeURIComponent(slug)}/`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                  className="inline-flex rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
                 >
                   打开作品
                 </Link>
@@ -380,7 +375,7 @@ export function DemoPreview({ slug }: { slug: string }) {
   return (
     <section className="mt-6 space-y-2">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">预览</h2>
+        <h2 className="text-lg font-medium text-gray-900">预览</h2>
         <Link to={src} target="_blank" rel="noreferrer" className="text-sm hover:underline">
           新标签页打开
         </Link>
@@ -388,7 +383,7 @@ export function DemoPreview({ slug }: { slug: string }) {
       <iframe
         src={src}
         title="作品预览"
-        className="h-[70vh] w-full rounded-xl border border-gray-200 bg-white dark:border-gray-800"
+        className="h-[70vh] w-full rounded-xl border border-gray-200 bg-white"
         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock"
         referrerPolicy="no-referrer"
       />
@@ -417,13 +412,11 @@ export function DemoDownload({ slug }: { slug: string }) {
       <a
         href={`/download/${encodeURIComponent(slug)}`}
         download
-        className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+        className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
       >
         下载作品
       </a>
-      <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-        原始上传包（单文件作品为原文件）
-      </span>
+      <span className="ml-2 text-xs text-gray-500">原始上传包（单文件作品为原文件）</span>
     </p>
   );
 }
@@ -515,11 +508,11 @@ function RatingBlock({ slug, demo }: { slug: string; demo: DemoDetail }) {
         disabled={rate.isPending}
         showValueText
       />
-      <span className="text-xs text-gray-500 dark:text-gray-400">
+      <span className="text-xs text-gray-500">
         {count > 0 ? `平均 ${average.toFixed(2)} 分，${count} 人评过` : '还没有人评分'}
       </span>
       {error ? (
-        <span role="alert" className="text-xs text-red-600 dark:text-red-400">
+        <span role="alert" className="text-xs text-red-600">
           {error}
         </span>
       ) : null}
@@ -593,8 +586,8 @@ export function LifecycleBar({ slug, demo }: { slug: string; demo: DemoDetail })
       </div>
 
       {confirming ? (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950">
-          <p className="text-red-800 dark:text-red-200">
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+          <p className="text-red-800">
             删除后这件作品对外立刻不可见。删除前设定的恢复期内可以恢复，过期就再也找不回来了。
           </p>
           <div className="mt-2 flex gap-2">
@@ -614,7 +607,7 @@ export function LifecycleBar({ slug, demo }: { slug: string; demo: DemoDetail })
       ) : null}
 
       {error ? (
-        <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">
+        <p role="alert" className="mt-2 text-sm text-red-700">
           {error}
         </p>
       ) : null}
