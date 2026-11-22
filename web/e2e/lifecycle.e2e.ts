@@ -63,12 +63,13 @@ async function loginAs(screen: Screen, app: App, email: string, password: string
   await screen.getByLabel('邮箱或用户名').fill(email);
   await screen.getByLabel('密码').fill(password);
   await screen.getByRole('button', { name: '登录' }).last().click();
-  // 登录成功的判据是页头出现「登出」——停在哪一页都不能说明成功。
-  await expect(screen.getByRole('button', { name: '登出' })).toBeVisible();
+  // 登录成功的判据是页头出现用户菜单；停在哪一页都不能说明成功。
+  await expect(screen.getByTestId('user-menu-trigger')).toBeVisible();
 }
 
 async function logout(screen: Screen): Promise<void> {
-  await screen.getByRole('button', { name: '登出' }).click();
+  await screen.getByTestId('user-menu-trigger').click();
+  await screen.getByRole('menuitem', { name: '登出' }).click();
 }
 
 /**
@@ -109,7 +110,7 @@ async function publishFreshDemo(
   await screen.getByLabel('邮箱或用户名').fill(email);
   await screen.getByLabel('密码').fill(password);
   await screen.getByRole('button', { name: '登录' }).last().click();
-  await expect(screen.getByRole('button', { name: '登出' })).toBeVisible();
+  await expect(screen.getByTestId('user-menu-trigger')).toBeVisible();
 
   await app.open('/submit');
   await screen.getByLabel('标题').fill(title);
