@@ -54,10 +54,9 @@ export function ModelPage() {
           <EmptyState
             title="没有这个模型"
             description="链接可能过期了，或者这个模型还没进目录。"
-            // 指向作品库而不是「模型目录」：目录页还没做，链到一个 404 比不给出口更糟。
             action={
-              <Link className="text-sm underline" to="/demos">
-                去作品库
+              <Link className="text-sm underline" to="/models">
+                去模型目录
               </Link>
             }
           />
@@ -87,8 +86,8 @@ export function ModelPage() {
         (model.vendor || '厂商未知') + ' · ' + model.slug + ' · ' + statusLabel(model.status)
       }
       actions={
-        <Link className="text-sm underline" to="/demos">
-          ← 返回作品库
+        <Link className="text-sm underline" to="/models">
+          ← 返回模型目录
         </Link>
       }
     >

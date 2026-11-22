@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Button, EmptyState, ErrorState, Input, Pagination, Skeleton } from '@/components/ui';
@@ -22,6 +22,8 @@ export function ModelsPage() {
   const q = (params.get('q') ?? '').trim();
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [draft, setDraft] = useState(q);
+
+  useEffect(() => setDraft(q), [q]);
 
   const query = useQuery({
     queryKey: ['models', 'active'],
