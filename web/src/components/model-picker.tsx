@@ -52,7 +52,7 @@ export function ModelPicker({ value, onChange, disabled, extra = [] }: ModelPick
     return (
       <div className="flex flex-col gap-1 text-sm">
         <span>模型声明（可留空）</span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">正在读取模型目录…</span>
+        <span className="text-xs text-gray-500">正在读取模型目录…</span>
       </div>
     );
   }
@@ -63,7 +63,7 @@ export function ModelPicker({ value, onChange, disabled, extra = [] }: ModelPick
     return (
       <div className="flex flex-col gap-1 text-sm">
         <span>模型声明（可留空）</span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="text-xs text-gray-500">
           模型目录暂时读不到，可以这次先不声明，稍后在编辑页补。
         </span>
         <SelectedList value={value} onRemove={(s) => toggle(s, false)} disabled={disabled} />
@@ -81,9 +81,7 @@ export function ModelPicker({ value, onChange, disabled, extra = [] }: ModelPick
     return (
       <div className="flex flex-col gap-1 text-sm">
         <span>模型声明（可留空）</span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          模型目录还没有内容，暂时无法声明模型。
-        </span>
+        <span className="text-xs text-gray-500">模型目录还没有内容，暂时无法声明模型。</span>
       </div>
     );
   }
@@ -97,11 +95,11 @@ export function ModelPicker({ value, onChange, disabled, extra = [] }: ModelPick
   return (
     <fieldset className="flex flex-col gap-2 text-sm">
       <legend className="mb-1">模型声明（可留空，可多选）</legend>
-      <span className="text-xs text-gray-500 dark:text-gray-400">
+      <span className="text-xs text-gray-500">
         勾选目录里的模型。这是作者自己的声明，不是平台核验过的结论。
       </span>
       {data.length === 0 ? (
-        <span className="text-xs text-gray-500 dark:text-gray-400">模型目录还没有内容。</span>
+        <span className="text-xs text-gray-500">模型目录还没有内容。</span>
       ) : (
         data.map((model) => (
           <Checkbox
@@ -116,7 +114,7 @@ export function ModelPicker({ value, onChange, disabled, extra = [] }: ModelPick
       )}
       {orphans.length > 0 ? (
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="text-xs text-gray-600">
             作品上还声明了这些模型，但当前可选目录里没有（可能已退役、已合并或还没核验）：
           </span>
           {orphans.map((slug) => (
@@ -131,7 +129,7 @@ export function ModelPicker({ value, onChange, disabled, extra = [] }: ModelPick
           ))}
         </div>
       ) : null}
-      <span className="text-xs text-gray-500 dark:text-gray-400">
+      <span className="text-xs text-gray-500">
         目录里没有的模型现在声明不了——需要先收录进目录，缺了哪一条可以告诉管理员。
       </span>
     </fieldset>

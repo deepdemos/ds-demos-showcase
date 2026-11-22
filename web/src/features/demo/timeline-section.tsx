@@ -54,9 +54,9 @@ export function DemoTimeline({ slug }: { slug: string }) {
   });
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-      <h2 className="text-base font-medium text-gray-900 dark:text-gray-100">作品动态</h2>
-      <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
+    <section className="mt-6 rounded-lg border border-gray-200 p-4">
+      <h2 className="text-base font-medium text-gray-900">作品动态</h2>
+      <p className="mt-1 text-xs text-gray-500">
         只有你能看到这份记录：谁在什么时候通过了它、发布了它、改过它。
       </p>
 
@@ -85,16 +85,12 @@ export function DemoTimeline({ slug }: { slug: string }) {
           {timeline.data.items.map((item, index) => (
             <li
               key={`${item.kind}-${item.at}-${index}`}
-              className="flex flex-wrap items-baseline gap-x-2 text-sm text-gray-700 dark:text-gray-200"
+              className="flex flex-wrap items-baseline gap-x-2 text-sm text-gray-700"
             >
-              <span className="text-gray-500 dark:text-gray-400">{formatAt(item.at)}</span>
+              <span className="text-gray-500">{formatAt(item.at)}</span>
               <span className="font-medium">{KIND_LABELS[item.kind] ?? item.kind}</span>
-              {item.message ? (
-                <span className="text-gray-600 dark:text-gray-300">{item.message}</span>
-              ) : null}
-              {item.actorName ? (
-                <span className="text-gray-500 dark:text-gray-400">· {item.actorName}</span>
-              ) : null}
+              {item.message ? <span className="text-gray-600">{item.message}</span> : null}
+              {item.actorName ? <span className="text-gray-500">· {item.actorName}</span> : null}
             </li>
           ))}
         </ol>

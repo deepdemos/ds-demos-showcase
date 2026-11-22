@@ -105,17 +105,17 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
 
   if (publish.isSuccess) {
     return (
-      <li className="rounded-lg border border-green-300 bg-green-50/50 p-4 dark:border-green-900 dark:bg-green-950/30">
+      <li className="rounded-lg border border-green-300 bg-green-50/50 p-4">
         <p className="text-sm">
           <span className="font-medium">{title}</span> 已发布到「{channelLabel}」。
         </p>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+        <p className="mt-1 text-sm text-neutral-600">
           <Link to={`/demos/${slug}`} className="underline">
             查看作品页
           </Link>
         </p>
         {/* 发布成功之后才有渠道行，所以面板放在这里：管理员发完主站就能顺手挂第二个渠道。 */}
-        <div className="mt-3 border-t border-green-200 pt-3 dark:border-green-900">
+        <div className="mt-3 border-t border-green-200 pt-3">
           <ChannelPanel slug={slug} />
         </div>
       </li>
@@ -123,12 +123,12 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
   }
 
   return (
-    <li className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <li className="rounded-lg border border-neutral-200 p-4">
       <h3 className="truncate font-medium">{title}</h3>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <label className="block text-sm" htmlFor={`publish-channel-${slug}`}>
-          <span className="text-neutral-500 dark:text-neutral-400">渠道</span>
+          <span className="text-neutral-500">渠道</span>
           <Select
             id={`publish-channel-${slug}`}
             value={channel}
@@ -147,7 +147,7 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
         </label>
 
         <label className="block text-sm" htmlFor={`publish-visibility-${slug}`}>
-          <span className="text-neutral-500 dark:text-neutral-400">可见性</span>
+          <span className="text-neutral-500">可见性</span>
           <Select
             id={`publish-visibility-${slug}`}
             value={visibility}
@@ -160,7 +160,7 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
         </label>
 
         <label className="block text-sm" htmlFor={`publish-lang-${slug}`}>
-          <span className="text-neutral-500 dark:text-neutral-400">语言</span>
+          <span className="text-neutral-500">语言</span>
           <Select
             id={`publish-lang-${slug}`}
             value={lang}
@@ -174,13 +174,13 @@ export function PublishCard({ slug, title }: { slug: string; title: string }) {
       </div>
 
       {channel === 'astra' ? (
-        <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+        <p className="mt-2 text-xs text-neutral-500">
           Astra 是英文橱窗：语言已自动切到 en，可见性不收「隐藏」（要撤下请删掉这个渠道行）。
         </p>
       ) : null}
 
       {publish.isError ? (
-        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-2 text-sm text-red-600">
           {publish.error instanceof Error ? publish.error.message : '发布失败，请重试'}
         </p>
       ) : null}

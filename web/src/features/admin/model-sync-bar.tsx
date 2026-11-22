@@ -20,10 +20,10 @@ import { getModelSyncStatus, syncModelCatalog, type ModelSyncStatus } from '@/ap
  */
 
 const STATUS_TEXT: Record<string, { label: string; className: string }> = {
-  ok: { label: '已同步', className: 'text-green-700 dark:text-green-400' },
-  stale: { label: '需要同步', className: 'text-amber-700 dark:text-amber-400' },
-  failed: { label: '上次同步失败', className: 'text-red-700 dark:text-red-400' },
-  never: { label: '从未同步过', className: 'text-gray-600 dark:text-gray-400' },
+  ok: { label: '已同步', className: 'text-green-700' },
+  stale: { label: '需要同步', className: 'text-amber-700' },
+  failed: { label: '上次同步失败', className: 'text-red-700' },
+  never: { label: '从未同步过', className: 'text-gray-600' },
 };
 
 function when(value: string | null | undefined): string {
@@ -80,16 +80,14 @@ export function ModelSyncBar() {
   const shape = status.data ? STATUS_TEXT[status.data.status] : undefined;
 
   return (
-    <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+    <section className="rounded-xl border border-gray-200 p-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">上游目录镜像</h2>
+        <h2 className="text-sm font-medium text-gray-900">上游目录镜像</h2>
         {status.isPending ? <Skeleton lines={1} lineHeight="h-4" /> : null}
         {status.data && shape ? (
           <>
             <span className={`text-sm font-medium ${shape.className}`}>{shape.label}</span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              {syncSummary(status.data)}
-            </span>
+            <span className="text-xs text-gray-600">{syncSummary(status.data)}</span>
           </>
         ) : null}
         <span className="ml-auto" />
@@ -106,12 +104,12 @@ export function ModelSyncBar() {
         />
       ) : null}
       {status.data?.status === 'failed' && status.data.error ? (
-        <p role="alert" className="mt-2 text-xs text-red-700 dark:text-red-400">
+        <p role="alert" className="mt-2 text-xs text-red-700">
           上次失败原因：{status.data.error}
         </p>
       ) : null}
       {notice ? (
-        <p role="status" className="mt-2 text-xs text-gray-700 dark:text-gray-300">
+        <p role="status" className="mt-2 text-xs text-gray-700">
           {notice}
         </p>
       ) : null}

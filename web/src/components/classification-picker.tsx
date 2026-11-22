@@ -64,14 +64,14 @@ export function ClassificationPicker({
   };
 
   if (isPending) {
-    return <p className="m-0 text-sm text-gray-500 dark:text-gray-400">分类目录加载中…</p>;
+    return <p className="m-0 text-sm text-gray-500">分类目录加载中…</p>;
   }
   // 目录读不到时**不挡投稿**：分类是补充信息，读不到就当作这次不分类。
   // 挡住的代价是作者上传一个大包之后才发现提交不了。
   if (isError || !data) {
     return (
       <div className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-600 dark:text-gray-300">
+        <span className="text-gray-600">
           分类目录加载失败，可以这次先不打分类，稍后在编辑页补。
         </span>
         <span>
@@ -92,7 +92,7 @@ export function ClassificationPicker({
     <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
       <legend className="p-0 text-sm">
         分类
-        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+        <span className="ml-2 text-xs text-gray-500">
           （可选，可多选；分类挂在作品上，改稿不影响）
         </span>
       </legend>
@@ -102,13 +102,13 @@ export function ClassificationPicker({
         const picked = value.filter((s) => list.some((c) => c.slug === s));
         return (
           <div key={dim.dimension} className="flex flex-col gap-1">
-            <p className="m-0 text-xs text-gray-600 dark:text-gray-400">
+            <p className="m-0 text-xs text-gray-600">
               {dim.label}
               {dim.description ? ` — ${dim.description}` : ''}
               {picked.length > 0 ? `（已选 ${picked.length}）` : ''}
             </p>
             {list.length === 0 ? (
-              <p className="m-0 text-xs text-gray-500 dark:text-gray-500">这个维度还没有词条。</p>
+              <p className="m-0 text-xs text-gray-500">这个维度还没有词条。</p>
             ) : (
               <div className="flex flex-wrap gap-x-4 gap-y-1">
                 {list.map((item) => (
@@ -124,7 +124,7 @@ export function ClassificationPicker({
               </div>
             )}
             {dim.mode === 'open' ? (
-              <p className="m-0 text-xs text-gray-500 dark:text-gray-500">
+              <p className="m-0 text-xs text-gray-500">
                 这个维度是开放的，但自助新增还没做——缺了哪一条可以告诉管理员。
               </p>
             ) : null}
@@ -134,7 +134,7 @@ export function ClassificationPicker({
 
       {orphans.length > 0 ? (
         <div className="flex flex-col gap-1">
-          <p className="m-0 text-xs text-gray-600 dark:text-gray-400">
+          <p className="m-0 text-xs text-gray-600">
             作品上还有这些分类，但当前目录里查不到（可能已下架或改名）：
           </p>
           <div className="flex flex-wrap gap-x-4 gap-y-1">

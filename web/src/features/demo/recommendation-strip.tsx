@@ -30,10 +30,7 @@ export function RecommendationStrip() {
 
   return (
     <section className="mb-6" aria-labelledby="recommendation-heading">
-      <h2
-        id="recommendation-heading"
-        className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300"
-      >
+      <h2 id="recommendation-heading" className="mb-2 text-sm font-semibold text-gray-700">
         为你推荐
       </h2>
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -41,11 +38,11 @@ export function RecommendationStrip() {
           <li key={item.slug}>
             <Link
               to={`/demos/${item.slug}`}
-              className="block rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
+              className="block rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-gray-400"
             >
               <span className="font-medium">{item.title}</span>
               {item.classifications.length > 0 ? (
-                <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                <span className="mt-1 block text-xs text-gray-500">
                   {item.classifications.map((c) => c.label).join(' · ')}
                 </span>
               ) : null}

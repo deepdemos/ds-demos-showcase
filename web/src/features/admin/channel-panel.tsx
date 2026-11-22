@@ -138,7 +138,7 @@ export function ChannelPanel({ slug }: { slug: string }) {
           {channels.map((item) => (
             <li key={item.channel} className="flex items-center gap-3 text-sm">
               <span className="font-medium">{CHANNEL_LABELS[item.channel] ?? item.channel}</span>
-              <span className="text-neutral-500 dark:text-neutral-400">
+              <span className="text-neutral-500">
                 {VISIBILITY_LABELS[item.visibility] ?? item.visibility} · {item.lang}
               </span>
               <Button
@@ -150,9 +150,7 @@ export function ChannelPanel({ slug }: { slug: string }) {
                 撤下
               </Button>
               {channels.length === 1 ? (
-                <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                  最后一个渠道不能撤
-                </span>
+                <span className="text-xs text-neutral-500">最后一个渠道不能撤</span>
               ) : null}
             </li>
           ))}
@@ -175,7 +173,7 @@ export function ChannelPanel({ slug }: { slug: string }) {
       ) : null}
 
       {add.isError || remove.isError ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-red-600">
           {errorText(add.isError ? add.error : remove.error)}
         </p>
       ) : null}

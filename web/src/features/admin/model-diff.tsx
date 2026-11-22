@@ -98,7 +98,7 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
 
   if (!target) {
     return (
-      <section className="rounded-xl border border-dashed border-gray-200 p-4 dark:border-gray-800">
+      <section className="rounded-xl border border-dashed border-gray-200 p-4">
         <EmptyState
           title="选一条上游条目"
           description="左边点一条，这里会列出「上游有、本地没有」以及「两边不一样」的字段。"
@@ -114,9 +114,9 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
     .map(([field]) => field);
 
   return (
-    <section className="flex min-h-0 flex-col gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+    <section className="flex min-h-0 flex-col gap-3 rounded-xl border border-gray-200 p-4">
       <header className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+        <h2 className="text-sm font-medium text-gray-900">
           {item?.name ?? preview.data?.target?.name ?? target.externalId}
         </h2>
         {mode ? (
@@ -124,16 +124,16 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
             className={[
               'rounded px-1.5 py-0.5 text-[11px]',
               mode === 'create'
-                ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                ? 'bg-blue-50 text-blue-700'
                 : mode === 'conflict'
-                  ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
-                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+                  ? 'bg-red-50 text-red-700'
+                  : 'bg-amber-50 text-amber-700',
             ].join(' ')}
           >
             {mode === 'create' ? '新建' : mode === 'conflict' ? '已被认领' : '补全'}
           </span>
         ) : null}
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="text-xs text-gray-500">
           {item?.providerName ?? target.providerId} · {target.externalId}
         </span>
       </header>
@@ -150,21 +150,21 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
       ) : (
         <>
           {mode === 'complete' && preview.data?.target ? (
-            <p className="text-xs text-gray-600 dark:text-gray-400">
+            <p className="text-xs text-gray-600">
               补全到已有模型 <code>{preview.data.target.slug}</code>
             </p>
           ) : null}
           {mode === 'conflict' ? (
             <p
               role="alert"
-              className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+              className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800"
             >
               该上游条目已被 <code>{conflict?.slug}</code> 认领。先把两条模型归并，再从这里导入。
             </p>
           ) : null}
           {mode === 'create' ? (
             <div className="flex flex-col gap-2">
-              <label className="text-xs text-gray-600 dark:text-gray-400">
+              <label className="text-xs text-gray-600">
                 展示名（默认取上游名，去掉 `:free` 这类渠道标记）
                 <Input
                   aria-label="展示名"
@@ -179,7 +179,7 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
           <div className="min-h-0 flex-1 overflow-y-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
+                <tr className="text-left text-xs text-gray-500">
                   <th className="w-8 py-1" />
                   <th className="py-1">字段</th>
                   <th className="py-1">本地</th>
@@ -191,7 +191,7 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
                 {preview.data?.fields.map((f) => {
                   const reason = fieldReason(f);
                   return (
-                    <tr key={f.field} className="border-t border-gray-100 dark:border-gray-800">
+                    <tr key={f.field} className="border-t border-gray-100">
                       <td className="py-1 align-top">
                         <Checkbox
                           label={`选择 ${f.field}`}
@@ -204,14 +204,14 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
                           }
                         />
                       </td>
-                      <td className="py-1 align-top text-gray-900 dark:text-gray-100">{f.field}</td>
-                      <td className="max-w-48 truncate py-1 align-top text-gray-600 dark:text-gray-400">
+                      <td className="py-1 align-top text-gray-900">{f.field}</td>
+                      <td className="max-w-48 truncate py-1 align-top text-gray-600">
                         {f.current || '—'}
                       </td>
-                      <td className="max-w-48 truncate py-1 align-top text-gray-900 dark:text-gray-100">
+                      <td className="max-w-48 truncate py-1 align-top text-gray-900">
                         {f.upstream || '—'}
                       </td>
-                      <td className="py-1 align-top text-xs text-gray-500 dark:text-gray-400">
+                      <td className="py-1 align-top text-xs text-gray-500">
                         {reason ?? (f.source === 'none' ? '本地没有' : f.source)}
                       </td>
                     </tr>
@@ -237,9 +237,7 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
             >
               {enqueued ? '已在待导入清单' : '加入待导入'}
             </Button>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              已选 {checkedFields.length} 个字段
-            </span>
+            <span className="text-xs text-gray-500">已选 {checkedFields.length} 个字段</span>
           </div>
         </>
       )}

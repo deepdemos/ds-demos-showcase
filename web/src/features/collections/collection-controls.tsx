@@ -79,7 +79,7 @@ export function CollectionControls({ slug }: { slug: string }) {
 
   if (me === null) {
     return (
-      <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+      <p className="mt-4 text-sm text-gray-500">
         登录后可收藏这件作品。
         <Link
           className="ml-2 underline"
@@ -135,15 +135,15 @@ export function CollectionControls({ slug }: { slug: string }) {
         >
           {inDefault ? '已收藏' : '收藏'}
         </Button>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="text-xs text-gray-500">
           {inDefault ? '已加入默认收藏夹' : '加入默认收藏夹'}
         </span>
       </div>
 
       <details className="text-sm">
-        <summary className="cursor-pointer text-gray-600 dark:text-gray-300">加入指定夹</summary>
+        <summary className="cursor-pointer text-gray-600">加入指定夹</summary>
         {custom.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-2 text-sm text-gray-500">
             还没有自定义收藏夹。
             <Link className="ml-2 underline" to="/me/collections">
               去新建
@@ -170,7 +170,7 @@ export function CollectionControls({ slug }: { slug: string }) {
       </details>
 
       {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-red-600">
           {error}
         </p>
       ) : null}
