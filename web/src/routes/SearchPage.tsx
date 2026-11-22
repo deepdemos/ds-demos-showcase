@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Button, EmptyState, ErrorState, Input, Pagination, Skeleton } from '@/components/ui';
@@ -13,6 +13,8 @@ export function SearchPage() {
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [draft, setDraft] = useState(q);
 
+  useEffect(() => setDraft(q), [q]);
+
   const query = useQuery({
     queryKey: ['search', q, page],
     queryFn: async (): Promise<DemoList> => {
@@ -20,6 +22,8 @@ export function SearchPage() {
       if (response.status !== 200) throw new Error('搜索失败（' + response.status + '）');
       return response.data;
     },
+    // 没有关键词时不打全量列表：搜索页的空态是提示，不是作品库的第二份。
+    enabled: q !== '',
   });
 
   function submit(event: FormEvent) {
@@ -56,13 +60,27 @@ export function SearchPage() {
         </Button>
       </form>
 
-      {query.isPending ? (
+      {q === '' ? (
+        <div className="mt-6">
+          <EmptyState
+            title="还没有搜索"
+            description="输入关键词后按搜索。"
+            action={
+              <Link className="text-sm underline" to="/demos">
+                去作品库
+              </Link>
+            }
+          />
+        </div>
+      ) : null}
+
+      {q !== '' && query.isPending ? (
         <div className="mt-6">
           <Skeleton lines={6} lineHeight="h-24" />
         </div>
       ) : null}
 
-      {query.isError ? (
+      {q !== '' && query.isError ? (
         <div className="mt-6">
           <ErrorState
             title="搜索失败"
@@ -73,11 +91,11 @@ export function SearchPage() {
         </div>
       ) : null}
 
-      {query.data && query.data.items.length === 0 ? (
+      {q !== '' && query.data && query.data.items.length === 0 ? (
         <div className="mt-6">
           <EmptyState
-            title={q ? '没有找到作品' : '还没有搜索'}
-            description={q ? '换一个关键词，或者去作品库按分类筛选。' : '输入关键词后按搜索。'}
+            title="没有找到作品"
+            description="换一个关键词，或者去作品库按分类筛选。"
             action={
               <Link className="text-sm underline" to="/demos">
                 去作品库

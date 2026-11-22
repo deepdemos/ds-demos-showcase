@@ -49,10 +49,10 @@ test('把关键词带给列表接口并显示结果', async () => {
   expect(listDemos).toHaveBeenCalledWith(expect.objectContaining({ q: '钢琴', page: 1 }));
 });
 
-test('空关键词显示输入提示，列表走空查询', async () => {
+test('空关键词只显示输入提示，不发请求', async () => {
   renderAt('/search');
   expect(await screen.findByText('还没有搜索')).toBeInTheDocument();
-  expect(listDemos).toHaveBeenCalled();
+  expect(listDemos).not.toHaveBeenCalled();
 });
 
 test('提交搜索词后更新 URL', async () => {
