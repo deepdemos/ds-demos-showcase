@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { Rating } from './rating';
@@ -17,6 +17,28 @@ describe('Rating', () => {
     // 文案会变：已选中的那颗说「取消评分」而不是「打 3 分」。
     screen.getByRole('radio', { name: /取消评分/ }).click();
     expect(onChange).toHaveBeenCalledWith(0);
+  });
+
+  test('边界方向键只移动焦点，不撤销评分（issue #538）', () => {
+    const onChange = vi.fn();
+    render(<Rating label="打分" value={5} onChange={onChange} />);
+    const selected = screen.getByRole('radio', { name: /取消评分/ });
+
+    fireEvent.keyDown(selected, { key: 'ArrowRight' });
+    fireEvent.keyDown(selected, { key: 'ArrowDown' });
+    fireEvent.keyDown(selected, { key: 'End' });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test('非边界方向键改到下一颗星', () => {
+    const onChange = vi.fn();
+    render(<Rating label="打分" value={3} onChange={onChange} />);
+    const selected = screen.getByRole('radio', { name: /取消评分/ });
+
+    fireEvent.keyDown(selected, { key: 'ArrowRight' });
+
+    expect(onChange).toHaveBeenCalledWith(4);
   });
 
   test('读屏能听出选中状态', () => {
