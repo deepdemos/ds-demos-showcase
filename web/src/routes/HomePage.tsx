@@ -1,5 +1,9 @@
 import { Link } from 'react-router';
-import { Page } from '@/components/layout/page';
+import { useQuery } from '@tanstack/react-query';
+import { Page, PageSection } from '@/components/layout/page';
+import { Skeleton } from '@/components/ui';
+import { listDemos, type DemoList } from '@/api';
+import { DemoCard } from '@/features/demo/demo-card';
 import { useAuth } from '@/features/auth/AuthContext';
 
 // 首页只做一件事：把「这站是什么」和「现在能去哪」说清楚。
@@ -9,6 +13,14 @@ const actionLink =
 
 export function HomePage() {
   const { me } = useAuth();
+  const latest = useQuery({
+    queryKey: ['home-latest'],
+    queryFn: async (): Promise<DemoList> => {
+      const response = await listDemos({ sort: 'latest', page: 1, pageSize: 3 });
+      if (response.status !== 200) throw new Error('加载失败（' + response.status + '）');
+      return response.data;
+    },
+  });
 
   return (
     <Page
@@ -39,6 +51,33 @@ export function HomePage() {
           </Link>
         )}
       </p>
+
+      <PageSection
+        title="最新上架"
+        description="最近发布的作品。"
+        actions={
+          <Link className="text-sm underline" to="/demos?sort=latest">
+            查看全部
+          </Link>
+        }
+      >
+        {latest.isPending ? <Skeleton lines={3} /> : null}
+        {latest.isError ? (
+          <p className="m-0 text-sm text-gray-500">最新作品暂时读不到，先去作品库看看。</p>
+        ) : null}
+        {latest.data && latest.data.items.length === 0 ? (
+          <p className="m-0 text-sm text-gray-500">还没有公开作品。</p>
+        ) : null}
+        {latest.data && latest.data.items.length > 0 ? (
+          <ul className="grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
+            {latest.data.items.map((demo) => (
+              <li key={demo.slug}>
+                <DemoCard demo={demo} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </PageSection>
     </Page>
   );
 }

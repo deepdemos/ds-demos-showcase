@@ -112,7 +112,7 @@ describe('模型页', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('DeepSeek Chat')).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: '← 返回作品库' })).toHaveAttribute('href', '/demos');
+    expect(screen.getByRole('link', { name: '← 返回模型目录' })).toHaveAttribute('href', '/models');
   });
 
   it('作品数链到作品库的模型筛选，而不是一个死数字', async () => {
@@ -169,8 +169,7 @@ describe('模型页', () => {
     renderPage('nope');
 
     await waitFor(() => expect(screen.getByText('没有这个模型')).toBeInTheDocument());
-    // 出口是作品库：模型目录页还没做，指向 `/models` 会 404。
-    expect(screen.getByRole('link', { name: '去作品库' })).toHaveAttribute('href', '/demos');
+    expect(screen.getByRole('link', { name: '去模型目录' })).toHaveAttribute('href', '/models');
   });
 
   it('接口失败时显示错误并允许重试', async () => {

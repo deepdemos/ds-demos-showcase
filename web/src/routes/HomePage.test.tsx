@@ -1,7 +1,11 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { listDemos } from '@/api';
 import { HomePage } from './HomePage';
+
+vi.mock('@/api', () => ({ listDemos: vi.fn() }));
 
 const auth = vi.hoisted(() => ({
   me: null as null | { sub: string; username: string; displayName: string },
@@ -18,12 +22,22 @@ vi.mock('@/features/auth/AuthContext', () => ({
 }));
 
 function renderHome() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
+
+beforeEach(() => {
+  vi.mocked(listDemos).mockResolvedValue({
+    status: 200,
+    data: { items: [], page: 1, pageSize: 3, total: 0 },
+  } as never);
+});
 
 describe('HomePage', () => {
   test('未登录：给出作品库、排行榜和登录三个入口', () => {
@@ -42,6 +56,32 @@ describe('HomePage', () => {
 
     expect(screen.getByRole('link', { name: '投稿' })).toHaveAttribute('href', '/submit');
     expect(screen.queryByRole('link', { name: '登录' })).toBeNull();
+  });
+
+  test('首页显示最新上架作品', async () => {
+    auth.me = null;
+    vi.mocked(listDemos).mockResolvedValue({
+      status: 200,
+      data: {
+        items: [
+          {
+            slug: 'latest-demo',
+            title: '最新作品',
+            coverUrl: null,
+            createdAt: '2026-01-01T00:00:00Z',
+            matchedIn: 'title',
+          },
+        ],
+        page: 1,
+        pageSize: 3,
+        total: 1,
+      },
+    } as never);
+    renderHome();
+    expect(await screen.findByRole('link', { name: /最新作品/ })).toHaveAttribute(
+      'href',
+      '/demos/latest-demo',
+    );
   });
 
   // 首页曾经写着「目前开放的是作品库（只读）」——那是在投稿、评分、审核、排行榜都上线之前的事实。
