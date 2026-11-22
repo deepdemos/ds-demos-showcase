@@ -16,6 +16,8 @@ export interface PaginationProps {
  *
  * 为什么不显示全部页码：作品库未来会有上百页，全部铺开会把工具栏撑爆。这里用
  * 「首 / 上一页 / 当前 x/y / 下一页 / 末」五个位置，页码本身用文本表达。
+ *
+ * 窄屏允许换行：以前这里是一行不换行，390px 下会把「末页」裁掉。
  */
 export function Pagination({ page, pageCount, onPageChange, disabled = false }: PaginationProps) {
   if (pageCount < 1) return null;
@@ -26,7 +28,7 @@ export function Pagination({ page, pageCount, onPageChange, disabled = false }: 
   };
 
   return (
-    <nav aria-label="分页" className="flex items-center justify-center gap-2 py-4">
+    <nav aria-label="分页" className="flex flex-wrap items-center justify-center gap-2 py-4">
       <Button disabled={disabled || page <= 1} onClick={() => go(1)}>
         首页
       </Button>
@@ -34,7 +36,7 @@ export function Pagination({ page, pageCount, onPageChange, disabled = false }: 
         上一页
       </Button>
       <span
-        className="px-2 text-sm text-gray-600 tabular-nums dark:text-gray-400"
+        className="whitespace-nowrap px-2 text-sm text-gray-600 tabular-nums dark:text-gray-400"
         aria-live="polite"
       >
         第 {page} / {pageCount} 页

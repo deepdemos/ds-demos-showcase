@@ -19,6 +19,7 @@ import {
   InputDefaultDemo,
   InputDisabledDemo,
   InputErrorDemo,
+  InputFullDemo,
   InputPasswordDemo,
 } from './input.demo';
 import { MenuDefaultDemo } from './menu.demo';
@@ -104,6 +105,14 @@ export const controls: ControlSpec[] = [
     category: 'input',
     description: '单行文本输入。',
     Demo: InputDefaultDemo,
+  },
+  {
+    id: 'input/full',
+    component: 'Input',
+    name: '全宽输入框',
+    category: 'input',
+    description: '填满父容器；表单里默认用这一种，避免按钮与输入框脱节。',
+    Demo: InputFullDemo,
   },
   {
     id: 'input/error',
