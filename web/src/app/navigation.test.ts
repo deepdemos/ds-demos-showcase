@@ -47,12 +47,19 @@ describe('导航派生', () => {
 
   test('个人区二级导航使用 /me 地址，不混入管理入口', () => {
     const items = meNav(me(['demo.review']));
-    expect(items.map((item) => item.label)).toEqual(['我的作品', '收藏夹', '浏览历史', '通知']);
+    expect(items.map((item) => item.label)).toEqual([
+      '我的作品',
+      '收藏夹',
+      '浏览历史',
+      '通知',
+      '设置',
+    ]);
     expect(items.map((item) => item.to)).toEqual([
       '/me/demos',
       '/me/collections',
       '/me/history',
       '/me/notifications',
+      '/me/settings',
     ]);
   });
 
@@ -62,6 +69,7 @@ describe('导航派生', () => {
       '/me/collections',
       '/me/history',
       '/me/notifications',
+      '/me/settings',
     ]);
   });
 
@@ -92,6 +100,7 @@ describe('导航派生', () => {
     expect(adminNav(me([], 'admin')).map((item) => item.label)).toEqual([
       '收件箱',
       '作品审核',
+      '提案',
       '申诉',
       '模型导入',
     ]);

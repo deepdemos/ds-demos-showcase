@@ -21,9 +21,11 @@ import { NotFoundPage } from '@/routes/NotFoundPage';
 import { NotificationsPage } from '@/routes/NotificationsPage';
 import { PasswordResetPage } from '@/routes/PasswordResetPage';
 import { ProposalDetailPage } from '@/routes/ProposalDetailPage';
+import { ProposalsPage } from '@/routes/ProposalsPage';
 import { RankingsPage } from '@/routes/RankingsPage';
 import { RegisterPage } from '@/routes/RegisterPage';
 import { SearchPage } from '@/routes/SearchPage';
+import { SettingsPage } from '@/routes/SettingsPage';
 import { AboutPage } from '@/routes/AboutPage';
 import { SubmitPage } from '@/routes/SubmitPage';
 import { VerifyEmailPage } from '@/routes/VerifyEmailPage';
@@ -55,12 +57,14 @@ export const routeElements: RouteElementMap = {
   notifications: <NotificationsPage />,
   'my-demos': <MyDemosPage />,
   history: <HistoryPage />,
+  settings: <SettingsPage />,
   login: <LoginPage />,
   register: <RegisterPage />,
   'verify-email': <VerifyEmailPage />,
   'password-reset': <PasswordResetPage />,
   'admin-inbox': <AdminInboxPage />,
   'admin-reviews': <AdminReviewPage />,
+  'admin-proposals': <ProposalsPage />,
   'admin-proposal': <ProposalDetailPage />,
   'admin-appeals': <AdminAppealsPage />,
   'admin-models': <AdminModelsPage />,

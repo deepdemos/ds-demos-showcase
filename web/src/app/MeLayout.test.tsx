@@ -78,6 +78,7 @@ describe('MeLayout', () => {
       'href',
       '/me/notifications',
     );
+    expect(within(nav).getByRole('link', { name: '设置' })).toHaveAttribute('href', '/me/settings');
     expect(screen.getByText('我的作品正文')).toBeInTheDocument();
   });
 
