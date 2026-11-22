@@ -33,18 +33,22 @@ export function MeLayout() {
     );
   }
 
-  if (me === null) {
+  // HIST-001：本机浏览历史不要求登录；其余 /me 页面仍由布局守卫。
+  const guestHistory = location.pathname === '/me/history';
+  if (me === null && !guestHistory) {
     const returnTo = returnToParam(location.pathname + location.search + location.hash);
     return <Navigate to={'/login' + returnTo} replace />;
   }
 
   return (
     <div>
-      <div className="border-b border-gray-200 bg-white">
-        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-          <NavList ariaLabel="个人中心导航" items={meNav(me)} onNavigate={scrollTop} />
+      {me ? (
+        <div className="border-b border-gray-200 bg-white">
+          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+            <NavList ariaLabel="个人中心导航" items={meNav(me)} onNavigate={scrollTop} />
+          </div>
         </div>
-      </div>
+      ) : null}
       <Outlet />
     </div>
   );
