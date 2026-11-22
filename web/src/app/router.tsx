@@ -1,6 +1,10 @@
 import type { RouteObject } from 'react-router';
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, matchPath, useLocation } from 'react-router';
 import { DevRoomPage } from '@/dev-room/DevRoomPage';
+import { PagesListPage } from '@/dev-room/PagesListPage';
+import { fixtureElements, fixturePages } from '@/dev-room/fixtures';
+import { NotFoundPage } from '@/routes/NotFoundPage';
+import { UnavailablePage } from './UnavailablePage';
 import { AdminLayout } from './AdminLayout';
 import { AppShell } from './AppShell';
 import { AUTH } from './auth-layout';
@@ -17,14 +21,18 @@ import { childPath, pages, redirects, type PageEntry } from './routes';
  * 放到最后。不要在这里手写页面 path——加页面去 routes.ts 登记，再在
  * route-elements.tsx 里补元素。
  */
-function elementFor(page: PageEntry) {
-  const element = routeElements[page.id];
+function elementFor(page: PageEntry, elements: typeof routeElements = routeElements) {
+  const element = elements[page.id];
   if (!element) throw new Error('页面清单缺少路由元素：' + page.id);
   return element;
 }
 
-function pageRoute(page: PageEntry, parentPath = ''): RouteObject {
-  const base = { element: elementFor(page), errorElement: <RouteError /> };
+function pageRoute(
+  page: PageEntry,
+  parentPath = '',
+  elements: typeof routeElements = routeElements,
+): RouteObject {
+  const base = { element: elementFor(page, elements), errorElement: <RouteError /> };
   if (page.path === '*') return { path: '*', ...base };
   const path = parentPath
     ? page.path.slice(parentPath.length).replace(/^\//, '')
@@ -36,12 +44,33 @@ function pageRoute(page: PageEntry, parentPath = ''): RouteObject {
 const notFound = pages.find((page) => page.path === '*');
 if (!notFound) throw new Error('页面清单缺少 404 路由');
 
+/** 生产访问 DEV-only fixture：给「尚未接入」，不要冒充普通 404。 */
+function NotFoundRoute() {
+  const { pathname } = useLocation();
+  if (!import.meta.env.DEV) {
+    const fixture = fixturePages.find(
+      (page) => page.path !== '*' && matchPath({ path: page.path, end: true }, pathname) !== null,
+    );
+    if (fixture) return <UnavailablePage />;
+  }
+  return <NotFoundPage />;
+}
+
 const authPages = pages.filter((page) => page.group === 'auth');
 const mePages = pages.filter((page) => page.group === 'me');
 const adminPages = pages.filter((page) => page.group === 'admin');
 const shellPages = pages.filter(
   (page) => (page.group === 'public' || page.group === 'system') && page.path !== '*',
 );
+
+/** DEV-only fixtures：路径和组挂在同一套外壳下，生产构建不注册。 */
+const fixturePublic = import.meta.env.DEV
+  ? fixturePages.filter((page) => page.group === 'public')
+  : [];
+const fixtureMe = import.meta.env.DEV ? fixturePages.filter((page) => page.group === 'me') : [];
+const fixtureAdmin = import.meta.env.DEV
+  ? fixturePages.filter((page) => page.group === 'admin')
+  : [];
 
 /** 旧地址：和页面一样套 AppShell，跳转时保留查询串。 */
 const redirectRoutes: RouteObject[] = redirects.map((entry) => ({
@@ -52,7 +81,10 @@ const redirectRoutes: RouteObject[] = redirects.map((entry) => ({
 
 /** DEV-only：组件开发室与后续页面清单。生产构建里整段被剔除。 */
 const devRoutes: RouteObject[] = import.meta.env.DEV
-  ? [{ path: '/dev-room', element: <DevRoomPage />, errorElement: <RouteError /> }]
+  ? [
+      { path: '/dev-room', element: <DevRoomPage />, errorElement: <RouteError /> },
+      { path: '/dev-room/pages', element: <PagesListPage />, errorElement: <RouteError /> },
+    ]
   : [];
 
 export const router = createBrowserRouter([
@@ -65,20 +97,27 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       ...shellPages.map((page) => pageRoute(page)),
+      ...fixturePublic.map((page) => pageRoute(page, '', fixtureElements)),
       {
         path: 'me',
         element: <MeLayout />,
         errorElement: <RouteError />,
-        children: mePages.map((page) => pageRoute(page, '/me')),
+        children: [
+          ...mePages.map((page) => pageRoute(page, '/me')),
+          ...fixtureMe.map((page) => pageRoute(page, '/me', fixtureElements)),
+        ],
       },
       {
         path: 'admin',
         element: <AdminLayout />,
         errorElement: <RouteError />,
-        children: adminPages.map((page) => pageRoute(page, '/admin')),
+        children: [
+          ...adminPages.map((page) => pageRoute(page, '/admin')),
+          ...fixtureAdmin.map((page) => pageRoute(page, '/admin', fixtureElements)),
+        ],
       },
       ...redirectRoutes,
-      pageRoute(notFound),
+      { path: '*', element: <NotFoundRoute />, errorElement: <RouteError /> },
     ],
   },
   {
