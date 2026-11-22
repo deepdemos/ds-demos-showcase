@@ -21,6 +21,7 @@ import { NotFoundPage } from '@/routes/NotFoundPage';
 import { NotificationsPage } from '@/routes/NotificationsPage';
 import { PasswordResetPage } from '@/routes/PasswordResetPage';
 import { ProposalDetailPage } from '@/routes/ProposalDetailPage';
+import { ProposalsPage } from '@/routes/ProposalsPage';
 import { RankingsPage } from '@/routes/RankingsPage';
 import { RegisterPage } from '@/routes/RegisterPage';
 import { SearchPage } from '@/routes/SearchPage';
@@ -63,6 +64,7 @@ export const routeElements: RouteElementMap = {
   'password-reset': <PasswordResetPage />,
   'admin-inbox': <AdminInboxPage />,
   'admin-reviews': <AdminReviewPage />,
+  'admin-proposals': <ProposalsPage />,
   'admin-proposal': <ProposalDetailPage />,
   'admin-appeals': <AdminAppealsPage />,
   'admin-models': <AdminModelsPage />,

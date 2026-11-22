@@ -100,6 +100,7 @@ describe('导航派生', () => {
     expect(adminNav(me([], 'admin')).map((item) => item.label)).toEqual([
       '收件箱',
       '作品审核',
+      '提案',
       '申诉',
       '模型导入',
     ]);

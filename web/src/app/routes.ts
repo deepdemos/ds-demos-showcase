@@ -362,6 +362,23 @@ export const pages: readonly PageEntry[] = [
     availability: 'ready',
   },
   {
+    id: 'admin-proposals',
+    path: '/admin/proposals',
+    title: '提案',
+    description: '用户实体提案列表与裁决入口。',
+    group: 'admin',
+    access: { kind: 'auth' },
+    width: 'wide',
+    availability: 'ready',
+    nav: {
+      area: 'admin',
+      label: '提案',
+      order: 30,
+      group: '待办',
+      permissions: ['proposal.review'],
+    },
+  },
+  {
     id: 'admin-appeals',
     path: '/admin/appeals',
     title: '申诉',
