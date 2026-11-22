@@ -11,6 +11,210 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getBenchmarkBySlug = `-- name: GetBenchmarkBySlug :one
+SELECT id, slug, name, publisher, homepage_url, category, description,
+       display_tier, license, license_url, attribution
+FROM benchmarks
+WHERE slug = $1 AND status = 'active'
+`
+
+type GetBenchmarkBySlugRow struct {
+	ID          int64
+	Slug        string
+	Name        string
+	Publisher   string
+	HomepageUrl string
+	Category    string
+	Description string
+	DisplayTier string
+	License     string
+	LicenseUrl  string
+	Attribution string
+}
+
+func (q *Queries) GetBenchmarkBySlug(ctx context.Context, slug string) (GetBenchmarkBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getBenchmarkBySlug, slug)
+	var i GetBenchmarkBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Publisher,
+		&i.HomepageUrl,
+		&i.Category,
+		&i.Description,
+		&i.DisplayTier,
+		&i.License,
+		&i.LicenseUrl,
+		&i.Attribution,
+	)
+	return i, err
+}
+
+const listBenchmarkMetricsWithScores = `-- name: ListBenchmarkMetricsWithScores :many
+SELECT bm.key, bm.label, bm.unit, bm.is_primary, bm.higher_is_better,
+       bs.external_name, bs.raw_score, bs.rank, bs.sample_size,
+       bs.uncertainty_lower, bs.uncertainty_upper, bs.match_status,
+       m.slug AS model_slug, m.name AS model_name
+FROM benchmark_metrics bm
+LEFT JOIN benchmark_scores bs ON bs.metric_id = bm.id
+LEFT JOIN models m ON m.id = bs.model_id
+WHERE bm.version_id = $1
+ORDER BY bm.is_primary DESC, bm.sort, bm.key, bs.rank NULLS LAST, bs.raw_score DESC
+`
+
+type ListBenchmarkMetricsWithScoresRow struct {
+	Key              string
+	Label            string
+	Unit             string
+	IsPrimary        bool
+	HigherIsBetter   bool
+	ExternalName     pgtype.Text
+	RawScore         pgtype.Float8
+	Rank             pgtype.Int4
+	SampleSize       pgtype.Int8
+	UncertaintyLower pgtype.Float8
+	UncertaintyUpper pgtype.Float8
+	MatchStatus      pgtype.Text
+	ModelSlug        pgtype.Text
+	ModelName        pgtype.Text
+}
+
+// 某一版的指标表。**LEFT JOIN**：指标存在但一条分数都没有时仍要出行（空榜要正常展示）。
+//
+// 排序：主榜在前、再按 sort、最后按名次（没有名次的排在后面）。
+func (q *Queries) ListBenchmarkMetricsWithScores(ctx context.Context, versionID int64) ([]ListBenchmarkMetricsWithScoresRow, error) {
+	rows, err := q.db.Query(ctx, listBenchmarkMetricsWithScores, versionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBenchmarkMetricsWithScoresRow{}
+	for rows.Next() {
+		var i ListBenchmarkMetricsWithScoresRow
+		if err := rows.Scan(
+			&i.Key,
+			&i.Label,
+			&i.Unit,
+			&i.IsPrimary,
+			&i.HigherIsBetter,
+			&i.ExternalName,
+			&i.RawScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.UncertaintyLower,
+			&i.UncertaintyUpper,
+			&i.MatchStatus,
+			&i.ModelSlug,
+			&i.ModelName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBenchmarkVersions = `-- name: ListBenchmarkVersions :many
+SELECT id, version, as_of, source_type, coverage, participant_count, source_url
+FROM benchmark_versions
+WHERE benchmark_id = $1 AND status = 'active'
+ORDER BY as_of DESC, id DESC
+`
+
+type ListBenchmarkVersionsRow struct {
+	ID               int64
+	Version          string
+	AsOf             pgtype.Date
+	SourceType       string
+	Coverage         string
+	ParticipantCount pgtype.Int8
+	SourceUrl        string
+}
+
+// 版本历史：全量、按日期倒序。`self_reported` 照常返回，由页面分组（MODEL-020）。
+func (q *Queries) ListBenchmarkVersions(ctx context.Context, benchmarkID int64) ([]ListBenchmarkVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listBenchmarkVersions, benchmarkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBenchmarkVersionsRow{}
+	for rows.Next() {
+		var i ListBenchmarkVersionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Version,
+			&i.AsOf,
+			&i.SourceType,
+			&i.Coverage,
+			&i.ParticipantCount,
+			&i.SourceUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBenchmarks = `-- name: ListBenchmarks :many
+
+SELECT b.slug, b.name, b.publisher, b.category, b.display_tier,
+       (SELECT max(bv.as_of) FROM benchmark_versions bv
+         WHERE bv.benchmark_id = b.id AND bv.status = 'active')::date AS latest_as_of
+FROM benchmarks b
+WHERE b.status = 'active'
+ORDER BY b.name, b.id
+`
+
+type ListBenchmarksRow struct {
+	Slug        string
+	Name        string
+	Publisher   string
+	Category    string
+	DisplayTier string
+	LatestAsOf  pgtype.Date
+}
+
+// ---------- 读取：目录与详情（#427）----------
+// 目录一页：只取列表页要的五列，外加「最新版本日期」这个派生值。
+//
+// 不复用详情那句 SQL：列表页拿全字段再丢掉，等于每次翻页都读一遍用不上的列。
+// 没有任何版本时 `latest_as_of` 为 NULL —— 那是「刚收录、还没导数据」的正常状态，不是缺数据。
+func (q *Queries) ListBenchmarks(ctx context.Context) ([]ListBenchmarksRow, error) {
+	rows, err := q.db.Query(ctx, listBenchmarks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBenchmarksRow{}
+	for rows.Next() {
+		var i ListBenchmarksRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Name,
+			&i.Publisher,
+			&i.Category,
+			&i.DisplayTier,
+			&i.LatestAsOf,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveModelForBenchmark = `-- name: ResolveModelForBenchmark :one
 SELECT m.id
 FROM models m

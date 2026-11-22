@@ -152,6 +152,56 @@
         "optional": false
       }
     },
+    "BenchmarkDetail": {
+      "attribution": {
+        "type": "string",
+        "optional": true
+      },
+      "category": {
+        "type": "string",
+        "optional": false
+      },
+      "description": {
+        "type": "string",
+        "optional": true
+      },
+      "displayTier": {
+        "type": "BenchmarkDetailDisplayTier",
+        "optional": false
+      },
+      "homepageUrl": {
+        "type": "string",
+        "optional": false
+      },
+      "license": {
+        "type": "string",
+        "optional": true
+      },
+      "licenseUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "metrics": {
+        "type": "[]BenchmarkMetricRow",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "publisher": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "versions": {
+        "type": "[]BenchmarkVersionSummary",
+        "optional": false
+      }
+    },
     "BenchmarkImportBenchmark": {
       "attribution": {
         "type": "string",
@@ -390,6 +440,128 @@
       "sourceType": {
         "type": "string",
         "optional": true
+      },
+      "sourceUrl": {
+        "type": "string",
+        "optional": true
+      },
+      "version": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "BenchmarkList": {
+      "items": {
+        "type": "[]BenchmarkSummary",
+        "optional": false
+      }
+    },
+    "BenchmarkMetricRow": {
+      "higherIsBetter": {
+        "type": "bool",
+        "optional": false
+      },
+      "isPrimary": {
+        "type": "bool",
+        "optional": false
+      },
+      "key": {
+        "type": "string",
+        "optional": false
+      },
+      "label": {
+        "type": "string",
+        "optional": false
+      },
+      "scores": {
+        "type": "[]BenchmarkScoreRow",
+        "optional": false
+      },
+      "unit": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "BenchmarkScoreRow": {
+      "externalName": {
+        "type": "string",
+        "optional": false
+      },
+      "matchStatus": {
+        "type": "string",
+        "optional": false
+      },
+      "modelName": {
+        "type": "string",
+        "optional": true
+      },
+      "modelSlug": {
+        "type": "string",
+        "optional": true
+      },
+      "rank": {
+        "type": "int",
+        "optional": true
+      },
+      "rawScore": {
+        "type": "float64",
+        "optional": false
+      },
+      "sampleSize": {
+        "type": "int",
+        "optional": true
+      },
+      "uncertaintyLower": {
+        "type": "float64",
+        "optional": true
+      },
+      "uncertaintyUpper": {
+        "type": "float64",
+        "optional": true
+      }
+    },
+    "BenchmarkSummary": {
+      "category": {
+        "type": "string",
+        "optional": false
+      },
+      "displayTier": {
+        "type": "BenchmarkSummaryDisplayTier",
+        "optional": false
+      },
+      "latestAsOf": {
+        "type": "openapi_types.Date",
+        "optional": true
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "publisher": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "BenchmarkVersionSummary": {
+      "asOf": {
+        "type": "openapi_types.Date",
+        "optional": false
+      },
+      "coverage": {
+        "type": "string",
+        "optional": false
+      },
+      "participantCount": {
+        "type": "int",
+        "optional": true
+      },
+      "sourceType": {
+        "type": "string",
+        "optional": false
       },
       "sourceUrl": {
         "type": "string",
@@ -2328,7 +2500,17 @@
       "approved",
       "rejected"
     ],
+    "BenchmarkDetailDisplayTier": [
+      "cite",
+      "link",
+      "table"
+    ],
     "BenchmarkImportBenchmarkDisplayTier": [
+      "cite",
+      "link",
+      "table"
+    ],
+    "BenchmarkSummaryDisplayTier": [
       "cite",
       "link",
       "table"
@@ -2767,6 +2949,16 @@
     "POST /api/v1/auth/verify-email/resend": {
       "method": "PostAuthVerifyEmailResend",
       "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/benchmarks": {
+      "method": "ListBenchmarks",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/benchmarks/{slug}": {
+      "method": "GetBenchmark",
+      "pathParams": 1,
       "params": null
     },
     "GET /api/v1/classifications": {

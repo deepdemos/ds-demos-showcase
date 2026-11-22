@@ -105,3 +105,43 @@ ORDER BY
     END,
     m.id
 LIMIT 1;
+-- ---------- 读取：目录与详情（#427）----------
+
+-- name: ListBenchmarks :many
+-- 目录一页：只取列表页要的五列，外加「最新版本日期」这个派生值。
+--
+-- 不复用详情那句 SQL：列表页拿全字段再丢掉，等于每次翻页都读一遍用不上的列。
+-- 没有任何版本时 `latest_as_of` 为 NULL —— 那是「刚收录、还没导数据」的正常状态，不是缺数据。
+SELECT b.slug, b.name, b.publisher, b.category, b.display_tier,
+       (SELECT max(bv.as_of) FROM benchmark_versions bv
+         WHERE bv.benchmark_id = b.id AND bv.status = 'active')::date AS latest_as_of
+FROM benchmarks b
+WHERE b.status = 'active'
+ORDER BY b.name, b.id;
+
+-- name: GetBenchmarkBySlug :one
+SELECT id, slug, name, publisher, homepage_url, category, description,
+       display_tier, license, license_url, attribution
+FROM benchmarks
+WHERE slug = @slug AND status = 'active';
+
+-- name: ListBenchmarkVersions :many
+-- 版本历史：全量、按日期倒序。`self_reported` 照常返回，由页面分组（MODEL-020）。
+SELECT id, version, as_of, source_type, coverage, participant_count, source_url
+FROM benchmark_versions
+WHERE benchmark_id = @benchmark_id AND status = 'active'
+ORDER BY as_of DESC, id DESC;
+
+-- name: ListBenchmarkMetricsWithScores :many
+-- 某一版的指标表。**LEFT JOIN**：指标存在但一条分数都没有时仍要出行（空榜要正常展示）。
+--
+-- 排序：主榜在前、再按 sort、最后按名次（没有名次的排在后面）。
+SELECT bm.key, bm.label, bm.unit, bm.is_primary, bm.higher_is_better,
+       bs.external_name, bs.raw_score, bs.rank, bs.sample_size,
+       bs.uncertainty_lower, bs.uncertainty_upper, bs.match_status,
+       m.slug AS model_slug, m.name AS model_name
+FROM benchmark_metrics bm
+LEFT JOIN benchmark_scores bs ON bs.metric_id = bm.id
+LEFT JOIN models m ON m.id = bs.model_id
+WHERE bm.version_id = @version_id
+ORDER BY bm.is_primary DESC, bm.sort, bm.key, bs.rank NULLS LAST, bs.raw_score DESC;

@@ -14,5 +14,5 @@ test('页面清单列出 ready 与 fixture，并给出计数', () => {
     screen.getByText(/44 条页面（ready \+ fixture \+ DEV 工具），按区列出。/),
   ).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '首页' })).toHaveAttribute('href', '/');
-  expect(screen.getByRole('link', { name: '基准' })).toHaveAttribute('href', '/benchmarks');
+  expect(screen.getByRole('link', { name: '第三方基准' })).toHaveAttribute('href', '/benchmarks');
 });

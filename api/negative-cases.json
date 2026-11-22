@@ -1184,6 +1184,24 @@
           "name": "TestIntegrationImportBenchmarksRejectsCiteTierScores"
         }
       }
+    ],
+    "GET /api/v1/benchmarks": [
+      {
+        "case": "列表按名字升序，且 cite 档如实标出档位（不伪装成有分数）",
+        "test": {
+          "file": "backend/internal/httpapi/benchmarks_read_integration_test.go",
+          "name": "TestIntegrationListBenchmarks"
+        }
+      }
+    ],
+    "GET /api/v1/benchmarks/{slug}": [
+      {
+        "case": "不存在的榜返回 404，而空榜返回 200 + 空数组（空是正常状态）",
+        "test": {
+          "file": "backend/internal/httpapi/benchmarks_read_integration_test.go",
+          "name": "TestIntegrationGetBenchmarkEmptyAndMissing"
+        }
+      }
     ]
   },
   "outsideContract": {

@@ -138,6 +138,27 @@ export const pages: readonly PageEntry[] = [
     availability: 'ready',
   },
   {
+    id: 'benchmarks',
+    path: '/benchmarks',
+    title: '第三方基准',
+    description: '站内已收录的第三方基准：每张榜单独陈列，不跨榜比较。',
+    group: 'public',
+    access: { kind: 'public' },
+    width: 'wide',
+    availability: 'ready',
+    // 不进一级导航（模型域 §5.6）：入口是模型详情页的第三区块。
+  },
+  {
+    id: 'benchmark-detail',
+    path: '/benchmarks/:slug',
+    title: '基准',
+    description: '单张基准的版本、指标与分数。',
+    group: 'public',
+    access: { kind: 'public' },
+    width: 'default',
+    availability: 'ready',
+  },
+  {
     id: 'rankings',
     path: '/rankings',
     title: '排行榜',

@@ -1,4 +1,6 @@
 import { AdminAppealsPage } from '@/routes/AdminAppealsPage';
+import { BenchmarkDetailPage } from '@/routes/BenchmarkDetailPage';
+import { BenchmarksPage } from '@/routes/BenchmarksPage';
 import { AdminInboxPage } from '@/routes/AdminInboxPage';
 import { AdminModelsPage } from '@/routes/AdminModelsPage';
 import { AdminReviewPage } from '@/routes/AdminReviewPage';
@@ -45,6 +47,8 @@ export const routeElements: RouteElementMap = {
   'demo-edit': <EditDemoPage />,
   models: <ModelsPage />,
   'model-detail': <ModelPage />,
+  benchmarks: <BenchmarksPage />,
+  'benchmark-detail': <BenchmarkDetailPage />,
   rankings: <RankingsPage />,
   author: <AuthorPage />,
   classification: <ClassificationPage />,

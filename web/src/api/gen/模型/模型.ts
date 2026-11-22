@@ -9,7 +9,7 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 74 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 76 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -30,10 +30,129 @@
  * OpenAPI spec version: 0.1.0
  */
 import type {
+  BenchmarkDetail,
   BenchmarkImportRequest,
   BenchmarkImportResult,
+  BenchmarkList,
   Error
 } from '../model';
+
+
+export type listBenchmarksResponse200 = {
+  data: BenchmarkList
+  status: 200
+}
+
+export type listBenchmarksResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listBenchmarksResponseSuccess = (listBenchmarksResponse200) & {
+  headers: Headers;
+};
+export type listBenchmarksResponseError = (listBenchmarksResponse503) & {
+  headers: Headers;
+};
+
+export type listBenchmarksResponse = (listBenchmarksResponseSuccess | listBenchmarksResponseError)
+
+export const getListBenchmarksUrl = () => {
+
+
+
+
+  return `/api/v1/benchmarks`
+}
+
+/**
+ * 站内已收录的第三方基准，按名称升序。**只做分榜展示**：这里出现的是「有哪些榜」，
+ * 不是「谁比谁强」—— 跨榜比较与综合分是后续层（模型域 §5.3 / §5.4），本端点不提供。
+ *
+ * 每项给出：榜名、发布方、方向、最新版本日期、陈列档位（`table` / `cite` / `link`）。
+ * 档位由数据层决定：`cite` / `link` 档的榜**不可能有分数**，读者看到档位就知道
+ * 点进去会看到什么，不会把「没有分数」当成缺数据。
+ * @summary 第三方基准目录
+ */
+export const listBenchmarks = async ( options?: RequestInit): Promise<listBenchmarksResponse> => {
+
+  const res = await fetch(getListBenchmarksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listBenchmarksResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listBenchmarksResponse
+}
+
+
+export type getBenchmarkResponse200 = {
+  data: BenchmarkDetail
+  status: 200
+}
+
+export type getBenchmarkResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getBenchmarkResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getBenchmarkResponseSuccess = (getBenchmarkResponse200) & {
+  headers: Headers;
+};
+export type getBenchmarkResponseError = (getBenchmarkResponse404 | getBenchmarkResponse503) & {
+  headers: Headers;
+};
+
+export type getBenchmarkResponse = (getBenchmarkResponseSuccess | getBenchmarkResponseError)
+
+export const getGetBenchmarkUrl = (slug: string,) => {
+
+
+
+
+  return `/api/v1/benchmarks/${slug}`
+}
+
+/**
+ * 一张榜的完整视图：概述、最新版本、指标表（含分数与名次）、版本历史。
+ *
+ * - **指标表只取最新版本**；历史版本在 `versions` 里列出，供核对「这个分数是哪天、哪一版」。
+ * - `sourceType='self_reported'` 的版本**不混进指标表**：厂商自报与第三方测评是两种凭据
+ *   （MODEL-020），版本历史里照常列出，由页面单独分组。
+ * - 榜还在、但还没有任何分数时，`metrics` 里只有指标、`scores` 为空数组 —— 不报错、
+ *   不返回 404。空榜是**正常状态**，不是缺数据。
+ * - 区间与样本量缺失就是缺失：字段为 `null`，页面显示 `—`，**不补零、不推断**。
+ * @summary 单张基准的详情
+ */
+export const getBenchmark = async (slug: string, options?: RequestInit): Promise<getBenchmarkResponse> => {
+
+  const res = await fetch(getGetBenchmarkUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getBenchmarkResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getBenchmarkResponse
+}
 
 
 export type importBenchmarksResponse200 = {
