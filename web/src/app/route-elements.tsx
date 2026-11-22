@@ -21,6 +21,7 @@ import { PasswordResetPage } from '@/routes/PasswordResetPage';
 import { ProposalDetailPage } from '@/routes/ProposalDetailPage';
 import { RankingsPage } from '@/routes/RankingsPage';
 import { RegisterPage } from '@/routes/RegisterPage';
+import { SearchPage } from '@/routes/SearchPage';
 import { SubmitPage } from '@/routes/SubmitPage';
 import { VerifyEmailPage } from '@/routes/VerifyEmailPage';
 import type { RouteElementMap } from './routes';
@@ -41,6 +42,7 @@ export const routeElements: RouteElementMap = {
   author: <AuthorPage />,
   classification: <ClassificationPage />,
   guidelines: <CommunityGuidelinesPage />,
+  search: <SearchPage />,
   submit: <SubmitPage />,
   collections: <CollectionsPage />,
   'collection-detail': <CollectionDetailPage />,

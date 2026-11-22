@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { getUnreadNotificationCount } from '@/api';
-import { Button, Menu, NavList, type MenuItem } from '@/components/ui';
+import { Button, Input, Menu, NavList, type MenuItem } from '@/components/ui';
 import { useAuth } from '@/features/auth/AuthContext';
 import { primaryNav, userNav } from './navigation';
 import { RouteTitle } from './RouteTitle';
@@ -18,6 +18,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchDraft, setSearchDraft] = useState('');
 
   const unread = useQuery({
     queryKey: ['notifications', 'unread'],
@@ -53,6 +54,13 @@ export function AppShell() {
   const current = location.pathname + location.search;
   const loginTo = '/login?return_to=' + encodeURIComponent(current);
 
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault();
+    const q = searchDraft.trim();
+    navigate(q === '' ? '/search' : '/search?q=' + encodeURIComponent(q));
+    setMobileOpen(false);
+  }
+
   const menuItems: MenuItem[] = [
     ...user.map((item) => ({ id: item.id, label: item.label, to: item.to, badge: item.badge })),
     {
@@ -87,6 +95,20 @@ export function AppShell() {
             onNavigate={() => setMobileOpen(false)}
             className="hidden min-w-0 lg:flex"
           />
+
+          <form className="hidden min-w-0 lg:block" onSubmit={submitSearch} role="search">
+            <div className="flex w-56 items-center gap-2">
+              <Input
+                fullWidth
+                type="search"
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+                placeholder="搜索作品"
+                aria-label="搜索作品"
+              />
+              <Button type="submit">搜索</Button>
+            </div>
+          </form>
 
           <div className="ml-auto hidden items-center gap-2 lg:flex">
             {isLoading ? (
@@ -124,6 +146,20 @@ export function AppShell() {
             id="mobile-nav"
             className="border-t border-gray-200 px-4 pb-4 pt-2 sm:px-6 lg:hidden"
           >
+            <form className="mb-3 flex items-end gap-2" onSubmit={submitSearch} role="search">
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                搜索
+                <Input
+                  fullWidth
+                  type="search"
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
+                  placeholder="标题或简介里的词"
+                  aria-label="搜索作品"
+                />
+              </label>
+              <Button type="submit">搜索</Button>
+            </form>
             <NavList
               ariaLabel="主导航（移动端）"
               items={primary}

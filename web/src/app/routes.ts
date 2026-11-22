@@ -158,6 +158,16 @@ export const pages: readonly PageEntry[] = [
     availability: 'ready',
   },
   {
+    id: 'search',
+    path: '/search',
+    title: '搜索',
+    description: '按标题或简介搜索公开作品。',
+    group: 'public',
+    access: { kind: 'public' },
+    width: 'wide',
+    availability: 'ready',
+  },
+  {
     id: 'submit',
     path: '/submit',
     title: '投稿',
