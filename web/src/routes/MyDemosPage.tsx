@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, Pagination, Select, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { listMyDemos, type ListMyDemosParams, type MyDemoList, type MyDemoSummary } from '@/api';
 import { returnToParam } from '@/lib/return-to';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -195,13 +196,7 @@ export function MyDemosPage() {
     staleTime: 30 * 1000,
   });
 
-  if (isLoading) {
-    return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <Skeleton lines={5} />
-      </div>
-    );
-  }
+  if (isLoading) return <Skeleton lines={5} />;
   if (!me) {
     // 带上来路：登录后回到「我的作品」，而不是被丢回首页（issue #371）。
     const returnTo = returnToParam(`${location.pathname}${location.search}`);
@@ -212,24 +207,21 @@ export function MyDemosPage() {
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
-    <section className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">我的作品</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            草稿与待审的点标题看预览；已上线的点标题看读者看到的页面。
-          </p>
-        </div>
+    <Page
+      width="wide"
+      title="我的作品"
+      description="草稿与待审的点标题看预览；已上线的点标题看读者看到的页面。"
+      actions={
         <Link
           to="/submit"
-          className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
+          className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700"
         >
           投新作品
         </Link>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <label htmlFor="my-demos-state" className="text-sm text-gray-600 dark:text-gray-300">
+      }
+    >
+      <div className="mt-6 flex items-center gap-2">
+        <label htmlFor="my-demos-state" className="text-sm text-gray-600">
           状态
         </label>
         <Select
@@ -269,7 +261,7 @@ export function MyDemosPage() {
           action={
             <Link
               to="/submit"
-              className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
+              className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700"
             >
               去投稿
             </Link>
@@ -278,7 +270,7 @@ export function MyDemosPage() {
       ) : null}
 
       {data && data.items.length > 0 ? (
-        <ul className="flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
+        <ul className="flex flex-col divide-y divide-gray-200">
           {data.items.map((demo) => {
             const state = rowState(demo);
             const title = demo.title?.trim() || demo.slug;
@@ -291,43 +283,33 @@ export function MyDemosPage() {
                     className="h-14 w-20 flex-none rounded object-cover"
                   />
                 ) : (
-                  <div
-                    aria-hidden
-                    className="h-14 w-20 flex-none rounded bg-gray-100 dark:bg-gray-800"
-                  />
+                  <div aria-hidden className="h-14 w-20 flex-none rounded bg-gray-100" />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {state.href ? (
                       <Link
                         to={state.href}
-                        className="truncate font-medium text-gray-800 hover:underline dark:text-gray-100"
+                        className="truncate font-medium text-gray-800 hover:underline"
                       >
                         {title}
                       </Link>
                     ) : (
-                      <span className="truncate font-medium text-gray-500 dark:text-gray-400">
-                        {title}
-                      </span>
+                      <span className="truncate font-medium text-gray-500">{title}</span>
                     )}
-                    <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                    <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                       {state.label}
                     </span>
                   </div>
-                  {state.note ? (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{state.note}</p>
-                  ) : null}
+                  {state.note ? <p className="mt-1 text-xs text-gray-500">{state.note}</p> : null}
                   {state.detailHref ? (
                     <p className="mt-1 text-xs">
-                      <Link
-                        to={state.detailHref}
-                        className="text-blue-600 hover:underline dark:text-blue-400"
-                      >
+                      <Link to={state.detailHref} className="text-blue-600 hover:underline">
                         查看详情
                       </Link>
                     </p>
                   ) : null}
-                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  <p className="mt-1 text-xs text-gray-400">
                     {demo.slug} · 更新于 {formatDate(demo.updatedAt)}
                   </p>
                 </div>
@@ -347,6 +329,6 @@ export function MyDemosPage() {
           setSearchParams(params, { replace: true });
         }}
       />
-    </section>
+    </Page>
   );
 }

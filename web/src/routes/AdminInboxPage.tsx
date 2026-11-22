@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, Checkbox, ErrorState, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { batchReviewAdminProposals, getAdminInbox, type ProposalBatchItem } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -62,17 +63,16 @@ export function AdminInboxPage() {
   const data = inbox.data;
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-4 py-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">收件箱</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          待审作品、已通过待发布、待处理提案都在这里；计数不受下面列表条数限制。
-        </p>
+    <Page
+      width="wide"
+      title="收件箱"
+      description="待审作品、已通过待发布、待处理提案都在这里；计数不受下面列表条数限制。"
+      actions={
         <Link className="text-sm underline" to="/admin/reviews">
           打开作品审核
         </Link>
-      </header>
-
+      }
+    >
       {inbox.isPending ? (
         <div className="mt-4">
           <Skeleton lines={4} />
@@ -95,43 +95,43 @@ export function AdminInboxPage() {
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <a
               href="#demo-pending"
-              className="rounded-lg border border-gray-200 p-4 text-inherit no-underline dark:border-gray-800"
+              className="rounded-lg border border-gray-200 p-4 text-inherit no-underline"
             >
-              <p className="text-sm text-gray-500 dark:text-gray-400">待审作品</p>
+              <p className="text-sm text-gray-500">待审作品</p>
               <p className="text-2xl font-semibold">{data.demoPendingCount}</p>
             </a>
             <a
               href="#approved-unpublished"
-              className="rounded-lg border border-gray-200 p-4 text-inherit no-underline dark:border-gray-800"
+              className="rounded-lg border border-gray-200 p-4 text-inherit no-underline"
             >
-              <p className="text-sm text-gray-500 dark:text-gray-400">已通过待发布</p>
+              <p className="text-sm text-gray-500">已通过待发布</p>
               <p className="text-2xl font-semibold">{data.approvedUnpublishedCount}</p>
             </a>
             <a
               href="#proposals"
-              className="rounded-lg border border-gray-200 p-4 text-inherit no-underline dark:border-gray-800"
+              className="rounded-lg border border-gray-200 p-4 text-inherit no-underline"
             >
-              <p className="text-sm text-gray-500 dark:text-gray-400">待处理提案</p>
+              <p className="text-sm text-gray-500">待处理提案</p>
               <p className="text-2xl font-semibold">{data.proposalPendingCount}</p>
             </a>
           </div>
 
           <section id="demo-pending" className="mt-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">待审作品</h2>
+            <h2 className="text-lg font-semibold text-gray-900">待审作品</h2>
             {data.demoPending.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">没有待审作品。</p>
+              <p className="mt-2 text-sm text-gray-500">没有待审作品。</p>
             ) : (
               <ul className="mt-2 list-none space-y-2 p-0">
                 {data.demoPending.map((item) => (
                   <li
                     key={item.slug}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 p-3 dark:border-gray-800"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 p-3"
                   >
                     <div className="min-w-0">
                       <Link className="underline" to={'/demos/' + item.slug}>
                         {item.title || item.slug}
                       </Link>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-gray-500">
                         {item.authorName || '（未知作者）'} · {formatAt(item.submittedAt)}
                       </p>
                     </div>
@@ -145,21 +145,21 @@ export function AdminInboxPage() {
           </section>
 
           <section id="approved-unpublished" className="mt-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">已通过待发布</h2>
+            <h2 className="text-lg font-semibold text-gray-900">已通过待发布</h2>
             {data.approvedUnpublished.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">没有等待发布的作品。</p>
+              <p className="mt-2 text-sm text-gray-500">没有等待发布的作品。</p>
             ) : (
               <ul className="mt-2 list-none space-y-2 p-0">
                 {data.approvedUnpublished.map((item) => (
                   <li
                     key={item.slug}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 p-3 dark:border-gray-800"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 p-3"
                   >
                     <div className="min-w-0">
                       <Link className="underline" to={'/demos/' + item.slug}>
                         {item.title || item.slug}
                       </Link>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-gray-500">
                         {item.authorName || '（未知作者）'} · {formatAt(item.submittedAt)}
                       </p>
                     </div>
@@ -174,11 +174,9 @@ export function AdminInboxPage() {
 
           <section id="proposals" className="mt-8">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">待处理提案</h2>
+              <h2 className="text-lg font-semibold text-gray-900">待处理提案</h2>
               {data.proposals.length > 0 ? (
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  已选 {selected.length} 条
-                </span>
+                <span className="text-xs text-gray-500">已选 {selected.length} 条</span>
               ) : null}
             </div>
             {selected.length > 0 ? (
@@ -201,7 +199,7 @@ export function AdminInboxPage() {
               </div>
             ) : null}
             {batchError ? (
-              <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+              <p role="alert" className="mt-2 text-sm text-red-600">
                 {batchError}
               </p>
             ) : null}
@@ -215,14 +213,11 @@ export function AdminInboxPage() {
               </ul>
             ) : null}
             {data.proposals.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">没有待处理提案。</p>
+              <p className="mt-2 text-sm text-gray-500">没有待处理提案。</p>
             ) : (
               <ul className="mt-2 list-none space-y-2 p-0">
                 {data.proposals.map((proposal) => (
-                  <li
-                    key={proposal.id}
-                    className="rounded border border-gray-200 p-3 dark:border-gray-800"
-                  >
+                  <li key={proposal.id} className="rounded border border-gray-200 p-3">
                     <Checkbox
                       label={'选择：' + (proposal.title || '提案 #' + proposal.id)}
                       checked={selected.includes(proposal.id)}
@@ -241,23 +236,21 @@ export function AdminInboxPage() {
                       <Link className="underline" to={'/admin/proposals/' + proposal.id}>
                         {proposal.title || '（没有标题）'}
                       </Link>
-                      <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                      <span className="ml-2 text-xs text-gray-500">
                         {proposal.kind} · {proposal.source}
                       </span>
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatAt(proposal.createdAt)}
-                    </p>
+                    <p className="text-xs text-gray-500">{formatAt(proposal.createdAt)}</p>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-xs text-gray-500">
               提案可勾选后批量处理；失败行会单独给出原因。
             </p>
           </section>
         </>
       ) : null}
-    </section>
+    </Page>
   );
 }

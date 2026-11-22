@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Button, EmptyState, ErrorState, Input, Select, Skeleton, Textarea } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import {
   deleteCollection,
   getCollection,
@@ -117,36 +118,40 @@ export function CollectionDetailPage() {
 
   if (!Number.isInteger(id) || id <= 0) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
-        <EmptyState title="收藏夹不存在" description="地址里的编号不合法。" />
-      </section>
+      <Page width="narrow" title="收藏夹不存在" description="地址里的编号不合法。">
+        <p className="mt-4">
+          <Link className="text-sm underline" to="/me/collections">
+            回我的收藏夹
+          </Link>
+        </p>
+      </Page>
     );
   }
 
   if (detail.isPending) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <Page width="narrow" title="收藏夹">
         <Skeleton lines={4} />
-      </section>
+      </Page>
     );
   }
 
   if (detail.isError) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <Page width="narrow" title="收藏夹">
         <ErrorState
           title="收藏夹加载失败"
           description="请稍后重试。"
           onRetry={() => void detail.refetch()}
           retrying={detail.isFetching}
         />
-      </section>
+      </Page>
     );
   }
 
   if (detail.data === null) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <Page width="narrow" title="收藏夹">
         <EmptyState
           title="收藏夹不存在或不可见"
           description="它可能是私密收藏夹，或者已经被删除。"
@@ -156,7 +161,7 @@ export function CollectionDetailPage() {
             </Link>
           }
         />
-      </section>
+      </Page>
     );
   }
 
@@ -166,42 +171,45 @@ export function CollectionDetailPage() {
   const manage = isOwner && !data.collection.isDefault;
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
-      <header className="space-y-1">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          <Link className="underline" to="/me/collections">
-            我的收藏夹
-          </Link>
-          {data.collection.visibility === 'public' ? ' · 公开' : ' · 私密'}
-        </p>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+    <Page
+      width="narrow"
+      title={
+        <>
           {data.collection.name}
           {data.collection.isDefault ? (
             <span className="ml-2 text-sm font-normal text-gray-500">默认</span>
           ) : null}
-        </h1>
-        {data.collection.description ? (
-          <p className="whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
-            {data.collection.description}
-          </p>
-        ) : null}
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          共 {data.collection.itemCount} 件
+        </>
+      }
+      eyebrow={
+        <>
+          <Link className="underline" to="/me/collections">
+            我的收藏夹
+          </Link>
+          {data.collection.visibility === 'public' ? ' · 公开' : ' · 私密'}
+        </>
+      }
+      description={'共 ' + data.collection.itemCount + ' 件'}
+    >
+      {data.collection.description ? (
+        <p className="mt-2 whitespace-pre-line text-sm text-gray-700">
+          {data.collection.description}
         </p>
-      </header>
+      ) : null}
 
       {data.collection.isDefault ? (
-        <p className="mt-4 rounded-lg border border-gray-200 p-3 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-300">
+        <p className="mt-4 rounded-lg border border-gray-200 p-3 text-sm text-gray-600">
           默认收藏夹永远私有，不能改名、删除或转公开；作品可以从这里移出。
         </p>
       ) : null}
 
       {manage ? (
-        <section className="mt-4 space-y-3 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <h2 className="text-sm font-medium text-gray-700 dark:text-gray-200">管理</h2>
+        <section className="mt-4 space-y-3 rounded-lg border border-gray-200 p-4">
+          <h2 className="text-sm font-medium text-gray-700">管理</h2>
           <label className="block text-sm">
-            <span className="text-gray-500 dark:text-gray-400">名称</span>
+            <span className="text-gray-500">名称</span>
             <Input
+              fullWidth
               className="mt-1"
               value={name}
               maxLength={50}
@@ -209,7 +217,7 @@ export function CollectionDetailPage() {
             />
           </label>
           <label className="block text-sm">
-            <span className="text-gray-500 dark:text-gray-400">说明</span>
+            <span className="text-gray-500">说明</span>
             <Textarea
               className="mt-1"
               rows={2}
@@ -219,7 +227,7 @@ export function CollectionDetailPage() {
             />
           </label>
           <label className="block text-sm">
-            <span className="text-gray-500 dark:text-gray-400">可见性</span>
+            <span className="text-gray-500">可见性</span>
             <Select
               ariaLabel="收藏夹可见性"
               value={visibility}
@@ -234,9 +242,7 @@ export function CollectionDetailPage() {
             </Button>
             {confirmingDelete ? (
               <>
-                <span className="text-sm text-red-600 dark:text-red-400">
-                  删除收藏夹不会删除作品，确认？
-                </span>
+                <span className="text-sm text-red-600">删除收藏夹不会删除作品，确认？</span>
                 <Button
                   type="button"
                   danger
@@ -259,7 +265,7 @@ export function CollectionDetailPage() {
       ) : null}
 
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-3 text-sm text-red-600">
           {error}
         </p>
       ) : null}
@@ -278,7 +284,7 @@ export function CollectionDetailPage() {
               key={item.slug}
               data-slug={item.slug}
               data-accessible={item.accessible}
-              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800"
+              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3"
             >
               {item.coverUrl ? (
                 <img
@@ -288,27 +294,22 @@ export function CollectionDetailPage() {
                   loading="lazy"
                 />
               ) : (
-                <div
-                  aria-hidden="true"
-                  className="h-16 w-24 flex-none rounded bg-gray-100 dark:bg-gray-800"
-                />
+                <div aria-hidden="true" className="h-16 w-24 flex-none rounded bg-gray-100" />
               )}
               <div className="min-w-0 flex-1">
                 {item.accessible ? (
                   <Link
                     to={'/demos/' + item.slug}
-                    className="block truncate text-base font-medium text-gray-900 hover:underline dark:text-gray-100"
+                    className="block truncate text-base font-medium text-gray-900 hover:underline"
                   >
                     {item.title || item.slug}
                   </Link>
                 ) : (
                   <>
-                    <p className="truncate text-base font-medium text-gray-500 dark:text-gray-400">
+                    <p className="truncate text-base font-medium text-gray-500">
                       {item.title || item.slug}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      该作品已不可访问
-                    </p>
+                    <p className="mt-1 text-xs text-gray-500">该作品已不可访问</p>
                   </>
                 )}
               </div>
@@ -326,6 +327,6 @@ export function CollectionDetailPage() {
           ))}
         </ul>
       )}
-    </section>
+    </Page>
   );
 }

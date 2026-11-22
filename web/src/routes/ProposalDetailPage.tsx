@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { Button, EmptyState, ErrorState, Skeleton, Textarea } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { getAdminProposal, reviewEntity } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -99,39 +100,39 @@ export function ProposalDetailPage() {
   if (authLoading) return <Skeleton lines={3} />;
   if (!Number.isInteger(id) || id < 1) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <Page width="wide" title="提案详情">
         <EmptyState title="地址里的提案编号不合法" description="编号必须是正整数。" />
-      </section>
+      </Page>
     );
   }
   if (me === null) return <Navigate to={'/login?return_to=/admin/proposals/' + id} replace />;
 
   if (detail.isPending) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <Page width="wide" title="提案详情">
         <Skeleton lines={4} />
-      </section>
+      </Page>
     );
   }
 
   if (detail.isError) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <Page width="wide" title="提案详情">
         <ErrorState
           title="提案加载失败"
           description={detail.error instanceof Error ? detail.error.message : '请稍后重试。'}
           onRetry={() => void detail.refetch()}
           retrying={detail.isFetching}
         />
-      </section>
+      </Page>
     );
   }
 
   if (detail.data === null) {
     return (
-      <section className="mx-auto w-full max-w-3xl px-4 py-8">
+      <Page width="wide" title="提案详情">
         <EmptyState title="提案不存在" description="它可能已经被擦除，或者编号不对。" />
-      </section>
+      </Page>
     );
   }
 
@@ -139,37 +140,43 @@ export function ProposalDetailPage() {
   const pending = data.status === 'pending';
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        <Link className="underline" to="/admin/inbox">
-          收件箱
-        </Link>{' '}
-        · 提案 #{data.id}
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
-        {String(data.payload?.title ?? data.payload?.name ?? data.kind)}
-      </h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        {data.kind} · {data.source} · {STATUS_LABEL[data.status] ?? data.status} · 提交于{' '}
-        {formatAt(data.createdAt)}
-      </p>
-
-      <h2 className="mt-6 text-lg font-semibold text-gray-900 dark:text-gray-100">内容</h2>
-      <pre className="mt-2 overflow-x-auto rounded border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-800 dark:bg-gray-900">
+    <Page
+      width="wide"
+      title={String(data.payload?.title ?? data.payload?.name ?? data.kind)}
+      eyebrow={
+        <>
+          <Link className="underline" to="/admin/inbox">
+            收件箱
+          </Link>{' '}
+          · 提案 #{data.id}
+        </>
+      }
+      description={
+        data.kind +
+        ' · ' +
+        data.source +
+        ' · ' +
+        (STATUS_LABEL[data.status] ?? data.status) +
+        ' · 提交于 ' +
+        formatAt(data.createdAt)
+      }
+    >
+      <h2 className="mt-6 text-lg font-semibold text-gray-900">内容</h2>
+      <pre className="mt-2 overflow-x-auto rounded border border-gray-200 bg-gray-50 p-3 text-xs">
         {JSON.stringify(data.payload ?? {}, null, 2)}
       </pre>
 
       {data.status === 'rejected' ? (
-        <p className="mt-4 text-sm text-gray-700 dark:text-gray-300">
+        <p className="mt-4 text-sm text-gray-700">
           驳回原因：{data.rejectReason || '管理员未填写理由'}
         </p>
       ) : null}
 
       {pending ? (
-        <section className="mt-6 space-y-3 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">裁决</h2>
+        <section className="mt-6 space-y-3 rounded-lg border border-gray-200 p-4">
+          <h2 className="text-lg font-semibold text-gray-900">裁决</h2>
           <label className="block text-sm">
-            <span className="text-gray-500 dark:text-gray-400">驳回原因（可选）</span>
+            <span className="text-gray-500">驳回原因（可选）</span>
             <Textarea
               className="mt-1"
               rows={2}
@@ -197,21 +204,21 @@ export function ProposalDetailPage() {
                 通过
               </Button>
             ) : (
-              <span className="text-sm text-gray-500 dark:text-gray-400">通过（执行器未接入）</span>
+              <span className="text-sm text-gray-500">通过（执行器未接入）</span>
             )}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-500">
             {APPROVABLE_KINDS.includes(data.kind)
               ? '通过会写对应的正式表（已存在则复用），并把提案置为已通过。'
               : '这个 kind 的执行器还没接入；驳回只改提案状态并写审计。'}
           </p>
           {error ? (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-red-600">
               {error}
             </p>
           ) : null}
         </section>
       ) : null}
-    </section>
+    </Page>
   );
 }

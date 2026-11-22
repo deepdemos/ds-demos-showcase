@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Button, Checkbox, EmptyState, Pagination, Select, Skeleton } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { deleteMyHistory, getMyHistory, updateMyHistorySettings } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 import {
@@ -207,16 +208,13 @@ export function HistoryPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">浏览历史</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            本机记录只保存在这个浏览器；登录后还会合并账号记录。同一作品只留较近的一次。
-          </p>
-        </div>
+    <Page
+      width="narrow"
+      title="浏览历史"
+      description="本机记录只保存在这个浏览器；登录后还会合并账号记录。同一作品只留较近的一次。"
+      actions={
         <div className="flex items-center gap-2 text-sm">
-          <label htmlFor="history-limit" className="text-gray-600 dark:text-gray-300">
+          <label htmlFor="history-limit" className="text-gray-600">
             本机上限
           </label>
           <Select
@@ -230,10 +228,10 @@ export function HistoryPage() {
             清空本机
           </Button>
         </div>
-      </div>
-
+      }
+    >
       {!authLoading && me === null ? (
-        <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-3 text-sm text-gray-500">
           登录后可以同步账号历史；本机记录不受影响。
           <Link className="ml-2 underline" to="/login?return_to=/me/history">
             去登录
@@ -242,7 +240,7 @@ export function HistoryPage() {
       ) : null}
 
       {me !== null ? (
-        <section className="mt-4 space-y-2 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+        <section className="mt-4 space-y-2 rounded-lg border border-gray-200 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Checkbox
               label="记录账号历史"
@@ -259,7 +257,7 @@ export function HistoryPage() {
               清空账号历史
             </Button>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-500">
             {account.isError
               ? '账号历史设置读取失败，先不要修改；重试后再看。'
               : accountEnabled
@@ -268,13 +266,13 @@ export function HistoryPage() {
           </p>
 
           {account.isError ? (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-red-600">
               {account.error instanceof Error ? account.error.message : '账号历史加载失败'}
             </p>
           ) : null}
 
           {actionError ? (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-red-600">
               {actionError}
             </p>
           ) : null}
@@ -306,7 +304,7 @@ export function HistoryPage() {
         </section>
       ) : null}
 
-      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+      <p className="mt-3 text-xs text-gray-500">
         共 {merged.length} 条（去重后 · 本机 {localEntries.length} · 账号 {accountItems.length}）
       </p>
 
@@ -332,7 +330,7 @@ export function HistoryPage() {
                 key={entry.slug}
                 data-slug={entry.slug}
                 data-source={entry.source}
-                className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800"
+                className="flex items-center gap-3 rounded-lg border border-gray-200 p-3"
               >
                 {entry.coverUrl ? (
                   <img
@@ -342,19 +340,16 @@ export function HistoryPage() {
                     loading="lazy"
                   />
                 ) : (
-                  <div
-                    aria-hidden="true"
-                    className="h-16 w-24 flex-none rounded bg-gray-100 dark:bg-gray-800"
-                  />
+                  <div aria-hidden="true" className="h-16 w-24 flex-none rounded bg-gray-100" />
                 )}
                 <div className="min-w-0 flex-1">
                   <Link
                     to={'/demos/' + entry.slug}
-                    className="block truncate text-base font-medium text-gray-900 hover:underline dark:text-gray-100"
+                    className="block truncate text-base font-medium text-gray-900 hover:underline"
                   >
                     {entry.title || entry.slug}
                   </Link>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 text-xs text-gray-500">
                     {entry.source === 'account' ? '账号' : '本机'} ·{' '}
                     {formatViewedAt(entry.viewedAt)}
                   </p>
@@ -375,6 +370,6 @@ export function HistoryPage() {
           <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
         </>
       )}
-    </section>
+    </Page>
   );
 }

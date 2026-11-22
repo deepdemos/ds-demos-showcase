@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { EmptyState } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import type { ModelCatalogItem } from '@/api';
 import { ModelBatch } from '@/features/admin/model-batch';
 import { ModelDiff, type SelectedPayload } from '@/features/admin/model-diff';
@@ -99,33 +100,29 @@ export function AdminModelsPage() {
   // only 用来做「入口可见性」，不是权限判定——真正的判定在服务端。
   if (me === null) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <Page width="wide" title="模型导入">
         <EmptyState title="请先登录" description="模型导入是管理端功能，需要先登录。" />
-      </div>
+      </Page>
     );
   }
 
   if (me.role !== 'admin') {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <Page width="wide" title="模型导入">
         <EmptyState
           title="没有导入权限"
           description="导入会写共享的模型目录，只有持有 model.import 权限的管理员可以操作。"
         />
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6">
-      <header>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">模型导入</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          从上游目录（models.dev）挑条目，逐字段确认后落库。写的是共享目录——一条改动会影响
-          所有引用它的版本。
-        </p>
-      </header>
-
+    <Page
+      width="wide"
+      title="模型导入"
+      description="从上游目录（models.dev）挑条目，逐字段确认后落库。写的是共享目录——一条改动会影响所有引用它的版本。"
+    >
       <ModelSyncBar />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -158,6 +155,6 @@ export function AdminModelsPage() {
         onRemove={(index) => setQueue((prev) => prev.filter((_, i) => i !== index))}
         onClear={() => setQueue([])}
       />
-    </div>
+    </Page>
   );
 }
