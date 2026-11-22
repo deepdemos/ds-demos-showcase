@@ -1,89 +1,52 @@
-import type { ReactElement } from 'react';
+import type { RouteObject } from 'react-router';
 import { createBrowserRouter } from 'react-router';
 import { DevRoomPage } from '@/dev-room/DevRoomPage';
-import { DemoDetailPage } from '@/routes/DemoDetailPage';
-import { EditDemoPage } from '@/routes/EditDemoPage';
-import { DemosPage } from '@/routes/DemosPage';
-import { HomePage } from '@/routes/HomePage';
-import { LoginPage } from '@/routes/LoginPage';
-import { RegisterPage } from '@/routes/RegisterPage';
-import { PasswordResetPage } from '@/routes/PasswordResetPage';
-import { VerifyEmailPage } from '@/routes/VerifyEmailPage';
-import { SubmitPage } from '@/routes/SubmitPage';
-import { AdminModelsPage } from '@/routes/AdminModelsPage';
-import { ModelPage } from '@/routes/ModelPage';
-import { RankingsPage } from '@/routes/RankingsPage';
-import { AdminReviewPage } from '@/routes/AdminReviewPage';
-import { AdminInboxPage } from '@/routes/AdminInboxPage';
-import { AdminPage } from '@/routes/AdminPage';
-import { ProposalDetailPage } from '@/routes/ProposalDetailPage';
-import { AdminAppealsPage } from '@/routes/AdminAppealsPage';
-import { MyDemosPage } from '@/routes/MyDemosPage';
-import { HistoryPage } from '@/routes/HistoryPage';
-import { ClassificationPage } from '@/routes/ClassificationPage';
-import { AuthorPage } from '@/routes/AuthorPage';
-import { CollectionsPage } from '@/routes/CollectionsPage';
-import { CollectionDetailPage } from '@/routes/CollectionDetailPage';
-import { NotificationsPage } from '@/routes/NotificationsPage';
-import { CommunityGuidelinesPage } from '@/routes/CommunityGuidelinesPage';
-import { NotFoundPage } from '@/routes/NotFoundPage';
 import { AppLayout } from './AppLayout';
 import { RouteError } from './RouteError';
-
-const devRoutes = import.meta.env.DEV
-  ? [{ path: '/dev-room', element: <DevRoomPage />, errorElement: <RouteError /> }]
-  : [];
+import { routeElements } from './route-elements';
+import { childPath, pages, type PageEntry } from './routes';
 
 /**
- * 每条页面路由都挂一份兜底页。
+ * 从页面清单生成路由。
  *
- * 实测（React Router 7）：只挂在顶层也能接住子路由的异常，但整棵树会被替换成
- * 错误页——导航、品牌、登录状态一起消失，用户除了刷新没有别的动作。逐条挂之后
- * 只有正文那一块被替换，外壳还在：「回首页」之外还能直接点去别的页面。
- *
- * 所以新增页面时用 `page()` 登记，别直接写裸的 `{ path, element }`。
+ * 这里只做三件事：按清单套外壳、给每条路由挂兜底页、把 404 放到最后。
+ * 不要在这里import页面或手写 path——加页面去 routes.ts 登记，再在
+ * route-elements.tsx 里补元素。
  */
-const page = (path: string, element: ReactElement) => ({
-  path,
-  element,
-  errorElement: <RouteError />,
-});
+function elementFor(page: PageEntry) {
+  const element = routeElements[page.id];
+  if (!element) throw new Error('页面清单缺少路由元素：' + page.id);
+  return element;
+}
+
+function pageRoute(page: PageEntry): RouteObject {
+  const base = { element: elementFor(page), errorElement: <RouteError /> };
+  if (page.path === '*') return { path: '*', ...base };
+  if (page.path === '/') return { index: true, ...base };
+  return { path: childPath(page.path), ...base };
+}
+
+const appPages = pages.filter((page) => page.path !== '*');
+const notFound = pages.find((page) => page.path === '*');
+
+if (!notFound) throw new Error('页面清单缺少 404 路由');
+
+/** DEV-only：组件开发室与后续页面清单。生产构建里整段被剔除。 */
+const devRoutes: RouteObject[] = import.meta.env.DEV
+  ? [{ path: '/dev-room', element: <DevRoomPage />, errorElement: <RouteError /> }]
+  : [];
 
 export const router = createBrowserRouter([
   ...devRoutes,
   {
     path: '/',
     element: <AppLayout />,
-    // 这一份接的是 AppLayout 自己的异常，以及所有子路由 loader/action 抛出的错；
+    // 这一份接 AppLayout 自己的异常，以及所有子路由 loader/action 抛出的错；
     // 页面渲染期崩掉由各自的 errorElement 接，外壳保持可用。
     errorElement: <RouteError />,
     children: [
-      { index: true, element: <HomePage />, errorElement: <RouteError /> },
-      page('demos', <DemosPage />),
-      page('classifications/:dimension/:slug', <ClassificationPage />),
-      page('u/:username', <AuthorPage />),
-      page('me/collections', <CollectionsPage />),
-      page('me/collections/:id', <CollectionDetailPage />),
-      page('notifications', <NotificationsPage />),
-      page('community-guidelines', <CommunityGuidelinesPage />),
-      page('demos/:slug', <DemoDetailPage />),
-      page('demos/:slug/edit', <EditDemoPage />),
-      page('models/:slug', <ModelPage />),
-      page('rankings', <RankingsPage />),
-      page('login', <LoginPage />),
-      page('register', <RegisterPage />),
-      page('verify-email', <VerifyEmailPage />),
-      page('password-reset', <PasswordResetPage />),
-      page('submit', <SubmitPage />),
-      page('my/demos', <MyDemosPage />),
-      page('me/history', <HistoryPage />),
-      page('admin', <AdminPage />),
-      page('admin/inbox', <AdminInboxPage />),
-      page('admin/reviews', <AdminReviewPage />),
-      page('admin/proposals/:id', <ProposalDetailPage />),
-      page('admin/appeals', <AdminAppealsPage />),
-      page('admin/models', <AdminModelsPage />),
-      page('*', <NotFoundPage />),
+      ...appPages.map(pageRoute),
+      { path: '*', element: elementFor(notFound), errorElement: <RouteError /> },
     ],
   },
 ]);
