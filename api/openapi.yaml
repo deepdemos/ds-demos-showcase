@@ -11,7 +11,7 @@ info:
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 74 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 76 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -125,6 +125,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/benchmarks:
+    get:
+      operationId: listBenchmarks
+      tags: [模型]
+      summary: 第三方基准目录
+      description: |
+        站内已收录的第三方基准，按名称升序。**只做分榜展示**：这里出现的是「有哪些榜」，
+        不是「谁比谁强」—— 跨榜比较与综合分是后续层（模型域 §5.3 / §5.4），本端点不提供。
+
+        每项给出：榜名、发布方、方向、最新版本日期、陈列档位（`table` / `cite` / `link`）。
+        档位由数据层决定：`cite` / `link` 档的榜**不可能有分数**，读者看到档位就知道
+        点进去会看到什么，不会把「没有分数」当成缺数据。
+      responses:
+        '200':
+          description: 目录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkList'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/benchmarks/{slug}:
+    get:
+      operationId: getBenchmark
+      tags: [模型]
+      summary: 单张基准的详情
+      description: |
+        一张榜的完整视图：概述、最新版本、指标表（含分数与名次）、版本历史。
+
+        - **指标表只取最新版本**；历史版本在 `versions` 里列出，供核对「这个分数是哪天、哪一版」。
+        - `sourceType='self_reported'` 的版本**不混进指标表**：厂商自报与第三方测评是两种凭据
+          （MODEL-020），版本历史里照常列出，由页面单独分组。
+        - 榜还在、但还没有任何分数时，`metrics` 里只有指标、`scores` 为空数组 —— 不报错、
+          不返回 404。空榜是**正常状态**，不是缺数据。
+        - 区间与样本量缺失就是缺失：字段为 `null`，页面显示 `—`，**不补零、不推断**。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkDetail'
+        '404':
+          description: 榜不存在或已下架
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/models/{slug}:
     get:
       operationId: getModel
@@ -4573,6 +4637,155 @@ components:
           nullable: true
           description: 只做参考，**不参与**社区分；票数为 0 时为 null
 
+    BenchmarkList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BenchmarkSummary'
+
+    BenchmarkSummary:
+      type: object
+      additionalProperties: false
+      required: [slug, name, publisher, category, displayTier]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        publisher:
+          type: string
+          description: 发布方；空串表示未填写
+        category:
+          type: string
+          description: 逗号分隔的方向标签；空串按 general 理解
+        displayTier:
+          type: string
+          enum: [table, cite, link]
+          description: 只有 table 档可能有分数
+        latestAsOf:
+          type: string
+          format: date
+          nullable: true
+          description: 最新版本的日期；还没有任何版本时为 null
+
+    BenchmarkDetail:
+      type: object
+      additionalProperties: false
+      required: [slug, name, publisher, homepageUrl, category, displayTier, versions, metrics]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        publisher:
+          type: string
+        homepageUrl:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        displayTier:
+          type: string
+          enum: [table, cite, link]
+        license:
+          type: string
+        licenseUrl:
+          type: string
+        attribution:
+          type: string
+        versions:
+          type: array
+          description: 版本历史，按日期倒序；含 self_reported，由页面分组
+          items:
+            $ref: '#/components/schemas/BenchmarkVersionSummary'
+        metrics:
+          type: array
+          description: 最新版本的指标表（不含 self_reported 版本）；没有分数时 scores 为空数组
+          items:
+            $ref: '#/components/schemas/BenchmarkMetricRow'
+
+    BenchmarkVersionSummary:
+      type: object
+      additionalProperties: false
+      required: [version, asOf, sourceType, coverage]
+      properties:
+        version:
+          type: string
+        asOf:
+          type: string
+          format: date
+        sourceType:
+          type: string
+          description: leaderboard / paper / self_reported …
+        coverage:
+          type: string
+          description: full / partial
+        participantCount:
+          type: integer
+          nullable: true
+        sourceUrl:
+          type: string
+
+    BenchmarkMetricRow:
+      type: object
+      additionalProperties: false
+      required: [key, label, unit, isPrimary, higherIsBetter, scores]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        unit:
+          type: string
+        isPrimary:
+          type: boolean
+        higherIsBetter:
+          type: boolean
+        scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/BenchmarkScoreRow'
+
+    BenchmarkScoreRow:
+      type: object
+      additionalProperties: false
+      required: [externalName, rawScore, matchStatus]
+      properties:
+        modelSlug:
+          type: string
+          nullable: true
+          description: 解析到的站内模型；未解析时为 null（此时页面上带不出链接）
+        modelName:
+          type: string
+          nullable: true
+        externalName:
+          type: string
+          description: 上游榜里的写法，原样保留
+        rawScore:
+          type: number
+          format: double
+        rank:
+          type: integer
+          nullable: true
+        sampleSize:
+          type: integer
+          nullable: true
+        uncertaintyLower:
+          type: number
+          format: double
+          nullable: true
+        uncertaintyUpper:
+          type: number
+          format: double
+          nullable: true
+        matchStatus:
+          type: string
+          description: matched / unmatched
     BenchmarkImportRequest:
       type: object
       additionalProperties: false

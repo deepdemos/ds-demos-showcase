@@ -146,5 +146,5 @@ test('关于页说明数据口径', async ({ app, screen }) => {
 test('DEV 页面清单列出 fixture', async ({ app, screen }) => {
   await app.open('/dev-room/pages');
   await expect(screen.getByRole('heading', { name: '页面清单' })).toBeVisible();
-  await expect(screen.getByRole('link', { name: '基准' })).toBeVisible();
+  await expect(screen.getByRole('link', { name: '第三方基准' })).toBeVisible();
 });

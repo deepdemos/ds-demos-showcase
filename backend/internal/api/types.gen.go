@@ -41,11 +41,25 @@ const (
 	AppealReviewResultStatusRejected AppealReviewResultStatus = "rejected"
 )
 
+// Defines values for BenchmarkDetailDisplayTier.
+const (
+	BenchmarkDetailDisplayTierCite  BenchmarkDetailDisplayTier = "cite"
+	BenchmarkDetailDisplayTierLink  BenchmarkDetailDisplayTier = "link"
+	BenchmarkDetailDisplayTierTable BenchmarkDetailDisplayTier = "table"
+)
+
 // Defines values for BenchmarkImportBenchmarkDisplayTier.
 const (
-	Cite  BenchmarkImportBenchmarkDisplayTier = "cite"
-	Link  BenchmarkImportBenchmarkDisplayTier = "link"
-	Table BenchmarkImportBenchmarkDisplayTier = "table"
+	BenchmarkImportBenchmarkDisplayTierCite  BenchmarkImportBenchmarkDisplayTier = "cite"
+	BenchmarkImportBenchmarkDisplayTierLink  BenchmarkImportBenchmarkDisplayTier = "link"
+	BenchmarkImportBenchmarkDisplayTierTable BenchmarkImportBenchmarkDisplayTier = "table"
+)
+
+// Defines values for BenchmarkSummaryDisplayTier.
+const (
+	Cite  BenchmarkSummaryDisplayTier = "cite"
+	Link  BenchmarkSummaryDisplayTier = "link"
+	Table BenchmarkSummaryDisplayTier = "table"
 )
 
 // Defines values for ClassificationDimension.
@@ -530,6 +544,29 @@ type AppealReviewResult struct {
 // AppealReviewResultStatus defines model for AppealReviewResult.Status.
 type AppealReviewResultStatus string
 
+// BenchmarkDetail defines model for BenchmarkDetail.
+type BenchmarkDetail struct {
+	Attribution *string                    `json:"attribution,omitempty"`
+	Category    string                     `json:"category"`
+	Description *string                    `json:"description,omitempty"`
+	DisplayTier BenchmarkDetailDisplayTier `json:"displayTier"`
+	HomepageUrl string                     `json:"homepageUrl"`
+	License     *string                    `json:"license,omitempty"`
+	LicenseUrl  *string                    `json:"licenseUrl,omitempty"`
+
+	// Metrics 最新版本的指标表（不含 self_reported 版本）；没有分数时 scores 为空数组
+	Metrics   []BenchmarkMetricRow `json:"metrics"`
+	Name      string               `json:"name"`
+	Publisher string               `json:"publisher"`
+	Slug      string               `json:"slug"`
+
+	// Versions 版本历史，按日期倒序；含 self_reported，由页面分组
+	Versions []BenchmarkVersionSummary `json:"versions"`
+}
+
+// BenchmarkDetailDisplayTier defines model for BenchmarkDetail.DisplayTier.
+type BenchmarkDetailDisplayTier string
+
 // BenchmarkImportBenchmark defines model for BenchmarkImportBenchmark.
 type BenchmarkImportBenchmark struct {
 	Attribution *string `json:"attribution,omitempty"`
@@ -636,6 +673,73 @@ type BenchmarkImportVersion struct {
 
 	// SourceType leaderboard / paper / self_reported …
 	SourceType *string `json:"sourceType,omitempty"`
+	SourceUrl  *string `json:"sourceUrl,omitempty"`
+	Version    string  `json:"version"`
+}
+
+// BenchmarkList defines model for BenchmarkList.
+type BenchmarkList struct {
+	Items []BenchmarkSummary `json:"items"`
+}
+
+// BenchmarkMetricRow defines model for BenchmarkMetricRow.
+type BenchmarkMetricRow struct {
+	HigherIsBetter bool                `json:"higherIsBetter"`
+	IsPrimary      bool                `json:"isPrimary"`
+	Key            string              `json:"key"`
+	Label          string              `json:"label"`
+	Scores         []BenchmarkScoreRow `json:"scores"`
+	Unit           string              `json:"unit"`
+}
+
+// BenchmarkScoreRow defines model for BenchmarkScoreRow.
+type BenchmarkScoreRow struct {
+	// ExternalName 上游榜里的写法，原样保留
+	ExternalName string `json:"externalName"`
+
+	// MatchStatus matched / unmatched
+	MatchStatus string  `json:"matchStatus"`
+	ModelName   *string `json:"modelName"`
+
+	// ModelSlug 解析到的站内模型；未解析时为 null（此时页面上带不出链接）
+	ModelSlug        *string  `json:"modelSlug"`
+	Rank             *int     `json:"rank"`
+	RawScore         float64  `json:"rawScore"`
+	SampleSize       *int     `json:"sampleSize"`
+	UncertaintyLower *float64 `json:"uncertaintyLower"`
+	UncertaintyUpper *float64 `json:"uncertaintyUpper"`
+}
+
+// BenchmarkSummary defines model for BenchmarkSummary.
+type BenchmarkSummary struct {
+	// Category 逗号分隔的方向标签；空串按 general 理解
+	Category string `json:"category"`
+
+	// DisplayTier 只有 table 档可能有分数
+	DisplayTier BenchmarkSummaryDisplayTier `json:"displayTier"`
+
+	// LatestAsOf 最新版本的日期；还没有任何版本时为 null
+	LatestAsOf *openapi_types.Date `json:"latestAsOf"`
+	Name       string              `json:"name"`
+
+	// Publisher 发布方；空串表示未填写
+	Publisher string `json:"publisher"`
+	Slug      string `json:"slug"`
+}
+
+// BenchmarkSummaryDisplayTier 只有 table 档可能有分数
+type BenchmarkSummaryDisplayTier string
+
+// BenchmarkVersionSummary defines model for BenchmarkVersionSummary.
+type BenchmarkVersionSummary struct {
+	AsOf openapi_types.Date `json:"asOf"`
+
+	// Coverage full / partial
+	Coverage         string `json:"coverage"`
+	ParticipantCount *int   `json:"participantCount"`
+
+	// SourceType leaderboard / paper / self_reported …
+	SourceType string  `json:"sourceType"`
 	SourceUrl  *string `json:"sourceUrl,omitempty"`
 	Version    string  `json:"version"`
 }

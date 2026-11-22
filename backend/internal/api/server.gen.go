@@ -101,6 +101,12 @@ type ServerInterface interface {
 	// 重发验证邮件
 	// (POST /api/v1/auth/verify-email/resend)
 	PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request)
+	// 第三方基准目录
+	// (GET /api/v1/benchmarks)
+	ListBenchmarks(w http.ResponseWriter, r *http.Request)
+	// 单张基准的详情
+	// (GET /api/v1/benchmarks/{slug})
+	GetBenchmark(w http.ResponseWriter, r *http.Request, slug string)
 	// 分类目录
 	// (GET /api/v1/classifications)
 	ListClassifications(w http.ResponseWriter, r *http.Request)
@@ -413,6 +419,18 @@ func (_ Unimplemented) PostAuthVerifyEmail(w http.ResponseWriter, r *http.Reques
 // 重发验证邮件
 // (POST /api/v1/auth/verify-email/resend)
 func (_ Unimplemented) PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 第三方基准目录
+// (GET /api/v1/benchmarks)
+func (_ Unimplemented) ListBenchmarks(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 单张基准的详情
+// (GET /api/v1/benchmarks/{slug})
+func (_ Unimplemented) GetBenchmark(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1480,6 +1498,45 @@ func (siw *ServerInterfaceWrapper) PostAuthVerifyEmailResend(w http.ResponseWrit
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAuthVerifyEmailResend(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListBenchmarks operation middleware
+func (siw *ServerInterfaceWrapper) ListBenchmarks(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBenchmarks(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBenchmark operation middleware
+func (siw *ServerInterfaceWrapper) GetBenchmark(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBenchmark(w, r, slug)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3070,6 +3127,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/verify-email/resend", wrapper.PostAuthVerifyEmailResend)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/benchmarks", wrapper.ListBenchmarks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/benchmarks/{slug}", wrapper.GetBenchmark)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/classifications", wrapper.ListClassifications)

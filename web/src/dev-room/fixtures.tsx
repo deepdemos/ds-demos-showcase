@@ -6,64 +6,6 @@ import type { PageEntry } from '@/app/routes';
 
 const NOTE = 'DEV fixture：结构与交互是真的，数据是本地示例。';
 
-function BenchmarksFixture() {
-  return (
-    <Page width="wide" title="基准" description={NOTE}>
-      <ul className="mt-6 list-none divide-y divide-gray-200 border-y border-gray-200 p-0">
-        {['MMLU', 'HumanEval', 'MathVista'].map((name) => (
-          <li key={name} className="py-3">
-            <Link
-              className="font-medium underline-offset-2 hover:underline"
-              to={'/benchmarks/' + name.toLowerCase()}
-            >
-              {name}
-            </Link>
-            <p className="m-0 mt-1 text-sm text-gray-500">第三方基准示例条目。</p>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-4 text-sm text-gray-500">基准数据尚未接入公开端点；生产环境不会注册本页。</p>
-    </Page>
-  );
-}
-
-function BenchmarkDetailFixture() {
-  const { slug = '' } = useParams();
-  return (
-    <Page width="default" title={'基准：' + slug} description={NOTE}>
-      <table className="mt-6 w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 text-left text-gray-500">
-            <th className="py-2 font-normal">模型</th>
-            <th className="py-2 font-normal">分数</th>
-            <th className="py-2 font-normal">排名</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[
-            ['DeepSeek Chat', '82.1', '4'],
-            ['Claude', '84.3', '2'],
-            ['GPT', '85.0', '1'],
-          ].map((row) => (
-            <tr key={row[0]} className="border-b border-gray-100">
-              {row.map((cell, index) => (
-                <td key={row[0] + '-' + index} className="py-2">
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="mt-4 text-sm">
-        <Link className="underline" to="/benchmarks">
-          回基准列表
-        </Link>
-      </p>
-    </Page>
-  );
-}
-
 function ProfileSettingsFixture() {
   const [displayName, setDisplayName] = useState('示例作者');
   const [saved, setSaved] = useState(false);
@@ -291,26 +233,6 @@ function AdminFeaturedFixture() {
 
 export const fixturePages: readonly PageEntry[] = [
   {
-    id: 'fixture-benchmarks',
-    path: '/benchmarks',
-    title: '基准',
-    description: NOTE,
-    group: 'public',
-    access: { kind: 'public' },
-    width: 'wide',
-    availability: 'fixture',
-  },
-  {
-    id: 'fixture-benchmark-detail',
-    path: '/benchmarks/:slug',
-    title: '基准详情',
-    description: NOTE,
-    group: 'public',
-    access: { kind: 'public' },
-    width: 'default',
-    availability: 'fixture',
-  },
-  {
     id: 'fixture-settings-profile',
     path: '/me/settings/profile',
     title: '资料设置',
@@ -403,8 +325,6 @@ export const fixturePages: readonly PageEntry[] = [
 ];
 
 export const fixtureElements: Record<string, ReactElement> = {
-  'fixture-benchmarks': <BenchmarksFixture />,
-  'fixture-benchmark-detail': <BenchmarkDetailFixture />,
   'fixture-settings-profile': <ProfileSettingsFixture />,
   'fixture-settings-preferences': <PreferencesFixture />,
   'fixture-admin-users': <AdminUsersFixture />,

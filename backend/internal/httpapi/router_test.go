@@ -236,6 +236,14 @@ func (s *stub) ImportBenchmarks(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "import-benchmarks")
 }
 
+func (s *stub) ListBenchmarks(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "benchmarks")
+}
+
+func (s *stub) GetBenchmark(_ http.ResponseWriter, _ *http.Request, slug string) {
+	s.hits = append(s.hits, "benchmark:"+slug)
+}
+
 func (s *stub) WithdrawProposal(_ http.ResponseWriter, _ *http.Request, id int) {
 	s.hits = append(s.hits, "withdraw-proposal:"+strconv.Itoa(id))
 }
@@ -342,6 +350,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/proposals", "submit-proposal"},
 		{http.MethodPost, "/api/v1/proposals/12/withdraw", "withdraw-proposal:12"},
 		{http.MethodPost, "/api/v1/admin/benchmarks/import", "import-benchmarks"},
+		{http.MethodGet, "/api/v1/benchmarks", "benchmarks"},
+		{http.MethodGet, "/api/v1/benchmarks/swe-bench", "benchmark:swe-bench"},
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
 		{http.MethodGet, "/api/v1/admin/appeals", "admin-appeals"},
