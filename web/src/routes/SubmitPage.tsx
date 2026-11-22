@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router';
 import { Button, FileInput, Input, Select, Textarea } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { ClassificationPicker } from '@/components/classification-picker';
 import { ModelPicker } from '@/components/model-picker';
 import { listDemoTypes, submitDemo, type DemoType, type Error as ApiError } from '@/api';
@@ -162,16 +163,16 @@ export function SubmitPage() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-2xl px-4 py-12">
-      <h1 className="text-2xl font-semibold">投稿</h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        提交后进入待审核队列，审核通过并能发布时才会出现在作品库。
-      </p>
-
+    <Page
+      width="form"
+      title="投稿"
+      description="提交后进入待审核队列，审核通过并能发布时才会出现在作品库。"
+    >
       <form className="mt-6 flex flex-col gap-4" onSubmit={onSubmit}>
         <label className="flex flex-col gap-1 text-sm">
           标题
           <Input
+            fullWidth
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={200}
@@ -209,7 +210,7 @@ export function SubmitPage() {
         </label>
 
         {current && (
-          <p className="m-0 text-xs text-gray-500 dark:text-gray-400">
+          <p className="m-0 text-xs text-gray-500">
             这一类收 {formatsText(current.formats)}
             {current.code === 'image' || current.code === 'model'
               ? '；不收压缩包，一张图或一个模型就是一个作品'
@@ -217,15 +218,13 @@ export function SubmitPage() {
           </p>
         )}
         {closedTypes.length > 0 && (
-          <p className="m-0 text-xs text-gray-400 dark:text-gray-500">
+          <p className="m-0 text-xs text-gray-400">
             暂未开放投稿：
             {closedTypes.map((t) => t.name).join('、')}
           </p>
         )}
         {typesQuery.isError && (
-          <p className="m-0 text-xs text-amber-600 dark:text-amber-400">
-            类型目录暂时读不到，先按常用的两种显示。
-          </p>
+          <p className="m-0 text-xs text-amber-600">类型目录暂时读不到，先按常用的两种显示。</p>
         )}
 
         <ClassificationPicker
@@ -240,6 +239,7 @@ export function SubmitPage() {
           <label className="flex flex-col gap-1 text-sm">
             作品地址（http:// 或 https://）
             <Input
+              fullWidth
               type="url"
               value={externalUrl}
               onChange={(e) => setExternalUrl(e.target.value)}
@@ -247,7 +247,7 @@ export function SubmitPage() {
               disabled={busy}
             />
             {fileError && (
-              <span className="text-xs text-red-600 dark:text-red-400" role="alert">
+              <span className="text-xs text-red-600" role="alert">
                 {fileError}
               </span>
             )}
@@ -266,16 +266,16 @@ export function SubmitPage() {
         )}
 
         {error && (
-          <p className="m-0 text-sm text-red-600 dark:text-red-400" role="alert">
+          <p className="m-0 text-sm text-red-600" role="alert">
             {error}
           </p>
         )}
 
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" primary disabled={busy}>
           {busy ? '提交中…（大文件需要一点时间）' : '提交投稿'}
         </Button>
       </form>
-    </section>
+    </Page>
   );
 }
 
@@ -294,29 +294,29 @@ export function SubmitPage() {
  */
 export function SubmitReceipt({ slug, signedIn }: { slug: string; signedIn: boolean }) {
   return (
-    <section className="mx-auto w-full max-w-2xl px-4 py-12">
-      <h1 className="text-2xl font-semibold">投稿已提交</h1>
-      <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-        作品处于待审核状态，审核通过并发布前，只有你自己能看到这件作品。
-      </p>
+    <Page
+      width="form"
+      title="投稿已提交"
+      description="作品处于待审核状态，审核通过并发布前，只有你自己能看到这件作品。"
+    >
       <p className="mt-4 flex flex-wrap gap-3">
         <Link
           to={`/preview/${encodeURIComponent(slug)}/`}
           target="_blank"
           rel="noreferrer"
-          className="text-blue-600 dark:text-blue-400"
+          className="text-blue-600"
         >
           预览这条作品
         </Link>
         {signedIn ? (
-          <Link to="/my/demos" className="text-blue-600 dark:text-blue-400">
+          <Link to="/me/demos" className="text-blue-600">
             我的作品
           </Link>
         ) : null}
-        <Link to="/demos" className="text-blue-600 dark:text-blue-400">
+        <Link to="/demos" className="text-blue-600">
           去作品库
         </Link>
       </p>
-    </section>
+    </Page>
   );
 }
