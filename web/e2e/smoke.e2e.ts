@@ -122,3 +122,29 @@ test('不存在的模型给出「没有这个模型」而不是白屏', async ({
 
   await expect(screen.getByText('没有这个模型')).toBeVisible();
 });
+
+test('探索页给出热门与最新两段', async ({ app, screen }) => {
+  await app.open('/explore');
+  await expect(screen.getByRole('heading', { name: '探索' })).toBeVisible();
+  await expect(screen.getByRole('heading', { name: '正在热门' })).toBeVisible();
+  await expect(screen.getByRole('heading', { name: '刚刚上架' })).toBeVisible();
+});
+
+test('模型目录列出种子模型并进入详情', async ({ app, screen }) => {
+  await app.open('/models');
+  await expect(screen.getByRole('heading', { name: '模型目录' })).toBeVisible();
+  await screen.getByRole('link', { name: 'DeepSeek Chat' }).click();
+  await expect(screen.getByRole('heading', { name: 'DeepSeek Chat' })).toBeVisible();
+});
+
+test('关于页说明数据口径', async ({ app, screen }) => {
+  await app.open('/about');
+  await expect(screen.getByRole('heading', { name: '关于' })).toBeVisible();
+  await expect(screen.getByRole('heading', { name: '数据与排序' })).toBeVisible();
+});
+
+test('DEV 页面清单列出 fixture', async ({ app, screen }) => {
+  await app.open('/dev-room/pages');
+  await expect(screen.getByRole('heading', { name: '页面清单' })).toBeVisible();
+  await expect(screen.getByRole('link', { name: '基准' })).toBeVisible();
+});

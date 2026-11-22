@@ -67,6 +67,7 @@ export function DevRoomPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button onClick={() => navigate('/dev-room/pages')}>页面清单</Button>
             <Button onClick={() => navigate('/')}>返回首页</Button>
             <ThemeToggle
               theme={theme}
