@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, Input } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { postAuthPasswordReset, postAuthPasswordResetCode, type Error as ApiError } from '@/api';
 import { PASSWORD_MIN, passwordLengthError } from '@/lib/password';
 import { returnToParam } from '@/lib/return-to';
@@ -84,9 +85,8 @@ export function PasswordResetPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-md px-4 py-10">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">找回密码</h1>
-      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+    <Page width="auth" title="找回密码">
+      <p className="mt-2 text-sm text-gray-600">
         用主邮箱收一个验证码，重设之后这台账号此前登录的所有设备都会退出。
       </p>
 
@@ -94,6 +94,7 @@ export function PasswordResetPage() {
         <div className="flex items-end gap-2">
           <div className="flex-1">
             <Input
+              fullWidth
               label="邮箱"
               type="email"
               value={email}
@@ -110,6 +111,7 @@ export function PasswordResetPage() {
         {codeSent ? (
           <>
             <Input
+              fullWidth
               label="验证码"
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -118,6 +120,7 @@ export function PasswordResetPage() {
               required
             />
             <Input
+              fullWidth
               label={`新密码（至少 ${PASSWORD_MIN} 位）`}
               type="password"
               value={password}
@@ -126,6 +129,7 @@ export function PasswordResetPage() {
               required
             />
             <Input
+              fullWidth
               label="再输一次新密码"
               type="password"
               value={confirm}
@@ -137,12 +141,12 @@ export function PasswordResetPage() {
         ) : null}
 
         {notice ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400" role="status">
+          <p className="text-sm text-gray-600" role="status">
             {notice}
           </p>
         ) : null}
         {error ? (
-          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          <p className="text-sm text-red-600" role="alert">
             {error}
           </p>
         ) : null}
@@ -153,12 +157,12 @@ export function PasswordResetPage() {
           </Button>
           <Link
             to={`/login${returnToParam(rawReturnTo)}`}
-            className="text-sm text-gray-600 hover:underline dark:text-gray-400"
+            className="text-sm text-gray-600 hover:underline"
           >
             想起来了，去登录
           </Link>
         </div>
       </form>
-    </section>
+    </Page>
   );
 }

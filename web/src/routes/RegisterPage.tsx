@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, Input } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { postAuthRegister, type Error as ApiError } from '@/api';
 import { PASSWORD_MIN, passwordLengthError } from '@/lib/password';
 import { returnToParam } from '@/lib/return-to';
@@ -61,9 +62,8 @@ export function RegisterPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-sm px-4 py-12">
-      <h1 className="text-2xl font-semibold">注册</h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+    <Page width="auth" title="注册">
+      <p className="mt-1 text-sm text-gray-500">
         注册后需要先验证邮箱，验证完才能登录。投稿内容需要经过审核才会公开。
       </p>
 
@@ -71,6 +71,7 @@ export function RegisterPage() {
         <label className="flex flex-col gap-1 text-sm">
           邮箱
           <Input
+            fullWidth
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -82,6 +83,7 @@ export function RegisterPage() {
         <label className="flex flex-col gap-1 text-sm">
           用户名
           <Input
+            fullWidth
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             error={usernameError}
@@ -92,12 +94,13 @@ export function RegisterPage() {
 
         <label className="flex flex-col gap-1 text-sm">
           显示名（可留空，默认用用户名）
-          <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          <Input fullWidth value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
           密码（至少 {PASSWORD_MIN} 位）
           <Input
+            fullWidth
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -108,25 +111,22 @@ export function RegisterPage() {
         </label>
 
         {error && (
-          <p className="m-0 text-sm text-red-600 dark:text-red-400" role="alert">
+          <p className="m-0 text-sm text-red-600" role="alert">
             {error}
           </p>
         )}
 
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" primary disabled={busy}>
           {busy ? '注册中…' : '注册'}
         </Button>
       </form>
 
-      <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
+      <p className="mt-6 text-sm text-gray-500">
         已有账号？
-        <Link
-          to={`/login${returnToParam(rawReturnTo)}`}
-          className="text-blue-600 dark:text-blue-400"
-        >
+        <Link to={`/login${returnToParam(rawReturnTo)}`} className="text-blue-600">
           登录
         </Link>
       </p>
-    </section>
+    </Page>
   );
 }
