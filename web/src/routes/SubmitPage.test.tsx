@@ -217,7 +217,7 @@ describe('SubmitPage', () => {
 
     await waitFor(() => expect(screen.getByText('投稿已提交')).toBeInTheDocument());
     // #459：回执要有「我的作品」这个出口，不能只给预览与作品库。
-    expect(screen.getByRole('link', { name: '我的作品' })).toHaveAttribute('href', '/my/demos');
+    expect(screen.getByRole('link', { name: '我的作品' })).toHaveAttribute('href', '/me/demos');
   });
 
   // 一个都没勾时不要塞一个空数组：契约里 modelIds 可省略，空数组和不传语义相同，
@@ -353,7 +353,7 @@ test('会话有效时回执给「我的作品」出口', () => {
       <SubmitReceipt slug="demo-a" signedIn />
     </MemoryRouter>,
   );
-  expect(screen.getByRole('link', { name: '我的作品' })).toHaveAttribute('href', '/my/demos');
+  expect(screen.getByRole('link', { name: '我的作品' })).toHaveAttribute('href', '/me/demos');
   expect(screen.getByRole('link', { name: '预览这条作品' })).toHaveAttribute(
     'href',
     '/preview/demo-a/',
