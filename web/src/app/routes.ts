@@ -227,7 +227,8 @@ export const pages: readonly PageEntry[] = [
     title: '浏览历史',
     description: '本机与账号两条来源的浏览记录。',
     group: 'me',
-    access: { kind: 'auth' },
+    // HIST-001：本机历史不要求登录。
+    access: { kind: 'public' },
     width: 'narrow',
     availability: 'ready',
     nav: { area: 'user', label: '浏览历史', order: 30 },

@@ -201,6 +201,9 @@ export function AppShell() {
           <Link className="underline" to="/community-guidelines">
             社区规范
           </Link>
+          <Link className="underline" to="/me/history">
+            浏览历史
+          </Link>
           {import.meta.env.DEV ? (
             <Link className="underline" to="/dev-room">
               开发房间
