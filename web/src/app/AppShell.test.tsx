@@ -80,7 +80,7 @@ describe('AppShell 导航', () => {
     await waitFor(() =>
       expect(screen.getByRole('menuitem', { name: /通知/ })).toHaveTextContent('3'),
     );
-    expect(screen.getByRole('menuitem', { name: '我的作品' })).toHaveAttribute('href', '/my/demos');
+    expect(screen.getByRole('menuitem', { name: '我的作品' })).toHaveAttribute('href', '/me/demos');
     expect(screen.getByRole('menuitem', { name: '登出' })).toBeInTheDocument();
   });
 
@@ -88,7 +88,10 @@ describe('AppShell 导航', () => {
     auth.me = me(['demo.review']);
     renderShell();
     fireEvent.click(screen.getByRole('button', { name: 'Alice' }));
-    expect(await screen.findByRole('menuitem', { name: '管理' })).toHaveAttribute('href', '/admin');
+    expect(await screen.findByRole('menuitem', { name: '管理' })).toHaveAttribute(
+      'href',
+      '/admin/inbox',
+    );
   });
 
   test('访客看到登录按钮，没有用户菜单', () => {
