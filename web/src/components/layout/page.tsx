@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { PageWidth } from '@/app/routes';
 
 const WIDTH_CLASS: Record<PageWidth, string> = {
@@ -8,6 +8,13 @@ const WIDTH_CLASS: Record<PageWidth, string> = {
   default: 'max-w-4xl',
   wide: 'max-w-6xl',
 };
+
+/** 路由层用清单里的 width 包住页面；页面自己写错也覆盖不了。 */
+const PageWidthContext = createContext<PageWidth | null>(null);
+
+export function PageWidthProvider({ width, children }: { width: PageWidth; children: ReactNode }) {
+  return <PageWidthContext.Provider value={width}>{children}</PageWidthContext.Provider>;
+}
 
 export interface PageHeaderProps {
   title: ReactNode;
@@ -85,8 +92,11 @@ export function Page({
   width = 'default',
   children,
 }: PageProps) {
+  // 路由层已经按 routes.ts 声明了宽度时，以清单为准；独立渲染（如单测）才看 props。
+  const routeWidth = useContext(PageWidthContext);
+  const effectiveWidth = routeWidth ?? width;
   return (
-    <div className={'mx-auto w-full px-4 py-8 sm:px-6 lg:px-8 ' + WIDTH_CLASS[width]}>
+    <div className={'mx-auto w-full px-4 py-8 sm:px-6 lg:px-8 ' + WIDTH_CLASS[effectiveWidth]}>
       <PageHeader title={title} description={description} actions={actions} eyebrow={eyebrow} />
       {children}
     </div>

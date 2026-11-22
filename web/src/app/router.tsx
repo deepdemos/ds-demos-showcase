@@ -4,6 +4,7 @@ import { DevRoomPage } from '@/dev-room/DevRoomPage';
 import { PagesListPage } from '@/dev-room/PagesListPage';
 import { fixtureElements, fixturePages } from '@/dev-room/fixtures';
 import { NotFoundPage } from '@/routes/NotFoundPage';
+import { PageWidthProvider } from '@/components/layout/page';
 import { UnavailablePage } from './UnavailablePage';
 import { AdminLayout } from './AdminLayout';
 import { AppShell } from './AppShell';
@@ -24,7 +25,8 @@ import { childPath, pages, redirects, type PageEntry } from './routes';
 function elementFor(page: PageEntry, elements: typeof routeElements = routeElements) {
   const element = elements[page.id];
   if (!element) throw new Error('页面清单缺少路由元素：' + page.id);
-  return element;
+  // width 的唯一消费者：页面自己再写一个也覆盖不了清单。
+  return <PageWidthProvider width={page.width}>{element}</PageWidthProvider>;
 }
 
 function pageRoute(
@@ -87,7 +89,7 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
     ]
   : [];
 
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   ...devRoutes,
   {
     path: '/',
@@ -126,4 +128,6 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: authPages.map((page) => pageRoute(page)),
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);
