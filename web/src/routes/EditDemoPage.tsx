@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { Button, ErrorState, FileInput, Input, Select, Skeleton, Textarea } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { ClassificationPicker } from '@/components/classification-picker';
 import { ModelPicker } from '@/components/model-picker';
 import { getDemo, updateDemo, type DemoDetail, type Error as ApiError } from '@/api';
@@ -103,52 +104,50 @@ export function EditDemoPage() {
 
   if (loadError) {
     return (
-      <section className="mx-auto w-full max-w-2xl px-4 py-12">
+      <Page width="form" title="编辑作品">
         <ErrorState
           title="读取作品失败"
           description={loadError}
           onRetry={() => window.location.reload()}
         />
-      </section>
+      </Page>
     );
   }
 
   if (!state) {
     return (
-      <section className="mx-auto w-full max-w-2xl px-4 py-12">
+      <Page width="form" title="编辑作品">
         <Skeleton lines={4} lineHeight="h-8" />
-      </section>
+      </Page>
     );
   }
 
   if (state.kind === 'missing') {
     return (
-      <section className="mx-auto w-full max-w-2xl px-4 py-12">
-        <h1 className="text-2xl font-semibold">作品不存在</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          可能链接有误，或者它已经被删除了。
+      <Page width="form" title="作品不存在" description="可能链接有误，或者它已经被删除了。">
+        <p className="mt-4">
+          <Link className="text-blue-600" to="/demos">
+            回作品库
+          </Link>
         </p>
-      </section>
+      </Page>
     );
   }
 
   // 能读到作品但不是作者：说明是公开作品的详情，用户没有编辑权。
   if (state.kind === 'ok' && !state.demo.canEdit) {
     return (
-      <section className="mx-auto w-full max-w-2xl px-4 py-12">
-        <h1 className="text-2xl font-semibold">不能编辑这条作品</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          只有作者本人能编辑。如果你确实需要修改，请联系站点管理员。
-        </p>
+      <Page
+        width="form"
+        title="不能编辑这条作品"
+        description="只有作者本人能编辑。如果你确实需要修改，请联系站点管理员。"
+      >
         <p className="mt-4">
-          <Link
-            to={`/demos/${encodeURIComponent(slug)}`}
-            className="text-blue-600 dark:text-blue-400"
-          >
+          <Link to={`/demos/${encodeURIComponent(slug)}`} className="text-blue-600">
             回到作品页
           </Link>
         </p>
-      </section>
+      </Page>
     );
   }
 
@@ -185,43 +184,43 @@ export function EditDemoPage() {
 
   if (done) {
     return (
-      <section className="mx-auto w-full max-w-2xl px-4 py-12">
-        <h1 className="text-2xl font-semibold">已提交新版</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          第 {done.revisionNo} 版已提交，正在等复审。复审期间线上仍然是上一个通过审核的版本，
-          读者看到的内容不会因为你在改稿而中断。
-        </p>
+      <Page
+        width="form"
+        title="已提交新版"
+        description={
+          '第 ' +
+          done.revisionNo +
+          ' 版已提交，正在等复审。复审期间线上仍然是上一个通过审核的版本，读者看到的内容不会因为你在改稿而中断。'
+        }
+      >
         <p className="mt-4 flex gap-3">
           <Link
             to={`/preview/${encodeURIComponent(slug)}/`}
             target="_blank"
             rel="noreferrer"
-            className="text-blue-600 dark:text-blue-400"
+            className="text-blue-600"
           >
             预览新版
           </Link>
-          <Link
-            to={`/demos/${encodeURIComponent(slug)}`}
-            className="text-blue-600 dark:text-blue-400"
-          >
+          <Link to={`/demos/${encodeURIComponent(slug)}`} className="text-blue-600">
             回到作品页
           </Link>
         </p>
-      </section>
+      </Page>
     );
   }
 
   return (
-    <section className="mx-auto w-full max-w-2xl px-4 py-12">
-      <h1 className="text-2xl font-semibold">编辑作品</h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        保存后产生新版本并进入复审。旧版本继续对外服务，复审通过才会切换。
-      </p>
-
+    <Page
+      width="form"
+      title="编辑作品"
+      description="保存后产生新版本并进入复审。旧版本继续对外服务，复审通过才会切换。"
+    >
       <form className="mt-6 flex flex-col gap-4" onSubmit={onSubmit}>
         <label className="flex flex-col gap-1 text-sm">
           标题
           <Input
+            fullWidth
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={200}
@@ -275,17 +274,17 @@ export function EditDemoPage() {
         />
 
         {error && (
-          <p className="m-0 text-sm text-red-600 dark:text-red-400" role="alert">
+          <p className="m-0 text-sm text-red-600" role="alert">
             {error}
           </p>
         )}
 
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" primary disabled={busy}>
           {busy ? '保存中…（大文件需要一点时间）' : '保存并提交复审'}
         </Button>
       </form>
 
       <RevisionHistory slug={slug} />
-    </section>
+    </Page>
   );
 }

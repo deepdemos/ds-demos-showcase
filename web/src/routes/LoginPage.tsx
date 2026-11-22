@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, Input } from '@/components/ui';
+import { Page } from '@/components/layout/page';
 import { postAuthLogin, type Error as ApiError } from '@/api';
 import { useAuth } from '@/features/auth/AuthContext';
 import { readReturnTo, returnToLabel, returnToParam } from '@/lib/return-to';
@@ -69,12 +70,10 @@ export function LoginPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-sm px-4 py-12">
-      <h1 className="text-2xl font-semibold">登录</h1>
-
+    <Page width="auth" title="登录">
       {(verified || reset) && (
         <p
-          className="mt-4 rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200"
+          className="mt-4 rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800"
           role="status"
         >
           {reset
@@ -86,7 +85,7 @@ export function LoginPage() {
       {/* 从投稿页被送到这里的人，需要知道登录不是终点。不说这一句，他就得靠
           「登录完居然回到了首页」自己猜出刚才那条路。 */}
       {returnTo !== '/' && (
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400" role="status">
+        <p className="mt-2 text-sm text-gray-600" role="status">
           登录后会回到{returnToLabel(returnTo)}。
         </p>
       )}
@@ -95,6 +94,7 @@ export function LoginPage() {
         <label className="flex flex-col gap-1 text-sm">
           邮箱或用户名
           <Input
+            fullWidth
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             autoComplete="username"
@@ -105,6 +105,7 @@ export function LoginPage() {
         <label className="flex flex-col gap-1 text-sm">
           密码
           <Input
+            fullWidth
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -117,6 +118,7 @@ export function LoginPage() {
           <label className="flex flex-col gap-1 text-sm">
             邮箱验证码
             <Input
+              fullWidth
               value={emailCode}
               onChange={(e) => setEmailCode(e.target.value)}
               inputMode="numeric"
@@ -127,42 +129,36 @@ export function LoginPage() {
         )}
 
         {error && (
-          <p className="m-0 text-sm text-red-600 dark:text-red-400" role="alert">
+          <p className="m-0 text-sm text-red-600" role="alert">
             {error}
           </p>
         )}
         {needVerify && (
           <Link
             to={`/verify-email?email=${encodeURIComponent(identifier)}${returnToParam(rawReturnTo, '&')}`}
-            className="text-sm text-blue-600 dark:text-blue-400"
+            className="text-sm text-blue-600"
           >
             去验证邮箱
           </Link>
         )}
 
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" primary disabled={busy}>
           {busy ? '登录中…' : '登录'}
         </Button>
       </form>
 
-      <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
+      <p className="mt-6 text-sm text-gray-500">
         还没有账号？
-        <Link
-          to={`/register${returnToParam(rawReturnTo)}`}
-          className="text-blue-600 dark:text-blue-400"
-        >
+        <Link to={`/register${returnToParam(rawReturnTo)}`} className="text-blue-600">
           注册
         </Link>
       </p>
 
-      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-        <Link
-          to={`/password-reset${returnToParam(rawReturnTo)}`}
-          className="text-blue-600 dark:text-blue-400"
-        >
+      <p className="mt-2 text-sm text-gray-500">
+        <Link to={`/password-reset${returnToParam(rawReturnTo)}`} className="text-blue-600">
           忘记密码
         </Link>
       </p>
-    </section>
+    </Page>
   );
 }
