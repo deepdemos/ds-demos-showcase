@@ -97,7 +97,13 @@ export function AdminReviewPage() {
   // 权限键来自会话（#460）。没有它就只能按角色字符串猜，而 IA §7.2 明令不许。
   const canPublish = me?.permissions?.includes('demo.publish') ?? false;
 
-  if (authLoading) return <Skeleton lines={3} />;
+  if (authLoading) {
+    return (
+      <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
+        <Skeleton lines={3} />
+      </div>
+    );
+  }
   if (me === null) return <Navigate to="/login?return_to=/admin/reviews" replace />;
 
   const forbidden = queue.data?.status === 403;
@@ -108,7 +114,7 @@ export function AdminReviewPage() {
   const expired = queue.data?.status === 401;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">待审作品</h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">

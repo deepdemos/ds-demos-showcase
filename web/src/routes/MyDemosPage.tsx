@@ -195,7 +195,13 @@ export function MyDemosPage() {
     staleTime: 30 * 1000,
   });
 
-  if (isLoading) return <Skeleton lines={5} />;
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <Skeleton lines={5} />
+      </div>
+    );
+  }
   if (!me) {
     // 带上来路：登录后回到「我的作品」，而不是被丢回首页（issue #371）。
     const returnTo = returnToParam(`${location.pathname}${location.search}`);
@@ -206,7 +212,7 @@ export function MyDemosPage() {
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">我的作品</h1>

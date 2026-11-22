@@ -52,11 +52,13 @@ describe('路由清单', () => {
   });
 
   test('受保护页面不是 public', () => {
-    const protectedIds = ['submit', 'my-demos', 'history', 'collections', 'notifications'];
+    const protectedIds = ['submit', 'my-demos', 'collections', 'notifications'];
     for (const id of protectedIds) {
       const page = pages.find((entry) => entry.id === id);
       expect(page, id).toBeTruthy();
       expect(page?.access.kind, id).not.toBe('public');
     }
+    // HIST-001：本机历史是公开页，不要把它再塞回受保护列表。
+    expect(pages.find((entry) => entry.id === 'history')?.access.kind).toBe('public');
   });
 });

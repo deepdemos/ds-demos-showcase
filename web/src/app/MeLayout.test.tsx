@@ -38,6 +38,7 @@ function renderAt(path = '/me/demos') {
       <Routes>
         <Route element={<MeLayout />}>
           <Route path="/me/demos" element={<div>我的作品正文</div>} />
+          <Route path="/me/history" element={<div>本机历史正文</div>} />
         </Route>
         <Route path="/login" element={<LoginProbe />} />
       </Routes>
@@ -51,6 +52,13 @@ beforeEach(() => {
 });
 
 describe('MeLayout', () => {
+  test('未登录也能打开本机浏览历史（HIST-001）', () => {
+    auth.me = null;
+    renderAt('/me/history');
+    expect(screen.getByText('本机历史正文')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: '个人中心导航' })).toBeNull();
+  });
+
   test('登录后显示个人区导航与子页面', () => {
     renderAt();
     const nav = screen.getByRole('navigation', { name: '个人中心导航' });
