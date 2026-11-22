@@ -22,6 +22,8 @@ import {
   InputFullDemo,
   InputPasswordDemo,
 } from './input.demo';
+import { MenuDefaultDemo } from './menu.demo';
+import { NavListHorizontalDemo, NavListVerticalDemo } from './nav-list.demo';
 import { PaginationDefaultDemo, PaginationDisabledDemo } from './pagination.demo';
 import {
   SelectDefaultDemo,
@@ -283,6 +285,30 @@ export const controls: ControlSpec[] = [
     category: 'action',
     description: '浅色 / 深色模式切换。',
     Demo: ThemeToggleDemo,
+  },
+  {
+    id: 'nav-list/horizontal',
+    component: 'NavList',
+    name: '横向导航',
+    category: 'navigation',
+    description: '一级入口与页内 tab；当前项用 aria-current 标出。',
+    Demo: NavListHorizontalDemo,
+  },
+  {
+    id: 'nav-list/vertical',
+    component: 'NavList',
+    name: '纵向导航',
+    category: 'navigation',
+    description: '个人区与管理区的二级导航；窄屏可横向滚动。',
+    Demo: NavListVerticalDemo,
+  },
+  {
+    id: 'menu/default',
+    component: 'Menu',
+    name: '用户菜单',
+    category: 'navigation',
+    description: '放个人区入口与登出；支持链接与动作两种菜单项。',
+    Demo: MenuDefaultDemo,
   },
   {
     id: 'pagination/default',
