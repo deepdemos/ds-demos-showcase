@@ -10,10 +10,12 @@ import { CommunityGuidelinesPage } from '@/routes/CommunityGuidelinesPage';
 import { DemoDetailPage } from '@/routes/DemoDetailPage';
 import { DemosPage } from '@/routes/DemosPage';
 import { EditDemoPage } from '@/routes/EditDemoPage';
+import { ExplorePage } from '@/routes/ExplorePage';
 import { HistoryPage } from '@/routes/HistoryPage';
 import { HomePage } from '@/routes/HomePage';
 import { LoginPage } from '@/routes/LoginPage';
 import { ModelPage } from '@/routes/ModelPage';
+import { ModelsPage } from '@/routes/ModelsPage';
 import { MyDemosPage } from '@/routes/MyDemosPage';
 import { NotFoundPage } from '@/routes/NotFoundPage';
 import { NotificationsPage } from '@/routes/NotificationsPage';
@@ -22,6 +24,7 @@ import { ProposalDetailPage } from '@/routes/ProposalDetailPage';
 import { RankingsPage } from '@/routes/RankingsPage';
 import { RegisterPage } from '@/routes/RegisterPage';
 import { SearchPage } from '@/routes/SearchPage';
+import { AboutPage } from '@/routes/AboutPage';
 import { SubmitPage } from '@/routes/SubmitPage';
 import { VerifyEmailPage } from '@/routes/VerifyEmailPage';
 import type { RouteElementMap } from './routes';
@@ -35,13 +38,16 @@ import type { RouteElementMap } from './routes';
 export const routeElements: RouteElementMap = {
   home: <HomePage />,
   demos: <DemosPage />,
+  explore: <ExplorePage />,
   'demo-detail': <DemoDetailPage />,
   'demo-edit': <EditDemoPage />,
+  models: <ModelsPage />,
   'model-detail': <ModelPage />,
   rankings: <RankingsPage />,
   author: <AuthorPage />,
   classification: <ClassificationPage />,
   guidelines: <CommunityGuidelinesPage />,
+  about: <AboutPage />,
   search: <SearchPage />,
   submit: <SubmitPage />,
   collections: <CollectionsPage />,
