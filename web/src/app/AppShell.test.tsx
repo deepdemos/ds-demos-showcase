@@ -69,6 +69,7 @@ describe('AppShell 导航', () => {
     renderShell();
     const nav = screen.getByRole('navigation', { name: '主导航' });
     expect(within(nav).getByRole('link', { name: '作品库' })).toHaveAttribute('href', '/demos');
+    expect(within(nav).getByRole('link', { name: '探索' })).toHaveAttribute('href', '/explore');
     expect(within(nav).getByRole('link', { name: '排行榜' })).toHaveAttribute('href', '/rankings');
     expect(within(nav).getByRole('link', { name: '投稿' })).toHaveAttribute('href', '/submit');
   });

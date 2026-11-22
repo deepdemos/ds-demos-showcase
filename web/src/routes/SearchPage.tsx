@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Button, EmptyState, ErrorState, Input, Pagination, Skeleton } from '@/components/ui';
 import { Page } from '@/components/layout/page';
+import { DemoCard } from '@/features/demo/demo-card';
 import { listDemos, type DemoList } from '@/api';
 
 const PAGE_SIZE = 20;
@@ -110,17 +111,7 @@ export function SearchPage() {
           <ul className="mt-6 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
             {query.data.items.map((demo) => (
               <li key={demo.slug}>
-                <Link
-                  to={'/demos/' + demo.slug}
-                  className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 text-inherit no-underline hover:border-gray-300"
-                >
-                  <h2 className="line-clamp-2 min-h-12 text-base font-medium text-gray-900">
-                    {demo.title ?? '（无标题）'}
-                  </h2>
-                  <p className="mt-auto pt-3 text-xs text-gray-500">
-                    {new Date(demo.createdAt).toLocaleDateString('zh-CN')}
-                  </p>
-                </Link>
+                <DemoCard demo={demo} />
               </li>
             ))}
           </ul>

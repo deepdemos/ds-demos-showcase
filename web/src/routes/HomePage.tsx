@@ -20,8 +20,14 @@ export function HomePage() {
         <Link to="/demos" className={actionLink}>
           浏览作品库 →
         </Link>
+        <Link to="/explore" className={actionLink}>
+          探索
+        </Link>
         <Link to="/rankings" className={actionLink}>
           排行榜
+        </Link>
+        <Link to="/models" className={actionLink}>
+          模型目录
         </Link>
         {me ? (
           <Link to="/submit" className={actionLink}>

@@ -25,8 +25,18 @@ function me(permissions: string[] = [], role = 'user'): Me {
 
 describe('导航派生', () => {
   test('一级入口按 order 排列', () => {
-    expect(primaryNav(null).map((item) => item.label)).toEqual(['作品库', '排行榜', '投稿']);
-    expect(primaryNav(null).map((item) => item.to)).toEqual(['/demos', '/rankings', '/submit']);
+    expect(primaryNav(null).map((item) => item.label)).toEqual([
+      '作品库',
+      '探索',
+      '排行榜',
+      '投稿',
+    ]);
+    expect(primaryNav(null).map((item) => item.to)).toEqual([
+      '/demos',
+      '/explore',
+      '/rankings',
+      '/submit',
+    ]);
   });
 
   test('访客没有个人菜单', () => {
