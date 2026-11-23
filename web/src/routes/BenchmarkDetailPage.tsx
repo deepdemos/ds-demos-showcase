@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { Page } from '@/components/layout/page';
 import { getBenchmark, type BenchmarkDetail, type BenchmarkVersionSummary } from '@/api';
+import { tierLabel } from '@/content/benchmark-tier';
 
 /**
  * 单张基准的详情（模型域 §5.6）。
@@ -127,13 +128,7 @@ export function BenchmarkDetailPage() {
             </div>
             <div>
               <dt className="text-gray-500">陈列档位</dt>
-              <dd className="m-0 text-gray-900">
-                {detail.displayTier === 'table'
-                  ? '有分数'
-                  : detail.displayTier === 'cite'
-                    ? '仅引用'
-                    : '仅链接'}
-              </dd>
+              <dd className="m-0 text-gray-900">{tierLabel[detail.displayTier]}</dd>
             </div>
           </dl>
           {detail.attribution || detail.license ? (

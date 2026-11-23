@@ -35,6 +35,16 @@ describe('BenchmarksPage', () => {
     expect(await screen.findByText('还没有接入任何基准榜')).toBeInTheDocument();
   });
 
+  it('目录页给出「基准来源」入口，来源速查表才找得到', async () => {
+    listBenchmarks.mockResolvedValue({ status: 200, data: { items: [] } });
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: '基准来源' })).toHaveAttribute(
+      'href',
+      '/benchmarks/sources',
+    );
+  });
+
   it('按档位如实标注：cite 档显示「仅引用」，不会让人以为缺了分数', async () => {
     listBenchmarks.mockResolvedValue({
       status: 200,

@@ -149,6 +149,17 @@ export const pages: readonly PageEntry[] = [
     // 不进一级导航（模型域 §5.6）：入口是模型详情页的第三区块。
   },
   {
+    id: 'benchmark-sources',
+    path: '/benchmarks/sources',
+    title: '基准来源',
+    description: '站外主流评测榜的速查表：测什么、怎么防污染、跑在什么环境、指标与成本、多久更新。',
+    group: 'public',
+    access: { kind: 'public' },
+    width: 'wide',
+    availability: 'ready',
+    // 同样不进一级导航；入口是 /benchmarks 目录页（#568）。
+  },
+  {
     id: 'benchmark-detail',
     path: '/benchmarks/:slug',
     title: '基准',

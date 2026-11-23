@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { Page } from '@/components/layout/page';
 import { listBenchmarks, type BenchmarkSummary } from '@/api';
+import { tierLabel } from '@/content/benchmark-tier';
 
 /**
  * 第三方基准目录（模型域 §5.6）。
@@ -10,12 +11,6 @@ import { listBenchmarks, type BenchmarkSummary } from '@/api';
  * 只做分榜陈列：这里回答「有哪些榜」，不回答「谁比谁强」。跨榜归一化与综合分是后续层，
  * 所以页面上不出现任何「总分」或「即将上线」的占位。
  */
-
-const TIER_LABEL: Record<BenchmarkSummary['displayTier'], string> = {
-  table: '有分数',
-  cite: '仅引用',
-  link: '仅链接',
-};
 
 function formatDay(value: string | null | undefined): string {
   if (!value) return '—';
@@ -36,6 +31,11 @@ export function BenchmarksPage() {
     <Page
       title="第三方基准"
       description={'站内已收录的第三方基准。每张榜单独陈列：只给原始分与名次，不跨榜比较。'}
+      actions={
+        <Link to="/benchmarks/sources" className="text-sm underline">
+          基准来源
+        </Link>
+      }
     >
       {query.isPending ? (
         <div className="mt-6">
@@ -83,7 +83,7 @@ export function BenchmarksPage() {
                   <td className="py-2 pr-3 text-gray-600">{item.publisher || '—'}</td>
                   <td className="py-2 pr-3 text-gray-600">{item.category || 'general'}</td>
                   <td className="py-2 pr-3 text-gray-600">{formatDay(item.latestAsOf)}</td>
-                  <td className="py-2 text-gray-600">{TIER_LABEL[item.displayTier]}</td>
+                  <td className="py-2 text-gray-600">{tierLabel[item.displayTier]}</td>
                 </tr>
               ))}
             </tbody>

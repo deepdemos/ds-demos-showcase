@@ -112,6 +112,22 @@ export const RULES = [
     hint: '入口文件名只由 shapes.go 的 singleFileKinds / stagedName / isRootIndex 决定，读侧从 entry_path 取',
   },
   {
+    id: 'display-tier-label',
+    title: '陈列档位文案（有分数 / 仅引用 / 仅链接）',
+    // #568 加来源页时，同一个档位名在目录页、详情页、来源内容文件里各写了一遍，
+    // 而「收录分数」与目录页的「有分数」已经不是同一个词。词表收敛到一处后，
+    // 只许在 benchmark-tier.ts 里出现，页面读它。
+    //
+    // 抓的是三个对外文案，不含「不收录」：那三个字在说明性句子里到处都有
+    // （例如 cite 档要写「本站不收录这张榜的分数」），抓它会把正常文案判成副本。
+    pattern: /(?:有分数|仅引用|仅链接)/g,
+    include: [/\.tsx?$/],
+    // 测试要断言页面上渲染出来的字，那是验证不是第二份实现。
+    exclude: [/\.test\.tsx?$/],
+    allowed: ['web/src/content/benchmark-tier.ts'],
+    hint: '档位文案只写在 web/src/content/benchmark-tier.ts 的 tierLabel，页面 import 它',
+  },
+  {
     id: 'audit-write',
     title: '审计写入（INSERT INTO audit_log）',
     // 审计出口必须唯一：actor_type / entity_type 这些口径写死在不同语句里，
