@@ -482,6 +482,62 @@
         "optional": false
       }
     },
+    "BenchmarkOverview": {
+      "columns": {
+        "type": "[]BenchmarkOverviewColumn",
+        "optional": false
+      },
+      "rows": {
+        "type": "[]BenchmarkOverviewRow",
+        "optional": false
+      }
+    },
+    "BenchmarkOverviewCell": {
+      "benchmarkSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "rank": {
+        "type": "int",
+        "optional": true
+      },
+      "rawScore": {
+        "type": "float64",
+        "optional": false
+      }
+    },
+    "BenchmarkOverviewColumn": {
+      "benchmarkSlug": {
+        "type": "string",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "unit": {
+        "type": "string",
+        "optional": false
+      },
+      "version": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "BenchmarkOverviewRow": {
+      "cells": {
+        "type": "[]BenchmarkOverviewCell",
+        "optional": false
+      },
+      "modelName": {
+        "type": "string",
+        "optional": false
+      },
+      "modelSlug": {
+        "type": "string",
+        "optional": false
+      }
+    },
     "BenchmarkScoreRow": {
       "externalName": {
         "type": "string",
@@ -2953,6 +3009,11 @@
     },
     "GET /api/v1/benchmarks": {
       "method": "ListBenchmarks",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/benchmarks/overview": {
+      "method": "GetBenchmarkOverview",
       "pathParams": 0,
       "params": null
     },

@@ -118,6 +118,91 @@ func (q *Queries) ListBenchmarkMetricsWithScores(ctx context.Context, versionID 
 	return items, nil
 }
 
+const listBenchmarkOverview = `-- name: ListBenchmarkOverview :many
+SELECT b.slug AS benchmark_slug,
+       b.name AS benchmark_name,
+       bm.unit,
+       bv.version,
+       m.slug AS model_slug,
+       m.name AS model_name,
+       bs.raw_score,
+       bs.rank
+FROM benchmarks b
+JOIN LATERAL (
+    SELECT v.id, v.version
+    FROM benchmark_versions v
+    WHERE v.benchmark_id = b.id
+      AND v.status = 'active'
+      AND v.source_type <> 'self_reported'
+    ORDER BY v.as_of DESC, v.id DESC
+    LIMIT 1
+) bv ON TRUE
+JOIN LATERAL (
+    SELECT mt.id, mt.unit
+    FROM benchmark_metrics mt
+    WHERE mt.version_id = bv.id
+      AND mt.is_primary
+    LIMIT 1
+) bm ON TRUE
+LEFT JOIN benchmark_scores bs
+       ON bs.metric_id = bm.id
+      AND bs.match_status = 'matched'
+      AND bs.model_id IS NOT NULL
+      AND bs.ranked
+LEFT JOIN models m ON m.id = bs.model_id
+WHERE b.status = 'active'
+  AND b.display_tier = 'table'
+ORDER BY b.name, b.id, m.name, m.id
+`
+
+type ListBenchmarkOverviewRow struct {
+	BenchmarkSlug string
+	BenchmarkName string
+	Unit          string
+	Version       string
+	ModelSlug     pgtype.Text
+	ModelName     pgtype.Text
+	RawScore      pgtype.Float8
+	Rank          pgtype.Int4
+}
+
+// 模型 × 基准总览（#571）：一行一个模型、一列一张榜，格子是原始分 + 名次。
+//
+// 从 `benchmarks` 出发、LEFT JOIN 分数：**指标存在但一条匹配分数都没有时，列本身仍要出现**
+// （列头照常渲染，只是这一列没有格子）。反过来写（从 scores 出发）会把空列整列丢掉，
+// 页面就分不清「这张榜一张分数都没有」和「这张榜没接进来」。
+//
+// 口径与契约 `GET /api/v1/benchmarks/overview` 的 description 是同一份，改一处要同步另一处：
+// 榜 `table` 档 + 版本最新非自报 + 指标取主指标 + 分数 matched / ranked / model_id 非空。
+func (q *Queries) ListBenchmarkOverview(ctx context.Context) ([]ListBenchmarkOverviewRow, error) {
+	rows, err := q.db.Query(ctx, listBenchmarkOverview)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBenchmarkOverviewRow{}
+	for rows.Next() {
+		var i ListBenchmarkOverviewRow
+		if err := rows.Scan(
+			&i.BenchmarkSlug,
+			&i.BenchmarkName,
+			&i.Unit,
+			&i.Version,
+			&i.ModelSlug,
+			&i.ModelName,
+			&i.RawScore,
+			&i.Rank,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBenchmarkVersions = `-- name: ListBenchmarkVersions :many
 SELECT id, version, as_of, source_type, coverage, participant_count, source_url
 FROM benchmark_versions

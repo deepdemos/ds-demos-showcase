@@ -104,6 +104,9 @@ type ServerInterface interface {
 	// 第三方基准目录
 	// (GET /api/v1/benchmarks)
 	ListBenchmarks(w http.ResponseWriter, r *http.Request)
+	// 模型 × 基准总览（稀疏矩阵）
+	// (GET /api/v1/benchmarks/overview)
+	GetBenchmarkOverview(w http.ResponseWriter, r *http.Request)
 	// 单张基准的详情
 	// (GET /api/v1/benchmarks/{slug})
 	GetBenchmark(w http.ResponseWriter, r *http.Request, slug string)
@@ -425,6 +428,12 @@ func (_ Unimplemented) PostAuthVerifyEmailResend(w http.ResponseWriter, r *http.
 // 第三方基准目录
 // (GET /api/v1/benchmarks)
 func (_ Unimplemented) ListBenchmarks(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 模型 × 基准总览（稀疏矩阵）
+// (GET /api/v1/benchmarks/overview)
+func (_ Unimplemented) GetBenchmarkOverview(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1512,6 +1521,20 @@ func (siw *ServerInterfaceWrapper) ListBenchmarks(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListBenchmarks(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBenchmarkOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetBenchmarkOverview(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBenchmarkOverview(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3130,6 +3153,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/benchmarks", wrapper.ListBenchmarks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/benchmarks/overview", wrapper.GetBenchmarkOverview)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/benchmarks/{slug}", wrapper.GetBenchmark)

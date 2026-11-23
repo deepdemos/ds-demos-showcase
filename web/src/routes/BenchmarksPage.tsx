@@ -32,9 +32,14 @@ export function BenchmarksPage() {
       title="第三方基准"
       description={'站内已收录的第三方基准。每张榜单独陈列：只给原始分与名次，不跨榜比较。'}
       actions={
-        <Link to="/benchmarks/sources" className="text-sm underline">
-          基准来源
-        </Link>
+        <>
+          <Link to="/benchmarks/overview" className="text-sm underline">
+            总览
+          </Link>
+          <Link to="/benchmarks/sources" className="text-sm underline">
+            基准来源
+          </Link>
+        </>
       }
     >
       {query.isPending ? (

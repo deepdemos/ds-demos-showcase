@@ -240,6 +240,10 @@ func (s *stub) ListBenchmarks(http.ResponseWriter, *http.Request) {
 	s.hits = append(s.hits, "benchmarks")
 }
 
+func (s *stub) GetBenchmarkOverview(http.ResponseWriter, *http.Request) {
+	s.hits = append(s.hits, "benchmark-overview")
+}
+
 func (s *stub) GetBenchmark(_ http.ResponseWriter, _ *http.Request, slug string) {
 	s.hits = append(s.hits, "benchmark:"+slug)
 }
@@ -352,6 +356,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodPost, "/api/v1/admin/benchmarks/import", "import-benchmarks"},
 		{http.MethodGet, "/api/v1/benchmarks", "benchmarks"},
 		{http.MethodGet, "/api/v1/benchmarks/swe-bench", "benchmark:swe-bench"},
+		// 静态段必须压过 /{slug}：写成 "benchmark:overview" 就说明被参数路由抢走了。
+		{http.MethodGet, "/api/v1/benchmarks/overview", "benchmark-overview"},
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
 		{http.MethodGet, "/api/v1/admin/appeals", "admin-appeals"},

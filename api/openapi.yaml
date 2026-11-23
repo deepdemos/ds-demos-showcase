@@ -9,9 +9,9 @@ info:
     当前范围：站点可用性、作品列表与详情、投稿与更新、审核队列与裁决、发布到渠道、
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
-    作品榜与相关推荐、我的作品、渠道上架与撤下，
+    作品榜与相关推荐、我的作品、渠道上架与撤下、模型 × 基准总览，
     以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 76 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    共 77 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -144,6 +144,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BenchmarkList'
+        '503':
+          description: 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/benchmarks/overview:
+    get:
+      operationId: getBenchmarkOverview
+      tags: [模型]
+      summary: 模型 × 基准总览（稀疏矩阵）
+      description: |
+        **一行一个模型、一列一张榜**：格子里是该榜的原始分与榜内名次，缺格就是没有该格。
+        一屏回答「同一个模型在几张榜上各落在哪」，**不做任何跨榜合并**——
+        不归一化、不合成总分、不做跨列颜色。
+
+        收录口径只写这一处，别的层不许再推一遍：
+        - 榜：`status='active'` 且 `display_tier='table'`。`cite` / `link` 档没有分数，不进矩阵。
+        - 版本：每榜取最新一个 `status='active'` 且非 `self_reported` 的版本。
+        - 指标：该版本的主指标（`is_primary`）。**没有主指标的榜不进矩阵** —— 一列只放一个数。
+        - 分数：只取 `match_status='matched'`、`model_id` 非空、`ranked=true` 的行。
+
+        **稀疏**：`cells` 只含真的有分数的列，缺格**不补零、不回填**；`rank` 可空
+        （源榜没给名次）。没有任何 `table` 档分数时返回 `columns: []` / `rows: []`，
+        不是 404 —— 空矩阵是「还没导数据」或「一张 table 档榜都没接」的正常状态。
+      responses:
+        '200':
+          description: 稀疏矩阵
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkOverview'
         '503':
           description: 服务不可用
           content:
@@ -4708,6 +4741,63 @@ components:
           description: 最新版本的指标表（不含 self_reported 版本）；没有分数时 scores 为空数组
           items:
             $ref: '#/components/schemas/BenchmarkMetricRow'
+
+    BenchmarkOverview:
+      type: object
+      additionalProperties: false
+      required: [columns, rows]
+      properties:
+        columns:
+          type: array
+          description: 一列一张榜，按榜名升序
+          items:
+            $ref: '#/components/schemas/BenchmarkOverviewColumn'
+        rows:
+          type: array
+          description: 一行一个模型，至少有一个格子；按模型名升序
+          items:
+            $ref: '#/components/schemas/BenchmarkOverviewRow'
+
+    BenchmarkOverviewColumn:
+      type: object
+      additionalProperties: false
+      required: [benchmarkSlug, name, unit, version]
+      properties:
+        benchmarkSlug: { type: string }
+        name: { type: string }
+        unit:
+          type: string
+          description: 主指标的单位；空串表示无量纲
+        version:
+          type: string
+          description: 取的是哪一版（最新非自报版本）
+
+    BenchmarkOverviewRow:
+      type: object
+      additionalProperties: false
+      required: [modelSlug, modelName, cells]
+      properties:
+        modelSlug: { type: string }
+        modelName: { type: string }
+        cells:
+          type: array
+          description: 稀疏：只含有分数的列
+          items:
+            $ref: '#/components/schemas/BenchmarkOverviewCell'
+
+    BenchmarkOverviewCell:
+      type: object
+      additionalProperties: false
+      required: [benchmarkSlug, rawScore]
+      properties:
+        benchmarkSlug: { type: string }
+        rawScore:
+          type: number
+          format: double
+        rank:
+          type: integer
+          nullable: true
+          description: 榜内名次；源榜没给名次时为 null
 
     BenchmarkVersionSummary:
       type: object
