@@ -65,7 +65,6 @@ export function ExplorePage() {
 
   return (
     <Page
-      width="wide"
       title="探索"
       description="从作品库之外换一个入口：看最近被浏览最多的作品，也看刚上架的作品。"
       actions={

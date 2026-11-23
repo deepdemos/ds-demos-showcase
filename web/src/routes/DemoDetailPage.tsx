@@ -171,7 +171,7 @@ export function DemoDetailPage() {
   }, [data]);
 
   return (
-    <Page width="default" title={title}>
+    <Page title={title}>
       <p className="mb-4">
         <Button type="button" inline onClick={goBack}>
           ← 返回上一页

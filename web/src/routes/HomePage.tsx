@@ -24,7 +24,6 @@ export function HomePage() {
 
   return (
     <Page
-      width="default"
       title="DeepDemos 展示"
       description="这里托管可运行的作品：网页作品或压缩包，审核通过后公开。可以按形态、技术、模型筛选作品库，看排行榜；登录后能投稿和评分。"
     >

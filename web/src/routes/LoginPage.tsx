@@ -70,7 +70,7 @@ export function LoginPage() {
   };
 
   return (
-    <Page width="auth" title="登录">
+    <Page title="登录">
       {(verified || reset) && (
         <p
           className="mt-4 rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800"

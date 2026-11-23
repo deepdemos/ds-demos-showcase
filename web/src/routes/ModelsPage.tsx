@@ -57,11 +57,7 @@ export function ModelsPage() {
   }
 
   return (
-    <Page
-      width="wide"
-      title="模型目录"
-      description="站内登记的模型档案：厂商、状态与引用它的作品。按名字排序。"
-    >
+    <Page title="模型目录" description="站内登记的模型档案：厂商、状态与引用它的作品。按名字排序。">
       <form className="mt-6 flex max-w-xl items-end gap-2" onSubmit={submit} role="search">
         <label className="flex flex-1 flex-col gap-1 text-sm">
           关键词

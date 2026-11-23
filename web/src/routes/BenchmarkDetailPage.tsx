@@ -52,7 +52,7 @@ export function BenchmarkDetailPage() {
 
   if (query.isPending) {
     return (
-      <Page width="default" title="基准">
+      <Page title="基准">
         <div className="mt-6">
           <Skeleton lines={6} />
         </div>
@@ -62,7 +62,7 @@ export function BenchmarkDetailPage() {
 
   if (query.isError) {
     return (
-      <Page width="default" title="基准">
+      <Page title="基准">
         <div className="mt-6">
           <ErrorState
             title="基准详情加载失败"
@@ -78,7 +78,7 @@ export function BenchmarkDetailPage() {
   const detail = query.data;
   if (detail === null || detail === undefined) {
     return (
-      <Page width="default" title="基准">
+      <Page title="基准">
         <div className="mt-6">
           <EmptyState
             title="这张基准不存在或已下架"
@@ -95,7 +95,7 @@ export function BenchmarkDetailPage() {
   const current = latestThirdParty(detail.versions);
 
   return (
-    <Page width="default" title={detail.name} description={detail.description ?? undefined}>
+    <Page title={detail.name} description={detail.description ?? undefined}>
       <div className="mt-6 flex flex-col gap-8">
         <section>
           <h2 className="text-base font-semibold text-gray-900">概述</h2>

@@ -4,7 +4,6 @@ import { Page } from '@/components/layout/page';
 export function AboutPage() {
   return (
     <Page
-      width="narrow"
       title="关于"
       description="DeepDemos 展示托管可运行的 AI 作品：网页作品与压缩包，审核通过后公开。"
     >

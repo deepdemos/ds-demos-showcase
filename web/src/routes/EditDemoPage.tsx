@@ -104,7 +104,7 @@ export function EditDemoPage() {
 
   if (loadError) {
     return (
-      <Page width="form" title="编辑作品">
+      <Page title="编辑作品">
         <ErrorState
           title="读取作品失败"
           description={loadError}
@@ -116,7 +116,7 @@ export function EditDemoPage() {
 
   if (!state) {
     return (
-      <Page width="form" title="编辑作品">
+      <Page title="编辑作品">
         <Skeleton lines={4} lineHeight="h-8" />
       </Page>
     );
@@ -124,7 +124,7 @@ export function EditDemoPage() {
 
   if (state.kind === 'missing') {
     return (
-      <Page width="form" title="作品不存在" description="可能链接有误，或者它已经被删除了。">
+      <Page title="作品不存在" description="可能链接有误，或者它已经被删除了。">
         <p className="mt-4">
           <Link className="text-blue-600" to="/demos">
             回作品库
@@ -138,7 +138,6 @@ export function EditDemoPage() {
   if (state.kind === 'ok' && !state.demo.canEdit) {
     return (
       <Page
-        width="form"
         title="不能编辑这条作品"
         description="只有作者本人能编辑。如果你确实需要修改，请联系站点管理员。"
       >
@@ -185,7 +184,6 @@ export function EditDemoPage() {
   if (done) {
     return (
       <Page
-        width="form"
         title="已提交新版"
         description={
           '第 ' +
@@ -212,7 +210,6 @@ export function EditDemoPage() {
 
   return (
     <Page
-      width="form"
       title="编辑作品"
       description="保存后产生新版本并进入复审。旧版本继续对外服务，复审通过才会切换。"
     >

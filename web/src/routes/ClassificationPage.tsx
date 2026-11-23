@@ -136,7 +136,7 @@ export function ClassificationPage() {
 
   if (catalog.isPending) {
     return (
-      <Page width="wide" title="分类">
+      <Page title="分类">
         <Skeleton lines={4} />
       </Page>
     );
@@ -144,7 +144,7 @@ export function ClassificationPage() {
 
   if ((catalog.isError && !catalogData) || missing) {
     return (
-      <Page width="wide" title="分类">
+      <Page title="分类">
         {catalog.isError ? (
           <ErrorState
             title="分类目录加载失败"
@@ -177,7 +177,6 @@ export function ClassificationPage() {
 
   return (
     <Page
-      width="wide"
       title={value.label}
       eyebrow={dimensionMeta.label + '分类'}
       description={'共 ' + total + ' 个作品'}

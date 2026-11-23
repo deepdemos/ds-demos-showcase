@@ -75,7 +75,7 @@ export function VerifyEmailPage() {
   };
 
   return (
-    <Page width="auth" title="验证邮箱">
+    <Page title="验证邮箱">
       <p className="mt-1 text-sm text-gray-500">
         我们给你的邮箱发了一个 6 位验证码。验证之后就能登录了。
       </p>

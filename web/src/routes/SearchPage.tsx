@@ -42,7 +42,7 @@ export function SearchPage() {
   }
 
   return (
-    <Page width="wide" title="搜索" description={q ? '关键词：' + q : '按标题或简介搜索公开作品。'}>
+    <Page title="搜索" description={q ? '关键词：' + q : '按标题或简介搜索公开作品。'}>
       <form className="mt-6 flex max-w-xl items-end gap-2" onSubmit={submit} role="search">
         <label className="flex flex-1 flex-col gap-1 text-sm">
           关键词

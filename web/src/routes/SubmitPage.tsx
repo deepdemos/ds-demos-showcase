@@ -163,11 +163,7 @@ export function SubmitPage() {
   }
 
   return (
-    <Page
-      width="form"
-      title="投稿"
-      description="提交后进入待审核队列，审核通过并能发布时才会出现在作品库。"
-    >
+    <Page title="投稿" description="提交后进入待审核队列，审核通过并能发布时才会出现在作品库。">
       <form className="mt-6 flex flex-col gap-4" onSubmit={onSubmit}>
         <label className="flex flex-col gap-1 text-sm">
           标题
@@ -295,7 +291,6 @@ export function SubmitPage() {
 export function SubmitReceipt({ slug, signedIn }: { slug: string; signedIn: boolean }) {
   return (
     <Page
-      width="form"
       title="投稿已提交"
       description="作品处于待审核状态，审核通过并发布前，只有你自己能看到这件作品。"
     >
