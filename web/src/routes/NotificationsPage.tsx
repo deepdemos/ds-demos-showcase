@@ -102,7 +102,6 @@ export function NotificationsPage() {
 
   return (
     <Page
-      width="narrow"
       title="通知"
       description="审核结果与收到评分会出现在这里；已读之后仍可回看。"
       actions={

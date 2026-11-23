@@ -53,7 +53,6 @@ export function AdminAppealsPage() {
 
   return (
     <Page
-      width="wide"
       title="待处理申诉"
       eyebrow={
         <>

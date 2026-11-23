@@ -208,7 +208,6 @@ export function MyDemosPage() {
 
   return (
     <Page
-      width="wide"
       title="我的作品"
       description="草稿与待审的点标题看预览；已上线的点标题看读者看到的页面。"
       actions={

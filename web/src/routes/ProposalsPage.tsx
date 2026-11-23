@@ -49,7 +49,6 @@ export function ProposalsPage() {
 
   return (
     <Page
-      width="wide"
       title="提案"
       description="来自用户的实体提案；点标题查看 payload 并裁决。"
       actions={

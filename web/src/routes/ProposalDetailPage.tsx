@@ -100,7 +100,7 @@ export function ProposalDetailPage() {
   if (authLoading) return <Skeleton lines={3} />;
   if (!Number.isInteger(id) || id < 1) {
     return (
-      <Page width="wide" title="提案详情">
+      <Page title="提案详情">
         <EmptyState title="地址里的提案编号不合法" description="编号必须是正整数。" />
       </Page>
     );
@@ -109,7 +109,7 @@ export function ProposalDetailPage() {
 
   if (detail.isPending) {
     return (
-      <Page width="wide" title="提案详情">
+      <Page title="提案详情">
         <Skeleton lines={4} />
       </Page>
     );
@@ -117,7 +117,7 @@ export function ProposalDetailPage() {
 
   if (detail.isError) {
     return (
-      <Page width="wide" title="提案详情">
+      <Page title="提案详情">
         <ErrorState
           title="提案加载失败"
           description={detail.error instanceof Error ? detail.error.message : '请稍后重试。'}
@@ -130,7 +130,7 @@ export function ProposalDetailPage() {
 
   if (detail.data === null) {
     return (
-      <Page width="wide" title="提案详情">
+      <Page title="提案详情">
         <EmptyState title="提案不存在" description="它可能已经被擦除，或者编号不对。" />
       </Page>
     );
@@ -141,7 +141,6 @@ export function ProposalDetailPage() {
 
   return (
     <Page
-      width="wide"
       title={String(data.payload?.title ?? data.payload?.name ?? data.kind)}
       eyebrow={
         <>

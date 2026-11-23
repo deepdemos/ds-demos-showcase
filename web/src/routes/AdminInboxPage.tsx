@@ -64,7 +64,6 @@ export function AdminInboxPage() {
 
   return (
     <Page
-      width="wide"
       title="收件箱"
       description="待审作品、已通过待发布、待处理提案都在这里；计数不受下面列表条数限制。"
       actions={

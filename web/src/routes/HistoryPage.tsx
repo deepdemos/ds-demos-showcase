@@ -209,7 +209,6 @@ export function HistoryPage() {
 
   return (
     <Page
-      width="narrow"
       title="浏览历史"
       description="本机记录只保存在这个浏览器；登录后还会合并账号记录。同一作品只留较近的一次。"
       actions={
