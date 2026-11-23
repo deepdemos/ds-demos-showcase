@@ -96,7 +96,10 @@ export function Page({
   const routeWidth = useContext(PageWidthContext);
   const effectiveWidth = routeWidth ?? width;
   return (
-    <div className={'mx-auto w-full px-4 py-8 sm:px-6 lg:px-8 ' + WIDTH_CLASS[effectiveWidth]}>
+    <div
+      data-testid="page"
+      className={'mx-auto w-full px-4 py-8 sm:px-6 lg:px-8 ' + WIDTH_CLASS[effectiveWidth]}
+    >
       <PageHeader title={title} description={description} actions={actions} eyebrow={eyebrow} />
       {children}
     </div>

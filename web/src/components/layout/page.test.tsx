@@ -4,15 +4,16 @@ import { Page, PageSection, PageWidthProvider } from './page';
 
 describe('Page', () => {
   test('路由提供的 width 覆盖页面自己的 width', () => {
-    const { container } = render(
+    render(
       <PageWidthProvider width="narrow">
         <Page width="wide" title="浏览历史">
           内容
         </Page>
       </PageWidthProvider>,
     );
-    expect(container.firstElementChild).toHaveClass('max-w-3xl');
-    expect(container.firstElementChild).not.toHaveClass('max-w-6xl');
+    const page = screen.getByTestId('page');
+    expect(page).toHaveClass('max-w-3xl');
+    expect(page).not.toHaveClass('max-w-6xl');
   });
 
   test('渲染抬头、说明与操作', () => {
