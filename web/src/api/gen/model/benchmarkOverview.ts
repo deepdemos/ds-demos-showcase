@@ -33,8 +33,26 @@ import type { BenchmarkOverviewColumn } from './benchmarkOverviewColumn';
 import type { BenchmarkOverviewRow } from './benchmarkOverviewRow';
 
 export interface BenchmarkOverview {
-  /** 一列一张榜，按榜名升序 */
+  /**
+     * 一列一张榜。按能力象限分组（coding → agent → general → math → other），
+     * 组内按榜名升序；最多 24 列。
+     */
   columns: BenchmarkOverviewColumn[];
-  /** 一行一个模型，至少有一个格子；按模型名升序 */
+  /**
+     * 一行一个模型，至少有一个可见格子。按有格子的列数降序，再按模型名、slug 升序；
+     * 最多 200 行。
+     */
   rows: BenchmarkOverviewRow[];
+  /**
+     * 满足收录口径的列总数（**截断前**）。大于 `columns` 的长度就说明被列上限截断了；
+     * 页面据此写「只显示前 N 列」。
+     * @minimum 0
+     */
+  totalColumns: number;
+  /**
+     * 按列截断后仍有可见格子的模型总数（**行上限截断前**）。大于 `rows` 的长度
+     * 就说明被行上限截断了；页面据此写「只显示前 N 行」。
+     * @minimum 0
+     */
+  totalRows: number;
 }

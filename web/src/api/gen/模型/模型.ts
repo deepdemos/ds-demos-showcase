@@ -132,9 +132,20 @@ export const getGetBenchmarkOverviewUrl = () => {
  * - 指标：该版本的主指标（`is_primary`）。**没有主指标的榜不进矩阵** —— 一列只放一个数。
  * - 分数：只取 `match_status='matched'`、`model_id` 非空、`ranked=true` 的行。
  *
- * **稀疏**：`cells` 只含真的有分数的列，缺格**不补零、不回填**；`rank` 可空
- * （源榜没给名次）。没有任何 `table` 档分数时返回 `columns: []` / `rows: []`，
- * 不是 404 —— 空矩阵是「还没导数据」或「一张 table 档榜都没接」的正常状态。
+ * **阅读规则**（#572）：
+ * - 列按能力象限分组，组序 `coding` → `agent` → `general` → `math` → `other`，
+ *   组内按榜名升序。每列自报它所在的组（`category`）：取 `benchmarks.category`
+ *   多值里的**第一个值**（按固定顺序序列化，因此它就是第一个能识别的象限）；
+ *   空串按 `general`，`multimodal` / `safety` 落 `other`。
+ * - 行按「有格子的列数」降序，再按模型名、slug 升序。**排序由服务端给出**，
+ *   调用方按数组顺序渲染，不要再排一次。
+ * - **列最多 24、行最多 200，且不静默截断**：`totalColumns` / `totalRows` 是截断前的总数，
+ *   与 `columns` / `rows` 的长度一比就知道少了多少。列截断之后没有可见格子的模型
+ *   不成行，所以 `totalRows` 是「按可见列算仍有格子的模型数」，不是库里模型总数。
+ *
+ * **稀疏**：`cells` 只含 `columns` 里真的有分数的列，缺格**不补零、不回填**；`rank` 可空
+ * （源榜没给名次）。没有任何 `table` 档分数时返回 `columns: []` / `rows: []`、
+ * 两个 total 都是 0，不是 404 —— 空矩阵是「还没导数据」或「一张 table 档榜都没接」的正常状态。
  * @summary 模型 × 基准总览（稀疏矩阵）
  */
 export const getBenchmarkOverview = async ( options?: RequestInit): Promise<getBenchmarkOverviewResponse> => {

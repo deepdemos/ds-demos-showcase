@@ -1201,6 +1201,20 @@
           "file": "backend/internal/httpapi/benchmarks_overview_integration_test.go",
           "name": "TestIntegrationBenchmarkOverview"
         }
+      },
+      {
+        "case": "列超过 24 时只留前 24：被截掉的列不再有格子，只在那些列上有分数的模型不成行",
+        "test": {
+          "file": "backend/internal/httpapi/benchmarks_overview_fold_test.go",
+          "name": "TestFoldBenchmarkOverviewTruncatesColumns"
+        }
+      },
+      {
+        "case": "行超过 200 时只留前 200，且 totalRows 仍是截断前的总数（不静默截断）",
+        "test": {
+          "file": "backend/internal/httpapi/benchmarks_overview_fold_test.go",
+          "name": "TestFoldBenchmarkOverviewTruncatesRows"
+        }
       }
     ],
     "GET /api/v1/benchmarks/{slug}": [

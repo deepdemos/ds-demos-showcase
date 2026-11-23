@@ -29,10 +29,17 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { BenchmarkOverviewColumnCategory } from './benchmarkOverviewColumnCategory';
 
 export interface BenchmarkOverviewColumn {
   benchmarkSlug: string;
   name: string;
+  /**
+     * 这一列所在的能力组，也是列分组的唯一依据。取 `benchmarks.category` 多值里的
+     * **第一个值**（值按固定顺序序列化，因此它就是第一个能识别的象限）；
+     * 空串按 general，multimodal / safety 落 other。
+     */
+  category: BenchmarkOverviewColumnCategory;
   /** 主指标的单位；空串表示无量纲 */
   unit: string;
   /** 取的是哪一版（最新非自报版本） */

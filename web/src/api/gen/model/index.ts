@@ -58,6 +58,7 @@ export * from './benchmarkMetricRow';
 export * from './benchmarkOverview';
 export * from './benchmarkOverviewCell';
 export * from './benchmarkOverviewColumn';
+export * from './benchmarkOverviewColumnCategory';
 export * from './benchmarkOverviewRow';
 export * from './benchmarkScoreRow';
 export * from './benchmarkSummary';
