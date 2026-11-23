@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-24",
+  "title": "基准来源",
+  "intro": "站外主流评测榜的速查表：每张榜测什么、怎么防污染、跑在什么环境里、指标与成本、多久更新一次。收录方式见「档位」一列 —— 只有标着「有分数」的榜，分数才进站。",
+  "tierLegend": [
+    { "value": "table", "explain": "分数写进站内，页面可展示原始分与名次。" },
+    {
+      "value": "cite",
+      "explain": "不收录分数，只给一句带署名的引用与官方榜外链。"
+    },
+    { "value": "link", "explain": "只有名称、一句话介绍与官方链接。" },
+    {
+      "value": "none",
+      "explain": "数据已停更或授权不足，只在这张来源表里留档。"
+    }
+  ],
+  "columns": [
+    {
+      "key": "name",
+      "label": "评测名称与链接",
+      "explain": "这张榜叫什么、谁发布的、官方榜单在哪。"
+    },
+    {
+      "key": "capability",
+      "label": "核心能力象限",
+      "explain": "这张榜主要测什么能力。沿用站内基准的分类（coding / agent / general / math / multimodal / safety / other），可多值。"
+    },
+    {
+      "key": "contamination",
+      "label": "防污染机制",
+      "explain": "这张榜怎么防止模型在训练里见过题：私有题集、滚动换题、答案封存等。没有就写「无」，不推断。"
+    },
+    {
+      "key": "harness",
+      "label": "执行环境（Harness）",
+      "explain": "跑分时套在模型外面的那层东西：厂商 CLI、官方容器、浏览器 agent 等。同一个模型换 harness，分数会变。"
+    },
+    {
+      "key": "metricCost",
+      "label": "核心指标与效费比",
+      "explain": "主指标是什么，以及源方公布的成本口径。成本缺失写「未公布」—— 我们不换算、不估算。"
+    },
+    {
+      "key": "cadence",
+      "label": "更新频率与维护方",
+      "explain": "多久更新一次、谁在维护，以及我们最后一次核实的日期。"
+    }
+  ],
+  "sources": [
+    {
+      "id": "bug-hunt-bench",
+      "name": "Bug Hunt Bench",
+      "publisher": "Product Compass",
+      "url": "https://bughunt.productcompass.pm",
+      "benchmarkSlug": "bug-hunt-bench",
+      "displayTier": "table",
+      "categories": ["coding", "agent"],
+      "contamination": "私有种子仓库 + 答案键封存 + 运行期断网、无 git 历史 + 盲评；答案键、仓库与 diff 不公开。",
+      "harness": "厂商自己的 agentic CLI（Codex CLI、Claude Code、Grok CLI、Antigravity CLI、Muse Code、DeepSeek Harness 等）；按 model × harness 分行。",
+      "metricCost": "修掉的埋入 bug 数 /105，无部分分；每 run 公开记录成本（list / bill / floor 三种口径）。",
+      "cadence": "事件驱动、约每周；Product Compass（Pawel Huryn）。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": [
+        "同一模型的不同 effort / harness 是不同行，入库需要 variant 维度。",
+        "2026-11-19 快照：55 个模型 / 387 次运行 / 19 个 bug 从未被修掉。"
+      ]
+    },
+    {
+      "id": "bfcl-v4",
+      "name": "BFCL v4",
+      "publisher": "UC Berkeley (Gorilla)",
+      "url": "https://gorilla.cs.berkeley.edu/leaderboard.html",
+      "benchmarkSlug": "bfcl-v4",
+      "displayTier": "table",
+      "categories": ["agent", "general"],
+      "contamination": "公开数据集（HF，无 gating），没有私有测试集；防污染靠 V2 Live 的用户 / 企业新数据暴露污染，「污染指标」尚未实现。",
+      "harness": "各家 API / 原生 function calling；没有 agent CLI。",
+      "metricCost": "Overall Accuracy（各子类未加权平均）；源方公布单模型跑完整套的成本（Total Cost）。",
+      "cadence": "不定期（页面 Last Updated 2026-04-12）；UC Berkeley Gorilla 团队。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["榜单 CSV 由官网发出、不在 Apache-2.0 仓库内；收录分数前需确认授权。"]
+    },
+    {
+      "id": "swe-bench-verified",
+      "name": "SWE-bench / Verified",
+      "publisher": "Princeton / Stanford",
+      "url": "https://www.swebench.com",
+      "benchmarkSlug": "swe-bench-verified",
+      "displayTier": "cite",
+      "categories": ["coding"],
+      "contamination": "没有公开的防污染机制；Verified 是 500 题的可解性人审，不是污染防护。",
+      "harness": "官方 Docker 容器化 harness；默认 Verified 视图是 Bash Only —— 所有模型统一跑 mini-SWE-agent，无工具、无特殊脚手架；完整榜才允许各家自带 scaffold。",
+      "metricCost": "% resolved；成本：未公布（各家提交口径不统一）。",
+      "cadence": "无书面频率，批量合入（2026-03 至 08 有近四个月空档）；2025-11-18 起只收学术机构 / 开源且有同行评审的方法；Princeton + Stanford。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["分数仓 experiments 没有 license，MIT 只覆盖 harness。"]
+    },
+    {
+      "id": "livebench",
+      "name": "LiveBench",
+      "publisher": "LiveBench（Abacus.AI 主导）",
+      "url": "https://livebench.ai",
+      "benchmarkSlug": "livebench",
+      "displayTier": "table",
+      "categories": ["general", "math", "coding"],
+      "contamination": "设计每月换题、每版约换 1/6；新题压一个月才公开，所以公开榜上永远有 1/6 的题是私有的。",
+      "harness": "1.0 是模型 API 直接 prompting；2.0 已改为长任务 agent（decks、研究报告、修 bug）。",
+      "metricCost": "各任务平均；成本按「总成本 ÷ 题数」折算成 cost per task。",
+      "cadence": "设计月更、实际间隔不均；2.0 约 10 天一版；Abacus.AI 主导 + NYU / Nvidia / UMD / USC / Columbia。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["1.0 末期 release 是 2026-06-25；2.0 已换用新的 release 命名。"]
+    },
+    {
+      "id": "lmarena",
+      "name": "LMArena",
+      "publisher": "LMArena (LMSYS)",
+      "url": "https://lmarena.ai",
+      "benchmarkSlug": "lmarena",
+      "displayTier": "table",
+      "categories": ["general"],
+      "contamination": "不适用（人类成对投票）；题目公开。",
+      "harness": "官网 pairwise 投票界面，由人评。",
+      "metricCost": "Elo / Bradley-Terry 分；成本：未公布（不适用）。",
+      "cadence": "持续更新；数据经 Hugging Face 数据集发布（每日 / 定期）。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["收录需按 CC BY 4.0 署名；官网 ToS 禁止自动化访问，取数走 HF。"]
+    },
+    {
+      "id": "artificial-analysis",
+      "name": "Artificial Analysis",
+      "publisher": "Artificial Analysis",
+      "url": "https://artificialanalysis.ai",
+      "benchmarkSlug": "artificial-analysis",
+      "displayTier": "cite",
+      "categories": ["general"],
+      "contamination": "Intelligence Index 的 9 个组成评测中 5 个使用私有测试集（AA-Briefcase、AutomationBench-AA、FrontierCode-AA 2.0、CritPt v2 Hard Subset、AA-Omniscience）。",
+      "harness": "自己跑评测（维护全部数据集的内部副本），自家 harness（如 Stirrup）；价格取厂商挂牌价。",
+      "metricCost": "Intelligence Index v5.0.1（9 项组成）；成本：按每任务成本公布。",
+      "cadence": "没有书面更新频率；Artificial Analysis。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["合同禁止结构化 / 表格化再发布，只能单点引用 + 强制署名。"]
+    },
+    {
+      "id": "epoch-ai",
+      "name": "Epoch AI",
+      "publisher": "Epoch AI",
+      "url": "https://epoch.ai/benchmarks",
+      "benchmarkSlug": "epoch-ai",
+      "displayTier": "table",
+      "categories": ["math", "other"],
+      "contamination": "有私有题集：FrontierMath-*-Private 四条，且只公开 10 道题的 log；官方立场是承认污染风险，不宣称「无污染」。",
+      "harness": "两套：「Epoch AI internal runs」自跑 + 「External runs」收外部数据。",
+      "metricCost": "各榜原始分；成本：未公布（无统一口径）。",
+      "cadence": "没有书面频率；页面标 Updated 2026-11-23；Epoch AI（独立非营利，数据 CC BY 4.0）。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["旧链接 epoch.ai/data/benchmarks 已 404，请用 epoch.ai/benchmarks。"]
+    },
+    {
+      "id": "aider-polyglot",
+      "name": "Aider Polyglot",
+      "publisher": "Aider（Paul Gauthier）",
+      "url": "https://aider.chat/docs/leaderboards/",
+      "benchmarkSlug": "",
+      "displayTier": "none",
+      "categories": ["coding"],
+      "contamination": "无：公开练习集。",
+      "harness": "aider 自身，按 edit format 跑。",
+      "metricCost": "pass_rate_1 / pass_rate_2；成本：未公布（只有每题秒数）。",
+      "cadence": "2025 停更；Paul Gauthier。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["数据已停，不收录。"]
+    },
+    {
+      "id": "tau-bench",
+      "name": "τ-Bench",
+      "publisher": "Sierra",
+      "url": "https://github.com/sierra-research/tau-bench",
+      "benchmarkSlug": "tau-bench",
+      "displayTier": "cite",
+      "categories": ["agent"],
+      "contamination": "公开任务，无。",
+      "harness": "LLM + tools + 模拟用户。",
+      "metricCost": "Pass^1 - Pass^4；成本：未公布。",
+      "cadence": "2024 后停更；Sierra。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": []
+    },
+    {
+      "id": "online-mind2web",
+      "name": "Online-Mind2Web",
+      "publisher": "OSU NLP",
+      "url": "https://huggingface.co/spaces/osunlp/Online_Mind2Web_Leaderboard",
+      "benchmarkSlug": "online-mind2web",
+      "displayTier": "cite",
+      "categories": ["agent"],
+      "contamination": "真实网站（live）；但榜数据冻结在 2025-03-22。",
+      "harness": "浏览器 agent（Operator / SeeAct / Browser Use 等）。",
+      "metricCost": "Average Success Rate；成本：未公布。",
+      "cadence": "冻结（2025-03-22）；OSU NLP。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": []
+    },
+    {
+      "id": "hle",
+      "name": "HLE",
+      "publisher": "CAIS + Scale AI",
+      "url": "https://lastexam.ai",
+      "benchmarkSlug": "hle",
+      "displayTier": "cite",
+      "categories": ["general"],
+      "contamination": "数据集 gated（自动批准）+ MIT；有私有 held-out 集且不公布其上成绩；可搜索题已人工剔除。",
+      "harness": "纯模型作答，没有工具赛道；被评测模型访问不到计算器 / 代码执行。",
+      "metricCost": "accuracy；成本：未公布。",
+      "cadence": "无书面固定节奏；按日期挂更新（最新 2026-09-17），新模型滚动加行；CAIS + Scale。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": []
+    },
+    {
+      "id": "gaia",
+      "name": "GAIA",
+      "publisher": "Meta (FAIR / GenAI) + Hugging Face + AutoGPT",
+      "url": "https://huggingface.co/spaces/gaia-benchmark/leaderboard",
+      "benchmarkSlug": "gaia",
+      "displayTier": "link",
+      "categories": ["agent", "general"],
+      "contamination": "数据集 gated + test 答案不公开；注意：数据集没有 license 标签。",
+      "harness": "允许工具，题目按工具链深度分 3 级；agent + tools。",
+      "metricCost": "accuracy；成本：未公布。",
+      "cadence": "无书面节奏；验证集榜已关闭、只收 test set；Meta + HF + AutoGPT。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["Space 的 license: apache-2.0 是 Space 的，不是数据集的。"]
+    },
+    {
+      "id": "osworld",
+      "name": "OSWorld",
+      "publisher": "XLang",
+      "url": "https://os-world.github.io",
+      "benchmarkSlug": "osworld",
+      "displayTier": "link",
+      "categories": ["agent"],
+      "contamination": "公开 VM 任务，无。",
+      "harness": "虚拟机 + agent。",
+      "metricCost": "success rate；成本：未公布。",
+      "cadence": "2026 仍在更新；XLang。最后核实 2026-11-24。",
+      "verifiedAt": "2026-11-24",
+      "notes": ["没有机器可读的榜单文件，只能外链。"]
+    }
+  ]
+}
