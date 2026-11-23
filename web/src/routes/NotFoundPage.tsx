@@ -8,11 +8,7 @@ const actionLink =
 
 export function NotFoundPage() {
   return (
-    <Page
-      width="narrow"
-      title="404"
-      description="页面不存在。可能是地址写错了，也可能这个页面已经搬走。"
-    >
+    <Page title="404" description="页面不存在。可能是地址写错了，也可能这个页面已经搬走。">
       <p className="mt-6 flex flex-wrap gap-3">
         <Link to="/demos" className={actionLink}>
           回作品库

@@ -119,7 +119,15 @@ export const routes: RouteObject[] = [
         ],
       },
       ...redirectRoutes,
-      { path: '*', element: <NotFoundRoute />, errorElement: <RouteError /> },
+      {
+        path: '*',
+        element: (
+          <PageWidthProvider width={notFound.width}>
+            <NotFoundRoute />
+          </PageWidthProvider>
+        ),
+        errorElement: <RouteError />,
+      },
     ],
   },
   {

@@ -5,7 +5,6 @@ import { Page } from '@/components/layout/page';
 export function UnavailablePage() {
   return (
     <Page
-      width="narrow"
       title="功能尚未接入"
       description="这个页面只在开发环境提供，正式站还没有对应的服务端接口。"
     >
