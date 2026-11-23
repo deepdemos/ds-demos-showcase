@@ -210,3 +210,11 @@ describe('BenchmarkDetailPage', () => {
     expect(screen.queryByRole('heading', { name: '口径与来源' })).toBeNull();
   });
 });
+
+describe('findBenchmarkSource', () => {
+  it('空 slug 不是通配符：不认领「本站未收录」那一行的口径', () => {
+    // 内容文件里 aider 那一行的 benchmarkSlug 是空串，表示「本站未收录」。
+    // 若按字面相等匹配，空 slug 会认领到它的口径 —— 宁可返回 undefined。
+    expect(findBenchmarkSource('')).toBeUndefined();
+  });
+});
