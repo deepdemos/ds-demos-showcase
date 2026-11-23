@@ -61,8 +61,10 @@ describe('真实路由树', () => {
     );
   });
 
-  test('未匹配路径显示 404', async () => {
+  test('404 按清单的 not-found 宽度渲染', async () => {
     renderAt('/no-such-page');
     expect(await screen.findByRole('heading', { name: '404' })).toBeInTheDocument();
+    expect(document.querySelector('.max-w-3xl')).toBeInTheDocument();
+    expect(document.querySelector('.max-w-4xl')).toBeNull();
   });
 });
