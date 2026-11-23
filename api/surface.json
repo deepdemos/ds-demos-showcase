@@ -490,6 +490,14 @@
       "rows": {
         "type": "[]BenchmarkOverviewRow",
         "optional": false
+      },
+      "totalColumns": {
+        "type": "int",
+        "optional": false
+      },
+      "totalRows": {
+        "type": "int",
+        "optional": false
       }
     },
     "BenchmarkOverviewCell": {
@@ -509,6 +517,10 @@
     "BenchmarkOverviewColumn": {
       "benchmarkSlug": {
         "type": "string",
+        "optional": false
+      },
+      "category": {
+        "type": "BenchmarkOverviewColumnCategory",
         "optional": false
       },
       "name": {
@@ -2565,6 +2577,13 @@
       "cite",
       "link",
       "table"
+    ],
+    "BenchmarkOverviewColumnCategory": [
+      "agent",
+      "coding",
+      "general",
+      "math",
+      "other"
     ],
     "BenchmarkSummaryDisplayTier": [
       "cite",

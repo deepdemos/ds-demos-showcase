@@ -167,9 +167,20 @@ paths:
         - 指标：该版本的主指标（`is_primary`）。**没有主指标的榜不进矩阵** —— 一列只放一个数。
         - 分数：只取 `match_status='matched'`、`model_id` 非空、`ranked=true` 的行。
 
-        **稀疏**：`cells` 只含真的有分数的列，缺格**不补零、不回填**；`rank` 可空
-        （源榜没给名次）。没有任何 `table` 档分数时返回 `columns: []` / `rows: []`，
-        不是 404 —— 空矩阵是「还没导数据」或「一张 table 档榜都没接」的正常状态。
+        **阅读规则**（#572）：
+        - 列按能力象限分组，组序 `coding` → `agent` → `general` → `math` → `other`，
+          组内按榜名升序。每列自报它所在的组（`category`）：取 `benchmarks.category`
+          多值里的**第一个值**（按固定顺序序列化，因此它就是第一个能识别的象限）；
+          空串按 `general`，`multimodal` / `safety` 落 `other`。
+        - 行按「有格子的列数」降序，再按模型名、slug 升序。**排序由服务端给出**，
+          调用方按数组顺序渲染，不要再排一次。
+        - **列最多 24、行最多 200，且不静默截断**：`totalColumns` / `totalRows` 是截断前的总数，
+          与 `columns` / `rows` 的长度一比就知道少了多少。列截断之后没有可见格子的模型
+          不成行，所以 `totalRows` 是「按可见列算仍有格子的模型数」，不是库里模型总数。
+
+        **稀疏**：`cells` 只含 `columns` 里真的有分数的列，缺格**不补零、不回填**；`rank` 可空
+        （源榜没给名次）。没有任何 `table` 档分数时返回 `columns: []` / `rows: []`、
+        两个 total 都是 0，不是 404 —— 空矩阵是「还没导数据」或「一张 table 档榜都没接」的正常状态。
       responses:
         '200':
           description: 稀疏矩阵
@@ -4745,26 +4756,49 @@ components:
     BenchmarkOverview:
       type: object
       additionalProperties: false
-      required: [columns, rows]
+      required: [columns, rows, totalColumns, totalRows]
       properties:
         columns:
           type: array
-          description: 一列一张榜，按榜名升序
+          description: |-
+            一列一张榜。按能力象限分组（coding → agent → general → math → other），
+            组内按榜名升序；最多 24 列。
           items:
             $ref: '#/components/schemas/BenchmarkOverviewColumn'
         rows:
           type: array
-          description: 一行一个模型，至少有一个格子；按模型名升序
+          description: |-
+            一行一个模型，至少有一个可见格子。按有格子的列数降序，再按模型名、slug 升序；
+            最多 200 行。
           items:
             $ref: '#/components/schemas/BenchmarkOverviewRow'
+        totalColumns:
+          type: integer
+          minimum: 0
+          description: |-
+            满足收录口径的列总数（**截断前**）。大于 `columns` 的长度就说明被列上限截断了；
+            页面据此写「只显示前 N 列」。
+        totalRows:
+          type: integer
+          minimum: 0
+          description: |-
+            按列截断后仍有可见格子的模型总数（**行上限截断前**）。大于 `rows` 的长度
+            就说明被行上限截断了；页面据此写「只显示前 N 行」。
 
     BenchmarkOverviewColumn:
       type: object
       additionalProperties: false
-      required: [benchmarkSlug, name, unit, version]
+      required: [benchmarkSlug, name, category, unit, version]
       properties:
         benchmarkSlug: { type: string }
         name: { type: string }
+        category:
+          type: string
+          enum: [coding, agent, general, math, other]
+          description: |-
+            这一列所在的能力组，也是列分组的唯一依据。取 `benchmarks.category` 多值里的
+            **第一个值**（值按固定顺序序列化，因此它就是第一个能识别的象限）；
+            空串按 general，multimodal / safety 落 other。
         unit:
           type: string
           description: 主指标的单位；空串表示无量纲

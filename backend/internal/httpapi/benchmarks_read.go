@@ -51,11 +51,21 @@ func (h *Handler) ListBenchmarks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, api.BenchmarkList{Items: items})
 }
 
+// 总览矩阵的两个上限（#572）。
+//
+// 超限不静默截断：响应里带回截断前的总数，页面据此写「只显示前 N 列 / 前 N 行」。
+// 它们不写成契约的 maxItems —— 那是「请求参数的校验」，客户端会照抄成候选值；
+// 这里是服务端自己的陈列上限，改它不该让老调用方以为自己传错了参数。
+const (
+	benchmarkOverviewColumnLimit = 24
+	benchmarkOverviewRowLimit    = 200
+)
+
 // GetBenchmarkOverview 对应 GET /api/v1/benchmarks/overview。
 //
-// 一条查询取回「列 + 格子」的扁平行，在这里折成稀疏矩阵。列的先后按 SQL 给的榜名升序；
-// 行按模型名在这里排一次 —— SQL 是列主序吐的（同一列的所有模型连着出），不排就是乱的。
-// 除这一处之外不再排序：排序规则只有一份，写在查询与契约的 description 里。
+// 一条查询取回「列 + 格子」的扁平行，折成稀疏矩阵交给 foldBenchmarkOverview。
+// 排序不在这里做第二遍：列序（能力组 → 榜名）写在 SQL 与契约的 description 里，
+// 行序是折行后按可见格子数排的 —— SQL 是列主序吐的，排不了行序，所以只有这一处。
 func (h *Handler) GetBenchmarkOverview(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
 		unavailable(w, errors.New("database not configured"))
@@ -69,33 +79,56 @@ func (h *Handler) GetBenchmarkOverview(w http.ResponseWriter, r *http.Request) {
 		unavailable(w, err)
 		return
 	}
+	writeJSON(w, http.StatusOK, foldBenchmarkOverview(rows))
+}
 
-	out := api.BenchmarkOverview{
-		Columns: []api.BenchmarkOverviewColumn{},
-		Rows:    []api.BenchmarkOverviewRow{},
-	}
-	columnAt := make(map[string]int, len(rows))
-	rowAt := make(map[string]int, len(rows))
-	for _, row := range rows {
-		if _, seen := columnAt[row.BenchmarkSlug]; !seen {
-			columnAt[row.BenchmarkSlug] = len(out.Columns)
-			out.Columns = append(out.Columns, api.BenchmarkOverviewColumn{
-				BenchmarkSlug: row.BenchmarkSlug,
-				Name:          row.BenchmarkName,
-				Unit:          row.Unit,
-				Version:       row.Version,
-			})
+// foldBenchmarkOverview 把扁平行折成稀疏矩阵，并应用 #572 的阅读规则。
+//
+// 三步的顺序不能换，换一步就是另一个矩阵：
+//  1. 收列（SQL 已按「能力组 → 榜名」排好），按列上限截断 —— 被截掉的列不再有格子；
+//  2. 收行与格子，只留可见列上的格子；一个可见格子都没有的模型不成行（否则会出现整行「—」）；
+//  3. 行按可见格子数降序、再按模型名与 slug 升序，最后按行上限截断。
+//
+// 第 1 步先做，是为了让第 3 步的「覆盖数」与页面上看得见的列对得上：列被截掉之后
+// 还按看不见的列排序，会把一批整行都是「—」的模型排到前面。
+func foldBenchmarkOverview(flats []store.ListBenchmarkOverviewRow) api.BenchmarkOverview {
+	columns := make([]api.BenchmarkOverviewColumn, 0, len(flats))
+	seenColumn := make(map[string]bool, len(flats))
+	for _, row := range flats {
+		if seenColumn[row.BenchmarkSlug] {
+			continue
 		}
+		seenColumn[row.BenchmarkSlug] = true
+		columns = append(columns, api.BenchmarkOverviewColumn{
+			BenchmarkSlug: row.BenchmarkSlug,
+			Name:          row.BenchmarkName,
+			Category:      api.BenchmarkOverviewColumnCategory(row.CategoryGroup),
+			Unit:          row.Unit,
+			Version:       row.Version,
+		})
+	}
+	totalColumns := len(columns)
+	if len(columns) > benchmarkOverviewColumnLimit {
+		columns = columns[:benchmarkOverviewColumnLimit]
+	}
+	visible := make(map[string]bool, len(columns))
+	for _, column := range columns {
+		visible[column.BenchmarkSlug] = true
+	}
+
+	rows := make([]api.BenchmarkOverviewRow, 0, len(flats))
+	rowAt := make(map[string]int, len(flats))
+	for _, row := range flats {
 		// LEFT JOIN 的空行：这张榜还没有匹配到站内模型的分数。列照常出现，格子不出现 ——
 		// 缺格是「没测过」，不是「得了 0 分」。
-		if !row.ModelSlug.Valid || !row.ModelName.Valid {
+		if !row.ModelSlug.Valid || !row.ModelName.Valid || !visible[row.BenchmarkSlug] {
 			continue
 		}
 		index, seen := rowAt[row.ModelSlug.String]
 		if !seen {
-			index = len(out.Rows)
+			index = len(rows)
 			rowAt[row.ModelSlug.String] = index
-			out.Rows = append(out.Rows, api.BenchmarkOverviewRow{
+			rows = append(rows, api.BenchmarkOverviewRow{
 				ModelSlug: row.ModelSlug.String,
 				ModelName: row.ModelName.String,
 				Cells:     []api.BenchmarkOverviewCell{},
@@ -109,17 +142,29 @@ func (h *Handler) GetBenchmarkOverview(w http.ResponseWriter, r *http.Request) {
 			rank := int(row.Rank.Int32)
 			cell.Rank = &rank
 		}
-		out.Rows[index].Cells = append(out.Rows[index].Cells, cell)
+		rows[index].Cells = append(rows[index].Cells, cell)
 	}
 
-	sort.SliceStable(out.Rows, func(i, j int) bool {
-		if out.Rows[i].ModelName != out.Rows[j].ModelName {
-			return out.Rows[i].ModelName < out.Rows[j].ModelName
+	sort.SliceStable(rows, func(i, j int) bool {
+		if len(rows[i].Cells) != len(rows[j].Cells) {
+			return len(rows[i].Cells) > len(rows[j].Cells)
 		}
-		return out.Rows[i].ModelSlug < out.Rows[j].ModelSlug
+		if rows[i].ModelName != rows[j].ModelName {
+			return rows[i].ModelName < rows[j].ModelName
+		}
+		return rows[i].ModelSlug < rows[j].ModelSlug
 	})
+	totalRows := len(rows)
+	if len(rows) > benchmarkOverviewRowLimit {
+		rows = rows[:benchmarkOverviewRowLimit]
+	}
 
-	writeJSON(w, http.StatusOK, out)
+	return api.BenchmarkOverview{
+		Columns:      columns,
+		Rows:         rows,
+		TotalColumns: totalColumns,
+		TotalRows:    totalRows,
+	}
 }
 
 // GetBenchmark 对应 GET /api/v1/benchmarks/{slug}。

@@ -55,6 +55,15 @@ const (
 	BenchmarkImportBenchmarkDisplayTierTable BenchmarkImportBenchmarkDisplayTier = "table"
 )
 
+// Defines values for BenchmarkOverviewColumnCategory.
+const (
+	Agent   BenchmarkOverviewColumnCategory = "agent"
+	Coding  BenchmarkOverviewColumnCategory = "coding"
+	General BenchmarkOverviewColumnCategory = "general"
+	Math    BenchmarkOverviewColumnCategory = "math"
+	Other   BenchmarkOverviewColumnCategory = "other"
+)
+
 // Defines values for BenchmarkSummaryDisplayTier.
 const (
 	Cite  BenchmarkSummaryDisplayTier = "cite"
@@ -694,11 +703,21 @@ type BenchmarkMetricRow struct {
 
 // BenchmarkOverview defines model for BenchmarkOverview.
 type BenchmarkOverview struct {
-	// Columns 一列一张榜，按榜名升序
+	// Columns 一列一张榜。按能力象限分组（coding → agent → general → math → other），
+	// 组内按榜名升序；最多 24 列。
 	Columns []BenchmarkOverviewColumn `json:"columns"`
 
-	// Rows 一行一个模型，至少有一个格子；按模型名升序
+	// Rows 一行一个模型，至少有一个可见格子。按有格子的列数降序，再按模型名、slug 升序；
+	// 最多 200 行。
 	Rows []BenchmarkOverviewRow `json:"rows"`
+
+	// TotalColumns 满足收录口径的列总数（**截断前**）。大于 `columns` 的长度就说明被列上限截断了；
+	// 页面据此写「只显示前 N 列」。
+	TotalColumns int `json:"totalColumns"`
+
+	// TotalRows 按列截断后仍有可见格子的模型总数（**行上限截断前**）。大于 `rows` 的长度
+	// 就说明被行上限截断了；页面据此写「只显示前 N 行」。
+	TotalRows int `json:"totalRows"`
 }
 
 // BenchmarkOverviewCell defines model for BenchmarkOverviewCell.
@@ -713,7 +732,12 @@ type BenchmarkOverviewCell struct {
 // BenchmarkOverviewColumn defines model for BenchmarkOverviewColumn.
 type BenchmarkOverviewColumn struct {
 	BenchmarkSlug string `json:"benchmarkSlug"`
-	Name          string `json:"name"`
+
+	// Category 这一列所在的能力组，也是列分组的唯一依据。取 `benchmarks.category` 多值里的
+	// **第一个值**（值按固定顺序序列化，因此它就是第一个能识别的象限）；
+	// 空串按 general，multimodal / safety 落 other。
+	Category BenchmarkOverviewColumnCategory `json:"category"`
+	Name     string                          `json:"name"`
 
 	// Unit 主指标的单位；空串表示无量纲
 	Unit string `json:"unit"`
@@ -721,6 +745,11 @@ type BenchmarkOverviewColumn struct {
 	// Version 取的是哪一版（最新非自报版本）
 	Version string `json:"version"`
 }
+
+// BenchmarkOverviewColumnCategory 这一列所在的能力组，也是列分组的唯一依据。取 `benchmarks.category` 多值里的
+// **第一个值**（值按固定顺序序列化，因此它就是第一个能识别的象限）；
+// 空串按 general，multimodal / safety 落 other。
+type BenchmarkOverviewColumnCategory string
 
 // BenchmarkOverviewRow defines model for BenchmarkOverviewRow.
 type BenchmarkOverviewRow struct {

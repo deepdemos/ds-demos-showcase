@@ -120,7 +120,7 @@ WHERE b.status = 'active'
 ORDER BY b.name, b.id;
 
 -- name: ListBenchmarkOverview :many
--- 模型 × 基准总览（#571）：一行一个模型、一列一张榜，格子是原始分 + 名次。
+-- 模型 × 基准总览（#571 / #572）：一行一个模型、一列一张榜，格子是原始分 + 名次。
 --
 -- 从 `benchmarks` 出发、LEFT JOIN 分数：**指标存在但一条匹配分数都没有时，列本身仍要出现**
 -- （列头照常渲染，只是这一列没有格子）。反过来写（从 scores 出发）会把空列整列丢掉，
@@ -128,19 +128,42 @@ ORDER BY b.name, b.id;
 --
 -- 口径与契约 `GET /api/v1/benchmarks/overview` 的 description 是同一份，改一处要同步另一处：
 -- 榜 `table` 档 + 版本最新非自报 + 指标取主指标 + 分数 matched / ranked / model_id 非空。
-SELECT b.slug AS benchmark_slug,
-       b.name AS benchmark_name,
+--
+-- 阅读规则（#572）也在这里排序：列先按能力组（coding → agent → general → math → other）、
+-- 组内按榜名；行是处理器折行后按可见格子数排的（SQL 是列主序吐的，排不了行序）。
+-- 能力组 = `category` 多值里**第一个能识别的象限**（空串按 general），
+-- multimodal / safety 落 other —— 与契约里 `BenchmarkOverviewColumn.category` 同一口径。
+WITH eligible AS (
+    SELECT b.id,
+           b.slug,
+           b.name,
+           -- 能力组 = 多值里的**第一个值**：category 按固定顺序序列化（coding / math / agent /
+           -- general / multimodal / safety / other），所以第一个值就是第一个能识别的象限；
+           -- 空串按 general，multimodal / safety 落 other。
+           CASE
+               WHEN btrim(b.category) = '' THEN 'general'
+               WHEN btrim(split_part(b.category, ',', 1)) IN ('coding', 'agent', 'general', 'math')
+                   THEN btrim(split_part(b.category, ',', 1))
+               ELSE 'other'
+           END AS category_group
+    FROM benchmarks b
+    WHERE b.status = 'active'
+      AND b.display_tier = 'table'
+)
+SELECT e.slug AS benchmark_slug,
+       e.name AS benchmark_name,
+       e.category_group,
        bm.unit,
        bv.version,
        m.slug AS model_slug,
        m.name AS model_name,
        bs.raw_score,
        bs.rank
-FROM benchmarks b
+FROM eligible e
 JOIN LATERAL (
     SELECT v.id, v.version
     FROM benchmark_versions v
-    WHERE v.benchmark_id = b.id
+    WHERE v.benchmark_id = e.id
       AND v.status = 'active'
       AND v.source_type <> 'self_reported'
     ORDER BY v.as_of DESC, v.id DESC
@@ -159,9 +182,14 @@ LEFT JOIN benchmark_scores bs
       AND bs.model_id IS NOT NULL
       AND bs.ranked
 LEFT JOIN models m ON m.id = bs.model_id
-WHERE b.status = 'active'
-  AND b.display_tier = 'table'
-ORDER BY b.name, b.id, m.name, m.id;
+ORDER BY CASE e.category_group
+             WHEN 'coding' THEN 0
+             WHEN 'agent' THEN 1
+             WHEN 'general' THEN 2
+             WHEN 'math' THEN 3
+             ELSE 4
+         END,
+         e.name, e.id, m.name, m.id;
 
 -- name: GetBenchmarkBySlug :one
 SELECT id, slug, name, publisher, homepage_url, category, description,
