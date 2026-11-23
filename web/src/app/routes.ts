@@ -160,6 +160,17 @@ export const pages: readonly PageEntry[] = [
     // 同样不进一级导航；入口是 /benchmarks 目录页（#568）。
   },
   {
+    id: 'benchmark-overview',
+    path: '/benchmarks/overview',
+    title: '基准总览',
+    description: '一行一个模型、一列一张榜：原始分与榜内名次，缺格是没测过。',
+    group: 'public',
+    access: { kind: 'public' },
+    width: 'wide',
+    availability: 'ready',
+    // 同样不进一级导航；入口是 /benchmarks 目录页（#570）。
+  },
+  {
     id: 'benchmark-detail',
     path: '/benchmarks/:slug',
     title: '基准',

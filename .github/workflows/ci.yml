@@ -184,6 +184,9 @@ jobs:
       # 验证不到「选了模型能提交并显示出来」。
       - name: 灌模型目录种子（投稿页的模型多选要能选到东西）
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seeds/0002-dev-models.sql
+      # 基准总览的矩阵要有列有格子：e2e 要点进列头看详情，空矩阵只能验证空态。
+      - name: 灌第三方基准种子（总览矩阵要有列可点）
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seeds/0003-dev-benchmarks.sql
       - name: 建闭环用例所需的管理员
         working-directory: backend
         env:

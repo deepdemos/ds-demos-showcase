@@ -1194,6 +1194,15 @@
         }
       }
     ],
+    "GET /api/v1/benchmarks/overview": [
+      {
+        "case": "cite 档、没有主指标的榜都不进矩阵；未匹配的外部名与 ranked=false 的分数不成行，缺格不补零",
+        "test": {
+          "file": "backend/internal/httpapi/benchmarks_overview_integration_test.go",
+          "name": "TestIntegrationBenchmarkOverview"
+        }
+      }
+    ],
     "GET /api/v1/benchmarks/{slug}": [
       {
         "case": "不存在的榜返回 404，而空榜返回 200 + 空数组（空是正常状态）",

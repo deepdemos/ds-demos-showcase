@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 
 	"github.com/jackc/pgx/v5"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -48,6 +49,77 @@ func (h *Handler) ListBenchmarks(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, api.BenchmarkList{Items: items})
+}
+
+// GetBenchmarkOverview 对应 GET /api/v1/benchmarks/overview。
+//
+// 一条查询取回「列 + 格子」的扁平行，在这里折成稀疏矩阵。列的先后按 SQL 给的榜名升序；
+// 行按模型名在这里排一次 —— SQL 是列主序吐的（同一列的所有模型连着出），不排就是乱的。
+// 除这一处之外不再排序：排序规则只有一份，写在查询与契约的 description 里。
+func (h *Handler) GetBenchmarkOverview(w http.ResponseWriter, r *http.Request) {
+	if h.queries == nil {
+		unavailable(w, errors.New("database not configured"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+
+	rows, err := h.queries.ListBenchmarkOverview(ctx)
+	if err != nil {
+		unavailable(w, err)
+		return
+	}
+
+	out := api.BenchmarkOverview{
+		Columns: []api.BenchmarkOverviewColumn{},
+		Rows:    []api.BenchmarkOverviewRow{},
+	}
+	columnAt := make(map[string]int, len(rows))
+	rowAt := make(map[string]int, len(rows))
+	for _, row := range rows {
+		if _, seen := columnAt[row.BenchmarkSlug]; !seen {
+			columnAt[row.BenchmarkSlug] = len(out.Columns)
+			out.Columns = append(out.Columns, api.BenchmarkOverviewColumn{
+				BenchmarkSlug: row.BenchmarkSlug,
+				Name:          row.BenchmarkName,
+				Unit:          row.Unit,
+				Version:       row.Version,
+			})
+		}
+		// LEFT JOIN 的空行：这张榜还没有匹配到站内模型的分数。列照常出现，格子不出现 ——
+		// 缺格是「没测过」，不是「得了 0 分」。
+		if !row.ModelSlug.Valid || !row.ModelName.Valid {
+			continue
+		}
+		index, seen := rowAt[row.ModelSlug.String]
+		if !seen {
+			index = len(out.Rows)
+			rowAt[row.ModelSlug.String] = index
+			out.Rows = append(out.Rows, api.BenchmarkOverviewRow{
+				ModelSlug: row.ModelSlug.String,
+				ModelName: row.ModelName.String,
+				Cells:     []api.BenchmarkOverviewCell{},
+			})
+		}
+		cell := api.BenchmarkOverviewCell{
+			BenchmarkSlug: row.BenchmarkSlug,
+			RawScore:      row.RawScore.Float64,
+		}
+		if row.Rank.Valid {
+			rank := int(row.Rank.Int32)
+			cell.Rank = &rank
+		}
+		out.Rows[index].Cells = append(out.Rows[index].Cells, cell)
+	}
+
+	sort.SliceStable(out.Rows, func(i, j int) bool {
+		if out.Rows[i].ModelName != out.Rows[j].ModelName {
+			return out.Rows[i].ModelName < out.Rows[j].ModelName
+		}
+		return out.Rows[i].ModelSlug < out.Rows[j].ModelSlug
+	})
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 // GetBenchmark 对应 GET /api/v1/benchmarks/{slug}。

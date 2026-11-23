@@ -692,6 +692,44 @@ type BenchmarkMetricRow struct {
 	Unit           string              `json:"unit"`
 }
 
+// BenchmarkOverview defines model for BenchmarkOverview.
+type BenchmarkOverview struct {
+	// Columns 一列一张榜，按榜名升序
+	Columns []BenchmarkOverviewColumn `json:"columns"`
+
+	// Rows 一行一个模型，至少有一个格子；按模型名升序
+	Rows []BenchmarkOverviewRow `json:"rows"`
+}
+
+// BenchmarkOverviewCell defines model for BenchmarkOverviewCell.
+type BenchmarkOverviewCell struct {
+	BenchmarkSlug string `json:"benchmarkSlug"`
+
+	// Rank 榜内名次；源榜没给名次时为 null
+	Rank     *int    `json:"rank"`
+	RawScore float64 `json:"rawScore"`
+}
+
+// BenchmarkOverviewColumn defines model for BenchmarkOverviewColumn.
+type BenchmarkOverviewColumn struct {
+	BenchmarkSlug string `json:"benchmarkSlug"`
+	Name          string `json:"name"`
+
+	// Unit 主指标的单位；空串表示无量纲
+	Unit string `json:"unit"`
+
+	// Version 取的是哪一版（最新非自报版本）
+	Version string `json:"version"`
+}
+
+// BenchmarkOverviewRow defines model for BenchmarkOverviewRow.
+type BenchmarkOverviewRow struct {
+	// Cells 稀疏：只含有分数的列
+	Cells     []BenchmarkOverviewCell `json:"cells"`
+	ModelName string                  `json:"modelName"`
+	ModelSlug string                  `json:"modelSlug"`
+}
+
 // BenchmarkScoreRow defines model for BenchmarkScoreRow.
 type BenchmarkScoreRow struct {
 	// ExternalName 上游榜里的写法，原样保留

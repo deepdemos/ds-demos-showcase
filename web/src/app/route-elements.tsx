@@ -1,5 +1,6 @@
 import { AdminAppealsPage } from '@/routes/AdminAppealsPage';
 import { BenchmarkDetailPage } from '@/routes/BenchmarkDetailPage';
+import { BenchmarkOverviewPage } from '@/routes/BenchmarkOverviewPage';
 import { BenchmarksPage } from '@/routes/BenchmarksPage';
 import { BenchmarkSourcesPage } from '@/routes/BenchmarkSourcesPage';
 import { AdminInboxPage } from '@/routes/AdminInboxPage';
@@ -50,6 +51,7 @@ export const routeElements: RouteElementMap = {
   'model-detail': <ModelPage />,
   benchmarks: <BenchmarksPage />,
   'benchmark-sources': <BenchmarkSourcesPage />,
+  'benchmark-overview': <BenchmarkOverviewPage />,
   'benchmark-detail': <BenchmarkDetailPage />,
   rankings: <RankingsPage />,
   author: <AuthorPage />,
