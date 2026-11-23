@@ -99,9 +99,9 @@
 ### 上游榜单（Upstream board）
 
 - **一句话**：某机构发布并维护的一张评测榜 —— 有版本、有分数、有维护方；我们只登记与引用，不替它背书、不改它的分。
-- **锚点**：`web/src/content/benchmark-sources.json` 的 `sources[]`（当前 13 行）· 页面 `/benchmarks/sources` · [`基准来源.md`](docs/基准来源.md) §2「数据」
+- **锚点**：`web/src/content/benchmark-sources.json` 的 `sources[]`（当前 13 行）· 页面 `/benchmarks/sources` · 基准详情页的「口径与来源」块（`table` 档按 `benchmarkSlug` 命中时）· [`基准来源.md`](docs/基准来源.md) §2「数据」
 - **禁用别名**：榜单（指本站这一层时）、基准（那是我们登记的条目）
-- **谁读它**：模型域（来源表内容与收录判断）· 前端（来源页）· 任何要往来源表加一行的提案
+- **谁读它**：模型域（来源表内容与收录判断）· 前端（来源页；`table` 档基准详情页的「口径与来源」块）· 任何要往来源表加一行的提案
 
 ### 收录取向（DisplayTier）
 
