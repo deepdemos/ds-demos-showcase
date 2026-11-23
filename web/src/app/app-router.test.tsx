@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Me } from '@/api';
+import { recordView } from '@/features/history/local-history';
 import { routes } from './router';
 
 const auth = vi.hoisted(() => ({
@@ -41,9 +42,11 @@ beforeEach(() => {
 
 describe('真实路由树', () => {
   test('访客能打开本机浏览历史（HIST-001）', async () => {
+    recordView({ slug: 'local-demo', title: '本机看过的作品', coverUrl: null });
     renderAt('/me/history');
     expect(await screen.findByRole('heading', { level: 1, name: '浏览历史' })).toBeInTheDocument();
     expect(screen.getByText(/本机记录只保存在这个浏览器/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '本机看过的作品' })).toBeInTheDocument();
   });
 
   test('访客访问我的作品会回登录并保留 return_to', async () => {
