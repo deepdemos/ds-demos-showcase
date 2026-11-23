@@ -110,7 +110,6 @@ export function AdminReviewPage() {
 
   return (
     <Page
-      width="wide"
       title="待审作品"
       description="按提交时间正序。预览会在新标签页打开——那是作者上传的代码，不在本页里跑。"
     >

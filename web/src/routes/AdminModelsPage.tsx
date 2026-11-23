@@ -100,7 +100,7 @@ export function AdminModelsPage() {
   // only 用来做「入口可见性」，不是权限判定——真正的判定在服务端。
   if (me === null) {
     return (
-      <Page width="wide" title="模型导入">
+      <Page title="模型导入">
         <EmptyState title="请先登录" description="模型导入是管理端功能，需要先登录。" />
       </Page>
     );
@@ -108,7 +108,7 @@ export function AdminModelsPage() {
 
   if (me.role !== 'admin') {
     return (
-      <Page width="wide" title="模型导入">
+      <Page title="模型导入">
         <EmptyState
           title="没有导入权限"
           description="导入会写共享的模型目录，只有持有 model.import 权限的管理员可以操作。"
@@ -119,7 +119,6 @@ export function AdminModelsPage() {
 
   return (
     <Page
-      width="wide"
       title="模型导入"
       description="从上游目录（models.dev）挑条目，逐字段确认后落库。写的是共享目录——一条改动会影响所有引用它的版本。"
     >

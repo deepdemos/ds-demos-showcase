@@ -118,7 +118,7 @@ export function CollectionDetailPage() {
 
   if (!Number.isInteger(id) || id <= 0) {
     return (
-      <Page width="narrow" title="收藏夹不存在" description="地址里的编号不合法。">
+      <Page title="收藏夹不存在" description="地址里的编号不合法。">
         <p className="mt-4">
           <Link className="text-sm underline" to="/me/collections">
             回我的收藏夹
@@ -130,7 +130,7 @@ export function CollectionDetailPage() {
 
   if (detail.isPending) {
     return (
-      <Page width="narrow" title="收藏夹">
+      <Page title="收藏夹">
         <Skeleton lines={4} />
       </Page>
     );
@@ -138,7 +138,7 @@ export function CollectionDetailPage() {
 
   if (detail.isError) {
     return (
-      <Page width="narrow" title="收藏夹">
+      <Page title="收藏夹">
         <ErrorState
           title="收藏夹加载失败"
           description="请稍后重试。"
@@ -151,7 +151,7 @@ export function CollectionDetailPage() {
 
   if (detail.data === null) {
     return (
-      <Page width="narrow" title="收藏夹">
+      <Page title="收藏夹">
         <EmptyState
           title="收藏夹不存在或不可见"
           description="它可能是私密收藏夹，或者已经被删除。"
@@ -172,7 +172,6 @@ export function CollectionDetailPage() {
 
   return (
     <Page
-      width="narrow"
       title={
         <>
           {data.collection.name}

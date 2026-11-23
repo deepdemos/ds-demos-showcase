@@ -57,7 +57,6 @@ export function CollectionsPage() {
 
   return (
     <Page
-      width="narrow"
       title="我的收藏夹"
       description="默认收藏夹始终私有；自定义夹可以选择公开，公开后访客可读（但不能写）。"
     >
