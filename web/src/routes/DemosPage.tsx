@@ -226,7 +226,7 @@ export function DemosPage() {
   };
 
   return (
-    <Page width="wide" title="作品库" description={(q ? `搜索「${q}」，` : '') + SORT_NOTES[sort]}>
+    <Page title="作品库" description={(q ? `搜索「${q}」，` : '') + SORT_NOTES[sort]}>
       <div className="mt-6">
         {/* 排序：三种口径（SCH-006）。放 URL 里，刷新/后退都保持同一个视角。 */}
         <div className="flex max-w-xs flex-col gap-1 text-sm">

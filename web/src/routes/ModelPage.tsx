@@ -41,7 +41,7 @@ export function ModelPage() {
 
   if (query.isPending) {
     return (
-      <Page width="default" title="模型">
+      <Page title="模型">
         <Skeleton lines={8} />
       </Page>
     );
@@ -50,7 +50,7 @@ export function ModelPage() {
   if (query.isError) {
     if (query.error instanceof NotFoundError) {
       return (
-        <Page width="default" title="模型">
+        <Page title="模型">
           <EmptyState
             title="没有这个模型"
             description="链接可能过期了，或者这个模型还没进目录。"
@@ -64,7 +64,7 @@ export function ModelPage() {
       );
     }
     return (
-      <Page width="default" title="模型">
+      <Page title="模型">
         <ErrorState
           title="模型页加载失败"
           description={query.error instanceof Error ? query.error.message : undefined}
@@ -80,7 +80,6 @@ export function ModelPage() {
 
   return (
     <Page
-      width="default"
       title={model.name}
       description={
         (model.vendor || '厂商未知') + ' · ' + model.slug + ' · ' + statusLabel(model.status)

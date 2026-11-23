@@ -62,7 +62,7 @@ export function RegisterPage() {
   };
 
   return (
-    <Page width="auth" title="注册">
+    <Page title="注册">
       <p className="mt-1 text-sm text-gray-500">
         注册后需要先验证邮箱，验证完才能登录。投稿内容需要经过审核才会公开。
       </p>

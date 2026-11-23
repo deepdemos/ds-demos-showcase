@@ -64,7 +64,7 @@ export function AuthorPage() {
 
   if (profile.isPending) {
     return (
-      <Page width="narrow" title="作者">
+      <Page title="作者">
         <Skeleton lines={4} />
       </Page>
     );
@@ -72,7 +72,7 @@ export function AuthorPage() {
 
   if (profile.isError) {
     return (
-      <Page width="narrow" title="作者">
+      <Page title="作者">
         <ErrorState
           title="作者资料加载失败"
           description="请稍后重试。"
@@ -85,7 +85,7 @@ export function AuthorPage() {
 
   if (profile.data === null) {
     return (
-      <Page width="narrow" title="作者">
+      <Page title="作者">
         <EmptyState
           title="没有这个作者"
           description="用户名不存在，或者这个账号已经不可见。"
@@ -104,7 +104,6 @@ export function AuthorPage() {
 
   return (
     <Page
-      width="narrow"
       title={author.displayName || author.username}
       description={
         '加入于 ' +

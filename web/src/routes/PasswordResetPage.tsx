@@ -85,7 +85,7 @@ export function PasswordResetPage() {
   };
 
   return (
-    <Page width="auth" title="找回密码">
+    <Page title="找回密码">
       <p className="mt-2 text-sm text-gray-600">
         用主邮箱收一个验证码，重设之后这台账号此前登录的所有设备都会退出。
       </p>

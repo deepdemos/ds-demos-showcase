@@ -5,7 +5,6 @@ import { Page } from '@/components/layout/page';
 export function CommunityGuidelinesPage() {
   return (
     <Page
-      width="narrow"
       title="社区规范"
       description="本站展示 AI 生成与 AI 辅助创作的作品。发布或参与之前，请先确认下面几条。"
     >

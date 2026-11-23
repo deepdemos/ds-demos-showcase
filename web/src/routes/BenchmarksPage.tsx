@@ -34,7 +34,6 @@ export function BenchmarksPage() {
 
   return (
     <Page
-      width="wide"
       title="第三方基准"
       description={'站内已收录的第三方基准。每张榜单独陈列：只给原始分与名次，不跨榜比较。'}
     >

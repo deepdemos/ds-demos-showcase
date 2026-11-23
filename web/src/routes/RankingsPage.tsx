@@ -120,7 +120,6 @@ export function RankingsPage() {
 
   return (
     <Page
-      width="narrow"
       title="作品榜"
       description="只统计当前已上架的作品；并列按「平均分 → 评分人数 → 5 分票」，最后比较晚上架。"
     >
