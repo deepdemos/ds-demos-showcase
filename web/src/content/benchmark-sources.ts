@@ -53,6 +53,18 @@ export interface BenchmarkSourcesContent {
 
 export const benchmarkSources = content as BenchmarkSourcesContent;
 
+/**
+ * 按站内 `benchmarks.slug` 取这张榜的对外口径（#575）。
+ *
+ * 空 `benchmarkSlug` 是「这张榜不在站内目录里」的哨兵值，不是通配符：它属于只有来源表
+ * 留档的榜（aider 等）。不挡住的话，任何空 slug 都会认领到别人那一行的口径。
+ * 匹配不到返回 `undefined`，由调用方整块不渲染 —— 宁可少一块，不编、不借用。
+ */
+export function findBenchmarkSource(slug: string): BenchmarkSource | undefined {
+  if (slug === '') return undefined;
+  return benchmarkSources.sources.find((source) => source.benchmarkSlug === slug);
+}
+
 /** 分组顺序：只列站内 `category` 枚举里有的值，其余落 other。 */
 export const categoryOrder: readonly BenchmarkCategory[] = [
   'coding',

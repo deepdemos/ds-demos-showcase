@@ -3,15 +3,20 @@ import { useQuery } from '@tanstack/react-query';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { Page } from '@/components/layout/page';
 import { getBenchmark, type BenchmarkDetail, type BenchmarkVersionSummary } from '@/api';
+import { findBenchmarkSource, type BenchmarkSource } from '@/content/benchmark-sources';
 import { tierLabel } from '@/content/benchmark-tier';
 
 /**
  * 单张基准的详情（模型域 §5.6）。
  *
  * 页面按**陈列档位**分三种形状，而不是所有档位共用一张空表（#573）：
- * - `table`：概述 / 最新版本 / 指标表 / 版本历史 —— 我们收了分数，正常陈列；
+ * - `table`：概述 / 最新版本 / 指标表 / 版本历史 / 口径与来源 —— 我们收了分数，正常陈列；
  * - `cite`：概述 / 引用块 —— **不渲染指标表**，因为源方不允许结构化再发布，写「不收录」并给官方外链与署名；
  * - `link`：概述 / 外链块 —— 连版本历史也不给，这张榜我们没有可陈述的口径。
+ *
+ * 「口径与来源」（#575）只在 `table` 档加，且只在 `src/content/benchmark-sources.json`
+ * 里按 `benchmarkSlug` 找得到这张榜时才有 —— 找不到就整块不渲染：空标题会被读成
+ * 「我们说不清」，通用套话等于替上游下结论。
  *
  * 两条口径写在页面上，不写在注释里：
  * - 厂商自报（`self_reported`）单独分组，不进指标表 —— 两种凭据不可比（MODEL-020）。
@@ -249,7 +254,57 @@ function VersionHistorySection({
 }
 
 /**
- * `cite` 档：**不渲染指标表**。读者看到一张空表，会读成「我们的数据缺了」；
+ * 「口径与来源」（#575）：这张榜测什么、怎么防污染、跑在什么环境里、指标与成本是什么、
+ * 谁在维护、官方榜单在哪。
+ *
+ * 六项标签由 issue 定死；**每一项的取值都来自 `src/content/benchmark-sources.json`** ——
+ * 改口径文案只改内容文件，不动这里。内部证据标记（A / B / 未核）与 `notes` 不上对外页。
+ */
+function ProvenanceSection({ source }: { source: BenchmarkSource }) {
+  return (
+    <section>
+      <h2 className="text-base font-semibold text-gray-900">口径与来源</h2>
+      <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-gray-500">能力象限</dt>
+          {/* 与来源页同一写法：直接列站内分类键，不做第二次翻译。 */}
+          <dd className="m-0 text-gray-900">{source.categories.join(' · ')}</dd>
+        </div>
+        <div>
+          <dt className="text-gray-500">防污染机制</dt>
+          <dd className="m-0 text-gray-900">{source.contamination}</dd>
+        </div>
+        <div>
+          <dt className="text-gray-500">执行环境（Harness）</dt>
+          <dd className="m-0 text-gray-900">{source.harness}</dd>
+        </div>
+        <div>
+          <dt className="text-gray-500">核心指标与效费比</dt>
+          <dd className="m-0 text-gray-900">{source.metricCost}</dd>
+        </div>
+        <div>
+          <dt className="text-gray-500">更新频率与维护方</dt>
+          <dd className="m-0 text-gray-900">{source.cadence}</dd>
+        </div>
+        <div>
+          <dt className="text-gray-500">来源链接</dt>
+          <dd className="m-0">
+            <a
+              href={source.url}
+              rel="noreferrer noopener"
+              target="_blank"
+              className="text-gray-900 underline-offset-2 hover:underline"
+            >
+              {source.url}
+            </a>
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+/** `cite` 档：**不渲染指标表**。读者看到一张空表，会读成「我们的数据缺了」；
  * 实际是源方不允许把分数结构化再发布 —— 这两件事必须说清楚，不能糊过去。
  */
 function CiteNotice({ detail }: { detail: BenchmarkDetail }) {
@@ -362,6 +417,7 @@ export function BenchmarkDetailPage() {
   const thirdParty = detail.versions.filter((version) => version.sourceType !== 'self_reported');
   const selfReported = detail.versions.filter((version) => version.sourceType === 'self_reported');
   const current = latestThirdParty(detail.versions);
+  const provenance = findBenchmarkSource(slug);
 
   return (
     <Page title={detail.name} description={detail.description ?? undefined}>
@@ -373,6 +429,7 @@ export function BenchmarkDetailPage() {
             <LatestVersionSection current={current} />
             <MetricsSection metrics={detail.metrics} />
             <VersionHistorySection thirdParty={thirdParty} selfReported={selfReported} />
+            {provenance ? <ProvenanceSection source={provenance} /> : null}
           </>
         ) : detail.displayTier === 'cite' ? (
           <CiteNotice detail={detail} />
