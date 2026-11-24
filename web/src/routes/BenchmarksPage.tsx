@@ -33,6 +33,9 @@ export function BenchmarksPage() {
       description={'站内已收录的第三方基准。每张榜单独陈列：只给原始分与名次，不跨榜比较。'}
       actions={
         <>
+          <Link to="/benchmarks/leaderboards" className="text-sm underline">
+            排行榜
+          </Link>
           <Link to="/benchmarks/overview" className="text-sm underline">
             总览
           </Link>

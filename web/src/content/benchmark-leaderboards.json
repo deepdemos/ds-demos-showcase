@@ -1,0 +1,1718 @@
+{
+  "title": "排行榜",
+  "intro": "每张榜一张卡片：名字、一句话说明、前几名预览。默认只看近 6 个月有数据的榜，旧榜可切换查看。",
+  "updatedAt": "2026-11-24",
+  "source": "Epoch AI · Capabilities & benchmarking（CC BY 4.0）",
+  "boards": [
+    {
+      "id": "apex_agents_external",
+      "name": "APEX-Agents",
+      "description": "Epoch AI 收录的 APEX-Agents 榜。",
+      "category": "agent",
+      "latest": "2026-11-18",
+      "models": 65,
+      "top": [
+        {
+          "model": "Gemini 4 Carbon (unknown)",
+          "value": 84.2
+        },
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 82.9
+        },
+        {
+          "model": "Gemini 4 Argon (unknown)",
+          "value": 82.4
+        },
+        {
+          "model": "Claude Fable 5.2 (unknown)",
+          "value": 80.1
+        },
+        {
+          "model": "Gemini 4 Hydrogen (unknown)",
+          "value": 78.0
+        }
+      ]
+    },
+    {
+      "id": "osworld",
+      "name": "OSWorld",
+      "description": "虚拟机里的桌面操作，点鼠标、开窗口。",
+      "category": "agent",
+      "latest": "2026-02-17",
+      "models": 9,
+      "top": [
+        {
+          "model": "Claude Sonnet 4.6 (no thinking)",
+          "value": 72.1
+        },
+        {
+          "model": "Claude Opus 4.5 (no thinking)",
+          "value": 66.3
+        },
+        {
+          "model": "Kimi K2.5",
+          "value": 63.3
+        },
+        {
+          "model": "Claude Sonnet 4.5 (no thinking)",
+          "value": 62.9
+        },
+        {
+          "model": "claude-sonnet-4-20250514",
+          "value": 43.9
+        }
+      ]
+    },
+    {
+      "id": "terminalbench",
+      "name": "Terminal-Bench",
+      "description": "终端里的多步任务，看会不会用命令行。",
+      "category": "agent",
+      "latest": "2026-04-23",
+      "models": 46,
+      "top": [
+        {
+          "model": "GPT-5.5 (unknown thinking)",
+          "value": 84.72
+        },
+        {
+          "model": "GPT-5.4 (unknown thinking)",
+          "value": 81.8
+        },
+        {
+          "model": "Gemini 3.1 Pro Preview",
+          "value": 80.22
+        },
+        {
+          "model": "Claude Opus 4.7 (unknown)",
+          "value": 80.22
+        },
+        {
+          "model": "Claude Opus 4.6 (unknown thinking)",
+          "value": 79.8
+        }
+      ]
+    },
+    {
+      "id": "vending_bench_2_external",
+      "name": "Vending Bench 2",
+      "description": "Epoch AI 收录的 Vending Bench 2 榜。",
+      "category": "agent",
+      "latest": "2026-11-18",
+      "models": 70,
+      "top": [
+        {
+          "model": "Gemini 4 Neon (unknown)",
+          "value": 16843.41
+        },
+        {
+          "model": "Gemini 4 Carbon (unknown)",
+          "value": 16484.21
+        },
+        {
+          "model": "GPT-6 Astra (unknown thinking)",
+          "value": 15514.7
+        },
+        {
+          "model": "Gemini 4 Hydrogen (unknown)",
+          "value": 14549.49
+        },
+        {
+          "model": "GPT-6 Sol (unknown thinking)",
+          "value": 14427.85
+        }
+      ]
+    },
+    {
+      "id": "webdev_arena_external",
+      "name": "Webdev Arena",
+      "description": "Epoch AI 收录的 Webdev Arena 榜。",
+      "category": "agent",
+      "latest": "2026-10-13",
+      "models": 108,
+      "top": [
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 1820.31
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 1800.28
+        },
+        {
+          "model": "Claude Sonnet 5.5 (xhigh)",
+          "value": 1786.26
+        },
+        {
+          "model": "GPT-6.1 Sol (max)",
+          "value": 1758.72
+        },
+        {
+          "model": "Claude Fable 5.1 (max)",
+          "value": 1758.05
+        }
+      ]
+    },
+    {
+      "id": "aider_polyglot",
+      "name": "Aider Polyglot",
+      "description": "多语言代码编辑，按 edit format 跑。",
+      "category": "coding",
+      "latest": "2025-12-01",
+      "models": 64,
+      "top": [
+        {
+          "model": "GPT-5 (high)",
+          "value": 88.0
+        },
+        {
+          "model": "o3-pro-2025-06-10_high",
+          "value": 84.9
+        },
+        {
+          "model": "Gemini 2.5 Pro Preview (Jun 2025)",
+          "value": 83.1
+        },
+        {
+          "model": "o3 (high)",
+          "value": 81.3
+        },
+        {
+          "model": "grok-4-0709",
+          "value": 79.6
+        }
+      ]
+    },
+    {
+      "id": "cursorbench_external",
+      "name": "Cursorbench",
+      "description": "Epoch AI 收录的 Cursorbench 榜。",
+      "category": "coding",
+      "latest": "2026-11-18",
+      "models": 12,
+      "top": [
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 65.4
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 61.5
+        },
+        {
+          "model": "Gemini 4 Hydrogen (xhigh)",
+          "value": 61.4
+        },
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 61.3
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 58.1
+        }
+      ]
+    },
+    {
+      "id": "deepswe",
+      "name": "DeepSWE",
+      "description": "长程软件工程任务，带 harness 与成本。",
+      "category": "coding",
+      "latest": "2026-09-03",
+      "models": 26,
+      "top": [
+        {
+          "model": "GPT-6 Astra (xhigh)",
+          "value": 74.12
+        },
+        {
+          "model": "Gemini 3.8 Flash (high)",
+          "value": 73.83
+        },
+        {
+          "model": "Claude Opus 5 (max)",
+          "value": 73.65
+        },
+        {
+          "model": "GPT-5.6 Sol (max)",
+          "value": 72.67
+        },
+        {
+          "model": "Claude Fable 5 (xhigh)",
+          "value": 69.91
+        }
+      ]
+    },
+    {
+      "id": "frontiercode_external",
+      "name": "FrontierCode",
+      "description": "Epoch AI 收录的 FrontierCode 榜。",
+      "category": "coding",
+      "latest": "2026-10-13",
+      "models": 46,
+      "top": [
+        {
+          "model": "Claude Opus 5.5 (medium)",
+          "value": 54.64
+        },
+        {
+          "model": "Claude Fable 5 (unknown)",
+          "value": 53.48
+        },
+        {
+          "model": "Claude Opus 5 (max)",
+          "value": 53.38
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 53.26
+        },
+        {
+          "model": "Claude Sonnet 5.5 (xhigh)",
+          "value": 52.09
+        }
+      ]
+    },
+    {
+      "id": "frontierswe_external",
+      "name": "FrontierSWE",
+      "description": "Epoch AI 收录的 FrontierSWE 榜。",
+      "category": "coding",
+      "latest": "2026-11-12",
+      "models": 25,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 69.94
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 65.51
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 62.33
+        },
+        {
+          "model": "Claude Sonnet 5.5 (max)",
+          "value": 61.89
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 61.2
+        }
+      ]
+    },
+    {
+      "id": "mirrorcode",
+      "name": "MirrorCode",
+      "description": "Epoch AI 收录的 MirrorCode 榜。",
+      "category": "coding",
+      "latest": "2026-11-17",
+      "models": 41,
+      "top": [
+        {
+          "model": "Claude Sonnet 5.5 (max)",
+          "value": 97.78
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 95.56
+        },
+        {
+          "model": "Claude Fable 5.1 (max)",
+          "value": 93.33
+        },
+        {
+          "model": "Claude Opus 5 (max)",
+          "value": 87.78
+        },
+        {
+          "model": "Claude Haiku 5.5 (max)",
+          "value": 78.89
+        }
+      ]
+    },
+    {
+      "id": "swe_bench_verified",
+      "name": "SWE-bench Verified",
+      "description": "真实 GitHub issue，改对仓库才算过。",
+      "category": "coding",
+      "latest": "2026-06-16",
+      "models": 32,
+      "top": [
+        {
+          "model": "Claude Opus 4.7 (max)",
+          "value": 83.47
+        },
+        {
+          "model": "GPT-5.5 (xhigh)",
+          "value": 80.58
+        },
+        {
+          "model": "Gemini 3.5 Flash",
+          "value": 79.34
+        },
+        {
+          "model": "Claude Opus 4.6 (no thinking)",
+          "value": 78.72
+        },
+        {
+          "model": "GLM-5.2",
+          "value": 78.7
+        }
+      ]
+    },
+    {
+      "id": "scicode_external",
+      "name": "Scicode",
+      "description": "Epoch AI 收录的 Scicode 榜。",
+      "category": "coding",
+      "latest": "2026-11-10",
+      "models": 139,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 67.71
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 66.9
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 64.24
+        },
+        {
+          "model": "Claude Fable 5.1 (max)",
+          "value": 63.08
+        },
+        {
+          "model": "Gemini 4 Argon (high)",
+          "value": 61.81
+        }
+      ]
+    },
+    {
+      "id": "arc_ai2_external",
+      "name": "ARC AI2",
+      "description": "Epoch AI 收录的 ARC AI2 榜。",
+      "category": "general",
+      "latest": "2024-12-26",
+      "models": 77,
+      "top": [
+        {
+          "model": "Llama-3.1-405B",
+          "value": 95.3
+        },
+        {
+          "model": "DeepSeek-V3",
+          "value": 95.3
+        },
+        {
+          "model": "Qwen2.5-72B",
+          "value": 94.5
+        },
+        {
+          "model": "DeepSeek-V2",
+          "value": 92.2
+        },
+        {
+          "model": "Phi-3-medium-128k-instruct",
+          "value": 91.6
+        }
+      ]
+    },
+    {
+      "id": "arc_agi_external",
+      "name": "ARC-AGI",
+      "description": "Epoch AI 收录的 ARC-AGI 榜。",
+      "category": "general",
+      "latest": "2026-11-17",
+      "models": 130,
+      "top": [
+        {
+          "model": "Claude Fable 5 (xhigh)",
+          "value": 98.5
+        },
+        {
+          "model": "GPT-6 Astra (xhigh)",
+          "value": 98.5
+        },
+        {
+          "model": "Claude Opus 5.5 (high)",
+          "value": 98.5
+        },
+        {
+          "model": "GPT-6.1 Sol (xhigh)",
+          "value": 98.5
+        },
+        {
+          "model": "Gemini 3.8 Flash (high)",
+          "value": 98.5
+        }
+      ]
+    },
+    {
+      "id": "arc_agi_2",
+      "name": "ARC-AGI-2",
+      "description": "抽象推理谜题，看能不能举一反三。",
+      "category": "general",
+      "latest": "2026-11-17",
+      "models": 126,
+      "top": [
+        {
+          "model": "GPT-6.2 Astra (xhigh)",
+          "value": 95.83
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 95.0
+        },
+        {
+          "model": "GPT-6.1 Sol (max)",
+          "value": 94.17
+        },
+        {
+          "model": "Gemini 4 Carbon (medium)",
+          "value": 94.17
+        },
+        {
+          "model": "Claude Fable 5.2 (xhigh)",
+          "value": 93.75
+        }
+      ]
+    },
+    {
+      "id": "bbh_external",
+      "name": "BBH",
+      "description": "Epoch AI 收录的 BBH 榜。",
+      "category": "general",
+      "latest": "2024-12-26",
+      "models": 50,
+      "top": [
+        {
+          "model": "gemini-1.5-pro-001",
+          "value": 89.2
+        },
+        {
+          "model": "DeepSeek-V3",
+          "value": 87.5
+        },
+        {
+          "model": "gemini-1.5-pro-001-feb24",
+          "value": 84.0
+        },
+        {
+          "model": "Llama-3.1-405B",
+          "value": 82.9
+        },
+        {
+          "model": "Phi-3-medium-128k-instruct",
+          "value": 81.4
+        }
+      ]
+    },
+    {
+      "id": "balrog_external",
+      "name": "Balrog",
+      "description": "Epoch AI 收录的 Balrog 榜。",
+      "category": "general",
+      "latest": "2026-09-03",
+      "models": 39,
+      "top": [
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 68.3
+        },
+        {
+          "model": "Claude Opus 5 (max)",
+          "value": 63.4
+        },
+        {
+          "model": "GPT-5.6 Sol (max)",
+          "value": 60.0
+        },
+        {
+          "model": "Gemini 3 Pro Preview",
+          "value": 58.1
+        },
+        {
+          "model": "Gemini 3.1 Pro Preview",
+          "value": 57.0
+        }
+      ]
+    },
+    {
+      "id": "blueprint_bench_2_external",
+      "name": "Blueprint Bench 2",
+      "description": "Epoch AI 收录的 Blueprint Bench 2 榜。",
+      "category": "general",
+      "latest": "2026-11-17",
+      "models": 40,
+      "top": [
+        {
+          "model": "GPT-6.2 Astra (unknown thinking)",
+          "value": 61.39
+        },
+        {
+          "model": "Gemini 4 Carbon (unknown)",
+          "value": 58.57
+        },
+        {
+          "model": "GPT-6.2 Sol (unknown thinking)",
+          "value": 57.05
+        },
+        {
+          "model": "Claude Fable 5.2 (unknown)",
+          "value": 56.62
+        },
+        {
+          "model": "Gemini 4 Argon (unknown)",
+          "value": 54.45
+        }
+      ]
+    },
+    {
+      "id": "bool_q_external",
+      "name": "Bool Q",
+      "description": "Epoch AI 收录的 Bool Q 榜。",
+      "category": "general",
+      "latest": "2024-08-17",
+      "models": 77,
+      "top": [
+        {
+          "model": "T5-11B",
+          "value": 91.2
+        },
+        {
+          "model": "PaLM 2-L",
+          "value": 90.9
+        },
+        {
+          "model": "T5-3B",
+          "value": 89.9
+        },
+        {
+          "model": "Inflection-1",
+          "value": 89.7
+        },
+        {
+          "model": "StableBeluga2",
+          "value": 89.4
+        }
+      ]
+    },
+    {
+      "id": "chess_puzzles",
+      "name": "Chess Puzzles",
+      "description": "Epoch AI 收录的 Chess Puzzles 榜。",
+      "category": "general",
+      "latest": "2026-11-18",
+      "models": 105,
+      "top": [
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 83.0
+        },
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 79.0
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 78.0
+        },
+        {
+          "model": "GPT-6.2 Astra (max)",
+          "value": 78.0
+        },
+        {
+          "model": "GPT-6 Astra (pro, max)",
+          "value": 76.0
+        }
+      ]
+    },
+    {
+      "id": "critpt_external",
+      "name": "Critpt",
+      "description": "Epoch AI 收录的 Critpt 榜。",
+      "category": "general",
+      "latest": "2026-11-10",
+      "models": 164,
+      "top": [
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 36.0
+        },
+        {
+          "model": "Claude Fable 5.2 (xhigh)",
+          "value": 35.71
+        },
+        {
+          "model": "GPT-5.6 Sol (max)",
+          "value": 32.29
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 31.71
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 31.71
+        }
+      ]
+    },
+    {
+      "id": "dtbench_external",
+      "name": "DTBench",
+      "description": "Epoch AI 收录的 DTBench 榜。",
+      "category": "general",
+      "latest": "2026-11-10",
+      "models": 182,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (unknown)",
+          "value": 99.2
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 98.93
+        },
+        {
+          "model": "Claude Fable 5 (max)",
+          "value": 98.4
+        },
+        {
+          "model": "Gemini 4 Carbon (medium)",
+          "value": 98.39
+        },
+        {
+          "model": "Claude Opus 5 (xhigh)",
+          "value": 97.87
+        }
+      ]
+    },
+    {
+      "id": "deepresearchbench_external",
+      "name": "DeepResearch Bench",
+      "description": "Epoch AI 收录的 DeepResearch Bench 榜。",
+      "category": "general",
+      "latest": "2026-05-28",
+      "models": 26,
+      "top": [
+        {
+          "model": "Claude Opus 4.6 (high)",
+          "value": 55.3
+        },
+        {
+          "model": "Claude Sonnet 4.6 (high)",
+          "value": 54.9
+        },
+        {
+          "model": "Claude Opus 4.5 (high)",
+          "value": 54.8
+        },
+        {
+          "model": "GPT-5.5 (high)",
+          "value": 54.0
+        },
+        {
+          "model": "Claude Sonnet 4.5 (2k thinking)",
+          "value": 52.6
+        }
+      ]
+    },
+    {
+      "id": "ebr_bench",
+      "name": "EBR-bench",
+      "description": "Epoch AI 收录的 EBR-bench 榜。",
+      "category": "general",
+      "latest": "2026-11-18",
+      "models": 37,
+      "top": [
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 98.1
+        },
+        {
+          "model": "GPT-6.2 Astra (max)",
+          "value": 92.38
+        },
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 90.48
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 87.62
+        },
+        {
+          "model": "GPT-6.1 Terra (max)",
+          "value": 78.1
+        }
+      ]
+    },
+    {
+      "id": "enigma_eval_external",
+      "name": "Enigma Eval",
+      "description": "Epoch AI 收录的 Enigma Eval 榜。",
+      "category": "general",
+      "latest": "2026-07-09",
+      "models": 41,
+      "top": [
+        {
+          "model": "Claude Fable 5 (high)",
+          "value": 39.28
+        },
+        {
+          "model": "GPT-5.6 Sol (high)",
+          "value": 37.12
+        },
+        {
+          "model": "Gemini 3.1 Pro Preview",
+          "value": 36.78
+        },
+        {
+          "model": "Gemini 3.5 Flash",
+          "value": 25.41
+        },
+        {
+          "model": "GPT-5.4 Pro",
+          "value": 23.82
+        }
+      ]
+    },
+    {
+      "id": "fictionlivebench_external",
+      "name": "Fiction.LiveBench",
+      "description": "Epoch AI 收录的 Fiction.LiveBench 榜。",
+      "category": "general",
+      "latest": "2026-01-27",
+      "models": 59,
+      "top": [
+        {
+          "model": "GPT-5 (medium)",
+          "value": 97.2
+        },
+        {
+          "model": "o3-pro-2025-06-10_medium",
+          "value": 97.2
+        },
+        {
+          "model": "grok-4-0709",
+          "value": 94.4
+        },
+        {
+          "model": "grok-4-fast",
+          "value": 94.4
+        },
+        {
+          "model": "Gemini 2.5 Pro Preview (Jun 2025)",
+          "value": 91.7
+        }
+      ]
+    },
+    {
+      "id": "forecastbench_external",
+      "name": "Forecastbench",
+      "description": "Epoch AI 收录的 Forecastbench 榜。",
+      "category": "general",
+      "latest": "2026-09-22",
+      "models": 93,
+      "top": [
+        {
+          "model": "GPT-5.5 (high)",
+          "value": 66.6
+        },
+        {
+          "model": "GPT-6 Astra (high)",
+          "value": 66.6
+        },
+        {
+          "model": "Claude Opus 5.5 (high)",
+          "value": 66.6
+        },
+        {
+          "model": "Claude Opus 5 (max)",
+          "value": 66.4
+        },
+        {
+          "model": "GPT-6 Sol (high)",
+          "value": 66.3
+        }
+      ]
+    },
+    {
+      "id": "furniture_assembly",
+      "name": "Furniture Assembly",
+      "description": "Epoch AI 收录的 Furniture Assembly 榜。",
+      "category": "general",
+      "latest": "2026-11-18",
+      "models": 44,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 90.0
+        },
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 89.17
+        },
+        {
+          "model": "GPT-6.2 Astra (max)",
+          "value": 89.17
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 83.33
+        },
+        {
+          "model": "GPT-6.1 Sol (max)",
+          "value": 80.0
+        }
+      ]
+    },
+    {
+      "id": "gsm8k_external",
+      "name": "GSM8K",
+      "description": "Epoch AI 收录的 GSM8K 榜。",
+      "category": "general",
+      "latest": "2024-11-29",
+      "models": 93,
+      "top": [
+        {
+          "model": "DeepSeek-Coder-V2-Instruct",
+          "value": 94.5
+        },
+        {
+          "model": "Qwen2.5-Coder-14B-Instruct",
+          "value": 94.2
+        },
+        {
+          "model": "Qwen2.5-Coder-32B-Instruct",
+          "value": 93.0
+        },
+        {
+          "model": "GPT-4 (Mar 2023)",
+          "value": 92.0
+        },
+        {
+          "model": "gpt-4o-mini-2024-07-18",
+          "value": 91.3
+        }
+      ]
+    },
+    {
+      "id": "gso_external",
+      "name": "GSO-Bench",
+      "description": "Epoch AI 收录的 GSO-Bench 榜。",
+      "category": "general",
+      "latest": "2026-09-03",
+      "models": 31,
+      "top": [
+        {
+          "model": "Claude Fable 5.1 (unknown)",
+          "value": 88.24
+        },
+        {
+          "model": "GPT-6 Astra (unknown thinking)",
+          "value": 79.41
+        },
+        {
+          "model": "Claude Fable 5 (unknown)",
+          "value": 78.43
+        },
+        {
+          "model": "GPT-5.6 Sol (unknown thinking)",
+          "value": 76.47
+        },
+        {
+          "model": "Claude Opus 4.8",
+          "value": 47.06
+        }
+      ]
+    },
+    {
+      "id": "gbaeval_external",
+      "name": "Gbaeval",
+      "description": "Epoch AI 收录的 Gbaeval 榜。",
+      "category": "general",
+      "latest": "2026-11-09",
+      "models": 28,
+      "top": [
+        {
+          "model": "Claude Opus 5.5 (unknown)",
+          "value": 90.56
+        },
+        {
+          "model": "GPT-6 Astra (unknown thinking)",
+          "value": 87.05
+        },
+        {
+          "model": "Claude Fable 5.2 (unknown)",
+          "value": 84.8
+        },
+        {
+          "model": "GPT-6.1 Sol (unknown thinking)",
+          "value": 81.91
+        },
+        {
+          "model": "Claude Opus 5 (unknown)",
+          "value": 79.6
+        }
+      ]
+    },
+    {
+      "id": "geobench_external",
+      "name": "GeoBench",
+      "description": "Epoch AI 收录的 GeoBench 榜。",
+      "category": "general",
+      "latest": "2026-09-21",
+      "models": 47,
+      "top": [
+        {
+          "model": "Claude Fable 5 (high)",
+          "value": 89.0
+        },
+        {
+          "model": "Gemini 3 Flash Preview",
+          "value": 88.0
+        },
+        {
+          "model": "Gemini 3.8 Flash (unknown)",
+          "value": 86.0
+        },
+        {
+          "model": "Muse Spark 1.3 (unknown)",
+          "value": 86.0
+        },
+        {
+          "model": "Gemini 2.5 Pro Preview (Jun 2025)",
+          "value": 86.0
+        }
+      ]
+    },
+    {
+      "id": "hle",
+      "name": "HLE",
+      "description": "专家级跨学科难题，答案封闭。",
+      "category": "general",
+      "latest": "2026-10-07",
+      "models": 46,
+      "top": [
+        {
+          "model": "GPT-6 Astra (unknown thinking)",
+          "value": 54.8
+        },
+        {
+          "model": "Claude Fable 5.1 (xhigh)",
+          "value": 46.5
+        },
+        {
+          "model": "Gemini 3.1 Pro Preview",
+          "value": 46.44
+        },
+        {
+          "model": "Claude Sonnet 5.5 (xhigh)",
+          "value": 46.12
+        },
+        {
+          "model": "Gemini 3.8 Flash (unknown)",
+          "value": 44.52
+        }
+      ]
+    },
+    {
+      "id": "hella_swag_external",
+      "name": "HellaSwag",
+      "description": "Epoch AI 收录的 HellaSwag 榜。",
+      "category": "general",
+      "latest": "2024-12-26",
+      "models": 76,
+      "top": [
+        {
+          "model": "gpt-4-32k-0314",
+          "value": 95.3
+        },
+        {
+          "model": "GPT-4 (Mar 2023)",
+          "value": 95.3
+        },
+        {
+          "model": "Llama-3.1-405B",
+          "value": 89.2
+        },
+        {
+          "model": "falcon-180B",
+          "value": 89.0
+        },
+        {
+          "model": "DeepSeek-V3",
+          "value": 88.9
+        }
+      ]
+    },
+    {
+      "id": "lambada_external",
+      "name": "LAMBADA",
+      "description": "Epoch AI 收录的 LAMBADA 榜。",
+      "category": "general",
+      "latest": "2023-11-30",
+      "models": 26,
+      "top": [
+        {
+          "model": "Megatron-Turing NLG 530B",
+          "value": 87.15
+        },
+        {
+          "model": "text-davinci-001",
+          "value": 86.4
+        },
+        {
+          "model": "falcon-180B",
+          "value": 79.8
+        },
+        {
+          "model": "Llama-2-70b-hf",
+          "value": 78.9
+        },
+        {
+          "model": "Inflection-1",
+          "value": 78.5
+        }
+      ]
+    },
+    {
+      "id": "lmca_external",
+      "name": "LMCA",
+      "description": "Epoch AI 收录的 LMCA 榜。",
+      "category": "general",
+      "latest": "2026-11-10",
+      "models": 144,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (xhigh)",
+          "value": 70.61
+        },
+        {
+          "model": "Claude Sonnet 5.5 (max)",
+          "value": 68.26
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 68.23
+        },
+        {
+          "model": "Gemini 4 Carbon (medium)",
+          "value": 65.67
+        },
+        {
+          "model": "Claude Fable 5.1 (unknown)",
+          "value": 65.46
+        }
+      ]
+    },
+    {
+      "id": "livebench",
+      "name": "LiveBench",
+      "description": "滚动换题的防污染题库，多能力平均。",
+      "category": "general",
+      "latest": "2025-11-13",
+      "models": 50,
+      "top": [
+        {
+          "model": "Gemini 2.5 Pro Exp (Mar 2025)",
+          "value": 82.35
+        },
+        {
+          "model": "GPT-5.1 (high)",
+          "value": 78.79
+        },
+        {
+          "model": "claude-3-7-sonnet-20250219",
+          "value": 76.1
+        },
+        {
+          "model": "o3-mini (high)",
+          "value": 75.88
+        },
+        {
+          "model": "o1 (high)",
+          "value": 75.67
+        }
+      ]
+    },
+    {
+      "id": "metr_time_horizons_external",
+      "name": "METR Time Horizons",
+      "description": "Epoch AI 收录的 METR Time Horizons 榜。",
+      "category": "general",
+      "latest": "2026-04-07",
+      "models": 44,
+      "top": [
+        {
+          "model": "Claude Mythos Preview (Early)",
+          "value": 85.2
+        },
+        {
+          "model": "Claude Opus 4.6 (unknown thinking)",
+          "value": 78.86
+        },
+        {
+          "model": "Gemini 3.1 Pro Preview",
+          "value": 77.03
+        },
+        {
+          "model": "GPT-5.2 (high)",
+          "value": 75.29
+        },
+        {
+          "model": "Claude Opus 4.5 (16k thinking)",
+          "value": 74.97
+        }
+      ]
+    },
+    {
+      "id": "mmlu",
+      "name": "MMLU",
+      "description": "学科知识多选题，已接近饱和。",
+      "category": "general",
+      "latest": "2024-12-26",
+      "models": 136,
+      "top": [
+        {
+          "model": "GPT-4o (Nov 2024)",
+          "value": 88.1
+        },
+        {
+          "model": "Claude 3.5 Sonnet (Oct 2024)",
+          "value": 87.3
+        },
+        {
+          "model": "DeepSeek-V3",
+          "value": 87.2
+        },
+        {
+          "model": "gemini-1.5-pro-002",
+          "value": 86.9
+        },
+        {
+          "model": "Claude 3.5 Sonnet (Jun 2024)",
+          "value": 86.5
+        }
+      ]
+    },
+    {
+      "id": "mystery_game_puzzles",
+      "name": "Mystery Game Puzzles",
+      "description": "Epoch AI 收录的 Mystery Game Puzzles 榜。",
+      "category": "general",
+      "latest": "2026-11-18",
+      "models": 89,
+      "top": [
+        {
+          "model": "GPT-6.2 Astra (max)",
+          "value": 95.0
+        },
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 90.0
+        },
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 85.0
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 84.0
+        },
+        {
+          "model": "GPT-6.1 Sol (max)",
+          "value": 80.0
+        }
+      ]
+    },
+    {
+      "id": "open_book_qa_external",
+      "name": "OpenBookQA",
+      "description": "Epoch AI 收录的 OpenBookQA 榜。",
+      "category": "general",
+      "latest": "2024-04-23",
+      "models": 42,
+      "top": [
+        {
+          "model": "Phi-3-mini-4k-instruct",
+          "value": 88.0
+        },
+        {
+          "model": "Phi-3-small-8k-instruct",
+          "value": 88.0
+        },
+        {
+          "model": "Phi-3-medium-128k-instruct",
+          "value": 87.4
+        },
+        {
+          "model": "GPT-3.5 Turbo (Nov 2023)",
+          "value": 86.0
+        },
+        {
+          "model": "Mixtral-8x7B-v0.1",
+          "value": 85.8
+        }
+      ]
+    },
+    {
+      "id": "piqa_external",
+      "name": "PIQA",
+      "description": "Epoch AI 收录的 PIQA 榜。",
+      "category": "general",
+      "latest": "2024-12-26",
+      "models": 60,
+      "top": [
+        {
+          "model": "gpt-4o-mini-2024-07-18",
+          "value": 88.7
+        },
+        {
+          "model": "Phi-3.5-MoE-instruct",
+          "value": 88.6
+        },
+        {
+          "model": "gemini-1.5-flash-002",
+          "value": 87.5
+        },
+        {
+          "model": "Llama-3.1-405B",
+          "value": 85.9
+        },
+        {
+          "model": "falcon-180B",
+          "value": 84.9
+        }
+      ]
+    },
+    {
+      "id": "science_qa_external",
+      "name": "Science Qa",
+      "description": "Epoch AI 收录的 Science Qa 榜。",
+      "category": "general",
+      "latest": "2024-08-16",
+      "models": 23,
+      "top": [
+        {
+          "model": "Phi-3.5-vision-instruct",
+          "value": 91.3
+        },
+        {
+          "model": "GPT-4o (May 2024)",
+          "value": 88.5
+        },
+        {
+          "model": "gemini-1.0-pro-vision",
+          "value": 79.7
+        },
+        {
+          "model": "falcon-11B-vlm",
+          "value": 74.9
+        },
+        {
+          "model": "blip2-opt-2.7b",
+          "value": 74.17
+        }
+      ]
+    },
+    {
+      "id": "simplebench_external",
+      "name": "SimpleBench",
+      "description": "Epoch AI 收录的 SimpleBench 榜。",
+      "category": "general",
+      "latest": "2026-11-18",
+      "models": 120,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (unknown)",
+          "value": 94.9
+        },
+        {
+          "model": "Gemini 4 Neon (unknown)",
+          "value": 94.4
+        },
+        {
+          "model": "Gemini 4 Carbon (unknown)",
+          "value": 92.6
+        },
+        {
+          "model": "Gemini 4 Argon (unknown)",
+          "value": 91.7
+        },
+        {
+          "model": "Gemini 4 Hydrogen (unknown)",
+          "value": 91.7
+        }
+      ]
+    },
+    {
+      "id": "simpleqa_verified",
+      "name": "SimpleQA Verified",
+      "description": "Epoch AI 收录的 SimpleQA Verified 榜。",
+      "category": "general",
+      "latest": "2026-11-18",
+      "models": 100,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 94.0
+        },
+        {
+          "model": "GPT-6.2 Astra (max)",
+          "value": 78.5
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 77.7
+        },
+        {
+          "model": "Gemini 4 Argon (high)",
+          "value": 76.0
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 75.6
+        }
+      ]
+    },
+    {
+      "id": "surface_evolver_bench_external",
+      "name": "Surface Evolver Bench",
+      "description": "Epoch AI 收录的 Surface Evolver Bench 榜。",
+      "category": "general",
+      "latest": "2026-10-06",
+      "models": 26,
+      "top": [
+        {
+          "model": "Claude Fable 5 (high)",
+          "value": 95.0
+        },
+        {
+          "model": "Kimi K3 (unknown)",
+          "value": 95.0
+        },
+        {
+          "model": "GPT-5.6 Sol (xhigh)",
+          "value": 93.12
+        },
+        {
+          "model": "GPT-5.5 (high)",
+          "value": 88.12
+        },
+        {
+          "model": "Claude Opus 4.8",
+          "value": 87.5
+        }
+      ]
+    },
+    {
+      "id": "trivia_qa_external",
+      "name": "TriviaQA",
+      "description": "Epoch AI 收录的 TriviaQA 榜。",
+      "category": "general",
+      "latest": "2024-12-26",
+      "models": 39,
+      "top": [
+        {
+          "model": "Llama-2-70b-hf",
+          "value": 87.6
+        },
+        {
+          "model": "claude-2.0",
+          "value": 87.5
+        },
+        {
+          "model": "claude-1.3",
+          "value": 86.7
+        },
+        {
+          "model": "PaLM 2-L",
+          "value": 86.1
+        },
+        {
+          "model": "LLaMA-65B",
+          "value": 86.0
+        }
+      ]
+    },
+    {
+      "id": "vpct_external",
+      "name": "VPCT",
+      "description": "Epoch AI 收录的 VPCT 榜。",
+      "category": "general",
+      "latest": "2025-12-17",
+      "models": 33,
+      "top": [
+        {
+          "model": "Gemini 3 Pro Preview",
+          "value": 91.0
+        },
+        {
+          "model": "GPT-5.2 (xhigh)",
+          "value": 84.0
+        },
+        {
+          "model": "Gemini 3 Flash Preview",
+          "value": 72.6
+        },
+        {
+          "model": "GPT-5 (high)",
+          "value": 66.0
+        },
+        {
+          "model": "GPT-5.1 (high)",
+          "value": 58.7
+        }
+      ]
+    },
+    {
+      "id": "weirdml_external",
+      "name": "WeirdML",
+      "description": "Epoch AI 收录的 WeirdML 榜。",
+      "category": "general",
+      "latest": "2026-09-03",
+      "models": 142,
+      "top": [
+        {
+          "model": "GPT-6 Astra (pro, max)",
+          "value": 93.57
+        },
+        {
+          "model": "GPT-6 Astra (max)",
+          "value": 93.26
+        },
+        {
+          "model": "Claude Fable 5.1 (max)",
+          "value": 92.9
+        },
+        {
+          "model": "Claude Fable 5 (max)",
+          "value": 91.94
+        },
+        {
+          "model": "Claude Opus 5 (max)",
+          "value": 91.78
+        }
+      ]
+    },
+    {
+      "id": "weirdml_v3_external",
+      "name": "WeirdML v3",
+      "description": "Epoch AI 收录的 WeirdML v3 榜。",
+      "category": "general",
+      "latest": "2026-11-09",
+      "models": 27,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (xhigh)",
+          "value": 65.28
+        },
+        {
+          "model": "GPT-6 Astra (xhigh)",
+          "value": 54.05
+        },
+        {
+          "model": "GPT-6.1 Sol (xhigh)",
+          "value": 50.6
+        },
+        {
+          "model": "Claude Opus 5.5 (xhigh)",
+          "value": 49.83
+        },
+        {
+          "model": "Claude Fable 5.1 (xhigh)",
+          "value": 43.53
+        }
+      ]
+    },
+    {
+      "id": "wino_grande_external",
+      "name": "Winogrande",
+      "description": "Epoch AI 收录的 Winogrande 榜。",
+      "category": "general",
+      "latest": "2024-12-26",
+      "models": 80,
+      "top": [
+        {
+          "model": "Llama-3.1-405B",
+          "value": 89.2
+        },
+        {
+          "model": "claude-3-opus-20240229",
+          "value": 88.5
+        },
+        {
+          "model": "GPT-4 (Mar 2023)",
+          "value": 87.5
+        },
+        {
+          "model": "gpt-4-32k-0314",
+          "value": 87.5
+        },
+        {
+          "model": "falcon-180B",
+          "value": 87.1
+        }
+      ]
+    },
+    {
+      "id": "frontiermath_tier4",
+      "name": "FrontierMath Tier 4",
+      "description": "研究级数学难题，私有题集。",
+      "category": "math",
+      "latest": "2026-11-18",
+      "models": 79,
+      "top": [
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 100.0
+        },
+        {
+          "model": "GPT-6.2 Astra (max)",
+          "value": 100.0
+        },
+        {
+          "model": "GPT-6.1 Sol (max)",
+          "value": 100.0
+        },
+        {
+          "model": "GPT-6 Astra (high)",
+          "value": 97.6
+        },
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 97.56
+        }
+      ]
+    },
+    {
+      "id": "gpqa_diamond",
+      "name": "GPQA Diamond",
+      "description": "研究生级科学问答，四选一。",
+      "category": "general",
+      "latest": "2026-11-18",
+      "models": 261,
+      "top": [
+        {
+          "model": "GPT-6.2 Astra (max)",
+          "value": 96.84
+        },
+        {
+          "model": "Gemini 4 Hydrogen (xhigh)",
+          "value": 96.78
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 96.53
+        },
+        {
+          "model": "Gemini 4 Argon (high)",
+          "value": 96.4
+        },
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 96.28
+        }
+      ]
+    },
+    {
+      "id": "math_level_5",
+      "name": "MATH level 5",
+      "description": "Epoch AI 收录的 MATH level 5 榜。",
+      "category": "math",
+      "latest": "2025-10-15",
+      "models": 101,
+      "top": [
+        {
+          "model": "GPT-5 (high)",
+          "value": 98.13
+        },
+        {
+          "model": "GPT-5 mini (high)",
+          "value": 97.85
+        },
+        {
+          "model": "o4-mini (high)",
+          "value": 97.83
+        },
+        {
+          "model": "o3 (high)",
+          "value": 97.77
+        },
+        {
+          "model": "Claude Sonnet 4.5 (32k thinking)",
+          "value": 97.73
+        }
+      ]
+    },
+    {
+      "id": "otis_aime",
+      "name": "OTIS Mock AIME",
+      "description": "竞赛数学模拟题，AIME 风格。",
+      "category": "math",
+      "latest": "2026-11-18",
+      "models": 239,
+      "top": [
+        {
+          "model": "Qwen4-Max (xhigh)",
+          "value": 100.0
+        },
+        {
+          "model": "Gemini 4 Neon (xhigh)",
+          "value": 100.0
+        },
+        {
+          "model": "Gemini 4 Hydrogen (xhigh)",
+          "value": 100.0
+        },
+        {
+          "model": "Kimi K3.1 Pro (Together, max)",
+          "value": 100.0
+        },
+        {
+          "model": "Gemini 4 Carbon (high)",
+          "value": 100.0
+        }
+      ]
+    },
+    {
+      "id": "proofbench_external",
+      "name": "ProofBench",
+      "description": "Epoch AI 收录的 ProofBench 榜。",
+      "category": "math",
+      "latest": "2026-11-09",
+      "models": 84,
+      "top": [
+        {
+          "model": "Claude Fable 5.1 (max)",
+          "value": 100.0
+        },
+        {
+          "model": "Claude Opus 5.5 (max)",
+          "value": 100.0
+        },
+        {
+          "model": "Claude Sonnet 5.5 (max)",
+          "value": 100.0
+        },
+        {
+          "model": "Claude Fable 5.2 (max)",
+          "value": 100.0
+        },
+        {
+          "model": "Claude Opus 5 (max)",
+          "value": 99.0
+        }
+      ]
+    }
+  ]
+}
