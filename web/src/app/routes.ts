@@ -171,6 +171,17 @@ export const pages: readonly PageEntry[] = [
     // 同样不进一级导航；入口是 /benchmarks 目录页（#570）。
   },
   {
+    id: 'benchmark-leaderboards',
+    path: '/benchmarks/leaderboards',
+    title: '排行榜',
+    description: '每张榜一张卡片：名字、一句话说明、前几名预览；默认只看近期有数据的榜。',
+    group: 'public',
+    access: { kind: 'public' },
+    width: 'wide',
+    availability: 'ready',
+    // 不进一级导航；入口是 /benchmarks 目录页。
+  },
+  {
     id: 'benchmark-detail',
     path: '/benchmarks/:slug',
     title: '基准',
