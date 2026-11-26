@@ -13,6 +13,7 @@ import (
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/model"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
@@ -132,11 +133,6 @@ func (h *Handler) applyImport(
 		var modelID int64
 		before := map[string]string{}
 		if target == nil {
-			// 新建：slug 用上游名字生成，撞了就加后缀（创建后不可变，所以一次定死）。
-			slug, err := uniqueModelSlug(ctx, q, cleanCatalogName(item.Name))
-			if err != nil {
-				return err
-			}
 			name := strings.TrimSpace(derefString(body.Name))
 			if name == "" {
 				name = cleanCatalogName(item.Name)
@@ -146,6 +142,13 @@ func (h *Handler) applyImport(
 				vendor = pgtype.Text{String: strings.TrimSpace(*body.Vendor), Valid: true}
 			} else if item.VendorSlug.Valid && item.VendorSlug.String != "" {
 				vendor = pgtype.Text{String: item.VendorSlug.String, Valid: true}
+			}
+			// 新建：slug 由上游名字与厂商生成，撞了就加后缀（创建后不可变，所以一次定死）。
+			// 名字折不出 ASCII（纯中文）时退「厂商 + 名字摘要」，厂商为空就只给摘要；
+			// 不再退成 model / model-2。
+			slug, err := uniqueModelSlug(ctx, q, cleanCatalogName(item.Name), vendor.String)
+			if err != nil {
+				return err
 			}
 			// 新建同样只写勾选的：`description` 没勾就留空，等下一轮导入或人工填。
 			// 「反正刚建的行都是空的、顺手把上游说明灌进去」听着无害，实际是
@@ -393,13 +396,12 @@ func derefString(s *string) string {
 
 // uniqueModelSlug 生成一个没被占用的 slug。
 //
-// slug 是公开 URL 的一部分、**创建后不可变**，所以这里必须一次定死。撞了就加数字后缀，
-// 试满 20 次仍撞则退到 `model-<随机>`：极端情况也不让导入失败。
-func uniqueModelSlug(ctx context.Context, q *store.Queries, name string) (string, error) {
-	base := demo.SlugifyForImport(name)
-	if base == "" {
-		base = "model"
-	}
+// slug 是公开 URL 的一部分、**创建后不可变**，所以这里必须一次定死。基座由
+// model.Slug 给出（名字折 ASCII / 退厂商 + 摘要）；撞了就加数字后缀，
+// 试满 20 次仍撞则报错——那时说明名字与摘要都不再有区分度，硬造一个随机后缀
+// 只会让这条模型在 URL 上永远认不出来。
+func uniqueModelSlug(ctx context.Context, q *store.Queries, name, vendor string) (string, error) {
+	base := model.Slug(name, vendor)
 	for i := 1; i <= 20; i++ {
 		candidate := base
 		if i > 1 {
