@@ -9,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
@@ -82,8 +81,9 @@ func notificationView(row store.ListNotificationsRow) api.Notification {
 		CreatedAt:   row.CreatedAt.Time,
 		Accessible:  row.Accessible,
 	}
-	// 过渡期展示缓存：作品类事件把对象快照再摊到旧字段上，老调用方读到的值与以前逐字一致；
-	// 非作品对象给空串（它们没有作品可指）。下一版随旧列一起删除。
+	// 契约里的 demoSlug / demoTitle 是给老调用方的展示缓存：作品类事件把对象快照摊到这两个
+	// 字段上，老调用方读到的值与旧列时代逐字一致；非作品对象给空串（它们没有作品可指）。
+	// 旧列已由迁移 0042 删除，这里只是**派生**，不是第二份事实源。
 	if row.ObjectType == objectTypeDemo {
 		out.DemoSlug = row.ObjectKey
 		out.DemoTitle = row.ObjectTitle
@@ -260,8 +260,8 @@ func (h *Handler) notifyDemoEvent(ctx context.Context, slug, kind string, payloa
 // notifyObject 给指定账号写一条对象通知。接收者由调用方解析——模型 / 提案这类事件
 // 没有「作品作者」可查，谁该收到是各域自己的事（#595 的驳回通知就这么走）。
 //
-// 作品类事件仍双写旧的 demo_slug / demo_title 两列：那两列只在回滚窗口里还有意义，
-// 读路径已经不看它们（见迁移 0041）。非作品对象给 NULL / 空串。
+// 对象只写 object_type / object_key / object_title 三列（旧的作品列已由迁移 0042 删除）：
+// 作品、模型、提案走同一条写入路径，差别只在传进来的类型与键。
 //
 // 写库失败只记日志：通知是附加动作，不能反向影响裁决。
 func (h *Handler) notifyObject(ctx context.Context, accountID int64, kind string, object notificationObject, payload any) {
@@ -280,10 +280,6 @@ func (h *Handler) notifyObject(ctx context.Context, accountID int64, kind string
 		ObjectKey:   object.Key,
 		ObjectTitle: object.Title,
 		Payload:     data,
-	}
-	if object.Type == objectTypeDemo {
-		params.DemoSlug = pgtype.Text{String: object.Key, Valid: true}
-		params.DemoTitle = object.Title
 	}
 	if err := h.queries.InsertNotification(ctx, params); err != nil {
 		slog.Warn("写通知失败", "object", object.Type+":"+object.Key, "kind", kind, "err", err)

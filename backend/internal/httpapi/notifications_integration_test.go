@@ -80,7 +80,7 @@ func TestIntegrationNotificationsFromReviewAndRating(t *testing.T) {
 	if got.Items[0].Kind != "review.approved" || got.Items[0].DemoSlug != slug {
 		t.Fatalf("通知 = %+v", got.Items[0])
 	}
-	// 对象三列与旧字段同值：作品类事件在写入路径上写的是同一份快照。
+	// 契约里的 demoSlug / demoTitle 由对象列派生（值与对象字段逐字相同），不是第二份事实源。
 	first := got.Items[0]
 	if first.ObjectType != "demo" || first.ObjectKey != slug || first.ObjectTitle != "通知作品" {
 		t.Fatalf("对象三列 = %q / %q / %q，想要 demo / %s / 通知作品",
@@ -89,16 +89,16 @@ func TestIntegrationNotificationsFromReviewAndRating(t *testing.T) {
 	if first.DemoSlug != first.ObjectKey || first.DemoTitle != first.ObjectTitle {
 		t.Fatalf("过渡期旧字段 = %q / %q，想要与对象字段同值", first.DemoSlug, first.DemoTitle)
 	}
-	// 旧列也还在写（回滚窗口内两边同值）；读路径已经从新列来。
-	var dbSlug, dbTitle, dbType, dbKey string
+	// 库里只有对象三列：旧的作品列已由迁移 0042 删除，写进去的就是读回来的那份快照。
+	var dbType, dbKey, dbTitle string
 	if err := pool.QueryRow(context.Background(), `
-SELECT demo_slug, demo_title, object_type, object_key FROM notifications
+SELECT object_type, object_key, object_title FROM notifications
 WHERE account_id = (SELECT id FROM accounts WHERE sub = $1) AND kind = 'review.approved'`, author.Sub).
-		Scan(&dbSlug, &dbTitle, &dbType, &dbKey); err != nil {
+		Scan(&dbType, &dbKey, &dbTitle); err != nil {
 		t.Fatalf("读通知行失败: %v", err)
 	}
-	if dbSlug != slug || dbTitle != "通知作品" || dbType != "demo" || dbKey != slug {
-		t.Fatalf("库里的旧列/新列 = %q / %q / %q / %q", dbSlug, dbTitle, dbType, dbKey)
+	if dbType != "demo" || dbKey != slug || dbTitle != "通知作品" {
+		t.Fatalf("库里的对象三列 = %q / %q / %q，想要 demo / %s / 通知作品", dbType, dbKey, dbTitle, slug)
 	}
 	// 通过但还没发布：作品不可访问，前端要能显示说明（NTF-007）。
 	if got.Items[0].Accessible {
@@ -221,7 +221,8 @@ FROM accounts WHERE sub = $1`, account.Sub); err != nil {
 // 非作品对象的通知：模型 / 提案这类事件没有作品 slug，所以对象改用「类型 + 键 + 标题快照」。
 //
 // 这条钉两件事：写入路径不查作品作者（接收者由调用方给），读路径把三类字段原样带回来；
-// 旧字段只为作品类事件填充——非作品对象读回来是空串，而不是一个不存在的作品 slug。
+// 契约里的 demoSlug / demoTitle 只为作品类事件派生——非作品对象读回来是空串，
+// 而不是一个不存在的作品 slug。
 func TestIntegrationNotificationNonDemoObject(t *testing.T) {
 	h, _, idSvc := newIdempotencyHandler(t)
 	pool := integrationPool(t)

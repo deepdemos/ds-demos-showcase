@@ -104,11 +104,10 @@ func (q *Queries) GetNotificationReadAt(ctx context.Context, arg GetNotification
 
 const insertNotification = `-- name: InsertNotification :exec
 INSERT INTO notifications (
-    account_id, kind, object_type, object_key, object_title, demo_slug, demo_title, payload
+    account_id, kind, object_type, object_key, object_title, payload
 )
 VALUES (
-    $1, $2, $3, $4, $5,
-    $6::text, $7, $8::jsonb
+    $1, $2, $3, $4, $5, $6::jsonb
 )
 `
 
@@ -118,15 +117,14 @@ type InsertNotificationParams struct {
 	ObjectType  string
 	ObjectKey   string
 	ObjectTitle string
-	DemoSlug    pgtype.Text
-	DemoTitle   string
 	Payload     []byte
 }
 
 // payload 是事件自己的数据（reason / score），由调用方序列化。
 //
-// 对象用「类型 + 键 + 快照标题」写，不存外键（NTF-007）。demo_slug / demo_title 是
-// 回滚窗口里的过渡双写：只有作品类事件填它们，非作品对象给 NULL / 空串；读路径不读这两列。
+// 对象用「类型 + 键 + 快照标题」写，不存外键（NTF-007）。作品类事件把 slug 与标题写进
+// object_key / object_title；模型与提案同理，库结构不要求「每条通知都得挂一件作品」
+// （旧列 demo_slug / demo_title 已由迁移 0042 删除）。
 func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotificationParams) error {
 	_, err := q.db.Exec(ctx, insertNotification,
 		arg.AccountID,
@@ -134,8 +132,6 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 		arg.ObjectType,
 		arg.ObjectKey,
 		arg.ObjectTitle,
-		arg.DemoSlug,
-		arg.DemoTitle,
 		arg.Payload,
 	)
 	return err
@@ -188,7 +184,7 @@ type ListNotificationsRow struct {
 //	· 非作品（model / proposal）：**不套**作品可见性——它们的读取入口由各自域决定，
 //	  当前过渡口径是「对象键在就算可访问」；各域的判据落地时在这里加分支。
 //
-// 旧列 demo_slug / demo_title 一律不读（它们只剩回滚窗口里的双写意义，见迁移 0041）。
+// 对象快照只读 object_type / object_key / object_title 三列；旧的作品列已在迁移 0042 删除。
 func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error) {
 	rows, err := q.db.Query(ctx, listNotifications, arg.AccountID, arg.RowOffset, arg.RowLimit)
 	if err != nil {

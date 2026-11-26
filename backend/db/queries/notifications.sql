@@ -13,14 +13,14 @@ WHERE d.slug = @slug;
 -- name: InsertNotification :exec
 -- payload 是事件自己的数据（reason / score），由调用方序列化。
 --
--- 对象用「类型 + 键 + 快照标题」写，不存外键（NTF-007）。demo_slug / demo_title 是
--- 回滚窗口里的过渡双写：只有作品类事件填它们，非作品对象给 NULL / 空串；读路径不读这两列。
+-- 对象用「类型 + 键 + 快照标题」写，不存外键（NTF-007）。作品类事件把 slug 与标题写进
+-- object_key / object_title；模型与提案同理，库结构不要求「每条通知都得挂一件作品」
+-- （旧列 demo_slug / demo_title 已由迁移 0042 删除）。
 INSERT INTO notifications (
-    account_id, kind, object_type, object_key, object_title, demo_slug, demo_title, payload
+    account_id, kind, object_type, object_key, object_title, payload
 )
 VALUES (
-    @account_id, @kind, @object_type, @object_key, @object_title,
-    sqlc.narg('demo_slug')::text, @demo_title, @payload::jsonb
+    @account_id, @kind, @object_type, @object_key, @object_title, @payload::jsonb
 );
 
 -- name: ListNotifications :many
@@ -28,7 +28,7 @@ VALUES (
 --   · 作品（demo）：只有在公开视图 demo_public_demos 里才算可访问（软删 / 下架 / 擦除后 false）。
 --   · 非作品（model / proposal）：**不套**作品可见性——它们的读取入口由各自域决定，
 --     当前过渡口径是「对象键在就算可访问」；各域的判据落地时在这里加分支。
--- 旧列 demo_slug / demo_title 一律不读（它们只剩回滚窗口里的双写意义，见迁移 0041）。
+-- 对象快照只读 object_type / object_key / object_title 三列；旧的作品列已在迁移 0042 删除。
 SELECT n.id,
        n.kind,
        n.object_type,
