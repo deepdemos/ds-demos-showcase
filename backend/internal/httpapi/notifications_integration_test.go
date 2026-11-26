@@ -80,6 +80,26 @@ func TestIntegrationNotificationsFromReviewAndRating(t *testing.T) {
 	if got.Items[0].Kind != "review.approved" || got.Items[0].DemoSlug != slug {
 		t.Fatalf("通知 = %+v", got.Items[0])
 	}
+	// 对象三列与旧字段同值：作品类事件在写入路径上写的是同一份快照。
+	first := got.Items[0]
+	if first.ObjectType != "demo" || first.ObjectKey != slug || first.ObjectTitle != "通知作品" {
+		t.Fatalf("对象三列 = %q / %q / %q，想要 demo / %s / 通知作品",
+			first.ObjectType, first.ObjectKey, first.ObjectTitle, slug)
+	}
+	if first.DemoSlug != first.ObjectKey || first.DemoTitle != first.ObjectTitle {
+		t.Fatalf("过渡期旧字段 = %q / %q，想要与对象字段同值", first.DemoSlug, first.DemoTitle)
+	}
+	// 旧列也还在写（回滚窗口内两边同值）；读路径已经从新列来。
+	var dbSlug, dbTitle, dbType, dbKey string
+	if err := pool.QueryRow(context.Background(), `
+SELECT demo_slug, demo_title, object_type, object_key FROM notifications
+WHERE account_id = (SELECT id FROM accounts WHERE sub = $1) AND kind = 'review.approved'`, author.Sub).
+		Scan(&dbSlug, &dbTitle, &dbType, &dbKey); err != nil {
+		t.Fatalf("读通知行失败: %v", err)
+	}
+	if dbSlug != slug || dbTitle != "通知作品" || dbType != "demo" || dbKey != slug {
+		t.Fatalf("库里的旧列/新列 = %q / %q / %q / %q", dbSlug, dbTitle, dbType, dbKey)
+	}
 	// 通过但还没发布：作品不可访问，前端要能显示说明（NTF-007）。
 	if got.Items[0].Accessible {
 		t.Fatal("未发布作品的通知不该标记为 accessible")
@@ -186,8 +206,8 @@ func TestIntegrationNotificationRetention(t *testing.T) {
 	t.Cleanup(func() { cleanupAuthor(t, pool, account.Sub) })
 
 	if _, err := pool.Exec(context.Background(), `
-INSERT INTO notifications (account_id, kind, demo_slug, demo_title, created_at)
-SELECT id, 'rating.received', 'old-demo', '旧通知', now() - interval '100 days'
+INSERT INTO notifications (account_id, kind, object_type, object_key, object_title, created_at)
+SELECT id, 'rating.received', 'demo', 'old-demo', '旧通知', now() - interval '100 days'
 FROM accounts WHERE sub = $1`, account.Sub); err != nil {
 		t.Fatalf("插入过期通知失败: %v", err)
 	}
@@ -195,6 +215,111 @@ FROM accounts WHERE sub = $1`, account.Sub); err != nil {
 	got := listNotifications(t, h, sid)
 	if got.Total != 0 {
 		t.Fatalf("100 天前的通知应被清理，实际 total=%d", got.Total)
+	}
+}
+
+// 非作品对象的通知：模型 / 提案这类事件没有作品 slug，所以对象改用「类型 + 键 + 标题快照」。
+//
+// 这条钉两件事：写入路径不查作品作者（接收者由调用方给），读路径把三类字段原样带回来；
+// 旧字段只为作品类事件填充——非作品对象读回来是空串，而不是一个不存在的作品 slug。
+func TestIntegrationNotificationNonDemoObject(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+
+	account, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-notif-model@example.com",
+		Password:    "correct-horse-battery",
+		Username:    "it-notif-model",
+		DisplayName: "提案作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, account.Sub) })
+
+	// 走真实的写入路径（#595 的驳回通知会走同一条）。
+	h.notifyObject(context.Background(), account.ID, "model.proposal.rejected",
+		notificationObject{Type: "proposal", Key: "42", Title: "示例收录提案"},
+		map[string]string{"reason": "和已有条目重复"})
+
+	got := listNotifications(t, h, sid)
+	if got.Total != 1 || got.UnreadCount != 1 {
+		t.Fatalf("非作品通知 = total %d / unread %d，想要 1/1", got.Total, got.UnreadCount)
+	}
+	item := got.Items[0]
+	if item.Kind != "model.proposal.rejected" || item.ObjectType != "proposal" ||
+		item.ObjectKey != "42" || item.ObjectTitle != "示例收录提案" {
+		t.Fatalf("非作品通知 = %+v", item)
+	}
+	if item.DemoSlug != "" || item.DemoTitle != "" {
+		t.Fatalf("非作品对象不该填作品字段，实际 %q / %q", item.DemoSlug, item.DemoTitle)
+	}
+	// 非作品对象不套作品公开可见性：对象键在就算可访问（过渡口径）。
+	if !item.Accessible {
+		t.Fatal("非作品对象不该被判成不可访问")
+	}
+	if item.Payload["reason"] != "和已有条目重复" {
+		t.Fatalf("payload = %+v", item.Payload)
+	}
+
+	// 已读口径不受对象类型影响。
+	rec := httptest.NewRecorder()
+	h.MarkNotificationRead(rec, notifReq(http.MethodPost, "/api/v1/notifications/x/read", sid), item.Id)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("标记已读 = %d，想要 204", rec.Code)
+	}
+	if unread := unreadCount(t, h, sid); unread != 0 {
+		t.Fatalf("已读后 unread = %d，想要 0", unread)
+	}
+}
+
+// 对象被删掉之后通知仍然可读（NTF-007）：标题快照还在，accessible 变 false。
+//
+// 这条同时也是「读路径不再依赖旧列」的证据：被删的正是那件作品，读回来靠的是对象快照。
+func TestIntegrationNotificationSurvivesDeletedDemo(t *testing.T) {
+	h, _, idSvc := newIdempotencyHandler(t)
+	pool := integrationPool(t)
+
+	author, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-notif-tomb@example.com",
+		Password:    "correct-horse-battery",
+		Username:    "it-notif-tomb",
+		DisplayName: "被删作品作者",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+	rater, raterSID := registerVerified(t, pool, idSvc, identity.RegisterInput{
+		Email:       "it-notif-tomb-rater@example.com",
+		Password:    "correct-horse-battery",
+		Username:    "it-notif-tomb-rater",
+		DisplayName: "打分人",
+	})
+	t.Cleanup(func() { cleanupAuthor(t, pool, rater.Sub) })
+
+	slug := submitHTML(t, h, sid, "被删作品", "<h1>gone</h1>")
+	publishNow(t, pool, slug)
+	if rec := putRating(t, h, slug, raterSID, 5); rec.Code != http.StatusOK {
+		t.Fatalf("打分 = %d，想要 200", rec.Code)
+	}
+	if got := listNotifications(t, h, sid); got.Total != 1 || !got.Items[0].Accessible {
+		t.Fatalf("发布态的通知 = %+v，想要 1 条且可访问", got.Items)
+	}
+
+	// 作者自己删掉作品：通知不跟着消失，但对象不再可访问。
+	body, err := json.Marshal(map[string]string{"reason": "写错了"})
+	if err != nil {
+		t.Fatalf("序列化删除理由失败: %v", err)
+	}
+	if rec := lifecycleCall(t, h, http.MethodDelete, slug, sid, body); rec.Code != http.StatusOK {
+		t.Fatalf("删除作品 = %d，想要 200（%s）", rec.Code, rec.Body.String())
+	}
+
+	got := listNotifications(t, h, sid)
+	if got.Total != 1 {
+		t.Fatalf("作品删除后通知 = %d 条，想要 1 条（NTF-007）", got.Total)
+	}
+	item := got.Items[0]
+	if item.Accessible {
+		t.Fatal("作品已删除，通知不该还说可访问")
+	}
+	if item.ObjectTitle != "被删作品" || item.ObjectKey != slug {
+		t.Fatalf("对象快照 = %q / %q，想要保留删除前的标题与 slug", item.ObjectTitle, item.ObjectKey)
 	}
 }
 

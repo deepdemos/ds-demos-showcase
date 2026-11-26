@@ -12,23 +12,39 @@ WHERE d.slug = @slug;
 
 -- name: InsertNotification :exec
 -- payload 是事件自己的数据（reason / score），由调用方序列化。
-INSERT INTO notifications (account_id, kind, demo_slug, demo_title, payload)
-VALUES (@account_id, @kind, @demo_slug, @demo_title, @payload::jsonb);
+--
+-- 对象用「类型 + 键 + 快照标题」写，不存外键（NTF-007）。demo_slug / demo_title 是
+-- 回滚窗口里的过渡双写：只有作品类事件填它们，非作品对象给 NULL / 空串；读路径不读这两列。
+INSERT INTO notifications (
+    account_id, kind, object_type, object_key, object_title, demo_slug, demo_title, payload
+)
+VALUES (
+    @account_id, @kind, @object_type, @object_key, @object_title,
+    sqlc.narg('demo_slug')::text, @demo_title, @payload::jsonb
+);
 
 -- name: ListNotifications :many
--- accessible：作品当前是否还在公开视图里（软删 / 下架 / 擦除后 false）。
+-- accessible：对象当前是否可访问。判据**按对象类型分支**：
+--   · 作品（demo）：只有在公开视图 demo_public_demos 里才算可访问（软删 / 下架 / 擦除后 false）。
+--   · 非作品（model / proposal）：**不套**作品可见性——它们的读取入口由各自域决定，
+--     当前过渡口径是「对象键在就算可访问」；各域的判据落地时在这里加分支。
+-- 旧列 demo_slug / demo_title 一律不读（它们只剩回滚窗口里的双写意义，见迁移 0041）。
 SELECT n.id,
        n.kind,
-       n.demo_slug,
-       n.demo_title,
+       n.object_type,
+       n.object_key,
+       n.object_title,
        n.payload,
        n.read_at,
        n.created_at,
-       EXISTS (
-           SELECT 1 FROM demos d
-           JOIN demo_public_demos p ON p.demo_id = d.id
-           WHERE d.slug = n.demo_slug
-       ) AS accessible
+       (CASE
+           WHEN n.object_type = 'demo' THEN EXISTS (
+               SELECT 1 FROM demos d
+               JOIN demo_public_demos p ON p.demo_id = d.id
+               WHERE d.slug = n.object_key
+           )
+           ELSE n.object_key <> ''
+       END)::boolean AS accessible
 FROM notifications n
 WHERE n.account_id = @account_id
 ORDER BY n.created_at DESC, n.id DESC

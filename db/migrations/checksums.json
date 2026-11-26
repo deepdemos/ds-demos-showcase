@@ -48,5 +48,6 @@
   "db/migrations/0037_appeal_notifications.sql": "b1bbaef028f07249045195dc742ea282cfb3fd335d4f231dd734829a1ca17395",
   "db/migrations/0038_new_benchmark_proposal_kind.sql": "c27df2b4aca0f046d092cbd982f4dfc1cbe3eecca42642b1c1579dfd44a1cbc8",
   "db/migrations/0039_proposal_rate_limit_setting.sql": "832e93c5f59373b29e00c032540c9db5d616130606306344dce3be4877fa3d53",
-  "db/migrations/0040_benchmark_import.sql": "24f0d09443d619e58737d3c1c35ba16af1a7c3a5c56d09de11f12edb7c141b5c"
+  "db/migrations/0040_benchmark_import.sql": "24f0d09443d619e58737d3c1c35ba16af1a7c3a5c56d09de11f12edb7c141b5c",
+  "db/migrations/0041_notification_objects.sql": "ca83309b6f461d160667152d22f26b16bc788260419a544012cdca02f3b5676f"
 }

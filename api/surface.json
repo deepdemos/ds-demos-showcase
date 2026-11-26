@@ -1933,6 +1933,18 @@
         "type": "string",
         "optional": false
       },
+      "objectKey": {
+        "type": "string",
+        "optional": false
+      },
+      "objectTitle": {
+        "type": "string",
+        "optional": false
+      },
+      "objectType": {
+        "type": "string",
+        "optional": false
+      },
       "payload": {
         "type": "map[string]interface{}",
         "optional": false

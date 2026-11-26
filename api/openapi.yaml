@@ -2534,8 +2534,13 @@ paths:
       description: |
         只返回自己的通知，按时间新→旧。带 total 与 unreadCount，导航角标可以不另拉列表。
 
-        条目里的 accessible 表示作品当前是否公开可见：作品软删 / 下架 / 擦除后仍保留
-        通知（NTF-007），但前端要显示「该作品已不可访问」并不给跳转。
+        条目按「对象类型 + 对象键 + 对象标题快照」描述被通知的对象（`objectType` /
+        `objectKey` / `objectTitle`）——这正是通知对象从「作品」泛化到模型 / 提案之后的口径，
+        加一类对象不改表结构。`demoSlug` / `demoTitle` 是**过渡期的展示缓存**，
+        只为作品类事件填充（非作品对象返回空串），读的人应优先用对象字段。
+
+        条目里的 accessible 表示**对象**当前是否可访问（判据按对象类型分支，见 Notification）：
+        作品软删 / 下架 / 擦除后通知仍保留（NTF-007），但前端要显示「该对象已不可访问」并不给跳转。
       security:
         - sessionCookie: []
       parameters:
@@ -6461,7 +6466,8 @@ components:
     Notification:
       type: object
       additionalProperties: false
-      required: [id, kind, demoSlug, demoTitle, payload, readAt, createdAt, accessible]
+      required:
+        [id, kind, objectType, objectKey, objectTitle, demoSlug, demoTitle, payload, readAt, createdAt, accessible]
       properties:
         id:
           type: integer
@@ -6469,12 +6475,32 @@ components:
         kind:
           type: string
           description: 事件类型键，由 notification_kinds 注册表定义（NTF-003）
+        objectType:
+          type: string
+          description: |
+            通知对象的类型键。取值由事件类型注册表 `notification_kinds.object_type` 决定：
+            作品是 `demo`，模型是 `model`，提案是 `proposal`。加一类对象 = 往注册表插一行，
+            不改表结构。
+        objectKey:
+          type: string
+          maxLength: 128
+          description: |
+            对象键：作品与模型是 slug，提案是提案 id 的十进制串。对象删除后仍然留着——
+            通知存的是快照，不是外键。
+        objectTitle:
+          type: string
+          description: 事件发生时的对象标题快照；对象删除后仍能显示
         demoSlug:
           type: string
           maxLength: 128
+          description: |
+            **过渡期展示缓存**：作品类事件（`objectType=demo`）返回该作品的 slug，其它对象返回空串。
+            读的人应优先用 `objectType` / `objectKey`；下一版删除。
         demoTitle:
           type: string
-          description: 事件发生时的标题快照；作品删除后仍能显示
+          description: |
+            **过渡期展示缓存**：作品类事件返回当时的标题快照，其它对象返回空串（与 `objectTitle` 同源）。
+            读的人应优先用 `objectTitle`；下一版删除。
         payload:
           type: object
           additionalProperties: true
@@ -6488,7 +6514,10 @@ components:
           format: date-time
         accessible:
           type: boolean
-          description: false = 作品当前不可访问；前端显示说明且不给跳转（NTF-007）
+          description: |
+            false = 对象当前不可访问；前端显示说明且不给跳转（NTF-007）。
+            判据**按对象类型分支**：作品走公开可见性（软删 / 下架 / 擦除后 false）；
+            非作品对象不套作品可见性，当前只在对象键为空时判 false（过渡口径，见通知域设计）。
 
     NotificationList:
       type: object
