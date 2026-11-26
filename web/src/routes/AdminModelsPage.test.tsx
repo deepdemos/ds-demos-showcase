@@ -6,8 +6,8 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import {
   applyModelImportBatch,
   getModelSyncStatus,
-  listModelCatalog,
   previewModelImport,
+  searchUpstreamModels,
   syncModelCatalog,
 } from '@/api';
 import { AdminModelsPage } from './AdminModelsPage';
@@ -32,31 +32,23 @@ vi.mock('@/api', async (importOriginal) => {
     ...actual,
     getModelSyncStatus: vi.fn(),
     syncModelCatalog: vi.fn(),
-    listModelCatalog: vi.fn(),
+    searchUpstreamModels: vi.fn(),
     previewModelImport: vi.fn(),
     applyModelImportBatch: vi.fn(),
   };
 });
 
+// 选择器的行形状（公开上游搜索的响应）。imported 那个布尔被 slug 取代了：
+// 已收录时给商店内模型 slug，未收录是 null。
 const item = {
+  source: 'models.dev',
   providerId: 'deepseek',
   providerName: 'DeepSeek',
   externalId: 'deepseek-flash',
   name: 'DeepSeek V4.1 Flash',
   canonicalId: 'deepseek/deepseek-v4.1-flash',
-  vendorSlug: 'deepseek',
-  family: '',
-  modelType: 'chat',
   upstreamStatus: 'stable',
-  imported: false,
-  contextWindow: 1048576,
-  maxOutput: null,
-  costIn: null,
-  costOut: null,
-  releaseDate: null,
-  modalityIn: null,
-  modalityOut: null,
-  description: null,
+  slug: null,
 };
 
 const statusOk = {
@@ -117,9 +109,9 @@ beforeEach(() => {
   auth.me = { id: 1, username: 'admin', displayName: '管理员', role: 'admin' };
   auth.isLoading = false;
   vi.mocked(getModelSyncStatus).mockResolvedValue({ status: 200, data: statusOk } as never);
-  vi.mocked(listModelCatalog).mockResolvedValue({
+  vi.mocked(searchUpstreamModels).mockResolvedValue({
     status: 200,
-    data: { items: [item], total: 1, limit: 50, offset: 0 },
+    data: { items: [item] },
   } as never);
   vi.mocked(previewModelImport).mockResolvedValue({
     status: 200,
@@ -227,12 +219,12 @@ test('非 admin 看到「没有导入权限」', async () => {
   auth.me = { id: 2, username: 'u', displayName: '普通用户', role: 'user' };
   renderPage();
   await waitFor(() => expect(screen.getByText('没有导入权限')).toBeTruthy());
-  expect(vi.mocked(listModelCatalog)).not.toHaveBeenCalled();
+  expect(vi.mocked(searchUpstreamModels)).not.toHaveBeenCalled();
 });
 
 // 目录读失败必须有出路：错误态带重试，而不是留一块空白。
 test('目录读取失败时给出重试', async () => {
-  vi.mocked(listModelCatalog).mockResolvedValue({ status: 503 } as never);
+  vi.mocked(searchUpstreamModels).mockResolvedValue({ status: 503 } as never);
   renderPage();
   await waitFor(() => expect(screen.getByText('目录读取失败')).toBeTruthy());
   expect(screen.getByText('重试')).toBeTruthy();

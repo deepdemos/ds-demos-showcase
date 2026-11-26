@@ -52,6 +52,9 @@ export function ModelBatch({ queue, onRemove, onClear }: ModelBatchProps) {
       setResults(data.results);
       // 成功的那些已经变成「已导入」，目录与差异都要重取——否则左边徽标还是旧值。
       void queryClient.invalidateQueries({ queryKey: ['admin', 'models'] });
+      // 选择器里的「已收录」标记同样变了：不重取的话它还会挂在「未收录」上，
+      // 管理员会以为这次导入没生效。
+      void queryClient.invalidateQueries({ queryKey: ['models', 'upstream'] });
     },
   });
 
