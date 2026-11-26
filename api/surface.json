@@ -2468,6 +2468,46 @@
         "optional": false
       }
     },
+    "UpstreamModel": {
+      "canonicalId": {
+        "type": "string",
+        "optional": false
+      },
+      "externalId": {
+        "type": "string",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "providerId": {
+        "type": "string",
+        "optional": false
+      },
+      "providerName": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": true
+      },
+      "source": {
+        "type": "string",
+        "optional": false
+      },
+      "upstreamStatus": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "UpstreamModelList": {
+      "items": {
+        "type": "[]UpstreamModel",
+        "optional": false
+      }
+    },
     "VerifyEmailRequest": {
       "code": {
         "type": "string",
@@ -3217,6 +3257,11 @@
       "method": "ListModels",
       "pathParams": 0,
       "params": "ListModelsParams"
+    },
+    "GET /api/v1/models/upstream": {
+      "method": "SearchUpstreamModels",
+      "pathParams": 0,
+      "params": "SearchUpstreamModelsParams"
     },
     "GET /api/v1/models/{slug}": {
       "method": "GetModel",

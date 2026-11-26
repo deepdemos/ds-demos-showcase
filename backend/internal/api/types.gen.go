@@ -2333,6 +2333,43 @@ type UnreadCount struct {
 	Count int `json:"count"`
 }
 
+// UpstreamModel defines model for UpstreamModel.
+type UpstreamModel struct {
+	// CanonicalId 规范标识（如 `deepseek/deepseek-v4-flash`）；上游没有时为空串
+	CanonicalId string `json:"canonicalId"`
+
+	// ExternalId 上游条目 id（原文，含 `:free` 这类渠道标记）
+	ExternalId string `json:"externalId"`
+
+	// Name 上游展示名
+	Name string `json:"name"`
+
+	// ProviderId 上游的 provider 标识
+	ProviderId string `json:"providerId"`
+
+	// ProviderName 上游发布方（给人看的展示名）
+	ProviderName string `json:"providerName"`
+
+	// Slug **已收录**时是对应的站内模型 slug；未收录为 `null`。
+	// 判定口径与导入页的「已导入」同源：`model_offerings` 里有
+	// `(authority=source, provider_id, external_id)` 这条认领行，且它指向的
+	// `models` 行有 slug。客户端不重算这个判定。
+	Slug *string `json:"slug"`
+
+	// Source 上游目录标识（当前只有 `models.dev`），与 providerId / externalId 一起构成上游三元组
+	Source string `json:"source"`
+
+	// UpstreamStatus 上游自己的状态（`deprecated` / `beta` / `alpha`）。**不改我们的 `Model.status`**：
+	// 上游弃用说的是「厂商不再维护」，我们弃用说的是「已合并到别的模型」。
+	UpstreamStatus string `json:"upstreamStatus"`
+}
+
+// UpstreamModelList defines model for UpstreamModelList.
+type UpstreamModelList struct {
+	// Items 命中的条目，最多 20 条；不返回总数（不分页）
+	Items []UpstreamModel `json:"items"`
+}
+
 // VerifyEmailRequest defines model for VerifyEmailRequest.
 type VerifyEmailRequest struct {
 	Code  string              `json:"code"`
@@ -2664,6 +2701,13 @@ type ListModelsParams struct {
 
 // ListModelsParamsStatus defines parameters for ListModels.
 type ListModelsParamsStatus string
+
+// SearchUpstreamModelsParams defines parameters for SearchUpstreamModels.
+type SearchUpstreamModelsParams struct {
+	// Q 按名称 / 上游 id / canonical / 厂商名子串匹配；不传或全空格表示不过滤。
+	// 超过 100 字回 400，而不是静默截断。
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+}
 
 // ListNotificationsParams defines parameters for ListNotifications.
 type ListNotificationsParams struct {

@@ -666,6 +666,9 @@ SELECT i.id,
        i.modalities_out,
        i.description,
        i.fetched_at,
+       -- 「已收录」判定只有这一个事实：model_offerings 里有没有这条认领行。
+       -- 公开上游搜索（db/queries/model_search.sql 的 SearchUpstreamModels）复用同一判定，
+       -- 只是多 join 一步取 models.slug——改这里的键/口径要同时改那条。
        CASE WHEN EXISTS (
            SELECT 1 FROM model_offerings r
            WHERE r.authority = i.source
