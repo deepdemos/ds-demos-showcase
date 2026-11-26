@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/platform/slug"
 )
 
 // 领域错误。传输层据此映射状态码，错误文字只给人看。
@@ -231,11 +233,6 @@ func (in SubmitInput) validate() error {
 	return nil
 }
 
-// slugify 把标题压成 URL 片段。
-//
-// 中文标题压不出东西是正常的——返回空串，由调用方退回随机 slug。
-// 不引入拼音库：多一个依赖换来的只是「好看一点的 URL」，而 slug 一旦发出就不该再变，
-// 生成规则越简单越不容易在以后被改。
 // SlugifyForImport 把一个名字（可能是中文、可能带渠道标记）折成 slug 的基座。
 //
 // 中文折不出可读的 slug（一律归成分隔符），调用方拿到空串时应退回自己的兜底形态，
@@ -245,26 +242,20 @@ func SlugifyForImport(name string) string {
 	return slugify(name)
 }
 
+// slugify 把标题压成 URL 片段，并截到 slugBaseLimit。
+//
+// 折叠规则本身在 platform/slug：「怎么折」全仓只有一份，模型 slug 复用同一处；
+// 两个域不同的只是**长度上限与兜底形态**（作品撞名补随机后缀、模型折不出时退厂商+摘要），
+// 所以那些留在各自的域里。
+//
+// 中文标题压不出东西是正常的——返回空串，由调用方退回随机 slug。
+// 不引入拼音库：多一个依赖换来的只是「好看一点的 URL」，而 slug 一旦发出就不该再变，
+// 生成规则越简单越不容易在以后被改。
 func slugify(title string) string {
-	var b strings.Builder
-	lastDash := false
-	for _, r := range strings.ToLower(strings.TrimSpace(title)) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			lastDash = false
-		default:
-			// 其余一律当分隔符：空格、标点、中文都归到这里。
-			// 丢掉它们会把 "a1!b2" 变成 "a1b2"（两个词粘一起），加个连字符更诚实。
-			if b.Len() > 0 && !lastDash {
-				b.WriteByte('-')
-				lastDash = true
-			}
-		}
-	}
-	out := strings.Trim(b.String(), "-")
+	out := slug.Fold(title)
 	if len(out) > slugBaseLimit {
-		out = strings.Trim(out[:slugBaseLimit], "-")
+		// 截断点可能正好落在分隔符上，末尾的连字符要去掉。
+		out = strings.TrimRight(out[:slugBaseLimit], "-")
 	}
 	return out
 }
