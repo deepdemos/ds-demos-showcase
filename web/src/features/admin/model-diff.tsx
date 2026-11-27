@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { Button, Checkbox, EmptyState, ErrorState, Input, Skeleton } from '@/components/ui';
-import { previewModelImport, type ModelCatalogItem, type ModelImportField } from '@/api';
+import { previewModelImport, type ModelImportField, type UpstreamModel } from '@/api';
 
 /**
  * 右侧：差异面板（preview → 勾字段 → 应用）。
@@ -48,8 +48,13 @@ export interface ModelDiffProps {
    * 组件里读到的永远是 undefined——而且不报错，表现为「点了没反应」。
    */
   target: { providerId: string; externalId: string } | null;
-  /** 列表里对应的行（可能还没加载出来）。只用来补 canonicalId 与展示名。 */
-  item: ModelCatalogItem | null;
+  /**
+   * 选择器里对应的行（可能还没加载出来）。只用来补 canonicalId、source 与展示名。
+   *
+   * 收窄成 `UpstreamModel` 的这四个字段：差异面板不该关心 vendorSlug / 价格那些
+   * 它不显示的列，也就不该被那些列的形状绑住。
+   */
+  item: Pick<UpstreamModel, 'name' | 'providerName' | 'canonicalId' | 'source'> | null;
   onEnqueue: (payload: SelectedPayload) => void;
   enqueued: boolean;
 }
@@ -73,7 +78,8 @@ export function ModelDiff({ target, item, onEnqueue, enqueued }: ModelDiffProps)
         // canonicalId 只有列表行带得出来；深链进来时没有它，服务端按
         // (source, provider_id, external_id) 一样能定位。
         ...(item?.canonicalId ? { canonicalId: item.canonicalId } : {}),
-        source: 'models.dev',
+        // source 由服务端给（当前只有 models.dev）；深链没有行时退回默认值。
+        source: item?.source ?? 'models.dev',
       });
       if (res.status !== 200) {
         throw new Error(

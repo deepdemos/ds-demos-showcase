@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
+import type { UpstreamModel } from '@/api';
 import { EmptyState } from '@/components/ui';
 import { Page } from '@/components/layout/page';
-import type { ModelCatalogItem } from '@/api';
+import { UpstreamModelSelector, upstreamRef } from '@/components/upstream-model-selector';
 import { ModelBatch } from '@/features/admin/model-batch';
 import { ModelDiff, type SelectedPayload } from '@/features/admin/model-diff';
-import { ModelSearch, refOf } from '@/features/admin/model-search';
 import { ModelSyncBar } from '@/features/admin/model-sync-bar';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -15,14 +15,14 @@ import { useAuth } from '@/features/auth/AuthContext';
  *
  * # 一页里做完四件事
  *
- * 同步（镜像有多旧 / 立刻拉一次）→ 搜索（8931 条里找一条）→ 差异（哪些字段该被动）
- * → 批量落库（逐条报结果）。四块缺一块，这条路就走不完：只给同步是运维视角，
- * 只给导入是开发者视角。
+ * 同步（镜像有多旧 / 立刻拉一次）→ 选择器（8931 条里找一条，标出「已收录 → 站内 slug」）
+ * → 差异（哪些字段该被动）→ 批量落库（逐条报结果）。四块缺一块，这条路就走不完：
+ * 只给同步是运维视角，只给导入是开发者视角。
  *
  * # 为什么状态放在 URL 里
  *
- * `?q=` / `?offset=` / `?ref=provider/externalId` 都在 URL：刷新能复原、
- * 链接能发给别人复现、「返回」不会把搜索词弄丢。这也是作品库那页的口径。
+ * `?q=` / `?ref=provider/externalId` 都在 URL：刷新能复原、链接能发给别人复现、
+ * 「返回」不会把搜索词弄丢。这也是作品库那页的口径。选择器自己只保管「正在输入的那串」。
  *
  * # 为什么权限不在这里判
  *
@@ -54,11 +54,9 @@ export function AdminModelsPage() {
   const [params, setParams] = useSearchParams();
   const [queue, setQueue] = useState<SelectedPayload[]>([]);
   // 选中的条目由 URL 决定，不用本地 state：刷新与分享链接都要能复原。
-  const [picked, setPicked] = useState<ModelCatalogItem | null>(null);
+  const [picked, setPicked] = useState<UpstreamModel | null>(null);
 
   const q = params.get('q') ?? '';
-  const includeDeprecated = params.get('deprecated') === '1';
-  const offset = Number(params.get('offset') ?? '0') || 0;
   const refParam = params.get('ref');
   const ref = parseRef(refParam);
 
@@ -75,22 +73,17 @@ export function AdminModelsPage() {
   );
 
   const onSearch = useCallback(
-    (next: { q: string; includeDeprecated: boolean }) => {
-      // 换搜索词必须回第一页：停在第 3 页会直接空白。
-      patch({
-        q: next.q === '' ? null : next.q,
-        deprecated: next.includeDeprecated ? '1' : null,
-        offset: null,
-      });
+    (next: { q: string }) => {
+      patch({ q: next.q === '' ? null : next.q });
     },
     [patch],
   );
 
   const onSelect = useCallback(
-    (item: ModelCatalogItem) => {
-      // 存一份列表行：它带来 canonicalId 与展示名，省一次回查。
+    (item: UpstreamModel) => {
+      // 存一份行：它带来 canonicalId、source 与展示名，省一次回查。
       setPicked(item);
-      patch({ ref: refOf(item) });
+      patch({ ref: upstreamRef(item) });
     },
     [patch],
   );
@@ -125,19 +118,18 @@ export function AdminModelsPage() {
       <ModelSyncBar />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <ModelSearch
+        <UpstreamModelSelector
           q={q}
-          includeDeprecated={includeDeprecated}
-          offset={offset}
           selectedRef={refParam}
           onSearch={onSearch}
-          onOffset={(next) => patch({ offset: next === 0 ? null : String(next) })}
           onSelect={onSelect}
         />
         <ModelDiff
           target={ref}
           item={
-            picked && ref && refOf(picked) === `${ref.providerId}/${ref.externalId}` ? picked : null
+            picked && ref && upstreamRef(picked) === `${ref.providerId}/${ref.externalId}`
+              ? picked
+              : null
           }
           enqueued={
             ref !== null &&

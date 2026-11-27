@@ -209,6 +209,9 @@ type ServerInterface interface {
 	// 模型目录（全部状态，可筛）
 	// (GET /api/v1/models)
 	ListModels(w http.ResponseWriter, r *http.Request, params ListModelsParams)
+	// 上游条目搜索（公开只读）
+	// (GET /api/v1/models/upstream)
+	SearchUpstreamModels(w http.ResponseWriter, r *http.Request, params SearchUpstreamModelsParams)
 	// 模型页
 	// (GET /api/v1/models/{slug})
 	GetModel(w http.ResponseWriter, r *http.Request, slug string)
@@ -638,6 +641,12 @@ func (_ Unimplemented) UpdateMyHistorySettings(w http.ResponseWriter, r *http.Re
 // 模型目录（全部状态，可筛）
 // (GET /api/v1/models)
 func (_ Unimplemented) ListModels(w http.ResponseWriter, r *http.Request, params ListModelsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 上游条目搜索（公开只读）
+// (GET /api/v1/models/upstream)
+func (_ Unimplemented) SearchUpstreamModels(w http.ResponseWriter, r *http.Request, params SearchUpstreamModelsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2596,6 +2605,33 @@ func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// SearchUpstreamModels operation middleware
+func (siw *ServerInterfaceWrapper) SearchUpstreamModels(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchUpstreamModelsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchUpstreamModels(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetModel operation middleware
 func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Request) {
 
@@ -3258,6 +3294,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/models", wrapper.ListModels)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/models/upstream", wrapper.SearchUpstreamModels)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/models/{slug}", wrapper.GetModel)
