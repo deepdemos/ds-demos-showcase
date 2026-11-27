@@ -129,7 +129,7 @@ export function ModelsPage() {
                     {model.name}
                   </Link>
                   <p className="m-0 mt-0.5 text-xs text-gray-500">
-                    {model.vendor || '厂商未知'} · {model.slug}
+                    {model.vendor || '厂商未标注'} · {model.slug}
                   </p>
                 </div>
                 <Link

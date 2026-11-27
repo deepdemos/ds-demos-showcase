@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui';
 import { Page } from '@/components/layout/page';
 import { UpstreamModelSelector, upstreamRef } from '@/components/upstream-model-selector';
 import { ModelBatch } from '@/features/admin/model-batch';
+import { ModelCreate } from '@/features/admin/model-create';
 import { ModelDiff, type SelectedPayload } from '@/features/admin/model-diff';
 import { ModelSyncBar } from '@/features/admin/model-sync-bar';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -146,6 +147,10 @@ export function AdminModelsPage() {
         onRemove={(index) => setQueue((prev) => prev.filter((_, i) => i !== index))}
         onClear={() => setQueue([])}
       />
+
+      {/* 上游目录里没有的私有模型只能手建。放在这一页是因为它是管理端唯一的模型入口；
+          这两块（导入 / 手动新建）在信息架构上是「模型维护」的两半，下一版会拆页。 */}
+      <ModelCreate />
     </Page>
   );
 }

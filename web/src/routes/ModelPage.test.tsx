@@ -107,6 +107,18 @@ describe('模型页', () => {
     expect(screen.getByRole('link', { name: '钢琴卷帘' })).toHaveAttribute('href', '/demos/demo-a');
   });
 
+  it('厂商为空时抬头写「厂商未标注」，不是「厂商未知」', async () => {
+    getModel.mockResolvedValue({
+      status: 200,
+      data: profile({ model: { ...profile().model, vendor: '' } }),
+    });
+    renderPage();
+
+    // 空厂商是「没人标注」，不是「不知道是哪家」——两者对读者是两件事。
+    await waitFor(() => expect(screen.getByText(/厂商未标注/)).toBeInTheDocument());
+    expect(screen.queryByText(/厂商未知/)).toBeNull();
+  });
+
   it('页面顶部给出回作品库的出口', async () => {
     getModel.mockResolvedValue({ status: 200, data: profile() });
     renderPage();
