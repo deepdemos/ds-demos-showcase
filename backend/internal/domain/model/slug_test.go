@@ -32,8 +32,10 @@ func TestSlugChineseNameFallsBackToVendorAndDigest(t *testing.T) {
 	if other := Slug("另一款国产模型", "deepseek"); other == got {
 		t.Fatalf("不同名字不该撞同一个 slug，两个都是 %q", got)
 	}
-	if strings.HasPrefix(got, "model") {
-		t.Fatalf("有厂商时不该退成 model 系列，实际 %q", got)
+	// 上面已断言以 deepseek- 开头，再断言「不以 model 开头」是恒真式。
+	// 真正要钉的是「没有厂商时」也不退化：
+	if bare := Slug("深度求索旗舰版", ""); strings.HasPrefix(bare, "model") {
+		t.Fatalf("无厂商时也不该退成 model 系列，实际 %q", bare)
 	}
 }
 

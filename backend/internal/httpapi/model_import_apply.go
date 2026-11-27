@@ -146,7 +146,7 @@ func (h *Handler) applyImport(
 			// 新建：slug 由上游名字与厂商生成，撞了就加后缀（创建后不可变，所以一次定死）。
 			// 名字折不出 ASCII（纯中文）时退「厂商 + 名字摘要」，厂商为空就只给摘要；
 			// 不再退成 model / model-2。
-			slug, err := uniqueModelSlug(ctx, q, cleanCatalogName(item.Name), vendor.String)
+			slug, err := uniqueModelSlug(ctx, q, name, vendor.String)
 			if err != nil {
 				return err
 			}
