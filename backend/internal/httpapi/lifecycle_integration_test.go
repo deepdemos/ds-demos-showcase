@@ -30,7 +30,7 @@ func newLifecycleHandler(t *testing.T) (*Handler, *pgxpool.Pool, int64, string) 
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
-	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
+	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, nil)
 	h := New(pool, q, idSvc, nil, demoSvc)
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{

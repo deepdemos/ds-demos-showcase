@@ -52,11 +52,7 @@ type Service struct {
 }
 
 // New 组装服务。files 与 q 都必须非 nil——投稿没有「降级运行」这一说。
-//
-// 第 6 个参数是**已停用的待审配额**（原 UPLOAD_MAX_PENDING），现在被忽略：
-// 传什么都不会生效，也没有日志。留着它只是因为调用点散在 cmd 与十几个测试文件里，
-// 一次删干净会越过 pr-guard 的 20 文件上限。删除这件事记在 #467，别让「下次」落空。
-func New(pool *pgxpool.Pool, q *store.Queries, files storage.Store, limits storage.Limits, maxPackageBytes int64, _ int, log *slog.Logger) *Service {
+func New(pool *pgxpool.Pool, q *store.Queries, files storage.Store, limits storage.Limits, maxPackageBytes int64, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
 	}
