@@ -3,8 +3,12 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
@@ -139,22 +143,85 @@ func seedBenchmarkOverview(t *testing.T, h *Handler) {
 		   OR b.slug = 'it-bench-ov-cite'`)
 }
 
+var (
+	benchmarkOverviewSlugs = []string{
+		"it-bench-ov-table",
+		"it-bench-ov-empty",
+		"it-bench-ov-cite",
+		"it-bench-ov-noprimary",
+		"it-bench-ov-second",
+	}
+	benchmarkOverviewModelSlugs = []string{
+		"it-model-ov-a",
+		"it-model-ov-b",
+		"it-model-ov-c",
+		"it-model-ov-d",
+	}
+)
+
+type benchmarkOverviewCleanupStmt struct {
+	sql  string
+	args []any
+}
+
+// benchmarkOverviewCleanupStmts 按外键依赖逆序清理全部总览测试数据，使用参数化 ANY($1)
+// 避免手拼括号引发类似 #600 的语法错误。
+func benchmarkOverviewCleanupStmts() []benchmarkOverviewCleanupStmt {
+	return []benchmarkOverviewCleanupStmt{
+		{
+			sql: `DELETE FROM benchmark_scores WHERE metric_id IN (
+        SELECT bm.id FROM benchmark_metrics bm
+          JOIN benchmark_versions bv ON bv.id = bm.version_id
+          JOIN benchmarks b ON b.id = bv.benchmark_id WHERE b.slug = ANY($1))`,
+			args: []any{benchmarkOverviewSlugs},
+		},
+		{
+			sql: `DELETE FROM benchmark_metrics WHERE version_id IN (
+        SELECT bv.id FROM benchmark_versions bv JOIN benchmarks b ON b.id = bv.benchmark_id
+         WHERE b.slug = ANY($1))`,
+			args: []any{benchmarkOverviewSlugs},
+		},
+		{
+			sql: `DELETE FROM benchmark_versions WHERE benchmark_id IN (
+        SELECT id FROM benchmarks WHERE slug = ANY($1))`,
+			args: []any{benchmarkOverviewSlugs},
+		},
+		{
+			sql:  `DELETE FROM benchmarks WHERE slug = ANY($1)`,
+			args: []any{benchmarkOverviewSlugs},
+		},
+		{
+			sql:  `DELETE FROM models WHERE slug = ANY($1)`,
+			args: []any{benchmarkOverviewModelSlugs},
+		},
+	}
+}
+
+// runBenchmarkOverviewCleanup 执行全部清理语句并收集每条错误，避免单条报错被静默吞掉
+// 或中断后续表的清理。
+func runBenchmarkOverviewCleanup(ctx context.Context, exec func(context.Context, string, ...any) error) []error {
+	var errs []error
+	for _, stmt := range benchmarkOverviewCleanupStmts() {
+		if err := exec(ctx, stmt.sql, stmt.args...); err != nil {
+			errs = append(errs, fmt.Errorf("清理总览数据失败: %w\nSQL: %s", err, stmt.sql))
+		}
+	}
+	return errs
+}
+
 func cleanupBenchmarkOverview(t *testing.T, h *Handler) {
 	t.Helper()
 	ctx := context.Background()
-	slugs := `('it-bench-ov-table','it-bench-ov-empty','it-bench-ov-cite','it-bench-ov-noprimary','it-bench-ov-second')`
-	_, _ = h.pool.Exec(ctx, `DELETE FROM benchmark_scores WHERE metric_id IN (
-        SELECT bm.id FROM benchmark_metrics bm
-          JOIN benchmark_versions bv ON bv.id = bm.version_id
-          JOIN benchmarks b ON b.id = bv.benchmark_id WHERE b.slug IN `+slugs+`)`)
-	_, _ = h.pool.Exec(ctx, `DELETE FROM benchmark_metrics WHERE version_id IN (
-        SELECT bv.id FROM benchmark_versions bv JOIN benchmarks b ON b.id = bv.benchmark_id
-         WHERE b.slug IN `+slugs+`)`)
-	_, _ = h.pool.Exec(ctx, `DELETE FROM benchmark_versions WHERE benchmark_id IN (
-        SELECT id FROM benchmarks WHERE slug IN `+slugs+`)`)
-	_, _ = h.pool.Exec(ctx, `DELETE FROM benchmarks WHERE slug IN `+slugs+`)`)
-	_, _ = h.pool.Exec(ctx, `DELETE FROM models WHERE slug IN
-        ('it-model-ov-a','it-model-ov-b','it-model-ov-c','it-model-ov-d')`)
+	errs := runBenchmarkOverviewCleanup(ctx, func(ctx context.Context, sql string, args ...any) error {
+		_, err := h.pool.Exec(ctx, sql, args...)
+		return err
+	})
+	for _, err := range errs {
+		t.Error(err)
+	}
+	if len(errs) > 0 {
+		t.FailNow()
+	}
 }
 
 func TestIntegrationBenchmarkOverview(t *testing.T) {
@@ -287,5 +354,128 @@ func TestIntegrationBenchmarkOverview(t *testing.T) {
 	}
 	if gamma.Cells[0].Rank == nil || *gamma.Cells[0].Rank != 3 {
 		t.Fatalf("Gamma 在 second 榜的名次 = %v，想要 3", gamma.Cells[0].Rank)
+	}
+}
+
+// 回归测试（#600）：清理语句不再静默丢弃错误，且单条报错后仍会跑完剩余表。
+func TestBenchmarkOverviewCleanupReportsErrors(t *testing.T) {
+	wantTables := []string{
+		"DELETE FROM benchmark_scores",
+		"DELETE FROM benchmark_metrics",
+		"DELETE FROM benchmark_versions",
+		"DELETE FROM benchmarks",
+		"DELETE FROM models",
+	}
+
+	var executed []string
+	if errs := runBenchmarkOverviewCleanup(context.Background(), func(_ context.Context, sql string, args ...any) error {
+		executed = append(executed, sql)
+		if len(args) != 1 {
+			t.Fatalf("清理语句参数个数 = %d，想要 1：%s", len(args), sql)
+		}
+		gotSlugs, ok := args[0].([]string)
+		if !ok {
+			t.Fatalf("清理语句参数类型 = %T，想要 []string：%s", args[0], sql)
+		}
+		wantSlugs := benchmarkOverviewSlugs
+		if strings.HasPrefix(sql, "DELETE FROM models") {
+			wantSlugs = benchmarkOverviewModelSlugs
+		}
+		if !slices.Equal(gotSlugs, wantSlugs) {
+			t.Fatalf("清理语句 slug 参数 = %v，想要 %v", gotSlugs, wantSlugs)
+		}
+		return nil
+	}); len(errs) != 0 {
+		t.Fatalf("无错误时应返回空错误列表，实际 = %v", errs)
+	}
+	if len(executed) != len(wantTables) {
+		t.Fatalf("执行语句数 = %d，想要 %d", len(executed), len(wantTables))
+	}
+	for i, prefix := range wantTables {
+		if !strings.HasPrefix(executed[i], prefix) {
+			t.Fatalf("第 %d 条清理语句 = %q，想要以 %q 开头", i, executed[i], prefix)
+		}
+	}
+
+	// 模拟 #600 事故现场：DELETE FROM benchmarks 报语法错时不得被吞，且 models 清理仍继续执行。
+	wantErr := errors.New(`ERROR: syntax error at or near ")" (SQLSTATE 42601)`)
+	called := 0
+	errs := runBenchmarkOverviewCleanup(context.Background(), func(_ context.Context, sql string, _ ...any) error {
+		called++
+		if strings.HasPrefix(sql, "DELETE FROM benchmarks ") {
+			return wantErr
+		}
+		return nil
+	})
+	if called != len(wantTables) {
+		t.Fatalf("中间语句出错后仍应执行完全部 %d 条清理语句，实际执行 %d 条", len(wantTables), called)
+	}
+	if len(errs) != 1 || !errors.Is(errs[0], wantErr) {
+		t.Fatalf("清理错误 = %v，想要包含 %v", errs, wantErr)
+	}
+}
+
+// 回归测试（#600）：同一个测试库连续跑两轮 seed + cleanup，必须零报错、零残留，
+// 防止清理失败只在本地复用库第二轮才暴露。
+func TestIntegrationBenchmarkOverviewCleanupIsRepeatable(t *testing.T) {
+	h, _, pool := newSortHandler(t)
+	h = h.WithPool(pool)
+	t.Cleanup(func() { cleanupBenchmarkOverview(t, h) })
+
+	assertZero := func(round int) {
+		t.Helper()
+		ctx := context.Background()
+		checks := []struct {
+			table string
+			sql   string
+			slugs []string
+		}{
+			{
+				table: "benchmark_scores",
+				sql: `SELECT count(*) FROM benchmark_scores WHERE metric_id IN (
+					SELECT bm.id FROM benchmark_metrics bm
+					  JOIN benchmark_versions bv ON bv.id = bm.version_id
+					  JOIN benchmarks b ON b.id = bv.benchmark_id WHERE b.slug = ANY($1))`,
+				slugs: benchmarkOverviewSlugs,
+			},
+			{
+				table: "benchmark_metrics",
+				sql: `SELECT count(*) FROM benchmark_metrics WHERE version_id IN (
+					SELECT bv.id FROM benchmark_versions bv
+					  JOIN benchmarks b ON b.id = bv.benchmark_id WHERE b.slug = ANY($1))`,
+				slugs: benchmarkOverviewSlugs,
+			},
+			{
+				table: "benchmark_versions",
+				sql: `SELECT count(*) FROM benchmark_versions WHERE benchmark_id IN (
+					SELECT id FROM benchmarks WHERE slug = ANY($1))`,
+				slugs: benchmarkOverviewSlugs,
+			},
+			{
+				table: "benchmarks",
+				sql:   `SELECT count(*) FROM benchmarks WHERE slug = ANY($1)`,
+				slugs: benchmarkOverviewSlugs,
+			},
+			{
+				table: "models",
+				sql:   `SELECT count(*) FROM models WHERE slug = ANY($1)`,
+				slugs: benchmarkOverviewModelSlugs,
+			},
+		}
+		for _, c := range checks {
+			var n int
+			if err := h.pool.QueryRow(ctx, c.sql, c.slugs).Scan(&n); err != nil {
+				t.Fatalf("第 %d 轮清理后查询 %s 残留失败: %v", round, c.table, err)
+			}
+			if n != 0 {
+				t.Fatalf("第 %d 轮清理后 %s 仍残留 %d 行，想要 0", round, c.table, n)
+			}
+		}
+	}
+
+	for round := 1; round <= 2; round++ {
+		seedBenchmarkOverview(t, h)
+		cleanupBenchmarkOverview(t, h)
+		assertZero(round)
 	}
 }
