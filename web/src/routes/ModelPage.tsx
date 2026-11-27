@@ -82,7 +82,7 @@ export function ModelPage() {
     <Page
       title={model.name}
       description={
-        (model.vendor || '厂商未知') + ' · ' + model.slug + ' · ' + statusLabel(model.status)
+        (model.vendor || '厂商未标注') + ' · ' + model.slug + ' · ' + statusLabel(model.status)
       }
       actions={
         <Link className="text-sm underline" to="/models">
