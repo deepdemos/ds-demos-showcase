@@ -74,9 +74,9 @@ VALUES (
     $1,
     $2,
     $3,
-    'active',
+    $4,
     'exact',
-    $4
+    $5
 )
 RETURNING id
 `
@@ -85,18 +85,26 @@ type CreateModelFromCatalogParams struct {
 	Slug        string
 	Name        string
 	Vendor      pgtype.Text
+	Status      string
 	Description string
 }
 
-// 导入新建：落一个 active 的模型（模型域 §4.6.5「新建」模式）。
+// 建一个模型：导入新建（模型域 §4.6.5「新建」模式）、手动新建（§4.7.3）、
+// 收录提案批准（§4.7.2 / #593）共用。
 //
-// `status='active'` 而不是 `candidate`：目录导入是管理员对着上游条目点的（有人背书）；
-// `candidate` 只来自人工登记——2026-11-17 起投稿路径不再建模型（#296 → #465）。
+// `status` 由调用方给，三条路各是什么：
+//   - 导入 / 手动新建 → `active`：管理员点下去的，有人背书；
+//   - 收录提案批准 → `candidate`：有人提了、还没人核实（**批准 ≠ 可用**）。
+//
+// 名字里的 Catalog 是历史（它原本只服务导入）。三条路共用一条 INSERT，是因为写下的形状
+// 逐列相同（slug / name / vendor / resolution=exact），差别只有状态这一列。各写一份的代价
+// 不是多几行，而是 slug 规则或审计形状改了之后只在一处改对。
 func (q *Queries) CreateModelFromCatalog(ctx context.Context, arg CreateModelFromCatalogParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createModelFromCatalog,
 		arg.Slug,
 		arg.Name,
 		arg.Vendor,
+		arg.Status,
 		arg.Description,
 	)
 	var id int64

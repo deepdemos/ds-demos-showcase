@@ -1373,6 +1373,16 @@ type Error struct {
 	// Code 机器可判别的错误码；`message` 只给人看，不要拿来做判断
 	Code ErrorCode `json:"code"`
 
+	// ExistingSlug 撞名 / 撞 slug 时，已有那条**模型**的 slug。**只有手动新建的 409 撞名才给**，
+	// 其余错误不带这个字段——包括「厂商名折出同一 slug」那种 409：那时撞的是
+	// 厂商，给出已有那条模型的链接只会把人带到错的地方。所以客户端按
+	// **这个字段在不在**分流，不要从 `message` 里抠。
+	//
+	// 为什么放进错误体：界面要能跳到已有那条（`/models/<slug>`）并提示
+	// 「改用导入补全」。从 `message` 里抠字符串是不允许的——`message`
+	// 是给人看的，措辞随时会改，抠它等于把展示文案变成协议。
+	ExistingSlug *string `json:"existingSlug,omitempty"`
+
 	// Message 中文说明，可直接展示
 	Message string `json:"message"`
 }
@@ -1495,7 +1505,9 @@ type Model struct {
 	// 条目但来源可疑；`deprecated` 已退役。
 	Status ModelStatus `json:"status"`
 
-	// Vendor 厂商名；未知时为空串
+	// Vendor 厂商名；「厂商未标注」时为空串。**厂商实体存在时取 `vendors.name`**，
+	// 否则退回过渡期的 `models.vendor` 文本列（历史行只有文本，没有实体）。
+	// 两者都空 = 未标注。判据只有 SQL 里那一处 `COALESCE`，读路径不再各读一半。
 	Vendor string `json:"vendor"`
 }
 
@@ -1741,6 +1753,35 @@ type ModelList struct {
 	Items []Model `json:"items"`
 }
 
+// ModelManualCreate defines model for ModelManualCreate.
+type ModelManualCreate struct {
+	// Name 展示名。**必须是人话里的型号名**：`unspecified` / `x-family` /
+	// `x-guess` / <厂商>-unknown 这类兜底名由系统维护，手填一律 400
+	// （模型域 §4.7.5）。唯一（`models.name` 上的 UNIQUE）：撞名回 409，
+	// 不自动加后缀。
+	Name string `json:"name"`
+
+	// Slug 公开 URL 标识。省略时由展示名与厂商生成（运行手册 §7.7「模型 slug 生成」）；
+	// 显式传入时按原值使用，只做长度校验。
+	// **创建后不可变**：改它等于换一条 URL，旧链接全部失效。
+	Slug *string `json:"slug,omitempty"`
+
+	// Vendor 就地新建一家厂商（只收名称，`source='manual'`）：折出的 slug 若已被
+	// 另一家厂商占用，回 409 并要求改名，**不自动加后缀**。名字与已有那家
+	// 逐字相同时直接挂上那家（同一个厂商建两次不该出现两条行）。
+	//
+	// 未知时省略或留空 = 「厂商未标注」。与 `vendorId` 互斥。
+	Vendor *string `json:"vendor,omitempty"`
+
+	// VendorId 挂到已有厂商（`vendors.id`，下拉里选的那一条）。与 `vendor` **互斥**：
+	// 两个同时给回 400——同时说「选这家」和「建一家叫这个的」，猜错哪一个
+	// 都会写进共享目录。
+	//
+	// 指向不存在的厂商回 400（不是 404）：这是新建模型的请求体，
+	// 形状错了就不该走得更远。
+	VendorId *int `json:"vendorId,omitempty"`
+}
+
 // ModelProfile defines model for ModelProfile.
 type ModelProfile struct {
 	// Benchmarks 第三方基准里**参与综合分资格**的条目（榜单与版本都 active、`coverage=full`、
@@ -1778,7 +1819,9 @@ type ModelRef struct {
 	// Slug 稳定可引用的模型标识（`models.slug`）
 	Slug string `json:"slug"`
 
-	// Vendor 厂商名；未知时为空串
+	// Vendor 厂商名；「厂商未标注」时为空串。**厂商实体存在时取 `vendors.name`**，
+	// 否则退回过渡期的 `models.vendor` 文本列（历史行只有文本，没有实体）。
+	// 两者都空 = 未标注。判据只有 SQL 里那一处 `COALESCE`，读路径不再各读一半。
 	Vendor string `json:"vendor"`
 }
 
@@ -1798,6 +1841,13 @@ type ModelSiteStats struct {
 
 	// Votes 这些作品的评分票数合计
 	Votes int `json:"votes"`
+}
+
+// ModelSlugSuggestion defines model for ModelSlugSuggestion.
+type ModelSlugSuggestion struct {
+	// Slug 按展示名与厂商算出的建议值，**不含唯一性后缀**（不查库、不加 `-2`）。
+	// 提交前仍要过唯一性与长度校验：撞了由创建端点回 409。
+	Slug string `json:"slug"`
 }
 
 // ModelSpecs 档案（`model_specs`）。**没有档案时整个字段是 null**，不是空对象——
@@ -1864,6 +1914,25 @@ type ModelSyncStatus struct {
 
 	// Status `ok` / `stale` / `failed` / `never`。见端点描述——故意不是 enum。
 	Status string `json:"status"`
+}
+
+// ModelVendor defines model for ModelVendor.
+type ModelVendor struct {
+	// Id 厂商行主键；新建模型时作为 `vendorId` 提交
+	Id int `json:"id"`
+
+	// Name 展示名；模型页与列表读的就是它（实体缺席时才退回文本列）
+	Name string `json:"name"`
+
+	// Slug 稳定键（`vendors.slug`），由厂商名折出（与模型 slug 同一个纯函数）：折不出
+	// ASCII 时退名字摘要前 6 位。唯一——两家厂商折出同一个 slug 时，后建的那家
+	// 被要求改名，不自动加后缀。
+	Slug string `json:"slug"`
+}
+
+// ModelVendorList defines model for ModelVendorList.
+type ModelVendorList struct {
+	Items []ModelVendor `json:"items"`
 }
 
 // MyDemoList defines model for MyDemoList.
@@ -2411,6 +2480,15 @@ type ListModelCatalogParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// SuggestModelSlugParams defines parameters for SuggestModelSlug.
+type SuggestModelSlugParams struct {
+	// Name 展示名（原始写法；中文照抄，摘要按原始字节算）
+	Name string `form:"name" json:"name"`
+
+	// Vendor 厂商；空字符串与省略等价
+	Vendor *string `form:"vendor,omitempty" json:"vendor,omitempty"`
+}
+
 // ListAdminProposalsParams defines parameters for ListAdminProposals.
 type ListAdminProposalsParams struct {
 	Status   *ListAdminProposalsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
@@ -2764,6 +2842,9 @@ type AddDemoChannelJSONRequestBody = DemoChannelRequest
 
 // PublishDemoJSONRequestBody defines body for PublishDemo for application/json ContentType.
 type PublishDemoJSONRequestBody = PublishRequest
+
+// CreateModelJSONRequestBody defines body for CreateModel for application/json ContentType.
+type CreateModelJSONRequestBody = ModelManualCreate
 
 // ApplyModelImportJSONRequestBody defines body for ApplyModelImport for application/json ContentType.
 type ApplyModelImportJSONRequestBody = ModelImportApply

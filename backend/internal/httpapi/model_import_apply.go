@@ -158,9 +158,11 @@ func (h *Handler) applyImport(
 				desc = item.Description
 			}
 			id, err := q.CreateModelFromCatalog(ctx, store.CreateModelFromCatalogParams{
-				Slug:        slug,
-				Name:        name,
-				Vendor:      vendor,
+				Slug:   slug,
+				Name:   name,
+				Vendor: vendor,
+				// 导入是管理员对着上游条目点的，有人背书：直接可用。
+				Status:      "active",
 				Description: desc,
 			})
 			if err != nil {

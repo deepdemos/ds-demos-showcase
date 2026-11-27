@@ -8,8 +8,9 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下、模型 × 基准总览，
- * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 78 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码）、
+ * 管理端的手动新建模型与厂商实体，
+ * 共 80 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -50,8 +51,11 @@ import type {
   ModelImportBatchResult,
   ModelImportPreview,
   ModelImportRef,
+  ModelManualCreate,
+  ModelSlugSuggestion,
   ModelSyncResult,
   ModelSyncStatus,
+  ModelVendorList,
   ProposalBatchResult,
   ProposalBatchReview,
   ProposalDecision,
@@ -62,7 +66,8 @@ import type {
   PublishResult,
   ReviewDecision,
   ReviewQueue,
-  ReviewResult
+  ReviewResult,
+  SuggestModelSlugParams
 } from '../model';
 
 
@@ -325,6 +330,274 @@ export const removeDemoChannel = async (slug: string,
 
   const data: removeDemoChannelResponse['data'] = body ? JSON.parse(body) : undefined
   return { data, status: res.status, headers: res.headers } as removeDemoChannelResponse
+}
+
+
+export type createModelResponse201 = {
+  data: Model
+  status: 201
+}
+
+export type createModelResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type createModelResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type createModelResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createModelResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type createModelResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type createModelResponseSuccess = (createModelResponse201) & {
+  headers: Headers;
+};
+export type createModelResponseError = (createModelResponse400 | createModelResponse401 | createModelResponse403 | createModelResponse409 | createModelResponse503) & {
+  headers: Headers;
+};
+
+export type createModelResponse = (createModelResponseSuccess | createModelResponseError)
+
+export const getCreateModelUrl = () => {
+
+
+
+
+  return `/api/v1/admin/models`
+}
+
+/**
+ * 管理员手填一个名字，就得到一个**直接可用**的模型：`status = 'active'`、
+ * `resolution = 'exact'`。它立刻出现在模型目录与详情页。
+ *
+ * **为什么不给候选状态选项**：这个动作没有上游依据——名字是人填的，点下去就是本站背书。
+ * 候选（`candidate`）的语义是「有人提了、等核实」，那是提案那条路（提案批准 ≠ 可用）。
+ * 把两种「谁背书」混进一个下拉，等于让操作者自己决定这句话算不算数。
+ *
+ * **为什么分辨率固定 `exact`**：人工建的就是确定的型号。`family` / `unknown` /
+ * `guess` 是系统维护的兜底实体（模型域 §4.7.5）——手填它们会把「说不清用了什么」
+ * 改写成「本站确认它是这个型号」，之后所有引用都指向它，真实型号反而查不出来。
+ * `unspecified` / `x-family` / `x-guess` / <厂商>-unknown 这类名字一律 400。
+ *
+ * **slug**：省略时按展示名与厂商生成（规则见运行手册 §7.7「模型 slug 生成」，
+ * 纯函数、同一输入永远同一个值）；也可以显式传入覆盖。它在公开 URL 里且
+ * **创建后不可变**，所以提交前必须做长度校验（1–128）。表单预填的建议值走
+ * `GET /api/v1/admin/models/slug-suggestion`——前端不复制生成规则。
+ *
+ * **撞名 / 撞 slug 一律 409，不自动加后缀**：自动后缀会造出一个永久难看的展示名
+ * （`deepseek-chat-2`），而管理员真正想的多半是「补全那一条」。响应里的
+ * `existingSlug` 指向已有那条，界面据此给「去那条补全」的入口。
+ *
+ * **厂商是实体，不是自由文本**：`vendorId` 挂到已有厂商（下拉里选的那一条），
+ * `vendor` 就地新建一条厂商——只收名称，`source='manual'`，slug 按名字折（与模型 slug
+ * 同一个纯函数）。两家厂商名折出同一个 slug 时回 409 **并要求改名**，不自动加后缀：
+ * 后缀会造出一个永久难看的厂商键，而撞车多半说明「这就是同一家，选它就行」。
+ * 两个字段同时给回 400（二选一，含糊的请求不该被猜）。
+ *
+ * 挂上厂商之后，厂商名同时写进 `vendors.name` 与过渡期的 `models.vendor` 文本列，
+ * 两边取值一致——文本列是展示缓存，不是第二份事实源。两个都不给就是「厂商未标注」，
+ * 模型页与列表都显示这句话（不是「厂商未知」：不知道与没标注是两件事）。
+ *
+ * 每次新建写一条审计（动作 `create`、实体 `model`）。需要 `model.create` 权限。
+ * @summary 手动新建一个模型
+ */
+export const createModel = async (modelManualCreate: ModelManualCreate, options?: RequestInit): Promise<createModelResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+const res = await fetch(getCreateModelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(modelManualCreate)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: createModelResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as createModelResponse
+}
+
+
+export type suggestModelSlugResponse200 = {
+  data: ModelSlugSuggestion
+  status: 200
+}
+
+export type suggestModelSlugResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type suggestModelSlugResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type suggestModelSlugResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type suggestModelSlugResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type suggestModelSlugResponseSuccess = (suggestModelSlugResponse200) & {
+  headers: Headers;
+};
+export type suggestModelSlugResponseError = (suggestModelSlugResponse400 | suggestModelSlugResponse401 | suggestModelSlugResponse403 | suggestModelSlugResponse503) & {
+  headers: Headers;
+};
+
+export type suggestModelSlugResponse = (suggestModelSlugResponseSuccess | suggestModelSlugResponseError)
+
+export const getSuggestModelSlugUrl = (params: SuggestModelSlugParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/admin/models/slug-suggestion?${stringifiedParams}` : `/api/v1/admin/models/slug-suggestion`
+}
+
+/**
+ * 按展示名与厂商算出 slug 建议值，给手动新建的表单预填。
+ *
+ * **只跑算法、不查唯一性**：同一个输入永远得到同一个值，撞了由创建端点回 409。
+ * 在建议这一步加 `-2` 后缀等于让表单里显示一个「提交后会变」的地址，而 slug
+ * 一旦写进 URL 就不可变——那时用户看到的和拿到的是两回事。
+ *
+ * **为什么单独一个端点而不是让前端算**：slug 的生成规则是公开 URL 的一部分
+ * （`/models/<slug>`），两处实现迟早分叉，分叉的表现就是「表单里看到的地址和
+ * 实际写下地址不一样」。服务端只保留一份实现（运行手册 §7.7「模型 slug 生成」）。
+ *
+ * `name` 必填；`vendor` 可省略。需要 `model.create` 权限。
+ * @summary 新模型的 slug 建议值
+ */
+export const suggestModelSlug = async (params: SuggestModelSlugParams, options?: RequestInit): Promise<suggestModelSlugResponse> => {
+
+  const res = await fetch(getSuggestModelSlugUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: suggestModelSlugResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as suggestModelSlugResponse
+}
+
+
+export type listModelVendorsResponse200 = {
+  data: ModelVendorList
+  status: 200
+}
+
+export type listModelVendorsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listModelVendorsResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listModelVendorsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listModelVendorsResponseSuccess = (listModelVendorsResponse200) & {
+  headers: Headers;
+};
+export type listModelVendorsResponseError = (listModelVendorsResponse401 | listModelVendorsResponse403 | listModelVendorsResponse503) & {
+  headers: Headers;
+};
+
+export type listModelVendorsResponse = (listModelVendorsResponseSuccess | listModelVendorsResponseError)
+
+export const getListModelVendorsUrl = () => {
+
+
+
+
+  return `/api/v1/admin/models/vendors`
+}
+
+/**
+ * 手动新建模型时「选已有厂商」那个下拉的数据源：`vendors` 表的全部行，按名称排序。
+ *
+ * **为什么只有三列**：下拉要回答的是「选哪一个」，不是「这家厂商的详情」。`id`
+ * 是提交 `vendorId` 用的键，`name` 显示给人看，`slug` 是稳定键（厂商改名时它不动，
+ * 与 `models.slug` 同规则）。主页 / 状态 / 来源在下拉里没有任何决策价值，
+ * 带出来只会让调用方开始依赖它们。
+ *
+ * **为什么不是公开端点**：厂商实体目前只由管理端维护（就地新建 + 导入填充），
+ * 公开读路径用的是模型行上的厂商名。把它开成公开端点，等于现在就把一个还没定的
+ * 厂商目录形状承诺出去。
+ *
+ * 只读列表，沿用 `model.create`——这条路唯一的用途就是新建模型的下拉。
+ * @summary 厂商实体列表（手动新建的下拉）
+ */
+export const listModelVendors = async ( options?: RequestInit): Promise<listModelVendorsResponse> => {
+
+  const res = await fetch(getListModelVendorsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listModelVendorsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listModelVendorsResponse
 }
 
 

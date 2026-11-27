@@ -38,6 +38,9 @@ type ServerInterface interface {
 	// 聚合收件箱
 	// (GET /api/v1/admin/inbox)
 	GetAdminInbox(w http.ResponseWriter, r *http.Request, params GetAdminInboxParams)
+	// 手动新建一个模型
+	// (POST /api/v1/admin/models)
+	CreateModel(w http.ResponseWriter, r *http.Request)
 	// 上游目录镜像（导入页的搜索）
 	// (GET /api/v1/admin/models/catalog)
 	ListModelCatalog(w http.ResponseWriter, r *http.Request, params ListModelCatalogParams)
@@ -50,12 +53,18 @@ type ServerInterface interface {
 	// 导入 / 补全的字段级差异
 	// (POST /api/v1/admin/models/import/preview)
 	PreviewModelImport(w http.ResponseWriter, r *http.Request)
+	// 新模型的 slug 建议值
+	// (GET /api/v1/admin/models/slug-suggestion)
+	SuggestModelSlug(w http.ResponseWriter, r *http.Request, params SuggestModelSlugParams)
 	// 读目录同步状态
 	// (GET /api/v1/admin/models/sync)
 	GetModelSyncStatus(w http.ResponseWriter, r *http.Request)
 	// 立即同步上游目录镜像
 	// (POST /api/v1/admin/models/sync)
 	SyncModelCatalog(w http.ResponseWriter, r *http.Request)
+	// 厂商实体列表（手动新建的下拉）
+	// (GET /api/v1/admin/models/vendors)
+	ListModelVendors(w http.ResponseWriter, r *http.Request)
 	// 提案列表
 	// (GET /api/v1/admin/proposals)
 	ListAdminProposals(w http.ResponseWriter, r *http.Request, params ListAdminProposalsParams)
@@ -302,6 +311,12 @@ func (_ Unimplemented) GetAdminInbox(w http.ResponseWriter, r *http.Request, par
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 手动新建一个模型
+// (POST /api/v1/admin/models)
+func (_ Unimplemented) CreateModel(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 上游目录镜像（导入页的搜索）
 // (GET /api/v1/admin/models/catalog)
 func (_ Unimplemented) ListModelCatalog(w http.ResponseWriter, r *http.Request, params ListModelCatalogParams) {
@@ -326,6 +341,12 @@ func (_ Unimplemented) PreviewModelImport(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 新模型的 slug 建议值
+// (GET /api/v1/admin/models/slug-suggestion)
+func (_ Unimplemented) SuggestModelSlug(w http.ResponseWriter, r *http.Request, params SuggestModelSlugParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 读目录同步状态
 // (GET /api/v1/admin/models/sync)
 func (_ Unimplemented) GetModelSyncStatus(w http.ResponseWriter, r *http.Request) {
@@ -335,6 +356,12 @@ func (_ Unimplemented) GetModelSyncStatus(w http.ResponseWriter, r *http.Request
 // 立即同步上游目录镜像
 // (POST /api/v1/admin/models/sync)
 func (_ Unimplemented) SyncModelCatalog(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 厂商实体列表（手动新建的下拉）
+// (GET /api/v1/admin/models/vendors)
+func (_ Unimplemented) ListModelVendors(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -997,6 +1024,26 @@ func (siw *ServerInterfaceWrapper) GetAdminInbox(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// CreateModel operation middleware
+func (siw *ServerInterfaceWrapper) CreateModel(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateModel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListModelCatalog operation middleware
 func (siw *ServerInterfaceWrapper) ListModelCatalog(w http.ResponseWriter, r *http.Request) {
 
@@ -1114,6 +1161,54 @@ func (siw *ServerInterfaceWrapper) PreviewModelImport(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// SuggestModelSlug operation middleware
+func (siw *ServerInterfaceWrapper) SuggestModelSlug(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SuggestModelSlugParams
+
+	// ------------- Required query parameter "name" -------------
+
+	if paramValue := r.URL.Query().Get("name"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "name"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "name", r.URL.Query(), &params.Name)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "vendor" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "vendor", r.URL.Query(), &params.Vendor)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "vendor", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SuggestModelSlug(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetModelSyncStatus operation middleware
 func (siw *ServerInterfaceWrapper) GetModelSyncStatus(w http.ResponseWriter, r *http.Request) {
 
@@ -1145,6 +1240,26 @@ func (siw *ServerInterfaceWrapper) SyncModelCatalog(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SyncModelCatalog(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListModelVendors operation middleware
+func (siw *ServerInterfaceWrapper) ListModelVendors(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListModelVendors(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3125,6 +3240,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/admin/inbox", wrapper.GetAdminInbox)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/models", wrapper.CreateModel)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/models/catalog", wrapper.ListModelCatalog)
 	})
 	r.Group(func(r chi.Router) {
@@ -3137,10 +3255,16 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/admin/models/import/preview", wrapper.PreviewModelImport)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/models/slug-suggestion", wrapper.SuggestModelSlug)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/models/sync", wrapper.GetModelSyncStatus)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/models/sync", wrapper.SyncModelCatalog)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/models/vendors", wrapper.ListModelVendors)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/proposals", wrapper.ListAdminProposals)

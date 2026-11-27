@@ -1217,6 +1217,10 @@
         "type": "ErrorCode",
         "optional": false
       },
+      "existingSlug": {
+        "type": "string",
+        "optional": true
+      },
       "message": {
         "type": "string",
         "optional": false
@@ -1646,6 +1650,24 @@
         "optional": false
       }
     },
+    "ModelManualCreate": {
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": true
+      },
+      "vendor": {
+        "type": "string",
+        "optional": true
+      },
+      "vendorId": {
+        "type": "int",
+        "optional": true
+      }
+    },
     "ModelProfile": {
       "benchmarks": {
         "type": "[]ModelBenchmarkScore",
@@ -1731,6 +1753,12 @@
       },
       "votes": {
         "type": "int",
+        "optional": false
+      }
+    },
+    "ModelSlugSuggestion": {
+      "slug": {
+        "type": "string",
         "optional": false
       }
     },
@@ -1849,6 +1877,26 @@
       },
       "status": {
         "type": "string",
+        "optional": false
+      }
+    },
+    "ModelVendor": {
+      "id": {
+        "type": "int",
+        "optional": false
+      },
+      "name": {
+        "type": "string",
+        "optional": false
+      },
+      "slug": {
+        "type": "string",
+        "optional": false
+      }
+    },
+    "ModelVendorList": {
+      "items": {
+        "type": "[]ModelVendor",
         "optional": false
       }
     },
@@ -2973,6 +3021,11 @@
       "pathParams": 0,
       "params": "GetAdminInboxParams"
     },
+    "POST /api/v1/admin/models": {
+      "method": "CreateModel",
+      "pathParams": 0,
+      "params": null
+    },
     "GET /api/v1/admin/models/catalog": {
       "method": "ListModelCatalog",
       "pathParams": 0,
@@ -2993,6 +3046,11 @@
       "pathParams": 0,
       "params": null
     },
+    "GET /api/v1/admin/models/slug-suggestion": {
+      "method": "SuggestModelSlug",
+      "pathParams": 0,
+      "params": "SuggestModelSlugParams"
+    },
     "GET /api/v1/admin/models/sync": {
       "method": "GetModelSyncStatus",
       "pathParams": 0,
@@ -3000,6 +3058,11 @@
     },
     "POST /api/v1/admin/models/sync": {
       "method": "SyncModelCatalog",
+      "pathParams": 0,
+      "params": null
+    },
+    "GET /api/v1/admin/models/vendors": {
+      "method": "ListModelVendors",
       "pathParams": 0,
       "params": null
     },
