@@ -1,0 +1,22 @@
+-- 模型写路径（手动新建，模型域 §4.7.3）。
+--
+-- 为什么单独一个文件而不是塞进 models.sql：那个文件已经 893 行、41 条查询，是这个
+-- epic 里所有模型写路径的合并瓶颈。sqlc 按目录扫描，新开一个文件就能拿到
+-- internal/store/model_write.sql.go，与别人的改动不撞行。
+--
+-- 这里只有「查重」一条：真正建行复用 CreateModelFromCatalog（slug / name / vendor /
+-- status='active' / resolution='exact' 的形状与导入新建完全一致，一条 INSERT 只该有一处）。
+
+-- name: FindModelByNameOrSlug :one
+-- 手动新建前的查重：名字或 slug 只要有一个已被占用就返回那一行。
+--
+-- 为什么一次查两个：撞名与撞 slug 都要回 409，且响应里要带「已有那条」的 slug——
+-- 分两次查会多一个往返，也更容易只处理其中一种（「slug 撞了自动加后缀」正是那样漏进来的）。
+--
+-- 不用 LIKE / lower()：唯一键就是逐字节比较（models.name UNIQUE、models.slug UNIQUE），
+-- 查重跟着库的判据走。库里允许的两行（仅大小写不同）在这里也不该被当成冲突。
+SELECT id, slug, name
+FROM models
+WHERE name = sqlc.arg(name) OR slug = sqlc.arg(slug)
+ORDER BY id
+LIMIT 1;

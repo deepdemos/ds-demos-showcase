@@ -8,8 +8,9 @@
  * 生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下、模型 × 基准总览，
- * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
- * 共 78 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码）、
+ * 管理端的手动新建模型与厂商实体，
+ * 共 81 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -38,6 +39,8 @@ export * from './adminAppeal';
 export * from './adminAppealList';
 export * from './adminAppealStatus';
 export * from './adminInbox';
+export * from './adminModelList';
+export * from './adminModelRow';
 export * from './appealDecision';
 export * from './appealDecisionDecision';
 export * from './appealReviewResult';
@@ -159,13 +162,17 @@ export * from './modelImportField';
 export * from './modelImportPreview';
 export * from './modelImportRef';
 export * from './modelList';
+export * from './modelManualCreate';
 export * from './modelProfile';
 export * from './modelProviderSlice';
 export * from './modelRef';
 export * from './modelSiteStats';
+export * from './modelSlugSuggestion';
 export * from './modelSpecs';
 export * from './modelSyncResult';
 export * from './modelSyncStatus';
+export * from './modelVendor';
+export * from './modelVendorList';
 export * from './myDemoList';
 export * from './myDemoSummary';
 export * from './myDemoSummaryModerationState';
@@ -229,6 +236,7 @@ export * from './searchUpstreamModelsParams';
 export * from './submissionResult';
 export * from './submissionResultModerationState';
 export * from './submitDemoBody';
+export * from './suggestModelSlugParams';
 export * from './unreadCount';
 export * from './updateDemoBody';
 export * from './upstreamModel';

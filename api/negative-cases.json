@@ -447,6 +447,68 @@
         }
       }
     ],
+    "POST /api/v1/admin/models": [
+      {
+        "case": "没有 model.create 权限的账号 403，不建出模型",
+        "test": {
+          "file": "backend/internal/httpapi/model_write_integration_test.go",
+          "name": "TestIntegrationManualModelCreatePermissions"
+        }
+      },
+      {
+        "case": "系统兜底名（unspecified / x-unknown / <厂商>-unknown）被拒，不落成一条 active 模型",
+        "test": {
+          "file": "backend/internal/httpapi/model_write_integration_test.go",
+          "name": "TestIntegrationManualModelCreateRejectsFallbackNames"
+        }
+      },
+      {
+        "case": "同名或同 slug 返回 409 并给出已有那条的 slug，不自动加后缀",
+        "test": {
+          "file": "backend/internal/httpapi/model_write_integration_test.go",
+          "name": "TestIntegrationManualModelCreateRejectsDuplicate"
+        }
+      },
+      {
+        "case": "slug 超过 128 个字符被拒（400），不把库约束变成 503",
+        "test": {
+          "file": "backend/internal/httpapi/model_write_integration_test.go",
+          "name": "TestIntegrationManualModelCreateValidatesSlug"
+        }
+      },
+      {
+        "case": "vendorId 与 vendor 同时给回 400（二选一），不猜哪一家",
+        "test": {
+          "file": "backend/internal/httpapi/model_vendor_integration_test.go",
+          "name": "TestIntegrationManualModelCreateRejectsVendorInput"
+        }
+      },
+      {
+        "case": "两家厂商名折出同一个 slug 时 409 要求改名，不自动加后缀、不带 existingSlug",
+        "test": {
+          "file": "backend/internal/httpapi/model_vendor_integration_test.go",
+          "name": "TestIntegrationManualModelCreateVendorSlugConflict"
+        }
+      }
+    ],
+    "GET /api/v1/admin/models/vendors": [
+      {
+        "case": "没有 model.create 权限的账号 403，不回厂商列表（未登录是 401）",
+        "test": {
+          "file": "backend/internal/httpapi/model_vendor_integration_test.go",
+          "name": "TestIntegrationListModelVendorsPermissions"
+        }
+      }
+    ],
+    "GET /api/v1/admin/models/slug-suggestion": [
+      {
+        "case": "没有 model.create 权限的账号也拿不到 slug 建议值（403）",
+        "test": {
+          "file": "backend/internal/httpapi/model_write_integration_test.go",
+          "name": "TestIntegrationManualModelCreatePermissions"
+        }
+      }
+    ],
     "GET /api/v1/admin/models/catalog": [
       {
         "case": "没有 model.import 权限的用户 403，不是空目录",

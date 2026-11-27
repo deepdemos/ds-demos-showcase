@@ -30,6 +30,14 @@ func (s *stub) SyncModelCatalog(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "sync")
 }
 
+func (s *stub) CreateModel(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "create-model")
+}
+
+func (s *stub) SuggestModelSlug(_ http.ResponseWriter, _ *http.Request, _ api.SuggestModelSlugParams) {
+	s.hits = append(s.hits, "slug-suggestion")
+}
+
 func (s *stub) ListDemoTypes(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "demo-types")
 }
@@ -92,6 +100,10 @@ func (s *stub) GetModelSyncStatus(_ http.ResponseWriter, _ *http.Request) {
 
 func (s *stub) ListModelCatalog(_ http.ResponseWriter, _ *http.Request, _ api.ListModelCatalogParams) {
 	s.hits = append(s.hits, "catalog")
+}
+
+func (s *stub) ListModelVendors(_ http.ResponseWriter, _ *http.Request) {
+	s.hits = append(s.hits, "model-vendors")
 }
 
 func (s *stub) PreviewModelImport(_ http.ResponseWriter, _ *http.Request) {
@@ -365,6 +377,8 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		// 同上：/api/v1/models/upstream 必须命中静态路由，而不是 getModel 的 {slug}。
 		// 写成 "detail:upstream" 就说明上游搜索被 /api/v1/models/{slug} 抢走了。
 		{http.MethodGet, "/api/v1/models/upstream", "upstream-search"},
+		// 管理端厂商下拉：静态段与 slug-suggestion 同级，谁也不该抢谁的路由。
+		{http.MethodGet, "/api/v1/admin/models/vendors", "model-vendors"},
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
 		{http.MethodGet, "/api/v1/admin/appeals", "admin-appeals"},

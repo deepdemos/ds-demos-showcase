@@ -69,14 +69,15 @@ func (q *Queries) CountCatalogItems(ctx context.Context, arg CountCatalogItemsPa
 }
 
 const createModelFromCatalog = `-- name: CreateModelFromCatalog :one
-INSERT INTO models (slug, name, vendor, status, resolution, description)
+INSERT INTO models (slug, name, vendor, vendor_id, status, resolution, description)
 VALUES (
     $1,
     $2,
     $3,
-    'active',
+    $4,
+    $5,
     'exact',
-    $4
+    $6
 )
 RETURNING id
 `
@@ -85,18 +86,31 @@ type CreateModelFromCatalogParams struct {
 	Slug        string
 	Name        string
 	Vendor      pgtype.Text
+	VendorID    pgtype.Int8
+	Status      string
 	Description string
 }
 
-// 导入新建：落一个 active 的模型（模型域 §4.6.5「新建」模式）。
+// 建一个模型：导入新建（模型域 §4.6.5「新建」模式）、手动新建（§4.7.3）、
+// 收录提案批准（§4.7.2 / #593）共用。
 //
-// `status='active'` 而不是 `candidate`：目录导入是管理员对着上游条目点的（有人背书）；
-// `candidate` 只来自人工登记——2026-11-17 起投稿路径不再建模型（#296 → #465）。
+// `status` 由调用方给，三条路各是什么：
+//   - 导入 / 手动新建 → `active`：管理员点下去的，有人背书；
+//   - 收录提案批准 → `candidate`：有人提了、还没人核实（**批准 ≠ 可用**）。
+//
+// 名字里的 Catalog 是历史（它原本只服务导入）。三条路共用一条 INSERT，是因为写下的形状
+// 逐列相同（slug / name / vendor / vendor_id / resolution=exact），差别只有 status 这一列与
+// `vendor_id` 的取值。各写一份的代价不是多几行，而是 slug 规则或审计形状改了之后只在一处改对。
+//
+// `vendor_id` 只有手动新建会填（#588）：导入路径按上游 canonical 前缀填的是文本列，
+// 厂商实体的映射还没做（见已知松点「厂商文本列的双写过渡」）。差异是一列的值，不是形状。
 func (q *Queries) CreateModelFromCatalog(ctx context.Context, arg CreateModelFromCatalogParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createModelFromCatalog,
 		arg.Slug,
 		arg.Name,
 		arg.Vendor,
+		arg.VendorID,
+		arg.Status,
 		arg.Description,
 	)
 	var id int64
@@ -275,7 +289,7 @@ const getModelByID = `-- name: GetModelByID :one
 SELECT m.id,
        m.slug,
        m.name,
-       COALESCE(m.vendor, '')::text AS vendor,
+       COALESCE(v.name, m.vendor, '')::text AS vendor,
        m.status,
        m.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
@@ -287,6 +301,7 @@ SELECT m.id,
        m.created_at,
        m.updated_at
 FROM models m
+LEFT JOIN vendors v ON v.id = m.vendor_id
 LEFT JOIN model_merge_targets mt ON mt.model_id = m.id
 LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> m.id
 WHERE m.id = $1
@@ -332,7 +347,7 @@ const getModelBySlug = `-- name: GetModelBySlug :one
 SELECT m.id,
        m.slug,
        m.name,
-       COALESCE(m.vendor, '')::text AS vendor,
+       COALESCE(v.name, m.vendor, '')::text AS vendor,
        m.status,
        m.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
@@ -344,6 +359,7 @@ SELECT m.id,
        m.created_at,
        m.updated_at
 FROM models m
+LEFT JOIN vendors v ON v.id = m.vendor_id
 LEFT JOIN model_merge_targets mt ON mt.model_id = m.id
 LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> m.id
 WHERE m.slug = $1
@@ -1130,7 +1146,7 @@ const listModels = `-- name: ListModels :many
 SELECT m.id,
        m.slug,
        m.name,
-       COALESCE(m.vendor, '')::text AS vendor,
+       COALESCE(v.name, m.vendor, '')::text AS vendor,
        m.status,
        m.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
@@ -1142,6 +1158,7 @@ SELECT m.id,
        m.created_at,
        m.updated_at
 FROM models m
+LEFT JOIN vendors v ON v.id = m.vendor_id
 LEFT JOIN model_merge_targets mt ON mt.model_id = m.id
 LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> m.id
 WHERE $1::text IS NULL OR m.status = $1::text
@@ -1178,6 +1195,10 @@ type ListModelsRow struct {
 //
 // `merged_into_slug` 而不是 `merged_into_id`：合并归宿要用 slug 表达（引用一律 slug），
 // 数字 id 是实现细节。
+// 厂商名的**唯一判定**在这条 SQL 的 COALESCE 里：有实体取实体名（`vendors.name`），
+// 没有实体退回过渡期的文本列（历史行 / 导入建的行只有文本），两者都空才是空串
+// （界面显示「厂商未标注」）。四条读路径（本文件三条 + ListRevisionModels）是同一句，
+// 别在一处读实体、另一处读文本——那种分裂只有在实体被改名时才会暴露。
 func (q *Queries) ListModels(ctx context.Context, status pgtype.Text) ([]ListModelsRow, error) {
 	rows, err := q.db.Query(ctx, listModels, status)
 	if err != nil {
@@ -1288,7 +1309,7 @@ const listRevisionModels = `-- name: ListRevisionModels :many
 SELECT mo.id,
        mo.slug,
        mo.name,
-       COALESCE(mo.vendor, '')::text AS vendor,
+       COALESCE(v.name, mo.vendor, '')::text AS vendor,
        mo.status,
        mo.resolution,
        COALESCE(t.slug, '')::text AS merged_into_slug,
@@ -1304,6 +1325,7 @@ SELECT mo.id,
        c.released_on AS checkpoint_released_on
 FROM demo_revision_models rm
 JOIN models mo ON mo.id = rm.model_id
+LEFT JOIN vendors v ON v.id = mo.vendor_id
 LEFT JOIN model_merge_targets mt ON mt.model_id = mo.id
 LEFT JOIN models t ON t.id = mt.terminal_id AND t.id <> mo.id
 LEFT JOIN model_checkpoints c ON c.id = rm.checkpoint_id
@@ -1522,7 +1544,10 @@ walk AS (
       AND w.merged_into_id IS NOT NULL
       AND w.depth < 20
 )
-SELECT DISTINCT ON (ref) ref::text AS ref, model_id
+SELECT DISTINCT ON (ref)
+       ref::text AS ref,
+       model_id,
+       (w.status = 'deprecated' AND w.merged_into_id IS NULL)::bool AS delisted
 FROM walk w
 WHERE w.status <> 'deprecated'
    OR w.merged_into_id IS NULL
@@ -1532,8 +1557,9 @@ ORDER BY ref, rank, model_id
 `
 
 type ResolveModelRefsRow struct {
-	Ref     string
-	ModelID int64
+	Ref      string
+	ModelID  int64
+	Delisted bool
 }
 
 // 把作者填的「模型指称」解析成模型 id。指称可以是 slug、展示名或别名，**大小写不敏感**。
@@ -1563,6 +1589,9 @@ type ResolveModelRefsRow struct {
 // 指针悬空时退回被合并的那个 id，而不是解析成「没有这个模型」：`models.merged_into_id`
 // 没有外键（见 `docs/已知松点.md`），归宿被硬删之后指针会留在原处；此时若返回空，
 // 作者手里那个旧名字就会重新变成一个待建的候选模型，等于凭空多出一行。
+// `delisted` 把「已退役且没有归宿」这件事交给库判（#599）：声明侧据此拒绝，
+// 而 Go 那边**不重算**这个判定。已下架与已合并在库里只差归宿这一列，两处各写一遍
+// 就会在某一处漂成「退役就算下架」——那样被合并的模型也会突然变得不可声明。
 func (q *Queries) ResolveModelRefs(ctx context.Context, refs []string) ([]ResolveModelRefsRow, error) {
 	rows, err := q.db.Query(ctx, resolveModelRefs, refs)
 	if err != nil {
@@ -1572,7 +1601,7 @@ func (q *Queries) ResolveModelRefs(ctx context.Context, refs []string) ([]Resolv
 	items := []ResolveModelRefsRow{}
 	for rows.Next() {
 		var i ResolveModelRefsRow
-		if err := rows.Scan(&i.Ref, &i.ModelID); err != nil {
+		if err := rows.Scan(&i.Ref, &i.ModelID, &i.Delisted); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

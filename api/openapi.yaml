@@ -10,8 +10,9 @@ info:
     生命周期（下架 / 重新上架 / 软删 / 恢复）、版本历史与回滚、浏览计数、模型目录、
     模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
     作品榜与相关推荐、我的作品、渠道上架与撤下、模型 × 基准总览，
-    以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码），
-    共 78 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+    以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码）、
+    管理端的手动新建模型与厂商实体，
+    共 81 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
     （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
 
     不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -3105,6 +3106,197 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/admin/models:
+    post:
+      operationId: createModel
+      tags: [治理]
+      summary: 手动新建一个模型
+      description: |
+        管理员手填一个名字，就得到一个**直接可用**的模型：`status = 'active'`、
+        `resolution = 'exact'`。它立刻出现在模型目录与详情页。
+
+        **为什么不给候选状态选项**：这个动作没有上游依据——名字是人填的，点下去就是本站背书。
+        候选（`candidate`）的语义是「有人提了、等核实」，那是提案那条路（提案批准 ≠ 可用）。
+        把两种「谁背书」混进一个下拉，等于让操作者自己决定这句话算不算数。
+
+        **为什么分辨率固定 `exact`**：人工建的就是确定的型号。`family` / `unknown` /
+        `guess` 是系统维护的兜底实体（模型域 §4.7.5）——手填它们会把「说不清用了什么」
+        改写成「本站确认它是这个型号」，之后所有引用都指向它，真实型号反而查不出来。
+        `unspecified` / `x-family` / `x-guess` / <厂商>-unknown 这类名字一律 400。
+
+        **slug**：省略时按展示名与厂商生成（规则见运行手册 §7.7「模型 slug 生成」，
+        纯函数、同一输入永远同一个值）；也可以显式传入覆盖。它在公开 URL 里且
+        **创建后不可变**，所以提交前必须做长度校验（1–128）。表单预填的建议值走
+        `GET /api/v1/admin/models/slug-suggestion`——前端不复制生成规则。
+
+        **撞名 / 撞 slug 一律 409，不自动加后缀**：自动后缀会造出一个永久难看的展示名
+        （`deepseek-chat-2`），而管理员真正想的多半是「补全那一条」。响应里的
+        `existingSlug` 指向已有那条，界面据此给「去那条补全」的入口。
+
+        **厂商是实体，不是自由文本**：`vendorId` 挂到已有厂商（下拉里选的那一条），
+        `vendor` 就地新建一条厂商——只收名称，`source='manual'`，slug 按名字折（与模型 slug
+        同一个纯函数）。两家厂商名折出同一个 slug 时回 409 **并要求改名**，不自动加后缀：
+        后缀会造出一个永久难看的厂商键，而撞车多半说明「这就是同一家，选它就行」。
+        两个字段同时给回 400（二选一，含糊的请求不该被猜）。
+
+        挂上厂商之后，厂商名同时写进 `vendors.name` 与过渡期的 `models.vendor` 文本列，
+        两边取值一致——文本列是展示缓存，不是第二份事实源。两个都不给就是「厂商未标注」，
+        模型页与列表都显示这句话（不是「厂商未知」：不知道与没标注是两件事）。
+
+        每次新建写一条审计（动作 `create`、实体 `model`）。需要 `model.create` 权限。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelManualCreate'
+      responses:
+        '201':
+          description: 新建成功（模型已可用）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '400':
+          description: 名称为空 / 名称或 slug 超长 / 名称是系统兜底名（unspecified、<厂商>-unknown 之类）/ `vendorId` 与 `vendor` 同时给出 / `vendorId` 指向不存在的厂商
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.create 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 同名或同 slug 的模型已存在（响应里 `existingSlug` 指向已有那条）；或厂商名折出的 slug 已被另一家厂商占用（这时**不带** `existingSlug`，要求换个厂商名）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/models/slug-suggestion:
+    get:
+      operationId: suggestModelSlug
+      tags: [治理]
+      summary: 新模型的 slug 建议值
+      description: |
+        按展示名与厂商算出 slug 建议值，给手动新建的表单预填。
+
+        **只跑算法、不查唯一性**：同一个输入永远得到同一个值，撞了由创建端点回 409。
+        在建议这一步加 `-2` 后缀等于让表单里显示一个「提交后会变」的地址，而 slug
+        一旦写进 URL 就不可变——那时用户看到的和拿到的是两回事。
+
+        **为什么单独一个端点而不是让前端算**：slug 的生成规则是公开 URL 的一部分
+        （`/models/<slug>`），两处实现迟早分叉，分叉的表现就是「表单里看到的地址和
+        实际写下地址不一样」。服务端只保留一份实现（运行手册 §7.7「模型 slug 生成」）。
+
+        `name` 必填；`vendor` 可省略。需要 `model.create` 权限。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+          description: 展示名（原始写法；中文照抄，摘要按原始字节算）
+        - name: vendor
+          in: query
+          schema: { type: string, maxLength: 64 }
+          description: 厂商；空字符串与省略等价
+      responses:
+        '200':
+          description: 建议值（不含唯一性后缀）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSlugSuggestion'
+        '400':
+          description: 缺少 name，或 name / vendor 超长
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.create 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/models/vendors:
+    get:
+      operationId: listModelVendors
+      tags: [治理]
+      summary: 厂商实体列表（手动新建的下拉）
+      description: |
+        手动新建模型时「选已有厂商」那个下拉的数据源：`vendors` 表的全部行，按名称排序。
+
+        **为什么只有三列**：下拉要回答的是「选哪一个」，不是「这家厂商的详情」。`id`
+        是提交 `vendorId` 用的键，`name` 显示给人看，`slug` 是稳定键（厂商改名时它不动，
+        与 `models.slug` 同规则）。主页 / 状态 / 来源在下拉里没有任何决策价值，
+        带出来只会让调用方开始依赖它们。
+
+        **为什么不是公开端点**：厂商实体目前只由管理端维护（就地新建 + 导入填充），
+        公开读路径用的是模型行上的厂商名。把它开成公开端点，等于现在就把一个还没定的
+        厂商目录形状承诺出去。
+
+        只读列表，沿用 `model.create`——这条路唯一的用途就是新建模型的下拉。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 厂商行（按名称排序；一家都没有时是空数组）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelVendorList'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少 model.create 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/admin/models/sync:
     post:
       operationId: syncModelCatalog
@@ -4343,6 +4535,17 @@ components:
         message:
           type: string
           description: 中文说明，可直接展示
+        existingSlug:
+          type: string
+          description: |
+            撞名 / 撞 slug 时，已有那条**模型**的 slug。**只有手动新建的 409 撞名才给**，
+            其余错误不带这个字段——包括「厂商名折出同一 slug」那种 409：那时撞的是
+            厂商，给出已有那条模型的链接只会把人带到错的地方。所以客户端按
+            **这个字段在不在**分流，不要从 `message` 里抠。
+
+            为什么放进错误体：界面要能跳到已有那条（`/models/<slug>`）并提示
+            「改用导入补全」。从 `message` 里抠字符串是不允许的——`message`
+            是给人看的，措辞随时会改，抠它等于把展示文案变成协议。
 
     Healthz:
       type: object
@@ -5455,6 +5658,90 @@ components:
             # 两份同值枚举并存时，生成器会给全仓每个枚举常量加上类型前缀
             #（`api.Unavailable` → `api.ErrorCodeUnavailable`），那是为一个数组元素
             # 付的全局代价。合法取值以 `ModelImportField.field` 为准。
+    ModelManualCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: |
+            展示名。**必须是人话里的型号名**：`unspecified` / `x-family` /
+            `x-guess` / <厂商>-unknown 这类兜底名由系统维护，手填一律 400
+            （模型域 §4.7.5）。唯一（`models.name` 上的 UNIQUE）：撞名回 409，
+            不自动加后缀。
+        slug:
+          type: string
+          maxLength: 128
+          description: |
+            公开 URL 标识。省略时由展示名与厂商生成（运行手册 §7.7「模型 slug 生成」）；
+            显式传入时按原值使用，只做长度校验。
+            **创建后不可变**：改它等于换一条 URL，旧链接全部失效。
+        vendorId:
+          type: integer
+          minimum: 1
+          description: |
+            挂到已有厂商（`vendors.id`，下拉里选的那一条）。与 `vendor` **互斥**：
+            两个同时给回 400——同时说「选这家」和「建一家叫这个的」，猜错哪一个
+            都会写进共享目录。
+
+            指向不存在的厂商回 400（不是 404）：这是新建模型的请求体，
+            形状错了就不该走得更远。
+        vendor:
+          type: string
+          maxLength: 64
+          description: |
+            就地新建一家厂商（只收名称，`source='manual'`）：折出的 slug 若已被
+            另一家厂商占用，回 409 并要求改名，**不自动加后缀**。名字与已有那家
+            逐字相同时直接挂上那家（同一个厂商建两次不该出现两条行）。
+
+            未知时省略或留空 = 「厂商未标注」。与 `vendorId` 互斥。
+
+    ModelSlugSuggestion:
+      type: object
+      additionalProperties: false
+      required: [slug]
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+          description: |
+            按展示名与厂商算出的建议值，**不含唯一性后缀**（不查库、不加 `-2`）。
+            提交前仍要过唯一性与长度校验：撞了由创建端点回 409。
+
+    # 厂商实体（`vendors`）。目前只服务手动新建的下拉，所以只暴露「选哪一个」需要的三列。
+    ModelVendor:
+      type: object
+      additionalProperties: false
+      required: [id, slug, name]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          description: 厂商行主键；新建模型时作为 `vendorId` 提交
+        slug:
+          type: string
+          maxLength: 64
+          description: |
+            稳定键（`vendors.slug`），由厂商名折出（与模型 slug 同一个纯函数）：折不出
+            ASCII 时退名字摘要前 6 位。唯一——两家厂商折出同一个 slug 时，后建的那家
+            被要求改名，不自动加后缀。
+        name:
+          type: string
+          maxLength: 128
+          description: 展示名；模型页与列表读的就是它（实体缺席时才退回文本列）
+    ModelVendorList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelVendor'
+
     ModelRef:
       type: object
       additionalProperties: false
@@ -5471,7 +5758,10 @@ components:
         vendor:
           type: string
           maxLength: 64
-          description: 厂商名；未知时为空串
+          description: |
+            厂商名；「厂商未标注」时为空串。**厂商实体存在时取 `vendors.name`**，
+            否则退回过渡期的 `models.vendor` 文本列（历史行只有文本，没有实体）。
+            两者都空 = 未标注。判据只有 SQL 里那一处 `COALESCE`，读路径不再各读一半。
 
     # 模型目录里的一行（`GET /api/v1/models`）。详情里作者声明的模型也是这个形状——
     # 同一份数据在两张页面上长得不一样，是最容易被忽略的不一致。
