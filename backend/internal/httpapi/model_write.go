@@ -13,7 +13,6 @@ import (
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/demo"
-	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/identity"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/model"
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
@@ -38,52 +37,6 @@ import (
 // slug 进 URL 且创建后不可变。自动加后缀（deepseek-chat-2）会造出一个永久难看的
 // 展示名，而管理员真正想的多半是「补全那一条」。所以 409 里带上已有那条的 slug，
 // 界面据此给「去那条补全」的入口。
-
-// modelCreator 是手动新建的鉴权点，键 model.create。
-//
-// 与 modelImporter 分开：导入管「把上游已有的条目搬进来」（依据是上游记录），
-// 新建管「认定这条存在」（依据是管理员的判断）。风险面不同，权限就该分开。
-func (h *Handler) modelCreator(ctx context.Context, r *http.Request) (demo.Actor, error) {
-	if h.identity == nil || h.queries == nil {
-		return demo.Actor{}, errNotWired
-	}
-	account, err := h.identity.Me(ctx, readSessionCookie(r))
-	if err != nil {
-		return demo.Actor{}, err
-	}
-	ok, err := h.queries.HasPermission(ctx, store.HasPermissionParams{
-		Sub:           account.Sub,
-		PermissionKey: "model.create",
-	})
-	if err != nil {
-		return demo.Actor{}, err
-	}
-	if !ok {
-		return demo.Actor{}, errForbidden
-	}
-	return demo.Actor{
-		AccountID: account.ID,
-		UserID:    account.UserID,
-		Role:      account.Role,
-	}, nil
-}
-
-// writeManualModelError 把鉴权类错误摊成状态码。
-//
-// 不并进 modelErrorParts：那里 403 的文案是「没有模型导入权限」，在这里复用它
-// 会让「缺哪个键」这句话说错——而这句话正是操作者找管理员要权限时的唯一线索。
-func (h *Handler) writeManualModelError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, identity.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, api.Unauthorized, "请先登录")
-	case errors.Is(err, errForbidden):
-		writeError(w, http.StatusForbidden, api.Forbidden, "没有新建模型的权限")
-	case errors.Is(err, errNotWired):
-		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
-	default:
-		unavailable(w, err)
-	}
-}
 
 // modelConflict 是「名字或 slug 已被占用」，带着已有那条的行。
 //
@@ -154,9 +107,9 @@ func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 		return
 	}
-	actor, err := h.modelCreator(r.Context(), r)
+	actor, err := h.requirePermission(r.Context(), r, permModelCreate)
 	if err != nil {
-		h.writeManualModelError(w, err)
+		h.writePermissionError(w, err, permModelCreate)
 		return
 	}
 
@@ -179,20 +132,32 @@ func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vendor := strings.TrimSpace(derefString(body.Vendor))
 	// 显式给空串与不给等价：表单里清空 slug 输入框，不该变成「提交一个空 slug」。
+	// 具体的值在事务里才算：厂商可能是实体（`vendorId`），只有先解析出厂商名，
+	// 才能算出与「表单里看到的建议值」一致的那个值。
 	slug := strings.TrimSpace(derefString(body.Slug))
-	if slug == "" {
-		// 建议值就是这里写下的值（同一个纯函数、同一份实现）：表单预填看到什么，
-		// 不填 slug 时拿到的就是什么。
-		slug = model.Slug(name, vendor)
-	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 
-	created, err := h.insertManualModel(ctx, actor, name, slug, vendor)
+	created, err := h.insertManualModel(ctx, actor, name, slug, body)
 	if err != nil {
+		// 厂商输入的两条形状错误先摊开：它们与「模型撞名」不是同一件事，
+		// 混进同一个 409 / 400 文案会让人不知道要改哪一处。
+		switch {
+		case errors.Is(err, errVendorAmbiguous):
+			writeError(w, http.StatusBadRequest, api.InvalidParam,
+				"vendorId 与 vendor 只能给一个：选已有厂商，或者新建一家")
+			return
+		case errors.Is(err, errVendorNotFound):
+			writeError(w, http.StatusBadRequest, api.InvalidParam, "vendorId 指向的厂商不存在")
+			return
+		}
+		var vendorConflict *vendorSlugConflict
+		if errors.As(err, &vendorConflict) {
+			writeVendorConflict(w, vendorConflict)
+			return
+		}
 		var conflict *modelConflict
 		if errors.As(err, &conflict) {
 			h.writeModelConflict(w, conflict)
@@ -223,12 +188,14 @@ func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
 // modelCreate 是「建一条模型」的全部输入。
 //
 // Status 是唯一随写路径变化的字段：手动新建是 active（管理员点下去就是背书），
-// 收录提案批准是 candidate（有人提了、等核实）。其余字段两条路完全一致。
+// 收录提案批准是 candidate（有人提了、等核实）。其余字段两条路完全一致——
+// `VendorID` 只有手动新建会填（#588：选已有厂商或就地新建），提案批准那边只写文本列。
 type modelCreate struct {
-	Name   string
-	Slug   string
-	Vendor string
-	Status string
+	Name     string
+	Slug     string
+	Vendor   string
+	VendorID pgtype.Int8
+	Status   string
 }
 
 // createModelInTx 在调用方已开启的事务里「查重 → 建行 → 写 create 审计」，返回新行 id。
@@ -258,12 +225,13 @@ func (h *Handler) createModelInTx(
 		vendorColumn = pgtype.Text{String: in.Vendor, Valid: true}
 	}
 
-	// 复用导入路径那条 INSERT：slug / name / vendor / status / resolution=exact 的形状
-	// 三条路一致，再开一条 INSERT INTO models 就是第二个写入点。
+	// 复用导入路径那条 INSERT：slug / name / vendor / vendor_id / status / resolution=exact
+	// 的形状三条路一致，再开一条 INSERT INTO models 就是第二个写入点。
 	id, err := q.CreateModelFromCatalog(ctx, store.CreateModelFromCatalogParams{
 		Slug:        in.Slug,
 		Name:        in.Name,
 		Vendor:      vendorColumn,
+		VendorID:    in.VendorID,
 		Status:      in.Status,
 		Description: "",
 	})
@@ -277,13 +245,20 @@ func (h *Handler) createModelInTx(
 	}
 	// after 只留「这条凭什么可信」用得上的字段：状态、名称精确度、标识与厂商。
 	// 不存整行——审计日志会跟着变胖，而真正要回答的是「谁在什么时候把它变成了什么」。
-	after, err := json.Marshal(map[string]string{
+	//
+	// `vendor_id` 只在真的挂了厂商时出现：没有这个键 = 厂商未标注（#588）。
+	// 写成一个空值反而会让人以为「挂了一个 id 为空的厂商」。
+	afterFields := map[string]any{
 		"slug":       in.Slug,
 		"name":       in.Name,
 		"vendor":     in.Vendor,
 		"status":     in.Status,
 		"resolution": "exact",
-	})
+	}
+	if in.VendorID.Valid {
+		afterFields["vendor_id"] = in.VendorID.Int64
+	}
+	after, err := json.Marshal(afterFields)
 	if err != nil {
 		return 0, err
 	}
@@ -309,7 +284,8 @@ func (h *Handler) createModelInTx(
 func (h *Handler) insertManualModel(
 	ctx context.Context,
 	actor demo.Actor,
-	name, slug, vendor string,
+	name, slug string,
+	body api.ModelManualCreate,
 ) (api.Model, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
@@ -320,10 +296,27 @@ func (h *Handler) insertManualModel(
 
 	q := h.queries.WithTx(tx)
 
+	// 厂商先定（#588）：就地新建要插一行，而那一行必须与模型行同生共死——模型撞名
+	// 回滚时不能留下一条没有任何模型指向的厂商。
+	vendorRef, err := h.resolveModelVendor(ctx, q, body)
+	if err != nil {
+		return api.Model{}, err
+	}
+	if slug == "" {
+		// 建议值就是这里写下的值（同一个纯函数、同一份输入：展示名 + 厂商名）。
+		// 厂商名取**实体**的，而不是请求里那个可能没给的文本——否则「选了已有厂商」
+		// 这条路的预填值与实际写入值会分叉。
+		slug = model.Slug(name, vendorRef.Name)
+	}
+
+	// 查重 / 建行 / 写 create 审计仍是 #587 那一处（createModelInTx）：提案批准走
+	// 同一个函数，只差状态这一列。厂商两个字段一起给——`vendor_id` 是权威，
+	// 文本列是过渡期的展示缓存（同值）。
 	id, err := h.createModelInTx(ctx, q, actor, modelCreate{
-		Name:   name,
-		Slug:   slug,
-		Vendor: vendor,
+		Name:     name,
+		Slug:     slug,
+		Vendor:   vendorRef.Name,
+		VendorID: vendorRef.ID,
 		// 手动新建由管理员点下去，是背书；候选那条语义属于提案批准。
 		Status: "active",
 	})
@@ -350,8 +343,8 @@ func (h *Handler) insertManualModel(
 // 单独一个端点而不是让前端算：slug 规则是公开 URL 的一部分，两处实现迟早分叉，
 // 分叉的表现正是「表单里看到的地址和实际写下地址不一样」。
 func (h *Handler) SuggestModelSlug(w http.ResponseWriter, r *http.Request, params api.SuggestModelSlugParams) {
-	if _, err := h.modelCreator(r.Context(), r); err != nil {
-		h.writeManualModelError(w, err)
+	if _, err := h.requirePermission(r.Context(), r, permModelCreate); err != nil {
+		h.writePermissionError(w, err, permModelCreate)
 		return
 	}
 	name := strings.TrimSpace(params.Name)

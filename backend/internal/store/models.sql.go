@@ -69,14 +69,15 @@ func (q *Queries) CountCatalogItems(ctx context.Context, arg CountCatalogItemsPa
 }
 
 const createModelFromCatalog = `-- name: CreateModelFromCatalog :one
-INSERT INTO models (slug, name, vendor, status, resolution, description)
+INSERT INTO models (slug, name, vendor, vendor_id, status, resolution, description)
 VALUES (
     $1,
     $2,
     $3,
     $4,
+    $5,
     'exact',
-    $5
+    $6
 )
 RETURNING id
 `
@@ -85,6 +86,7 @@ type CreateModelFromCatalogParams struct {
 	Slug        string
 	Name        string
 	Vendor      pgtype.Text
+	VendorID    pgtype.Int8
 	Status      string
 	Description string
 }
@@ -97,13 +99,17 @@ type CreateModelFromCatalogParams struct {
 //   - 收录提案批准 → `candidate`：有人提了、还没人核实（**批准 ≠ 可用**）。
 //
 // 名字里的 Catalog 是历史（它原本只服务导入）。三条路共用一条 INSERT，是因为写下的形状
-// 逐列相同（slug / name / vendor / resolution=exact），差别只有状态这一列。各写一份的代价
-// 不是多几行，而是 slug 规则或审计形状改了之后只在一处改对。
+// 逐列相同（slug / name / vendor / vendor_id / resolution=exact），差别只有 status 这一列与
+// `vendor_id` 的取值。各写一份的代价不是多几行，而是 slug 规则或审计形状改了之后只在一处改对。
+//
+// `vendor_id` 只有手动新建会填（#588）：导入路径按上游 canonical 前缀填的是文本列，厂商实体的
+// 映射还没做（见已知松点「厂商文本列的双写过渡」）。差异是一列的值，不是形状。
 func (q *Queries) CreateModelFromCatalog(ctx context.Context, arg CreateModelFromCatalogParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createModelFromCatalog,
 		arg.Slug,
 		arg.Name,
 		arg.Vendor,
+		arg.VendorID,
 		arg.Status,
 		arg.Description,
 	)

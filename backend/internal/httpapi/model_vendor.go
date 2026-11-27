@@ -160,8 +160,8 @@ func (h *Handler) ListModelVendors(w http.ResponseWriter, r *http.Request) {
 		unavailable(w, errors.New("database not configured"))
 		return
 	}
-	if _, err := h.modelCreator(r.Context(), r); err != nil {
-		h.writeManualModelError(w, err)
+	if _, err := h.requirePermission(r.Context(), r, permModelCreate); err != nil {
+		h.writePermissionError(w, err, permModelCreate)
 		return
 	}
 
