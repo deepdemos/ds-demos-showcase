@@ -10,7 +10,7 @@
  * 作品榜与相关推荐、我的作品、渠道上架与撤下、模型 × 基准总览，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码）、
  * 管理端的手动新建模型与厂商实体，
- * 共 80 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 共 81 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -58,9 +58,11 @@ import type {
   RelatedList,
   RestoreResult,
   RevisionList,
+  SearchUpstreamModelsParams,
   SubmissionResult,
   SubmitDemoBody,
-  UpdateDemoBody
+  UpdateDemoBody,
+  UpstreamModelList
 } from '../model';
 
 
@@ -320,6 +322,89 @@ export const listModels = async (params?: ListModelsParams, options?: RequestIni
 
   const data: listModelsResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listModelsResponse
+}
+
+
+export type searchUpstreamModelsResponse200 = {
+  data: UpstreamModelList
+  status: 200
+}
+
+export type searchUpstreamModelsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type searchUpstreamModelsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type searchUpstreamModelsResponseSuccess = (searchUpstreamModelsResponse200) & {
+  headers: Headers;
+};
+export type searchUpstreamModelsResponseError = (searchUpstreamModelsResponse400 | searchUpstreamModelsResponse503) & {
+  headers: Headers;
+};
+
+export type searchUpstreamModelsResponse = (searchUpstreamModelsResponseSuccess | searchUpstreamModelsResponseError)
+
+export const getSearchUpstreamModelsUrl = (params?: SearchUpstreamModelsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/models/upstream?${stringifiedParams}` : `/api/v1/models/upstream`
+}
+
+/**
+ * **公开只读**：未登录也能用。按关键词模糊查**本地镜像**的上游条目
+ * （`model_catalog_items`，由同步任务从 models.dev 拉下来），给模型选择器当数据源。
+ * 不实时问上游：models.dev 只提供整包 JSON（约 10MB），没有搜索接口，
+ * 上游不可用时本站照常工作（模型域 §4.6.1）。
+ *
+ * 每条只给五样东西：**名称**、**上游发布方**、**规范标识**（`source` + `providerId` +
+ * `externalId` + `canonicalId`）、**上游自己的状态**、以及**是否已被站内收录**
+ * （`slug`：已收录就是对应的站内模型 slug，未收录是 `null`）。
+ * **不暴露导入溯源**——谁导的、什么时候导的都不在这里，那是管理端审计的事。
+ *
+ * **不分页，最多 20 条**：这是选择器的数据源，不是供人逐页浏览的目录。
+ * 条数上限写死在 `backend/internal/httpapi/model_catalog_search.go` 的
+ * `upstreamSearchLimit`（登记在运行手册第 54 条）。
+ *
+ * **默认不排除上游已弃用的条目**：上游 `deprecated`（厂商不再维护）与我们自己的
+ * `models.status='deprecated'`（已合并到别的模型，见 `GET /api/v1/models`）是两套语义。
+ * 选择器要能搜到灰测 / 弃用的名字，所以这里不过滤，`upstreamStatus` 原样交给调用方判。
+ *
+ * `%` / `_` / `\` 按字面匹配（服务端转义），与作品搜索同一口径——不转义的话
+ * `%` 会把整份镜像吐回来。
+ *
+ * **这个端点没有限流**：全仓没有通用限流器（见 `docs/已知松点.md` 第 73 条）。
+ * @summary 上游条目搜索（公开只读）
+ */
+export const searchUpstreamModels = async (params?: SearchUpstreamModelsParams, options?: RequestInit): Promise<searchUpstreamModelsResponse> => {
+
+  const res = await fetch(getSearchUpstreamModelsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: searchUpstreamModelsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as searchUpstreamModelsResponse
 }
 
 
