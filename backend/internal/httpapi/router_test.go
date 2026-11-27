@@ -374,14 +374,11 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		{http.MethodGet, "/api/v1/benchmarks/swe-bench", "benchmark:swe-bench"},
 		// 静态段必须压过 /{slug}：写成 "benchmark:overview" 就说明被参数路由抢走了。
 		{http.MethodGet, "/api/v1/benchmarks/overview", "benchmark-overview"},
-<<<<<<< HEAD
 		// 同上：/api/v1/models/upstream 必须命中静态路由，而不是 getModel 的 {slug}。
 		// 写成 "detail:upstream" 就说明上游搜索被 /api/v1/models/{slug} 抢走了。
 		{http.MethodGet, "/api/v1/models/upstream", "upstream-search"},
-=======
 		// 管理端厂商下拉：静态段与 slug-suggestion 同级，谁也不该抢谁的路由。
 		{http.MethodGet, "/api/v1/admin/models/vendors", "model-vendors"},
->>>>>>> 8ec09d43 (feat(model): 手动新建模型 + 厂商实体接入（#587 #588 的后端与契约部分）)
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
 		{http.MethodGet, "/api/v1/admin/appeals", "admin-appeals"},
