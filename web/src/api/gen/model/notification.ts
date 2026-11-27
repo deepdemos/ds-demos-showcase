@@ -36,15 +36,40 @@ export interface Notification {
   id: number;
   /** 事件类型键，由 notification_kinds 注册表定义（NTF-003） */
   kind: string;
-  /** @maxLength 128 */
+  /**
+     * 通知对象的类型键。取值由事件类型注册表 `notification_kinds.object_type` 决定：
+     * 作品是 `demo`，模型是 `model`，提案是 `proposal`。加一类对象 = 往注册表插一行，
+     * 不改表结构。
+     */
+  objectType: string;
+  /**
+     * 对象键：作品与模型是 slug，提案是提案 id 的十进制串。对象删除后仍然留着——
+     * 通知存的是快照，不是外键。
+     * @maxLength 128
+     */
+  objectKey: string;
+  /** 事件发生时的对象标题快照；对象删除后仍能显示 */
+  objectTitle: string;
+  /**
+     * **过渡期展示缓存**：作品类事件（`objectType=demo`）返回该作品的 slug，其它对象返回空串。
+     * 读的人应优先用 `objectType` / `objectKey`；下一版删除。
+     * @maxLength 128
+     */
   demoSlug: string;
-  /** 事件发生时的标题快照；作品删除后仍能显示 */
+  /**
+     * **过渡期展示缓存**：作品类事件返回当时的标题快照，其它对象返回空串（与 `objectTitle` 同源）。
+     * 读的人应优先用 `objectTitle`；下一版删除。
+     */
   demoTitle: string;
   /** 事件自己的数据，如驳回理由 reason、评分 score */
   payload: NotificationPayload;
   /** @nullable */
   readAt: string | null;
   createdAt: string;
-  /** false = 作品当前不可访问；前端显示说明且不给跳转（NTF-007） */
+  /**
+     * false = 对象当前不可访问；前端显示说明且不给跳转（NTF-007）。
+     * 判据**按对象类型分支**：作品走公开可见性（软删 / 下架 / 擦除后 false）；
+     * 非作品对象不套作品可见性，当前只在对象键为空时判 false（过渡口径，见通知域设计）。
+     */
   accessible: boolean;
 }

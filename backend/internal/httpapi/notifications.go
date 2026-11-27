@@ -16,14 +16,30 @@ import (
 
 // 通知域传输层（#437 / NTF-001 – NTF-008）。
 //
-// 事件类型由 notification_kinds 注册表驱动；这里只负责读/已读，以及给审核与评分
-// 两个写入点提供 notifyDemoEvent。通知写失败只记日志：审核与评分本身不能被它拖垮。
+// 事件类型由 notification_kinds 注册表驱动；这里只负责读/已读，以及给各个写入点
+// 提供写入路径。通知写失败只记日志：审核、评分、裁决本身不能被它拖垮。
+//
+// 通知对象是「类型 + 键 + 标题快照」（#591 从「作品」泛化而来）：作品、模型、提案都能挂，
+// 存快照不存外键，所以对象删了通知还在（NTF-007）。
 
 const (
 	notificationPageSizeDefault = 20
 	notificationPageSizeMax     = 100
 	notificationRetentionDays   = 90
 )
+
+// objectTypeDemo 是作品对象的类型键。只有它走公开可见性判据（见 ListNotifications 的 SQL）；
+// 其它类型（model / proposal）不套作品可见性。
+const objectTypeDemo = "demo"
+
+// notificationObject 是通知指向的对象：类型 + 键 + 标题快照。
+//
+// 键就是「拿它能不能找到那个对象」：作品与模型是 slug，提案是提案 id 的十进制串。
+type notificationObject struct {
+	Type  string
+	Key   string
+	Title string
+}
 
 func (h *Handler) notificationRetentionDays(ctx context.Context) int32 {
 	raw, err := h.queries.GetSiteSettingNumber(ctx, "notification.retention_days")
@@ -56,13 +72,21 @@ func notificationView(row store.ListNotificationsRow) api.Notification {
 		}
 	}
 	out := api.Notification{
-		Id:         int(row.ID),
-		Kind:       row.Kind,
-		DemoSlug:   row.DemoSlug,
-		DemoTitle:  row.DemoTitle,
-		Payload:    payload,
-		CreatedAt:  row.CreatedAt.Time,
-		Accessible: row.Accessible,
+		Id:          int(row.ID),
+		Kind:        row.Kind,
+		ObjectType:  row.ObjectType,
+		ObjectKey:   row.ObjectKey,
+		ObjectTitle: row.ObjectTitle,
+		Payload:     payload,
+		CreatedAt:   row.CreatedAt.Time,
+		Accessible:  row.Accessible,
+	}
+	// 契约里的 demoSlug / demoTitle 是给老调用方的展示缓存：作品类事件把对象快照摊到这两个
+	// 字段上，老调用方读到的值与旧列时代逐字一致；非作品对象给空串（它们没有作品可指）。
+	// 旧列已由迁移 0042 删除，这里只是**派生**，不是第二份事实源。
+	if row.ObjectType == objectTypeDemo {
+		out.DemoSlug = row.ObjectKey
+		out.DemoTitle = row.ObjectTitle
 	}
 	if row.ReadAt.Valid {
 		readAt := row.ReadAt.Time
@@ -226,19 +250,38 @@ func (h *Handler) notifyDemoEvent(ctx context.Context, slug, kind string, payloa
 	if !target.AccountID.Valid || target.AccountID.Int64 == actorID {
 		return
 	}
+	h.notifyObject(ctx, target.AccountID.Int64, kind, notificationObject{
+		Type:  objectTypeDemo,
+		Key:   target.Slug,
+		Title: target.Title,
+	}, payload)
+}
 
-	data, err := json.Marshal(payload)
-	if err != nil {
-		slog.Warn("序列化通知 payload 失败", "slug", slug, "kind", kind, "err", err)
+// notifyObject 给指定账号写一条对象通知。接收者由调用方解析——模型 / 提案这类事件
+// 没有「作品作者」可查，谁该收到是各域自己的事（#595 的驳回通知就这么走）。
+//
+// 对象只写 object_type / object_key / object_title 三列（旧的作品列已由迁移 0042 删除）：
+// 作品、模型、提案走同一条写入路径，差别只在传进来的类型与键。
+//
+// 写库失败只记日志：通知是附加动作，不能反向影响裁决。
+func (h *Handler) notifyObject(ctx context.Context, accountID int64, kind string, object notificationObject, payload any) {
+	if h.queries == nil {
 		return
 	}
-	if err := h.queries.InsertNotification(ctx, store.InsertNotificationParams{
-		AccountID: target.AccountID.Int64,
-		Kind:      kind,
-		DemoSlug:  target.Slug,
-		DemoTitle: target.Title,
-		Payload:   data,
-	}); err != nil {
-		slog.Warn("写通知失败", "slug", slug, "kind", kind, "err", err)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		slog.Warn("序列化通知 payload 失败", "object", object.Type+":"+object.Key, "kind", kind, "err", err)
+		return
+	}
+	params := store.InsertNotificationParams{
+		AccountID:   accountID,
+		Kind:        kind,
+		ObjectType:  object.Type,
+		ObjectKey:   object.Key,
+		ObjectTitle: object.Title,
+		Payload:     data,
+	}
+	if err := h.queries.InsertNotification(ctx, params); err != nil {
+		slog.Warn("写通知失败", "object", object.Type+":"+object.Key, "kind", kind, "err", err)
 	}
 }

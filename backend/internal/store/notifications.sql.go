@@ -103,25 +103,35 @@ func (q *Queries) GetNotificationReadAt(ctx context.Context, arg GetNotification
 }
 
 const insertNotification = `-- name: InsertNotification :exec
-INSERT INTO notifications (account_id, kind, demo_slug, demo_title, payload)
-VALUES ($1, $2, $3, $4, $5::jsonb)
+INSERT INTO notifications (
+    account_id, kind, object_type, object_key, object_title, payload
+)
+VALUES (
+    $1, $2, $3, $4, $5, $6::jsonb
+)
 `
 
 type InsertNotificationParams struct {
-	AccountID int64
-	Kind      string
-	DemoSlug  string
-	DemoTitle string
-	Payload   []byte
+	AccountID   int64
+	Kind        string
+	ObjectType  string
+	ObjectKey   string
+	ObjectTitle string
+	Payload     []byte
 }
 
 // payload 是事件自己的数据（reason / score），由调用方序列化。
+//
+// 对象用「类型 + 键 + 快照标题」写，不存外键（NTF-007）。作品类事件把 slug 与标题写进
+// object_key / object_title；模型与提案同理，库结构不要求「每条通知都得挂一件作品」
+// （旧列 demo_slug / demo_title 已由迁移 0042 删除）。
 func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotificationParams) error {
 	_, err := q.db.Exec(ctx, insertNotification,
 		arg.AccountID,
 		arg.Kind,
-		arg.DemoSlug,
-		arg.DemoTitle,
+		arg.ObjectType,
+		arg.ObjectKey,
+		arg.ObjectTitle,
 		arg.Payload,
 	)
 	return err
@@ -130,16 +140,20 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 const listNotifications = `-- name: ListNotifications :many
 SELECT n.id,
        n.kind,
-       n.demo_slug,
-       n.demo_title,
+       n.object_type,
+       n.object_key,
+       n.object_title,
        n.payload,
        n.read_at,
        n.created_at,
-       EXISTS (
-           SELECT 1 FROM demos d
-           JOIN demo_public_demos p ON p.demo_id = d.id
-           WHERE d.slug = n.demo_slug
-       ) AS accessible
+       (CASE
+           WHEN n.object_type = 'demo' THEN EXISTS (
+               SELECT 1 FROM demos d
+               JOIN demo_public_demos p ON p.demo_id = d.id
+               WHERE d.slug = n.object_key
+           )
+           ELSE n.object_key <> ''
+       END)::boolean AS accessible
 FROM notifications n
 WHERE n.account_id = $1
 ORDER BY n.created_at DESC, n.id DESC
@@ -153,17 +167,24 @@ type ListNotificationsParams struct {
 }
 
 type ListNotificationsRow struct {
-	ID         int64
-	Kind       string
-	DemoSlug   string
-	DemoTitle  string
-	Payload    []byte
-	ReadAt     pgtype.Timestamptz
-	CreatedAt  pgtype.Timestamptz
-	Accessible bool
+	ID          int64
+	Kind        string
+	ObjectType  string
+	ObjectKey   string
+	ObjectTitle string
+	Payload     []byte
+	ReadAt      pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	Accessible  bool
 }
 
-// accessible：作品当前是否还在公开视图里（软删 / 下架 / 擦除后 false）。
+// accessible：对象当前是否可访问。判据**按对象类型分支**：
+//
+//	· 作品（demo）：只有在公开视图 demo_public_demos 里才算可访问（软删 / 下架 / 擦除后 false）。
+//	· 非作品（model / proposal）：**不套**作品可见性——它们的读取入口由各自域决定，
+//	  当前过渡口径是「对象键在就算可访问」；各域的判据落地时在这里加分支。
+//
+// 对象快照只读 object_type / object_key / object_title 三列；旧的作品列已在迁移 0042 删除。
 func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error) {
 	rows, err := q.db.Query(ctx, listNotifications, arg.AccountID, arg.RowOffset, arg.RowLimit)
 	if err != nil {
@@ -176,8 +197,9 @@ func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsPa
 		if err := rows.Scan(
 			&i.ID,
 			&i.Kind,
-			&i.DemoSlug,
-			&i.DemoTitle,
+			&i.ObjectType,
+			&i.ObjectKey,
+			&i.ObjectTitle,
 			&i.Payload,
 			&i.ReadAt,
 			&i.CreatedAt,

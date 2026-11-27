@@ -1405,8 +1405,13 @@ export const getListNotificationsUrl = (params?: ListNotificationsParams,) => {
 /**
  * 只返回自己的通知，按时间新→旧。带 total 与 unreadCount，导航角标可以不另拉列表。
  *
- * 条目里的 accessible 表示作品当前是否公开可见：作品软删 / 下架 / 擦除后仍保留
- * 通知（NTF-007），但前端要显示「该作品已不可访问」并不给跳转。
+ * 条目按「对象类型 + 对象键 + 对象标题快照」描述被通知的对象（`objectType` /
+ * `objectKey` / `objectTitle`）——这正是通知对象从「作品」泛化到模型 / 提案之后的口径，
+ * 加一类对象不改表结构。`demoSlug` / `demoTitle` 是**过渡期的展示缓存**，
+ * 只为作品类事件填充（非作品对象返回空串），读的人应优先用对象字段。
+ *
+ * 条目里的 accessible 表示**对象**当前是否可访问（判据按对象类型分支，见 Notification）：
+ * 作品软删 / 下架 / 擦除后通知仍保留（NTF-007），但前端要显示「该对象已不可访问」并不给跳转。
  * @summary 我的通知
  */
 export const listNotifications = async (params?: ListNotificationsParams, options?: RequestInit): Promise<listNotificationsResponse> => {
