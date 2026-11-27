@@ -29,7 +29,7 @@ func TestStageSingleFileTakesExtensionFromPackageName(t *testing.T) {
 	}
 
 	// 单文件分支不碰数据库与对象存储，传 nil 是安全的；只有 zip 分支会用到 limits。
-	s := New(nil, nil, nil, storage.Limits{}, 1<<20, 0, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s := New(nil, nil, nil, storage.Limits{}, 1<<20, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	st, cleanup, err := s.stage(context.Background(), SubmitInput{
 		PackagePath: pkgPath,
@@ -58,7 +58,7 @@ func TestStageRejectsUnknownExtension(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := New(nil, nil, nil, storage.Limits{}, 1<<20, 0, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s := New(nil, nil, nil, storage.Limits{}, 1<<20, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	_, cleanup, err := s.stage(context.Background(), SubmitInput{
 		PackagePath: pkgPath,
@@ -78,7 +78,7 @@ func TestStageNormalizesHtmToHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := New(nil, nil, nil, storage.Limits{}, 1<<20, 0, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s := New(nil, nil, nil, storage.Limits{}, 1<<20, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	st, cleanup, err := s.stage(context.Background(), SubmitInput{
 		PackagePath: pkgPath,

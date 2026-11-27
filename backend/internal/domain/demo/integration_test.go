@@ -40,7 +40,7 @@ func testService(t *testing.T, pool *pgxpool.Pool) *Service {
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
-	return New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, 0, nil)
+	return New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, nil)
 }
 
 // mkAuthor 建一个作者：accounts 行 + 对应的 users 投影行，返回 users.id。

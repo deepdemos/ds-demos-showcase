@@ -8,22 +8,19 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
-// TestIntegrationSubmitHasNoPerAuthorCap 钉住「第 6 个参数被忽略」这件事。
+// TestIntegrationSubmitHasNoPerAuthorCap 钉住「投稿写路径无单作者待审上限」这件事。
 //
 // 2026-11-16 撤掉了单作者待审上限（429 + Retry-After）：它来自 review #198 的
-// 防刷建议，没有需求授权。但 demo.New 的签名里还留着那个参数——一次删干净要动
-// 19 处调用点，会越过 pr-guard 的 20 文件上限（删除记在 #467，松点第 65 条）。
-//
-// 这条用例把「留着也不生效」写成断言：传 1 也照样能连投两条。如果哪天有人把这个
-// 参数接回配额判定，这里会红——而不是等到线上有人投第二条被挡住才发现。
+// 防刷建议，没有需求授权（松点第 65 条）。#467 已从 demo.New 签名中移除废弃的占位参数，
+// 本用例保留为直接断言同一作者可连续提交两条待审作品；若日后有人重新引入单作者硬拒配额，
+// 这里会红。
 func TestIntegrationSubmitHasNoPerAuthorCap(t *testing.T) {
 	pool := testPool(t)
 	files, err := storage.NewLocal(t.TempDir())
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
-	// 第 6 参故意传 1：旧语义下第二条会被 ErrTooManyPending 挡住。
-	s := New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, 1, nil)
+	s := New(pool, store.New(pool), files, storage.DefaultLimits(), 200<<20, nil)
 	author := mkAuthor(t, pool, "noquota")
 
 	for i, title := range []string{"第一条", "第二条"} {

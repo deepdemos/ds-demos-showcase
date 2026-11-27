@@ -26,7 +26,7 @@ func TestIntegrationUpdateDemo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
-	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil)
+	demoSvc := demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, nil)
 	h := New(pool, q, idSvc, nil, demoSvc)
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
@@ -204,7 +204,7 @@ func TestIntegrationUpdateRejectsInvalidUTF8(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
-	h := New(pool, q, idSvc, nil, demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, 0, nil))
+	h := New(pool, q, idSvc, nil, demo.New(pool, q, files, storage.DefaultLimits(), 200<<20, nil))
 
 	acc, sid := registerVerified(t, pool, idSvc, identity.RegisterInput{
 		Email: "it-update-utf8@example.com", Password: "updatetest123", Username: "it-upd-utf8", DisplayName: "编辑作者",
