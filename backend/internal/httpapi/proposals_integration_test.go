@@ -127,7 +127,7 @@ func TestIntegrationProposalApproveNotWired(t *testing.T) {
 	var proposalID int64
 	if err := pool.QueryRow(context.Background(), `
 INSERT INTO proposals (kind, payload, source)
-VALUES ('new_model', '{"name":"未接入模型提案"}'::jsonb, 'user')
+VALUES ('new_prompt', '{"title":"未接入提示词提案","content":"测试提示词内容"}'::jsonb, 'user')
 RETURNING id`).Scan(&proposalID); err != nil {
 		t.Fatalf("插入提案失败: %v", err)
 	}

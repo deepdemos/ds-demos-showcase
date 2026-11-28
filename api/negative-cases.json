@@ -965,6 +965,13 @@
           "file": "backend/internal/httpapi/proposals_integration_test.go",
           "name": "TestIntegrationProposalBatch"
         }
+      },
+      {
+        "case": "批量批准含已被认领上游三元组的 new_model 提案时逐条报错并指明归属，不连坐其余合法提案",
+        "test": {
+          "file": "backend/internal/httpapi/proposal_model_approve_integration_test.go",
+          "name": "TestIntegrationApproveNewModelProposalConflictsAndRejects"
+        }
       }
     ],
     "POST /api/v1/admin/proposals/{id}/review": [
@@ -980,6 +987,20 @@
         "test": {
           "file": "backend/internal/httpapi/proposals_integration_test.go",
           "name": "TestIntegrationProposalReviewReject"
+        }
+      },
+      {
+        "case": "批准 new_model 时上游三元组已被别的模型认领或模型撞名返回 409 并指明归属，提案保持 pending",
+        "test": {
+          "file": "backend/internal/httpapi/proposal_model_approve_integration_test.go",
+          "name": "TestIntegrationApproveNewModelProposalConflictsAndRejects"
+        }
+      },
+      {
+        "case": "批准 new_model 时模型名为兜底名、目录镜像缺条目或来源非法返回 422，提案保持 pending",
+        "test": {
+          "file": "backend/internal/httpapi/proposal_model_approve_integration_test.go",
+          "name": "TestIntegrationApproveNewModelProposalConflictsAndRejects"
         }
       }
     ],

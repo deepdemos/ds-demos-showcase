@@ -1672,10 +1672,18 @@ export const getReviewAdminProposalUrl = (id: number,) => {
 }
 
 /**
- * 目前只接 reject：拒绝只改 proposals 的状态并写审计，不产生任何正式数据（ENT-023）。
+ * - `reject`：只改 `proposals` 状态并写审计，不产生任何正式业务数据（ENT-023）。
+ * - `approve`：按 `kind` 执行对应正式写入并回填 `resultKind` / `resultId`（ENT-020）；
+ *   当前已接入 `new_benchmark` / `new_classification` / `new_skill` / `new_task` / `new_model`，
+ *   未接入的 `kind` 统一回 422，绝不出现「状态通过了但业务表没变」的假成功。
  *
- * approve 需要按 kind 执行对应的正式写入（ENT-020）；执行器尚未接入，统一回 422，
- * 不会出现「状态通过了但业务表没变」的假成功。
+ * **`new_model` 批准 ≠ 可用**（#593）：批准只建出一条 `status = 'candidate'`、
+ * `resolution = 'exact'` 的**候选模型**（复用手动新建的 `createModelInTx` 建行与审计逻辑，
+ * 没有第二份创建路径），并把 `resultKind = 'model'`、`resultId = <model_id>` 写回提案。
+ * 若提案 payload 附带上游三元组（`source = 'models.dev'` + `provider_id` + `external_id`），
+ * 将在同一事务内当场完成 `model_offerings` 认领（模型派生来源即为 `models.dev`）；
+ * 若该三元组已被其他模型认领、或模型名 / slug 与已有模型冲突，整笔事务回滚并回 409 指明归属。
+ * 候选模型需再经后续模型治理确认流程（`model.govern`）才能变为 `active` 可用。
  * @summary 裁决提案
  */
 export const reviewAdminProposal = async (id: number,

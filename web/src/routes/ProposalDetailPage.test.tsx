@@ -66,15 +66,34 @@ describe('ProposalDetailPage', () => {
   test('渲染 payload、来源与状态，通过按钮不可用', async () => {
     vi.mocked(getAdminProposal).mockResolvedValue({
       status: 200,
-      data: detail({ kind: 'new_model' }),
+      data: detail({ kind: 'new_prompt' }),
     } as never);
 
     renderPage();
 
     expect(await screen.findByRole('heading', { name: '提案标题' })).toBeInTheDocument();
-    expect(screen.getByText(/new_model · user · 待处理/)).toBeInTheDocument();
+    expect(screen.getByText(/new_prompt · user · 待处理/)).toBeInTheDocument();
     expect(screen.getByText(/一句话说明/)).toBeInTheDocument();
     expect(screen.getByText('通过（执行器未接入）')).toBeInTheDocument();
+  });
+
+  test('new_model 可以通过，并提示批准后只建候选模型', async () => {
+    vi.mocked(getAdminProposal).mockResolvedValue({
+      status: 200,
+      data: detail({ kind: 'new_model', payload: { name: 'DeepSeek V4 Preview' } }),
+    } as never);
+    vi.mocked(reviewEntity).mockResolvedValue({
+      status: 200,
+      data: { id: 7, status: 'approved' },
+    } as never);
+
+    renderPage();
+    expect(await screen.findByText(/批准 ≠ 可用/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '通过' }));
+
+    await waitFor(() =>
+      expect(reviewEntity).toHaveBeenCalledWith('proposal', '7', { decision: 'approve' }),
+    );
   });
 
   test('new_classification 可以通过，调用 approve', async () => {

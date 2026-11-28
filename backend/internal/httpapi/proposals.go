@@ -423,9 +423,12 @@ func (h *Handler) reviewProposalOne(ctx context.Context, actor demo.Actor, id in
 			h.auditProposalReview(ctx, actor, id, row.Status, "approved", "benchmark", approved.BenchmarkID, "")
 			return api.ProposalReviewResult{Id: int(id), Status: api.ProposalReviewResultStatusApproved}, nil
 
+		case "new_model":
+			return h.approveNewModelProposal(ctx, actor, id)
+
 		default:
 			return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, api.InvalidParam,
-				"该 kind 的执行器尚未接入（目前只接 new_benchmark / new_classification / new_skill / new_task）")
+				"该 kind 的执行器尚未接入（目前只接 new_benchmark / new_classification / new_model / new_skill / new_task）")
 		}
 
 	default:
