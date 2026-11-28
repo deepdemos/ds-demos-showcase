@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/api"
+	"github.com/deepdemos/ds-demos-showcase/backend/internal/domain/model"
 )
 
 // 批准 new_model 收录提案（#593）：
@@ -222,9 +223,12 @@ RETURNING id`, modelName, providerID, externalID).Scan(&proposalID); err != nil 
 		t.Fatalf("提案未记录产出 model id")
 	}
 
-	var slug string
-	if err := pool.QueryRow(ctx, `SELECT slug FROM models WHERE id=$1`, createdModelID).Scan(&slug); err != nil {
-		t.Fatalf("读 slug 失败: %v", err)
+	var slug, gotVendor string
+	if err := pool.QueryRow(ctx, `SELECT slug, COALESCE(vendor, '') FROM models WHERE id=$1`, createdModelID).Scan(&slug, &gotVendor); err != nil {
+		t.Fatalf("读 slug / vendor 失败: %v", err)
+	}
+	if gotVendor != "it-vendor" {
+		t.Fatalf("未填 vendor 时应回退目录 vendor_slug=it-vendor，实际 %q", gotVendor)
 	}
 
 	// 验证 model_offerings 认领已落库且 is_official 正确。
@@ -261,8 +265,11 @@ func TestIntegrationApproveNewModelProposalConflictsAndRejects(t *testing.T) {
 	ctx := context.Background()
 
 	tag := uniq()
-	ownerSlug := "it-pm-owner-" + tag
+	slugClashName := "IT PM Owner " + tag
+	ownerSlug := model.Slug(slugClashName, "")
 	ownerName := "IT Owner " + tag
+	midSlug := "it-pm-mid-" + tag
+	midName := "IT Mid Deprecated " + tag
 	depSlug := "it-pm-dep-" + tag
 	depName := "IT Deprecated " + tag
 	prov := "it-cprov-" + tag[:8]
@@ -270,11 +277,14 @@ func TestIntegrationApproveNewModelProposalConflictsAndRejects(t *testing.T) {
 	extDep := "ext-dep-" + tag
 	batchName := "IT Batch OK " + tag
 
-	var ownerID, depID int64
+	var ownerID, midID, depID int64
 	if err := pool.QueryRow(ctx, `INSERT INTO models (slug, name, status, resolution) VALUES ($1, $2, 'active', 'exact') RETURNING id`, ownerSlug, ownerName).Scan(&ownerID); err != nil {
 		t.Fatalf("建占坑 active 模型失败: %v", err)
 	}
-	if err := pool.QueryRow(ctx, `INSERT INTO models (slug, name, status, resolution, merged_into_id) VALUES ($1, $2, 'deprecated', 'exact', $3) RETURNING id`, depSlug, depName, ownerID).Scan(&depID); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO models (slug, name, status, resolution, merged_into_id) VALUES ($1, $2, 'deprecated', 'exact', $3) RETURNING id`, midSlug, midName, ownerID).Scan(&midID); err != nil {
+		t.Fatalf("建中间跳 deprecated 模型失败: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO models (slug, name, status, resolution, merged_into_id) VALUES ($1, $2, 'deprecated', 'exact', $3) RETURNING id`, depSlug, depName, midID).Scan(&depID); err != nil {
 		t.Fatalf("建占坑 deprecated 模型失败: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
@@ -304,20 +314,60 @@ VALUES ($1, 'models.dev', $2, 'Prov', $3),
 	var batchModelID int64
 	t.Cleanup(func() {
 		if batchModelID != 0 {
-			_, _ = pool.Exec(ctx, `DELETE FROM audit_log WHERE entity_type='model' AND entity_id=$1`, batchModelID)
-			_, _ = pool.Exec(ctx, `DELETE FROM models WHERE id=$1`, batchModelID)
+			if _, err := pool.Exec(ctx, `DELETE FROM audit_log WHERE entity_type='model' AND entity_id=$1`, batchModelID); err != nil {
+				t.Errorf("清理批量模型审计失败: %v", err)
+			}
+			if _, err := pool.Exec(ctx, `DELETE FROM models WHERE id=$1`, batchModelID); err != nil {
+				t.Errorf("清理批量模型失败: %v", err)
+			}
 		}
 		for _, id := range propIDs {
-			_, _ = pool.Exec(ctx, `DELETE FROM audit_log WHERE entity_type='proposal' AND entity_id=$1`, id)
-			_, _ = pool.Exec(ctx, `DELETE FROM proposals WHERE id=$1`, id)
+			if _, err := pool.Exec(ctx, `DELETE FROM audit_log WHERE entity_type='proposal' AND entity_id=$1`, id); err != nil {
+				t.Errorf("清理提案审计 %d 失败: %v", id, err)
+			}
+			if _, err := pool.Exec(ctx, `DELETE FROM proposals WHERE id=$1`, id); err != nil {
+				t.Errorf("清理提案 %d 失败: %v", id, err)
+			}
 		}
-		_, _ = pool.Exec(ctx, `DELETE FROM model_offerings WHERE authority='models.dev' AND provider_id=$1`, prov)
-		_, _ = pool.Exec(ctx, `DELETE FROM model_catalog_items WHERE source='models.dev' AND provider_id=$1`, prov)
-		_, _ = pool.Exec(ctx, `UPDATE models SET merged_into_id=NULL WHERE id=$1`, depID)
-		_, _ = pool.Exec(ctx, `DELETE FROM models WHERE id IN ($1, $2)`, depID, ownerID)
+		if _, err := pool.Exec(ctx, `DELETE FROM model_offerings WHERE authority='models.dev' AND provider_id=$1`, prov); err != nil {
+			t.Errorf("清理 model_offerings 失败: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM model_catalog_items WHERE source='models.dev' AND provider_id=$1`, prov); err != nil {
+			t.Errorf("清理 model_catalog_items 失败: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `UPDATE models SET merged_into_id=NULL WHERE id IN ($1, $2)`, depID, midID); err != nil {
+			t.Errorf("解除合并指针失败: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM models WHERE id IN ($1, $2, $3)`, depID, midID, ownerID); err != nil {
+			t.Errorf("清理占坑模型失败: %v", err)
+		}
 	})
 
-	// 1. 上游三元组已被 active 模型认领 → 409 并指明归属模型 slug，提案仍 pending。
+	assertPendingNoModelDelta := func(pid int64, beforeModels int, label string) {
+		t.Helper()
+		var st string
+		var resID int64
+		if err := pool.QueryRow(ctx, `SELECT status, COALESCE(result_id, 0) FROM proposals WHERE id=$1`, pid).Scan(&st, &resID); err != nil {
+			t.Fatalf("%s 读提案状态失败: %v", label, err)
+		}
+		if st != "pending" || resID != 0 {
+			t.Fatalf("%s 冲突后提案应保持 pending 且无 result_id，实际 status=%q result_id=%d", label, st, resID)
+		}
+		var afterModels int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM models`).Scan(&afterModels); err != nil {
+			t.Fatalf("%s 统计 models 失败: %v", label, err)
+		}
+		if afterModels != beforeModels {
+			t.Fatalf("%s 冲突后不应新建任何模型行：before=%d after=%d", label, beforeModels, afterModels)
+		}
+	}
+
+	var modelsBefore int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM models`).Scan(&modelsBefore); err != nil {
+		t.Fatalf("统计 models 基线失败: %v", err)
+	}
+
+	// 1. 上游三元组已被 active 模型认领 → 409 并指明归属模型 slug，提案仍 pending、零新增模型。
 	pClaimedActive := insertProp(`{"name":"Brand New A ` + tag + `","source":"models.dev","provider_id":"` + prov + `","external_id":"` + extActive + `"}`)
 	rec := httptest.NewRecorder()
 	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID, `{"decision":"approve"}`), int(pClaimedActive))
@@ -327,8 +377,9 @@ VALUES ($1, 'models.dev', $2, 'Prov', $3),
 	if !strings.Contains(rec.Body.String(), "/models/"+ownerSlug) {
 		t.Fatalf("409 文案应指明认领归属 /models/%s，实际：%s", ownerSlug, rec.Body.String())
 	}
+	assertPendingNoModelDelta(pClaimedActive, modelsBefore, "active 认领冲突")
 
-	// 2. 上游三元组已被已退役且合并的模型认领 → 409 并指明归宿模型。
+	// 2. 上游三元组已被多跳合并链（dep -> mid -> owner）的已退役模型认领 → 409 追到终点 owner，而非中间跳 mid。
 	pClaimedDep := insertProp(`{"name":"Brand New B ` + tag + `","source":"models.dev","provider_id":"` + prov + `","external_id":"` + extDep + `"}`)
 	rec = httptest.NewRecorder()
 	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID, `{"decision":"approve"}`), int(pClaimedDep))
@@ -336,10 +387,14 @@ VALUES ($1, 'models.dev', $2, 'Prov', $3),
 		t.Fatalf("三元组已被 deprecated 认领 = %d，想要 409；body=%s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "/models/"+depSlug) || !strings.Contains(rec.Body.String(), "/models/"+ownerSlug) {
-		t.Fatalf("409 文案应指明退役认领方与合并归宿，实际：%s", rec.Body.String())
+		t.Fatalf("409 文案应指明退役认领方与最终合并归宿 /models/%s，实际：%s", ownerSlug, rec.Body.String())
 	}
+	if strings.Contains(rec.Body.String(), "/models/"+midSlug) {
+		t.Fatalf("多跳合并链归宿不应停在中间已退役节点 /models/%s，实际：%s", midSlug, rec.Body.String())
+	}
+	assertPendingNoModelDelta(pClaimedDep, modelsBefore, "多跳退役认领冲突")
 
-	// 3. 模型名与已有模型冲突 → 409 并复用手动新建的冲突文案。
+	// 3a. 模型名与已有模型冲突（sameName=true）→ 409 并复用手动新建冲突文案。
 	pNameClash := insertProp(`{"name":"` + ownerName + `"}`)
 	rec = httptest.NewRecorder()
 	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID, `{"decision":"approve"}`), int(pNameClash))
@@ -349,8 +404,21 @@ VALUES ($1, 'models.dev', $2, 'Prov', $3),
 	if !strings.Contains(rec.Body.String(), "/models/"+ownerSlug) {
 		t.Fatalf("撞名 409 文案应指向 /models/%s，实际：%s", ownerSlug, rec.Body.String())
 	}
+	assertPendingNoModelDelta(pNameClash, modelsBefore, "同名冲突")
 
-	// 4. 兜底名 / 目录缺失 / 非法来源 → 422 且提案保持 pending。
+	// 3b. 不同名但同 slug 冲突（sameName=false）→ 409 并指向已有 slug。
+	pSlugClash := insertProp(`{"name":"` + slugClashName + `"}`)
+	rec = httptest.NewRecorder()
+	h.ReviewAdminProposal(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/x/review", adminSID, `{"decision":"approve"}`), int(pSlugClash))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("同 slug 不同名批准 = %d，想要 409；body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "/models/"+ownerSlug) || !strings.Contains(rec.Body.String(), "slug") {
+		t.Fatalf("同 slug 409 文案应说明 slug 被 /models/%s 占用，实际：%s", ownerSlug, rec.Body.String())
+	}
+	assertPendingNoModelDelta(pSlugClash, modelsBefore, "同 slug 冲突")
+
+	// 4. 兜底名 / 目录缺失 / 非法来源 → 422 且提案保持 pending、零新增模型。
 	for _, raw := range []string{
 		`{"name":"unspecified"}`,
 		`{"name":"Missing Cat ` + tag + `","source":"models.dev","provider_id":"` + prov + `","external_id":"does-not-exist"}`,
@@ -362,10 +430,7 @@ VALUES ($1, 'models.dev', $2, 'Prov', $3),
 		if r.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("非法提案 %s = %d，想要 422；body=%s", raw, r.Code, r.Body.String())
 		}
-		var st string
-		if err := pool.QueryRow(ctx, `SELECT status FROM proposals WHERE id=$1`, pid).Scan(&st); err != nil || st != "pending" {
-			t.Fatalf("失败后提案状态 = %q err=%v，必须仍是 pending", st, err)
-		}
+		assertPendingNoModelDelta(pid, modelsBefore, "422 拦截")
 	}
 
 	// 5. 批量批准：1 条合法 + 1 条认领冲突 → 200，前者 ok=true，后者 ok=false 且含归属 slug。
@@ -376,6 +441,10 @@ VALUES ($1, 'models.dev', $2, 'Prov', $3),
 	})
 	bRec := httptest.NewRecorder()
 	h.BatchReviewAdminProposals(bRec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/batch", adminSID, string(batchBody)))
+	// 先回填 batchModelID 确保即便下方断言失败也能在 Cleanup 清理新建行。
+	if err := pool.QueryRow(ctx, `SELECT COALESCE(result_id, 0) FROM proposals WHERE id=$1`, pBatchOK).Scan(&batchModelID); err != nil {
+		t.Fatalf("读批量产出 model_id 失败: %v", err)
+	}
 	if bRec.Code != http.StatusOK {
 		t.Fatalf("批量批准 = %d，想要 200；body=%s", bRec.Code, bRec.Body.String())
 	}
@@ -387,5 +456,7 @@ VALUES ($1, 'models.dev', $2, 'Prov', $3),
 		bRes.Results[1].Error == nil || !strings.Contains(*bRes.Results[1].Error, "/models/"+ownerSlug) {
 		t.Fatalf("批量逐条结果不对：%+v", bRes.Results)
 	}
-	_ = pool.QueryRow(ctx, `SELECT COALESCE(result_id, 0) FROM proposals WHERE id=$1`, pBatchOK).Scan(&batchModelID)
+	if batchModelID == 0 {
+		t.Fatalf("批量通过后未记录产出 model_id")
+	}
 }

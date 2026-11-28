@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -17,7 +18,7 @@ import (
 	"github.com/deepdemos/ds-demos-showcase/backend/internal/store"
 )
 
-// 批准「收录模型」提案（#593 / 模型域 §6.7）。
+// 批准「收录模型」提案（#593 / 模型域 §4.7）。
 //
 // # 核心语义：批准 ≠ 可用
 //
@@ -129,7 +130,7 @@ func parseNewModelProposalPayload(raw []byte) (newModelProposalPayload, *proposa
 	}
 }
 
-// offeringClaimConflictMessage 把「三元组已被认领」翻成带归属链接的 409 文案（模型域 §6.7.4）。
+// offeringClaimConflictMessage 把「三元组已被认领」翻成带归属链接的 409 文案（模型域 §4.7.4）。
 func offeringClaimConflictMessage(owner store.FindOfferingOwnerRow) string {
 	if owner.Status == "deprecated" && owner.MergedIntoSlug != "" {
 		return fmt.Sprintf("该上游条目已被已退役模型「%s」（/models/%s）认领，请查看其合并归宿 /models/%s",
@@ -148,6 +149,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
+		slog.Error("批准模型提案开启事务失败", "proposal_id", id, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -159,6 +161,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 		return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
 	}
 	if err != nil {
+		slog.Error("批准模型提案锁行失败", "proposal_id", id, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 
@@ -180,6 +183,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 				"上游目录镜像里找不到该条目，请先同步目录或驳回提案")
 		}
 		if err != nil {
+			slog.Error("批准模型提案查上游镜像失败", "proposal_id", id, "err", err)
 			return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 		}
 		catalogItem = item
@@ -193,6 +197,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 		case err == nil:
 			return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, offeringClaimConflictMessage(owner))
 		case !errors.Is(err, pgx.ErrNoRows):
+			slog.Error("批准模型提案查认领归属失败", "proposal_id", id, "err", err)
 			return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 		}
 
@@ -218,6 +223,8 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 		}
 		if status, code, msg, ok := modelFieldViolation(err); ok {
 			if status == http.StatusConflict {
+				// 先释放已中止的事务连接再回查，避免并发冲突时同一协程同时占两条连接把连接池打满。
+				_ = tx.Rollback(ctx)
 				if existing, lookErr := h.queries.FindModelByNameOrSlug(ctx, store.FindModelByNameOrSlugParams{
 					Name: parsed.Name,
 					Slug: slug,
@@ -229,6 +236,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 			}
 			return api.ProposalReviewResult{}, proposalFail(http.StatusUnprocessableEntity, code, msg)
 		}
+		slog.Error("批准模型提案建候选模型失败", "proposal_id", id, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 
@@ -243,6 +251,8 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 			IsOfficial:   parsed.ProviderID == vendorPrefix(catalogItem.CanonicalID.String),
 		}); err != nil {
 			if isUniqueViolation(err) {
+				// 先回滚归还连接，再通过连接池查胜出认领方，避免双连接占位死锁。
+				_ = tx.Rollback(ctx)
 				if owner, lookErr := h.queries.FindOfferingOwner(ctx, store.FindOfferingOwnerParams{
 					Authority:  parsed.Source,
 					ProviderID: parsed.ProviderID,
@@ -252,6 +262,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 				}
 				return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "该上游条目已被其他模型认领")
 			}
+			slog.Error("批准模型提案写入认领失败", "proposal_id", id, "model_id", modelID, "err", err)
 			return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 		}
 	}
@@ -265,6 +276,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 		if errors.Is(err, pgx.ErrNoRows) {
 			return api.ProposalReviewResult{}, proposalFail(http.StatusConflict, api.Conflict, "提案已经处理过了")
 		}
+		slog.Error("批准模型提案更新状态失败", "proposal_id", id, "model_id", modelID, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 
@@ -272,6 +284,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 	// 模型行、认领行、提案状态、model:create 与 proposal:review 五者同生共死。
 	beforeJSON, err := json.Marshal(map[string]string{"status": locked.Status})
 	if err != nil {
+		slog.Error("批准模型提案序列化审计 before 失败", "proposal_id", id, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 	afterJSON, err := json.Marshal(map[string]any{
@@ -280,6 +293,7 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 		"result_id":   modelID,
 	})
 	if err != nil {
+		slog.Error("批准模型提案序列化审计 after 失败", "proposal_id", id, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 	if err := q.InsertAuditLog(ctx, store.InsertAuditLogParams{
@@ -292,10 +306,12 @@ func (h *Handler) approveNewModelProposal(ctx context.Context, actor demo.Actor,
 		After:      afterJSON,
 		Reason:     "",
 	}); err != nil {
+		slog.Error("批准模型提案写审核审计失败", "proposal_id", id, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
+		slog.Error("批准模型提案提交事务失败", "proposal_id", id, "model_id", modelID, "err", err)
 		return api.ProposalReviewResult{}, proposalFail(http.StatusServiceUnavailable, api.Unavailable, "服务暂时不可用")
 	}
 	return api.ProposalReviewResult{Id: int(id), Status: api.ProposalReviewResultStatusApproved}, nil

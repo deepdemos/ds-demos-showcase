@@ -19,7 +19,8 @@ SELECT m.id,
        COALESCE(dst.slug, '')::text AS merged_into_slug
 FROM model_offerings r
 JOIN models m ON m.id = r.model_id
-LEFT JOIN models dst ON dst.id = m.merged_into_id
+LEFT JOIN model_merge_targets mt ON mt.model_id = m.id
+LEFT JOIN models dst ON dst.id = mt.terminal_id AND dst.id <> m.id
 WHERE r.authority = $1
   AND r.provider_id = $2
   AND r.external_id = $3
@@ -39,8 +40,8 @@ type FindOfferingOwnerRow struct {
 	MergedIntoSlug string
 }
 
-// 查一条上游三元组是否已被某个本地模型认领，并带出认领方的状态与合并归宿，
-// 便于在冲突（409）时直接向管理员说明归属（模型域 §6.7.4）。
+// 查一条上游三元组是否已被某个本地模型认领，并沿统一视图 model_merge_targets 追到合并链终点
+// （含 dst.id <> m.id 滤环，避免多跳合并指向已退役中间节点，见模型域 §4.4 / §4.7.4）。
 func (q *Queries) FindOfferingOwner(ctx context.Context, arg FindOfferingOwnerParams) (FindOfferingOwnerRow, error) {
 	row := q.db.QueryRow(ctx, findOfferingOwner, arg.Authority, arg.ProviderID, arg.ExternalID)
 	var i FindOfferingOwnerRow

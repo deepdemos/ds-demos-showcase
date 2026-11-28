@@ -1158,6 +1158,11 @@ export type reviewEntityResponse409 = {
   status: 409
 }
 
+export type reviewEntityResponse422 = {
+  data: Error
+  status: 422
+}
+
 export type reviewEntityResponse503 = {
   data: Error
   status: 503
@@ -1166,7 +1171,7 @@ export type reviewEntityResponse503 = {
 export type reviewEntityResponseSuccess = (reviewEntityResponse200) & {
   headers: Headers;
 };
-export type reviewEntityResponseError = (reviewEntityResponse400 | reviewEntityResponse401 | reviewEntityResponse403 | reviewEntityResponse404 | reviewEntityResponse409 | reviewEntityResponse503) & {
+export type reviewEntityResponseError = (reviewEntityResponse400 | reviewEntityResponse401 | reviewEntityResponse403 | reviewEntityResponse404 | reviewEntityResponse409 | reviewEntityResponse422 | reviewEntityResponse503) & {
   headers: Headers;
 };
 
@@ -1186,6 +1191,8 @@ export const getReviewEntityUrl = (kind: 'demo' | 'proposal',
  *
  * - kind=demo：id 是作品 slug，委托作品审核（含权限、状态机、通知）。
  * - kind=proposal：id 是提案编号，委托提案裁决（含权限、执行器、审计）。
+ *   其中 `new_model` 遵循「批准 ≠ 可用」（#593）：批准只建出 `status = 'candidate'` 候选模型，
+ *   携带上游三元组时同事务写入认领，后续需经模型治理确认才进入 `active`。
  *
  * 旧路径保留为兼容别名，前端走这里；新增 kind 时只加一个分派分支，不再新开端点。
  * 响应里的 slug 是「对象标识」：demo 是 slug，proposal 是编号字符串（kind 字段可区分）。

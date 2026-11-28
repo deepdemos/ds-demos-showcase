@@ -72,8 +72,6 @@ export function ProposalDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'proposal', id] });
       void queryClient.invalidateQueries({ queryKey: ['admin', 'proposals'] });
       void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'models'] });
-      void queryClient.invalidateQueries({ queryKey: ['models'] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : '驳回失败'),
   });

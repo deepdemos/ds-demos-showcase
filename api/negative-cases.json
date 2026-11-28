@@ -1011,6 +1011,13 @@
           "file": "backend/internal/httpapi/reviews_unified_test.go",
           "name": "TestIntegrationUnifiedReviewDemo"
         }
+      },
+      {
+        "case": "经统一入口批准非法 new_model 提案（兜底名）返回 422，未登录/无权限分别返回 401/403",
+        "test": {
+          "file": "backend/internal/httpapi/proposal_model_approve_race_integration_test.go",
+          "name": "TestIntegrationApproveNewModelProposalUnifiedAndAuth"
+        }
       }
     ],
     "GET /api/v1/demos/{slug}/appeal": [
