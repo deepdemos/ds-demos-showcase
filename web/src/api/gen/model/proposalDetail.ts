@@ -33,6 +33,7 @@
 import type { ProposalDetailPayload } from './proposalDetailPayload';
 import type { ProposalDetailSource } from './proposalDetailSource';
 import type { ProposalDetailStatus } from './proposalDetailStatus';
+import type { ProposalSourceDemo } from './proposalSourceDemo';
 
 export interface ProposalDetail {
   /** @minimum 1 */
@@ -60,5 +61,7 @@ export interface ProposalDetail {
   resultKind?: string | null;
   /** @nullable */
   resultId?: number | null;
+  /** 来源作品；无来源作品或作品已删除/擦除时为 null */
+  sourceDemo?: ProposalSourceDemo | null;
   updatedAt: string;
 }

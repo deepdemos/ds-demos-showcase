@@ -821,6 +821,35 @@ paths:
                     maxLength: 2048
                   maxItems: 50
 
+                modelProposals:
+                  type: array
+                  description: |
+                    作者在投稿时顺带提出的**模型收录提案**（`proposals.kind = 'new_model'`，#590）。
+                    每一项是一个 JSON 对象的字符串形式，形如
+                    `{"name":"DeepSeek V4 Preview","vendor":"DeepSeek","source":"models.dev","providerId":"deepseek","externalId":"deepseek-v4-preview"}`
+                    或纯手填 `{"name":"我的私有模型","vendor":"自研"}`。
+
+                    为什么只能随投稿 / 编辑提交、不在通用 `POST /api/v1/proposals` 开放：
+                    收录提案的全部价值在于「有作品要用它」，必须关联一件具体作品（经 `proposal_refs(role='subject')`
+                    建立强引用，作品删除时级联清理），并记录提交时的 `demo_id` / `demo_slug` / `revision_no`
+                    作为审计留痕。
+
+                    - `name`（必填，1–128 字）：模型展示名；纯空白或超长一律 400。
+                    - `vendor`（可选，最多 64 字）：厂商名称说明，方便管理员核实。
+                    - `source` / `providerId` / `externalId`（可选上游三元组）：从上游层选择时一并给出；
+                      `providerId` 与 `externalId` 必须成对出现（此时 `source` 缺省为 `models.dev`），
+                      只给半截一律 400。
+
+                    一条投稿里 N 个未入库模型产生 N 条独立待审提案（支持管理员部分批准）；
+                    去重口径为「作品 × 规范化模型名（折叠空白并转小写）」，同一作品重复提交同名模型
+                    幂等跳过、不产生重复待审提案，不同作品各自保留自己的提案。
+
+                    最多 20 条；不传或空数组都合法。提案提交不会阻断作品入库与审核。
+                  items:
+                    type: string
+                    maxLength: 2048
+                  maxItems: 20
+
                 classificationSlugs:
                   type: array
                   description: |
@@ -1257,6 +1286,19 @@ paths:
                     type: string
                     maxLength: 2048
                   maxItems: 50
+
+                modelProposals:
+                  type: array
+                  description: |
+                    改稿时顺带提出的模型收录提案；每一项的形状、校验与去重口径与
+                    `POST /api/v1/demos` 的同名字段完全相同（按「本作品 × 规范化模型名」去重：
+                    本作品已有同名的待审提案时幂等跳过，不会产生重复提案）。
+
+                    不传或空数组都合法；不传不会撤回该作品此前已提交的待审提案。
+                  items:
+                    type: string
+                    maxLength: 2048
+                  maxItems: 20
 
                 classificationSlugs:
                   type: array
@@ -6314,6 +6356,12 @@ components:
           enum: [pending, approved, rejected]
         lifecycleState:
           $ref: '#/components/schemas/LifecycleState'
+        modelProposalIds:
+          type: array
+          description: 本次随投稿 / 编辑新建的模型收录提案编号；未新建提案时省略。
+          items:
+            type: integer
+            minimum: 1
 
     MyDemoSummary:
       type: object
@@ -7016,6 +7064,20 @@ components:
       properties:
         id: { type: integer, minimum: 1 }
         status: { type: string, enum: [withdrawn] }
+    ProposalSourceDemo:
+      type: object
+      additionalProperties: false
+      required: [slug, title]
+      description: 提案关联的来源作品（经 `proposal_refs(role='subject')` 指向）；管理端据此判断「哪件作品要用它」。
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+        title:
+          type: string
+          nullable: true
+          maxLength: 200
+
     ProposalSummary:
       type: object
       additionalProperties: false
@@ -7036,6 +7098,11 @@ components:
         title:
           type: string
           description: 从 payload 摘出的标题；取不到为空串
+        sourceDemo:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ProposalSourceDemo'
+          description: 来源作品；无来源作品或作品已删除/擦除时为 null
         createdAt:
           type: string
           format: date-time
@@ -7115,6 +7182,11 @@ components:
         resultId:
           type: integer
           nullable: true
+        sourceDemo:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ProposalSourceDemo'
+          description: 来源作品；无来源作品或作品已删除/擦除时为 null
         updatedAt:
           type: string
           format: date-time

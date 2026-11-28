@@ -2177,6 +2177,10 @@
         "type": "ProposalDetailSource",
         "optional": false
       },
+      "sourceDemo": {
+        "type": "ProposalSourceDemo",
+        "optional": true
+      },
       "status": {
         "type": "ProposalDetailStatus",
         "optional": false
@@ -2212,6 +2216,16 @@
       "status": {
         "type": "ProposalReviewResultStatus",
         "optional": false
+      }
+    },
+    "ProposalSourceDemo": {
+      "slug": {
+        "type": "string",
+        "optional": false
+      },
+      "title": {
+        "type": "string",
+        "optional": true
       }
     },
     "ProposalSubmission": {
@@ -2254,6 +2268,10 @@
       "source": {
         "type": "ProposalSummarySource",
         "optional": false
+      },
+      "sourceDemo": {
+        "type": "ProposalSourceDemo",
+        "optional": true
       },
       "status": {
         "type": "ProposalSummaryStatus",
@@ -2497,6 +2515,10 @@
         "type": "LifecycleState",
         "optional": false
       },
+      "modelProposalIds": {
+        "type": "[]int",
+        "optional": true
+      },
       "moderationState": {
         "type": "SubmissionResultModerationState",
         "optional": false
@@ -2593,6 +2615,10 @@
         "type": "[]string",
         "optional": true
       },
+      "modelProposals": {
+        "type": "[]string",
+        "optional": true
+      },
       "modelSlugs": {
         "type": "[]string",
         "optional": true
@@ -2630,6 +2656,10 @@
         "optional": true
       },
       "modelCalls": {
+        "type": "[]string",
+        "optional": true
+      },
+      "modelProposals": {
         "type": "[]string",
         "optional": true
       },

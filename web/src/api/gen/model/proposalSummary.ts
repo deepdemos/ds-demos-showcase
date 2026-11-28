@@ -30,6 +30,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { ProposalSourceDemo } from './proposalSourceDemo';
 import type { ProposalSummarySource } from './proposalSummarySource';
 import type { ProposalSummaryStatus } from './proposalSummaryStatus';
 
@@ -42,6 +43,8 @@ export interface ProposalSummary {
   source: ProposalSummarySource;
   /** 从 payload 摘出的标题；取不到为空串 */
   title: string;
+  /** 来源作品；无来源作品或作品已删除/擦除时为 null */
+  sourceDemo?: ProposalSourceDemo | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -43,4 +43,9 @@ export interface SubmissionResult {
   revisionNo: number;
   moderationState: SubmissionResultModerationState;
   lifecycleState: LifecycleState;
+  /**
+     * 本次随投稿 / 编辑新建的模型收录提案编号；未新建提案时省略。
+     * @items.minimum 1
+     */
+  modelProposalIds?: number[];
 }

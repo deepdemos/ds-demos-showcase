@@ -342,29 +342,41 @@ func (q *Queries) FindPendingProposalByDedupe(ctx context.Context, arg FindPendi
 }
 
 const getProposalByID = `-- name: GetProposalByID :one
-SELECT id, kind, status, payload, source, confidence,
-       created_by, created_at,
-       reviewed_by, reviewed_at, reject_reason,
-       result_kind, result_id, updated_at
-FROM proposals
-WHERE id = $1 AND erased_at IS NULL
+SELECT p.id, p.kind, p.status, p.payload, p.source, p.confidence,
+       p.created_by, p.created_at,
+       p.reviewed_by, p.reviewed_at, p.reject_reason,
+       p.result_kind, p.result_id, p.updated_at,
+       COALESCE(d.slug, '')::text AS source_demo_slug,
+       d.title AS source_demo_title
+FROM proposals p
+LEFT JOIN proposal_refs pr
+       ON pr.proposal_id = p.id
+      AND pr.role = 'subject'
+      AND pr.demo_id IS NOT NULL
+LEFT JOIN demos d
+       ON d.id = pr.demo_id
+      AND d.deleted_at IS NULL
+      AND d.erased_at IS NULL
+WHERE p.id = $1 AND p.erased_at IS NULL
 `
 
 type GetProposalByIDRow struct {
-	ID           int64
-	Kind         string
-	Status       string
-	Payload      []byte
-	Source       string
-	Confidence   pgtype.Float4
-	CreatedBy    pgtype.Int8
-	CreatedAt    pgtype.Timestamptz
-	ReviewedBy   pgtype.Int8
-	ReviewedAt   pgtype.Timestamptz
-	RejectReason pgtype.Text
-	ResultKind   pgtype.Text
-	ResultID     pgtype.Int8
-	UpdatedAt    pgtype.Timestamptz
+	ID              int64
+	Kind            string
+	Status          string
+	Payload         []byte
+	Source          string
+	Confidence      pgtype.Float4
+	CreatedBy       pgtype.Int8
+	CreatedAt       pgtype.Timestamptz
+	ReviewedBy      pgtype.Int8
+	ReviewedAt      pgtype.Timestamptz
+	RejectReason    pgtype.Text
+	ResultKind      pgtype.Text
+	ResultID        pgtype.Int8
+	UpdatedAt       pgtype.Timestamptz
+	SourceDemoSlug  string
+	SourceDemoTitle pgtype.Text
 }
 
 func (q *Queries) GetProposalByID(ctx context.Context, id int64) (GetProposalByIDRow, error) {
@@ -385,6 +397,8 @@ func (q *Queries) GetProposalByID(ctx context.Context, id int64) (GetProposalByI
 		&i.ResultKind,
 		&i.ResultID,
 		&i.UpdatedAt,
+		&i.SourceDemoSlug,
+		&i.SourceDemoTitle,
 	)
 	return i, err
 }
@@ -423,13 +437,23 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 
 const listProposalsForAdmin = `-- name: ListProposalsForAdmin :many
 
-SELECT id, kind, status, source, payload, created_at, updated_at
-FROM proposals
-WHERE erased_at IS NULL
-  AND ($1::text = '' OR status = $1)
-  AND ($2::text = '' OR kind = $2)
-  AND ($3::text = '' OR source = $3)
-ORDER BY created_at DESC, id DESC
+SELECT p.id, p.kind, p.status, p.source, p.payload, p.created_at, p.updated_at,
+       COALESCE(d.slug, '')::text AS source_demo_slug,
+       d.title AS source_demo_title
+FROM proposals p
+LEFT JOIN proposal_refs pr
+       ON pr.proposal_id = p.id
+      AND pr.role = 'subject'
+      AND pr.demo_id IS NOT NULL
+LEFT JOIN demos d
+       ON d.id = pr.demo_id
+      AND d.deleted_at IS NULL
+      AND d.erased_at IS NULL
+WHERE p.erased_at IS NULL
+  AND ($1::text = '' OR p.status = $1)
+  AND ($2::text = '' OR p.kind = $2)
+  AND ($3::text = '' OR p.source = $3)
+ORDER BY p.created_at DESC, p.id DESC
 LIMIT $5 OFFSET $4
 `
 
@@ -442,13 +466,15 @@ type ListProposalsForAdminParams struct {
 }
 
 type ListProposalsForAdminRow struct {
-	ID        int64
-	Kind      string
-	Status    string
-	Source    string
-	Payload   []byte
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID              int64
+	Kind            string
+	Status          string
+	Source          string
+	Payload         []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	SourceDemoSlug  string
+	SourceDemoTitle pgtype.Text
 }
 
 // 提案审核（#433 / ENT-016 – ENT-024）。
@@ -479,6 +505,8 @@ func (q *Queries) ListProposalsForAdmin(ctx context.Context, arg ListProposalsFo
 			&i.Payload,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SourceDemoSlug,
+			&i.SourceDemoTitle,
 		); err != nil {
 			return nil, err
 		}

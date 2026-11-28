@@ -74,6 +74,7 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.
 	// 这里只负责原样取出来：JSON 解码、规范化与校验都在领域层，好让投稿与编辑
 	// 走同一条判据（两处各写一遍迟早判得不一致）。
 	modelCalls := formValues(r, "modelCalls")
+	modelProposals := formValues(r, "modelProposals")
 	classificationSlugs := formValues(r, "classificationSlugs")
 
 	// 外链作品没有文件，只有一个地址：这两者互斥，由领域层判。
@@ -151,6 +152,7 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.
 		PackageSize:         pkgSize,
 		ModelSlugs:          modelIDs,
 		ModelCalls:          modelCalls,
+		ModelProposals:      modelProposals,
 		ClassificationSlugs: classificationSlugs,
 		IdempotencyKey:      idemKey,
 	})
@@ -167,11 +169,23 @@ func (h *Handler) SubmitDemo(w http.ResponseWriter, r *http.Request, params api.
 		status = http.StatusOK
 	}
 	writeJSON(w, status, api.SubmissionResult{
-		Slug:            res.Slug,
-		RevisionNo:      res.RevisionNo,
-		ModerationState: api.SubmissionResultModerationState(res.ModerationState),
-		LifecycleState:  api.LifecycleState(res.LifecycleState),
+		Slug:             res.Slug,
+		RevisionNo:       res.RevisionNo,
+		ModerationState:  api.SubmissionResultModerationState(res.ModerationState),
+		LifecycleState:   api.LifecycleState(res.LifecycleState),
+		ModelProposalIds: proposalIDsPtr(res.ModelProposalIDs),
 	})
+}
+
+func proposalIDsPtr(ids []int64) *[]int {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]int, len(ids))
+	for i, id := range ids {
+		out[i] = int(id)
+	}
+	return &out
 }
 
 // spillToTemp 把上传内容写进临时文件，返回路径与字节数。

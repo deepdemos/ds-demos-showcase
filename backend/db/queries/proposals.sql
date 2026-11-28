@@ -5,13 +5,23 @@
 
 -- name: ListProposalsForAdmin :many
 -- status / kind / source 空串表示不过滤。默认由 handler 传 'pending'。
-SELECT id, kind, status, source, payload, created_at, updated_at
-FROM proposals
-WHERE erased_at IS NULL
-  AND (sqlc.arg(status)::text = '' OR status = sqlc.arg(status))
-  AND (sqlc.arg(kind)::text = '' OR kind = sqlc.arg(kind))
-  AND (sqlc.arg(source)::text = '' OR source = sqlc.arg(source))
-ORDER BY created_at DESC, id DESC
+SELECT p.id, p.kind, p.status, p.source, p.payload, p.created_at, p.updated_at,
+       COALESCE(d.slug, '')::text AS source_demo_slug,
+       d.title AS source_demo_title
+FROM proposals p
+LEFT JOIN proposal_refs pr
+       ON pr.proposal_id = p.id
+      AND pr.role = 'subject'
+      AND pr.demo_id IS NOT NULL
+LEFT JOIN demos d
+       ON d.id = pr.demo_id
+      AND d.deleted_at IS NULL
+      AND d.erased_at IS NULL
+WHERE p.erased_at IS NULL
+  AND (sqlc.arg(status)::text = '' OR p.status = sqlc.arg(status))
+  AND (sqlc.arg(kind)::text = '' OR p.kind = sqlc.arg(kind))
+  AND (sqlc.arg(source)::text = '' OR p.source = sqlc.arg(source))
+ORDER BY p.created_at DESC, p.id DESC
 LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
 
 -- name: CountProposalsForAdmin :one
@@ -23,12 +33,22 @@ WHERE erased_at IS NULL
   AND (sqlc.arg(source)::text = '' OR source = sqlc.arg(source));
 
 -- name: GetProposalByID :one
-SELECT id, kind, status, payload, source, confidence,
-       created_by, created_at,
-       reviewed_by, reviewed_at, reject_reason,
-       result_kind, result_id, updated_at
-FROM proposals
-WHERE id = @id AND erased_at IS NULL;
+SELECT p.id, p.kind, p.status, p.payload, p.source, p.confidence,
+       p.created_by, p.created_at,
+       p.reviewed_by, p.reviewed_at, p.reject_reason,
+       p.result_kind, p.result_id, p.updated_at,
+       COALESCE(d.slug, '')::text AS source_demo_slug,
+       d.title AS source_demo_title
+FROM proposals p
+LEFT JOIN proposal_refs pr
+       ON pr.proposal_id = p.id
+      AND pr.role = 'subject'
+      AND pr.demo_id IS NOT NULL
+LEFT JOIN demos d
+       ON d.id = pr.demo_id
+      AND d.deleted_at IS NULL
+      AND d.erased_at IS NULL
+WHERE p.id = @id AND p.erased_at IS NULL;
 
 -- name: RejectProposal :one
 -- 条件写进 WHERE：并发两次驳回只有一次命中；命中 0 行时调用方再区分 404 / 409。
