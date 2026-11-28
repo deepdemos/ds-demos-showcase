@@ -8,6 +8,7 @@ import { UpstreamModelSelector, upstreamRef } from '@/components/upstream-model-
 import { ModelBatch } from '@/features/admin/model-batch';
 import { ModelCreate } from '@/features/admin/model-create';
 import { ModelDiff, type SelectedPayload } from '@/features/admin/model-diff';
+import { ModelList, type AdminModelStatusFilter } from '@/features/admin/model-list';
 import { ModelSyncBar } from '@/features/admin/model-sync-bar';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -50,6 +51,13 @@ export function parseRef(value: string | null): { providerId: string; externalId
   return { providerId: value.slice(0, at), externalId: value.slice(at + 1) };
 }
 
+const VALID_STATUS = new Set<string>(['candidate', 'active', 'unverified', 'deprecated']);
+
+function parseStatus(value: string | null): AdminModelStatusFilter {
+  if (value && VALID_STATUS.has(value)) return value as AdminModelStatusFilter;
+  return '';
+}
+
 export function AdminModelsPage() {
   const { me, isLoading } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -60,6 +68,8 @@ export function AdminModelsPage() {
   const q = params.get('q') ?? '';
   const refParam = params.get('ref');
   const ref = parseRef(refParam);
+  const status = parseStatus(params.get('status'));
+  const page = Math.max(1, Math.floor(Number(params.get('page')) || 1));
 
   const patch = useCallback(
     (next: Record<string, string | null>) => {
@@ -85,6 +95,20 @@ export function AdminModelsPage() {
       // 存一份行：它带来 canonicalId、source 与展示名，省一次回查。
       setPicked(item);
       patch({ ref: upstreamRef(item) });
+    },
+    [patch],
+  );
+
+  const onStatusChange = useCallback(
+    (next: AdminModelStatusFilter) => {
+      patch({ status: next === '' ? null : next, page: null });
+    },
+    [patch],
+  );
+
+  const onPageChange = useCallback(
+    (next: number) => {
+      patch({ page: next <= 1 ? null : String(next) });
     },
     [patch],
   );
@@ -146,6 +170,13 @@ export function AdminModelsPage() {
         queue={queue}
         onRemove={(index) => setQueue((prev) => prev.filter((_, i) => i !== index))}
         onClear={() => setQueue([])}
+      />
+
+      <ModelList
+        status={status}
+        page={page}
+        onStatusChange={onStatusChange}
+        onPageChange={onPageChange}
       />
 
       {/* 上游目录里没有的私有模型只能手建。放在这一页是因为它是管理端唯一的模型入口；

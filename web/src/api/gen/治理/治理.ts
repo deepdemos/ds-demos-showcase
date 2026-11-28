@@ -9,8 +9,8 @@
  * 模型目录同步与导入（含批量）、分类目录与筛选、作品评分（一人一票，可改可撤）、
  * 作品榜与相关推荐、我的作品、渠道上架与撤下、模型 × 基准总览，
  * 以及身份（注册 / 邮箱验证 / 登录 / 登出 / 我是谁 / 发验证码 / 找回密码）、
- * 管理端的手动新建模型与厂商实体，
- * 共 81 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
+ * 管理端的模型列表、手动新建模型与厂商实体，
+ * 共 82 个端点。实现全部已接入并有集成测试覆盖。这个数字由 `scripts/check-api-doc.mjs` 核对
  * （它漂过两次：三个 → 18 → 24，都是 review 读出来的），改端点时不用记着手改。
  *
  * 不在契约里的两个端点：`GET /preview/{slug}/*` 与 `GET /download/{slug}`。
@@ -33,6 +33,7 @@
 import type {
   AdminAppealList,
   AdminInbox,
+  AdminModelList,
   AppealDecision,
   AppealReviewResult,
   DemoChannelList,
@@ -41,6 +42,7 @@ import type {
   Error,
   GetAdminInboxParams,
   ListAdminAppealsParams,
+  ListAdminModelsParams,
   ListAdminProposalsParams,
   ListDemoReviewQueueParams,
   ListModelCatalogParams,
@@ -330,6 +332,86 @@ export const removeDemoChannel = async (slug: string,
 
   const data: removeDemoChannelResponse['data'] = body ? JSON.parse(body) : undefined
   return { data, status: res.status, headers: res.headers } as removeDemoChannelResponse
+}
+
+
+export type listAdminModelsResponse200 = {
+  data: AdminModelList
+  status: 200
+}
+
+export type listAdminModelsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listAdminModelsResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listAdminModelsResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listAdminModelsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listAdminModelsResponseSuccess = (listAdminModelsResponse200) & {
+  headers: Headers;
+};
+export type listAdminModelsResponseError = (listAdminModelsResponse400 | listAdminModelsResponse401 | listAdminModelsResponse403 | listAdminModelsResponse503) & {
+  headers: Headers;
+};
+
+export type listAdminModelsResponse = (listAdminModelsResponseSuccess | listAdminModelsResponseError)
+
+export const getListAdminModelsUrl = (params?: ListAdminModelsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/admin/models?${stringifiedParams}` : `/api/v1/admin/models`
+}
+
+/**
+ * 管理端列出**全部状态**的模型，并附带每条模型的档案行（`model_specs`），按名字排序；
+ * 可用 `?status=` 筛选。
+ *
+ * **为什么不能直接用公开的 `GET /api/v1/models`**：公开列表只返回身份字段，不带档案；
+ * 管理端需要区分「没有档案行（缺失）」「有行但缺上下文窗口或输入模态（部分）」与「完整」。
+ * 档案完整度三档是派生值、**不落库、不进契约**，由前端从 `specs` 单一函数推导；
+ * 「已下架」标记同样由 `status = 'deprecated'` 且 `mergedIntoSlug = ''` 派生。
+ *
+ * 需要任一模型管理权限（`model.import` / `model.create` / `model.govern`）。
+ * @summary 管理端模型列表（全部状态，含档案）
+ */
+export const listAdminModels = async (params?: ListAdminModelsParams, options?: RequestInit): Promise<listAdminModelsResponse> => {
+
+  const res = await fetch(getListAdminModelsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listAdminModelsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listAdminModelsResponse
 }
 
 

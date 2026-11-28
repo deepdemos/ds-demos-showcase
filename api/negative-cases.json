@@ -447,6 +447,22 @@
         }
       }
     ],
+    "GET /api/v1/admin/models": [
+      {
+        "case": "未登录 401、没有模型管理权限（model.import / model.create / model.govern）的账号 403",
+        "test": {
+          "file": "backend/internal/httpapi/model_admin_list_integration_test.go",
+          "name": "TestIntegrationListAdminModelsPermissions"
+        }
+      },
+      {
+        "case": "status 参数不在枚举内返回 400，不静默回空列表 200",
+        "test": {
+          "file": "backend/internal/httpapi/model_admin_list_integration_test.go",
+          "name": "TestIntegrationListAdminModelsAllStatusesAndSpecs"
+        }
+      }
+    ],
     "POST /api/v1/admin/models": [
       {
         "case": "没有 model.create 权限的账号 403，不建出模型",

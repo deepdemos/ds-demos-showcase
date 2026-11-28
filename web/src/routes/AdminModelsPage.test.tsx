@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import {
   applyModelImportBatch,
   getModelSyncStatus,
+  listAdminModels,
+  listModelVendors,
   previewModelImport,
   searchUpstreamModels,
   syncModelCatalog,
@@ -35,6 +37,8 @@ vi.mock('@/api', async (importOriginal) => {
     searchUpstreamModels: vi.fn(),
     previewModelImport: vi.fn(),
     applyModelImportBatch: vi.fn(),
+    listAdminModels: vi.fn(),
+    listModelVendors: vi.fn(),
   };
 });
 
@@ -90,6 +94,11 @@ const previewCreate = {
   ],
 };
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="loc-search">{location.search}</output>;
+}
+
 function renderPage(entry = '/admin/models') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -98,7 +107,15 @@ function renderPage(entry = '/admin/models') {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
-          <Route path="/admin/models" element={<AdminModelsPage />} />
+          <Route
+            path="/admin/models"
+            element={
+              <>
+                <AdminModelsPage />
+                <LocationProbe />
+              </>
+            }
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -139,6 +156,14 @@ beforeEach(() => {
         },
       ],
     },
+  } as never);
+  vi.mocked(listAdminModels).mockResolvedValue({
+    status: 200,
+    data: { items: [] },
+  } as never);
+  vi.mocked(listModelVendors).mockResolvedValue({
+    status: 200,
+    data: { items: [] },
   } as never);
 });
 
@@ -220,6 +245,7 @@ test('非 admin 看到「没有导入权限」', async () => {
   renderPage();
   await waitFor(() => expect(screen.getByText('没有导入权限')).toBeTruthy());
   expect(vi.mocked(searchUpstreamModels)).not.toHaveBeenCalled();
+  expect(vi.mocked(listAdminModels)).not.toHaveBeenCalled();
 });
 
 // 目录读失败必须有出路：错误态带重试，而不是留一块空白。
@@ -228,4 +254,34 @@ test('目录读取失败时给出重试', async () => {
   renderPage();
   await waitFor(() => expect(screen.getByText('目录读取失败')).toBeTruthy());
   expect(screen.getByText('重试')).toBeTruthy();
+});
+
+// #596：筛选与分页参数进 URL，刷新可复原，切换状态自动回第一页。
+test('模型列表状态筛选与分页同步到 URL 并可从 URL 复原', async () => {
+  const items = Array.from({ length: 22 }, (_, i) => ({
+    model: {
+      slug: `cand-${i + 1}`,
+      name: `Candidate ${i + 1}`,
+      vendor: 'DeepSeek',
+      status: 'candidate' as const,
+      resolution: 'exact' as const,
+      mergedIntoSlug: '',
+      source: 'manual' as const,
+      aliases: [],
+      description: '',
+    },
+    specs: null,
+  }));
+  vi.mocked(listAdminModels).mockResolvedValue({ status: 200, data: { items } } as never);
+
+  renderPage('/admin/models?status=candidate&page=2');
+  await waitFor(() =>
+    expect(vi.mocked(listAdminModels)).toHaveBeenCalledWith({ status: 'candidate' }),
+  );
+  expect(await screen.findByText('Candidate 21')).toBeTruthy();
+
+  fireEvent.change(screen.getByLabelText('状态'), { target: { value: 'deprecated' } });
+  await waitFor(() =>
+    expect(screen.getByTestId('loc-search').textContent).toBe('?status=deprecated'),
+  );
 });

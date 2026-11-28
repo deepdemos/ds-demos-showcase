@@ -30,6 +30,10 @@ func (s *stub) SyncModelCatalog(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "sync")
 }
 
+func (s *stub) ListAdminModels(_ http.ResponseWriter, _ *http.Request, _ api.ListAdminModelsParams) {
+	s.hits = append(s.hits, "admin-models")
+}
+
 func (s *stub) CreateModel(_ http.ResponseWriter, _ *http.Request) {
 	s.hits = append(s.hits, "create-model")
 }
@@ -378,6 +382,7 @@ func TestRouterUsesContractPaths(t *testing.T) {
 		// 写成 "detail:upstream" 就说明上游搜索被 /api/v1/models/{slug} 抢走了。
 		{http.MethodGet, "/api/v1/models/upstream", "upstream-search"},
 		// 管理端厂商下拉：静态段与 slug-suggestion 同级，谁也不该抢谁的路由。
+		{http.MethodGet, "/api/v1/admin/models", "admin-models"},
 		{http.MethodGet, "/api/v1/admin/models/vendors", "model-vendors"},
 		{http.MethodGet, "/api/v1/demos/demo-a/appeal", "demo-appeal:demo-a"},
 		{http.MethodPost, "/api/v1/demos/demo-a/appeal", "submit-appeal:demo-a"},
