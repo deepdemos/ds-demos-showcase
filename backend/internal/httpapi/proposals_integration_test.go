@@ -127,7 +127,7 @@ func TestIntegrationProposalApproveNotWired(t *testing.T) {
 	var proposalID int64
 	if err := pool.QueryRow(context.Background(), `
 INSERT INTO proposals (kind, payload, source)
-VALUES ('new_model', '{"name":"未接入模型提案"}'::jsonb, 'user')
+VALUES ('new_prompt', '{"title":"未接入提示词提案","content":"测试提示词内容"}'::jsonb, 'user')
 RETURNING id`).Scan(&proposalID); err != nil {
 		t.Fatalf("插入提案失败: %v", err)
 	}
@@ -471,13 +471,13 @@ INSERT INTO proposals (kind, payload, source) VALUES ($1, $2::jsonb, 'user') RET
 		t.Fatalf("失败行没有 error：%+v", out.Results[2])
 	}
 
-	// 批量通过：技能成功，未接入的 new_model 行失败，但不影响其它行。
-	modelID := insert("new_model", `{"name":"批量模型二"}`)
+	// 批量通过：技能成功，未接入的 new_prompt 行失败，但不影响其它行。
+	promptID := insert("new_prompt", `{"title":"批量提示词","content":"测试批量提示词内容"}`)
 	skillID := insert("new_skill", `{"slug":"it-batch-skill-c","name":"批量技能 C"}`)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM skills WHERE slug='it-batch-skill-c'`)
 	})
-	body = `{"ids":[` + itoa(int(skillID)) + `,` + itoa(int(modelID)) + `],"decision":"approve"}`
+	body = `{"ids":[` + itoa(int(skillID)) + `,` + itoa(int(promptID)) + `],"decision":"approve"}`
 	rec = httptest.NewRecorder()
 	h.BatchReviewAdminProposals(rec, proposalReq(http.MethodPost, "/api/v1/admin/proposals/batch", adminSID, body))
 	if rec.Code != http.StatusOK {

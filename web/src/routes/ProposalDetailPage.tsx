@@ -16,7 +16,7 @@ import { useAuth } from '@/features/auth/AuthContext';
 const REASON_MAX = 500;
 
 // 已经接入执行器的提案 kind；其余 kind 不渲染「通过」按钮，避免注定 422 的点击。
-const APPROVABLE_KINDS = ['new_classification', 'new_skill', 'new_task'];
+const APPROVABLE_KINDS = ['new_classification', 'new_skill', 'new_task', 'new_model'];
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '待处理',
@@ -93,6 +93,8 @@ export function ProposalDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'proposal', id] });
       void queryClient.invalidateQueries({ queryKey: ['admin', 'proposals'] });
       void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'models'] });
+      void queryClient.invalidateQueries({ queryKey: ['models'] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : '通过失败'),
   });
@@ -207,9 +209,11 @@ export function ProposalDetailPage() {
             )}
           </div>
           <p className="text-xs text-gray-500">
-            {APPROVABLE_KINDS.includes(data.kind)
-              ? '通过会写对应的正式表（已存在则复用），并把提案置为已通过。'
-              : '这个 kind 的执行器还没接入；驳回只改提案状态并写审计。'}
+            {data.kind === 'new_model'
+              ? '通过后将建出候选模型（批准 ≠ 可用，仍需在模型治理中确认启用）；若提案附带上游条目，将当场完成认领。'
+              : APPROVABLE_KINDS.includes(data.kind)
+                ? '通过会写对应的正式表（已存在则复用），并把提案置为已通过。'
+                : '这个 kind 的执行器还没接入；驳回只改提案状态并写审计。'}
           </p>
           {error ? (
             <p role="alert" className="text-sm text-red-600">
