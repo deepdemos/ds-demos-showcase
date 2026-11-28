@@ -94,6 +94,10 @@ describe('导航派生', () => {
     const models = adminNav(me(['model.import']));
     expect(models.map((item) => item.label)).toEqual(['模型导入']);
     expect(models[0]?.group).toBe('内容');
+
+    const modelCreate = adminNav(me(['model.create']));
+    expect(hasAdminAccess(me(['model.create']))).toBe(true);
+    expect(modelCreate.map((item) => item.to)).toEqual(['/admin/models']);
   });
 
   test('admin 角色看到全部管理入口', () => {

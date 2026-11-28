@@ -2,14 +2,18 @@ import { useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import type { UpstreamModel } from '@/api';
+import { hasAnyPermission } from '@/app/navigation';
+import { MODEL_ADMIN_PERMISSIONS } from '@/app/routes';
 import { EmptyState } from '@/components/ui';
 import { Page } from '@/components/layout/page';
 import { UpstreamModelSelector, upstreamRef } from '@/components/upstream-model-selector';
 import { ModelBatch } from '@/features/admin/model-batch';
 import { ModelCreate } from '@/features/admin/model-create';
 import { ModelDiff, type SelectedPayload } from '@/features/admin/model-diff';
+import { ModelList, type AdminModelStatusFilter } from '@/features/admin/model-list';
 import { ModelSyncBar } from '@/features/admin/model-sync-bar';
 import { useAuth } from '@/features/auth/AuthContext';
+import { MODEL_STATUSES } from '@/features/models/profile-completeness';
 
 /**
  * 管理端「模型导入」。
@@ -50,6 +54,18 @@ export function parseRef(value: string | null): { providerId: string; externalId
   return { providerId: value.slice(0, at), externalId: value.slice(at + 1) };
 }
 
+const VALID_STATUS = new Set<string>(MODEL_STATUSES);
+
+function parseStatus(value: string | null): AdminModelStatusFilter {
+  if (value && VALID_STATUS.has(value)) return value as AdminModelStatusFilter;
+  return '';
+}
+
+function parsePage(value: string | null): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
 export function AdminModelsPage() {
   const { me, isLoading } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -60,6 +76,8 @@ export function AdminModelsPage() {
   const q = params.get('q') ?? '';
   const refParam = params.get('ref');
   const ref = parseRef(refParam);
+  const status = parseStatus(params.get('status'));
+  const page = parsePage(params.get('page'));
 
   const patch = useCallback(
     (next: Record<string, string | null>) => {
@@ -89,9 +107,27 @@ export function AdminModelsPage() {
     [patch],
   );
 
+  const onStatusChange = useCallback(
+    (next: AdminModelStatusFilter) => {
+      patch({ status: next === '' ? null : next, page: null });
+    },
+    [patch],
+  );
+
+  const onPageChange = useCallback(
+    (next: number) => {
+      // 顺手清掉 URL 里可能残留的非法 status 参数，保持分享链接干净。
+      patch({
+        status: status === '' ? null : status,
+        page: next <= 1 ? null : String(next),
+      });
+    },
+    [patch, status],
+  );
+
   if (isLoading) return null;
 
-  // only 用来做「入口可见性」，不是权限判定——真正的判定在服务端。
+  // 只用来做「入口可见性」，真正的权限判定仍在服务端。
   if (me === null) {
     return (
       <Page title="模型导入">
@@ -100,12 +136,12 @@ export function AdminModelsPage() {
     );
   }
 
-  if (me.role !== 'admin') {
+  if (me.role !== 'admin' && !hasAnyPermission(me, MODEL_ADMIN_PERMISSIONS)) {
     return (
       <Page title="模型导入">
         <EmptyState
           title="没有导入权限"
-          description="导入会写共享的模型目录，只有持有 model.import 权限的管理员可以操作。"
+          description="只有持有模型管理权限（model.import / model.create / model.govern）的账号可以访问本页。"
         />
       </Page>
     );
@@ -146,6 +182,13 @@ export function AdminModelsPage() {
         queue={queue}
         onRemove={(index) => setQueue((prev) => prev.filter((_, i) => i !== index))}
         onClear={() => setQueue([])}
+      />
+
+      <ModelList
+        status={status}
+        page={page}
+        onStatusChange={onStatusChange}
+        onPageChange={onPageChange}
       />
 
       {/* 上游目录里没有的私有模型只能手建。放在这一页是因为它是管理端唯一的模型入口；

@@ -128,6 +128,22 @@
         "optional": false
       }
     },
+    "AdminModelList": {
+      "items": {
+        "type": "[]AdminModelRow",
+        "optional": false
+      }
+    },
+    "AdminModelRow": {
+      "model": {
+        "type": "Model",
+        "optional": false
+      },
+      "specs": {
+        "type": "ModelSpecs",
+        "optional": true
+      }
+    },
     "AppealDecision": {
       "decision": {
         "type": "AppealDecisionDecision",
@@ -3020,6 +3036,11 @@
       "method": "GetAdminInbox",
       "pathParams": 0,
       "params": "GetAdminInboxParams"
+    },
+    "GET /api/v1/admin/models": {
+      "method": "ListAdminModels",
+      "pathParams": 0,
+      "params": "ListAdminModelsParams"
     },
     "POST /api/v1/admin/models": {
       "method": "CreateModel",

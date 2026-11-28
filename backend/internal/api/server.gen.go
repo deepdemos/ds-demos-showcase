@@ -38,6 +38,9 @@ type ServerInterface interface {
 	// 聚合收件箱
 	// (GET /api/v1/admin/inbox)
 	GetAdminInbox(w http.ResponseWriter, r *http.Request, params GetAdminInboxParams)
+	// 管理端模型列表（全部状态，含档案）
+	// (GET /api/v1/admin/models)
+	ListAdminModels(w http.ResponseWriter, r *http.Request, params ListAdminModelsParams)
 	// 手动新建一个模型
 	// (POST /api/v1/admin/models)
 	CreateModel(w http.ResponseWriter, r *http.Request)
@@ -308,6 +311,12 @@ func (_ Unimplemented) PublishDemo(w http.ResponseWriter, r *http.Request, slug 
 // 聚合收件箱
 // (GET /api/v1/admin/inbox)
 func (_ Unimplemented) GetAdminInbox(w http.ResponseWriter, r *http.Request, params GetAdminInboxParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 管理端模型列表（全部状态，含档案）
+// (GET /api/v1/admin/models)
+func (_ Unimplemented) ListAdminModels(w http.ResponseWriter, r *http.Request, params ListAdminModelsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1015,6 +1024,39 @@ func (siw *ServerInterfaceWrapper) GetAdminInbox(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminInbox(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminModels operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminModels(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminModelsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminModels(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3238,6 +3280,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/admin/inbox", wrapper.GetAdminInbox)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/models", wrapper.ListAdminModels)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/models", wrapper.CreateModel)

@@ -532,6 +532,21 @@ type AdminInbox struct {
 	Proposals                []InboxProposal   `json:"proposals"`
 }
 
+// AdminModelList defines model for AdminModelList.
+type AdminModelList struct {
+	Items []AdminModelRow `json:"items"`
+}
+
+// AdminModelRow defines model for AdminModelRow.
+type AdminModelRow struct {
+	Model Model `json:"model"`
+
+	// Specs 档案对象（`model_specs`）；没有档案时是 `null`，不是空对象。
+	// 「还没录入」与「录了但每栏都空」对读者是两件事——前者是缺档案，
+	// 后者是档案完整度里的「部分」（`contextWindow` / `modalitiesIn` 任一为空）。
+	Specs *ModelSpecs `json:"specs"`
+}
+
 // AppealDecision defines model for AppealDecision.
 type AppealDecision struct {
 	Decision AppealDecisionDecision `json:"decision"`
@@ -2463,6 +2478,12 @@ type ListAdminAppealsParamsStatus string
 // GetAdminInboxParams defines parameters for GetAdminInbox.
 type GetAdminInboxParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListAdminModelsParams defines parameters for ListAdminModels.
+type ListAdminModelsParams struct {
+	// Status 只出这个状态的行（`candidate` / `active` / `unverified` / `deprecated`）；不传表示全部状态，其余取值回 400。
+	Status *string `form:"status,omitempty" json:"status,omitempty"`
 }
 
 // ListModelCatalogParams defines parameters for ListModelCatalog.

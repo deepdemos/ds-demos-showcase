@@ -64,6 +64,9 @@ export interface PageEntry {
  * 加页面的顺序：这里加一行 → route-elements.tsx 加元素 → 导航/重定向
  * （如果该页需要）→ 同 PR 补测试与文档。漏一步，routes.test.ts 会红。
  */
+/** 管理端「模型」页面所需的权限键（与后端 ListAdminModels 口径一致）。 */
+export const MODEL_ADMIN_PERMISSIONS = ['model.import', 'model.create', 'model.govern'] as const;
+
 export const pages: readonly PageEntry[] = [
   {
     id: 'home',
@@ -465,7 +468,7 @@ export const pages: readonly PageEntry[] = [
       order: 10,
       group: '内容',
       requiresAdmin: true,
-      permissions: ['model.import'],
+      permissions: MODEL_ADMIN_PERMISSIONS,
     },
   },
   {
