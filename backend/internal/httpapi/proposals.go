@@ -144,13 +144,14 @@ func (h *Handler) ListAdminProposals(w http.ResponseWriter, r *http.Request, par
 	items := make([]api.ProposalSummary, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, api.ProposalSummary{
-			Id:        int(row.ID),
-			Kind:      row.Kind,
-			Status:    api.ProposalSummaryStatus(row.Status),
-			Source:    api.ProposalSummarySource(row.Source),
-			Title:     proposalTitle(row.Payload),
-			CreatedAt: row.CreatedAt.Time,
-			UpdatedAt: row.UpdatedAt.Time,
+			Id:         int(row.ID),
+			Kind:       row.Kind,
+			Status:     api.ProposalSummaryStatus(row.Status),
+			Source:     api.ProposalSummarySource(row.Source),
+			Title:      proposalTitle(row.Payload),
+			SourceDemo: proposalSourceDemo(row.SourceDemoSlug, row.SourceDemoTitle),
+			CreatedAt:  row.CreatedAt.Time,
+			UpdatedAt:  row.UpdatedAt.Time,
 		})
 	}
 	writeJSON(w, http.StatusOK, api.ProposalList{
@@ -158,16 +159,29 @@ func (h *Handler) ListAdminProposals(w http.ResponseWriter, r *http.Request, par
 	})
 }
 
+func proposalSourceDemo(slug string, title pgtype.Text) *api.ProposalSourceDemo {
+	if slug == "" {
+		return nil
+	}
+	var titlePtr *string
+	if title.Valid {
+		v := title.String
+		titlePtr = &v
+	}
+	return &api.ProposalSourceDemo{Slug: slug, Title: titlePtr}
+}
+
 func proposalDetail(row store.GetProposalByIDRow) api.ProposalDetail {
 	payload := proposalPayloadMap(row.Payload)
 	out := api.ProposalDetail{
-		Id:        int(row.ID),
-		Kind:      row.Kind,
-		Status:    api.ProposalDetailStatus(row.Status),
-		Payload:   &payload,
-		Source:    api.ProposalDetailSource(row.Source),
-		CreatedAt: row.CreatedAt.Time,
-		UpdatedAt: row.UpdatedAt.Time,
+		Id:         int(row.ID),
+		Kind:       row.Kind,
+		Status:     api.ProposalDetailStatus(row.Status),
+		Payload:    &payload,
+		Source:     api.ProposalDetailSource(row.Source),
+		SourceDemo: proposalSourceDemo(row.SourceDemoSlug, row.SourceDemoTitle),
+		CreatedAt:  row.CreatedAt.Time,
+		UpdatedAt:  row.UpdatedAt.Time,
 	}
 	if row.Confidence.Valid {
 		value := row.Confidence.Float32

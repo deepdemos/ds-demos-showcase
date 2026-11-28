@@ -123,6 +123,32 @@ export type SubmitDemoBody = {
      */
   modelCalls?: string[];
   /**
+     * 作者在投稿时顺带提出的**模型收录提案**（`proposals.kind = 'new_model'`，#590）。
+     * 每一项是一个 JSON 对象的字符串形式，形如
+     * `{"name":"DeepSeek V4 Preview","vendor":"DeepSeek","source":"models.dev","providerId":"deepseek","externalId":"deepseek-v4-preview"}`
+     * 或纯手填 `{"name":"我的私有模型","vendor":"自研"}`。
+     *
+     * 为什么只能随投稿 / 编辑提交、不在通用 `POST /api/v1/proposals` 开放：
+     * 收录提案的全部价值在于「有作品要用它」，必须关联一件具体作品（经 `proposal_refs(role='subject')`
+     * 建立强引用，作品删除时级联清理），并记录提交时的 `demo_id` / `demo_slug` / `revision_no`
+     * 作为审计留痕。
+     *
+     * - `name`（必填，1–128 字）：模型展示名；纯空白或超长一律 400。
+     * - `vendor`（可选，最多 64 字）：厂商名称说明，方便管理员核实。
+     * - `source` / `providerId` / `externalId`（可选上游三元组）：从上游层选择时一并给出；
+     *   `providerId` 与 `externalId` 必须成对出现（此时 `source` 缺省为 `models.dev`），
+     *   只给半截一律 400。
+     *
+     * 一条投稿里 N 个未入库模型产生 N 条独立待审提案（支持管理员部分批准）；
+     * 去重口径为「作品 × 规范化模型名（折叠空白并转小写）」，同一作品重复提交同名模型
+     * 幂等跳过、不产生重复待审提案，不同作品各自保留自己的提案。
+     *
+     * 最多 20 条；不传或空数组都合法。提案提交不会阻断作品入库与审核。
+     * @maxItems 20
+     * @items.maxLength 2048
+     */
+  modelProposals?: string[];
+  /**
      * 这件作品的内容分类，取值为 `classifications.slug`（来自
      * `GET /api/v1/classifications`）。
      *

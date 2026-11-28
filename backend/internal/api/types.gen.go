@@ -2106,8 +2106,11 @@ type ProposalDetail struct {
 	ReviewedAt   *time.Time              `json:"reviewedAt"`
 	ReviewedBy   *int                    `json:"reviewedBy"`
 	Source       ProposalDetailSource    `json:"source"`
-	Status       ProposalDetailStatus    `json:"status"`
-	UpdatedAt    time.Time               `json:"updatedAt"`
+
+	// SourceDemo 来源作品；无来源作品或作品已删除/擦除时为 null
+	SourceDemo *ProposalSourceDemo  `json:"sourceDemo"`
+	Status     ProposalDetailStatus `json:"status"`
+	UpdatedAt  time.Time            `json:"updatedAt"`
 }
 
 // ProposalDetailSource defines model for ProposalDetail.Source.
@@ -2132,6 +2135,12 @@ type ProposalReviewResult struct {
 
 // ProposalReviewResultStatus defines model for ProposalReviewResult.Status.
 type ProposalReviewResultStatus string
+
+// ProposalSourceDemo 提案关联的来源作品（经 `proposal_refs(role='subject')` 指向）；管理端据此判断「哪件作品要用它」。
+type ProposalSourceDemo struct {
+	Slug  string  `json:"slug"`
+	Title *string `json:"title"`
+}
 
 // ProposalSubmission defines model for ProposalSubmission.
 type ProposalSubmission struct {
@@ -2162,7 +2171,10 @@ type ProposalSummary struct {
 	// Kind 提案 kind；取值由 proposals 的 CHECK 定义，不在契约里复制一份
 	Kind   string                `json:"kind"`
 	Source ProposalSummarySource `json:"source"`
-	Status ProposalSummaryStatus `json:"status"`
+
+	// SourceDemo 来源作品；无来源作品或作品已删除/擦除时为 null
+	SourceDemo *ProposalSourceDemo   `json:"sourceDemo"`
+	Status     ProposalSummaryStatus `json:"status"`
 
 	// Title 从 payload 摘出的标题；取不到为空串
 	Title     string    `json:"title"`
@@ -2386,9 +2398,12 @@ type SubmissionResult struct {
 	// LifecycleState 作品生命周期状态。与标准对象 §ST-2 的可见性档位对应：
 	// `draft` / `pending` / `rejected` 对外不可见；`published` 正常可见；
 	// `archived` / `removed` 可见但为墓碑态。
-	LifecycleState  LifecycleState                  `json:"lifecycleState"`
-	ModerationState SubmissionResultModerationState `json:"moderationState"`
-	RevisionNo      int                             `json:"revisionNo"`
+	LifecycleState LifecycleState `json:"lifecycleState"`
+
+	// ModelProposalIds 本次随投稿 / 编辑新建的模型收录提案编号；未新建提案时省略。
+	ModelProposalIds *[]int                          `json:"modelProposalIds,omitempty"`
+	ModerationState  SubmissionResultModerationState `json:"moderationState"`
+	RevisionNo       int                             `json:"revisionNo"`
 
 	// Slug 生成的唯一标识，客户端用它跳详情页
 	Slug string `json:"slug"`
@@ -2645,6 +2660,29 @@ type SubmitDemoMultipartBody struct {
 	// 最多 50 条；不传或空数组都合法。
 	ModelCalls *[]string `json:"modelCalls,omitempty"`
 
+	// ModelProposals 作者在投稿时顺带提出的**模型收录提案**（`proposals.kind = 'new_model'`，#590）。
+	// 每一项是一个 JSON 对象的字符串形式，形如
+	// `{"name":"DeepSeek V4 Preview","vendor":"DeepSeek","source":"models.dev","providerId":"deepseek","externalId":"deepseek-v4-preview"}`
+	// 或纯手填 `{"name":"我的私有模型","vendor":"自研"}`。
+	//
+	// 为什么只能随投稿 / 编辑提交、不在通用 `POST /api/v1/proposals` 开放：
+	// 收录提案的全部价值在于「有作品要用它」，必须关联一件具体作品（经 `proposal_refs(role='subject')`
+	// 建立强引用，作品删除时级联清理），并记录提交时的 `demo_id` / `demo_slug` / `revision_no`
+	// 作为审计留痕。
+	//
+	// - `name`（必填，1–128 字）：模型展示名；纯空白或超长一律 400。
+	// - `vendor`（可选，最多 64 字）：厂商名称说明，方便管理员核实。
+	// - `source` / `providerId` / `externalId`（可选上游三元组）：从上游层选择时一并给出；
+	//   `providerId` 与 `externalId` 必须成对出现（此时 `source` 缺省为 `models.dev`），
+	//   只给半截一律 400。
+	//
+	// 一条投稿里 N 个未入库模型产生 N 条独立待审提案（支持管理员部分批准）；
+	// 去重口径为「作品 × 规范化模型名（折叠空白并转小写）」，同一作品重复提交同名模型
+	// 幂等跳过、不产生重复待审提案，不同作品各自保留自己的提案。
+	//
+	// 最多 20 条；不传或空数组都合法。提案提交不会阻断作品入库与审核。
+	ModelProposals *[]string `json:"modelProposals,omitempty"`
+
 	// ModelSlugs 这一版用到的模型。每一项是一个**模型指称**：`slug`、展示名或别名
 	// 都可以（大小写不敏感），由服务端统一解析。从 `GET /api/v1/models`
 	// 选一个是最常见的情形，但不是唯一写法——同一个模型在别处的名字
@@ -2713,6 +2751,13 @@ type UpdateDemoMultipartBody struct {
 	// 这次既没在 `modelCalls` 里提它、也没在 `modelSlugs` 里换写法，
 	// 这一版仍记 `1017`，不会静默退回「未固定」。
 	ModelCalls *[]string `json:"modelCalls,omitempty"`
+
+	// ModelProposals 改稿时顺带提出的模型收录提案；每一项的形状、校验与去重口径与
+	// `POST /api/v1/demos` 的同名字段完全相同（按「本作品 × 规范化模型名」去重：
+	// 本作品已有同名的待审提案时幂等跳过，不会产生重复提案）。
+	//
+	// 不传或空数组都合法；不传不会撤回该作品此前已提交的待审提案。
+	ModelProposals *[]string `json:"modelProposals,omitempty"`
 
 	// ModelSlugs 这一版声明的模型，语义是**整体替换**。每一项是模型指称
 	// （slug / 展示名 / 别名），解析不到时一律 400，

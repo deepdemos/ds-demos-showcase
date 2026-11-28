@@ -71,6 +71,9 @@ type UpdateInput struct {
 	// 改稿时它是「这一版的上报」：没带版本的那些模型会沿用上一版记过的版本
 	// （见 applyModelDeclarations 的 carryOver），不会因为改个标题就变回「未固定」。
 	ModelCalls []string
+	// ModelProposals 是改稿时顺带提出的「收录模型」提案（#590），语义与 SubmitInput.ModelProposals 相同。
+	// 不传不会撤回该作品此前已提交的待审提案；重复提交同名模型幂等跳过。
+	ModelProposals []string
 	// ClassificationSlugs 是这件作品的内容分类（取 classifications.slug）。
 	//
 	// **注意：它的语义与 ModelSlugs 不同——不传（空）表示「不改」，不是「清空」。**
@@ -95,6 +98,8 @@ type UpdateResult struct {
 	LifecycleState  string
 	// FilesChanged 表示这一版是否换了文件（false = 只改了文字）。
 	FilesChanged bool
+	// ModelProposalIDs 是本次随改稿新建的 new_model 提案 id（重复跳过的不在此列）。
+	ModelProposalIDs []int64
 }
 
 // Update 追加一个新版本。
@@ -109,6 +114,9 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 	var out UpdateResult
 
 	if err := validateMeta(in.Title, in.Description, in.DemoType); err != nil {
+		return out, err
+	}
+	if _, err := validateModelProposals(in.ModelProposals); err != nil {
 		return out, err
 	}
 	if s.maxPackageBytes > 0 && in.PackageSize > s.maxPackageBytes {
@@ -206,7 +214,10 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 		meta.TotalBytes = pgtype.Int8{Int64: st.totalBytes, Valid: true}
 	}
 
-	var revNo int
+	var (
+		revNo       int
+		proposalIDs []int64
+	)
 	err = s.inTx(ctx, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 
@@ -264,6 +275,13 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 			return err
 		}
 
+		// 改稿顺带的未入库模型收录提案（#590）：同作品同名幂等跳过，不阻断改稿。
+		ids, err := applyModelProposals(ctx, q, cur.ID, cur.Slug, revNo, in.AuthorID, in.ModelProposals)
+		if err != nil {
+			return err
+		}
+		proposalIDs = ids
+
 		// 分类是作品级的，改它不产生新版本也不动审核态。
 		// 只在**传了**的时候替换：不传 = 不改（理由见 UpdateInput.ClassificationSlugs）。
 		if len(in.ClassificationSlugs) > 0 {
@@ -302,11 +320,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (UpdateResult, err
 	}
 
 	return UpdateResult{
-		Slug:            cur.Slug,
-		RevisionNo:      revNo,
-		ModerationState: "pending",
-		LifecycleState:  cur.LifecycleState,
-		FilesChanged:    hasPackage,
+		Slug:             cur.Slug,
+		RevisionNo:       revNo,
+		ModerationState:  "pending",
+		LifecycleState:   cur.LifecycleState,
+		FilesChanged:     hasPackage,
+		ModelProposalIDs: proposalIDs,
 	}, nil
 }
 

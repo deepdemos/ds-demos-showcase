@@ -78,6 +78,16 @@ export type UpdateDemoBody = {
      */
   modelCalls?: string[];
   /**
+     * 改稿时顺带提出的模型收录提案；每一项的形状、校验与去重口径与
+     * `POST /api/v1/demos` 的同名字段完全相同（按「本作品 × 规范化模型名」去重：
+     * 本作品已有同名的待审提案时幂等跳过，不会产生重复提案）。
+     *
+     * 不传或空数组都合法；不传不会撤回该作品此前已提交的待审提案。
+     * @maxItems 20
+     * @items.maxLength 2048
+     */
+  modelProposals?: string[];
+  /**
      * 这件作品的内容分类（`classifications.slug`），语义是**整体替换**，
      * 但**不传表示「不改」而不是「清空」**——理由见 `POST /api/v1/demos`
      * 同名参数的说明与 `docs/已知松点.md` 第 48 条。

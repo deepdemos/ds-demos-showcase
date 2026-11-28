@@ -79,6 +79,7 @@ func (h *Handler) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string
 		ModelSlugs: formValues(r, "modelSlugs"),
 		// 端点上报同样是整体替换（#445 的 4d），校验与投稿共用领域层那一处。
 		ModelCalls:          formValues(r, "modelCalls"),
+		ModelProposals:      formValues(r, "modelProposals"),
 		ClassificationSlugs: formValues(r, "classificationSlugs"),
 	}
 
@@ -125,9 +126,10 @@ func (h *Handler) UpdateDemo(w http.ResponseWriter, r *http.Request, slug string
 	}
 
 	writeJSON(w, http.StatusOK, api.SubmissionResult{
-		Slug:            res.Slug,
-		RevisionNo:      res.RevisionNo,
-		ModerationState: api.SubmissionResultModerationState(res.ModerationState),
-		LifecycleState:  api.LifecycleState(res.LifecycleState),
+		Slug:             res.Slug,
+		RevisionNo:       res.RevisionNo,
+		ModerationState:  api.SubmissionResultModerationState(res.ModerationState),
+		LifecycleState:   api.LifecycleState(res.LifecycleState),
+		ModelProposalIds: proposalIDsPtr(res.ModelProposalIDs),
 	})
 }

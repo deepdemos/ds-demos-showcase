@@ -274,6 +274,13 @@
         }
       },
       {
+        "case": "随投稿附带的 modelProposals 缺名称或上游三元组不完整 → 400，且不建作品与提案",
+        "test": {
+          "file": "backend/internal/httpapi/model_proposals_integration_test.go",
+          "name": "TestIntegrationModelProposalsRejectsInvalidAndGenericEndpoint"
+        }
+      },
+      {
         "case": "幂等键超过 128 个字符回 400，不静默截断（截断等于把两次调用并成一次）",
         "test": {
           "file": "backend/internal/httpapi/submit_idempotency_integration_test.go",
@@ -430,6 +437,13 @@
         "test": {
           "file": "backend/internal/httpapi/update_integration_test.go",
           "name": "TestIntegrationUpdateDemo"
+        }
+      },
+      {
+        "case": "随改稿附带的 modelProposals 缺名称或格式非法返回 400，且不建提案",
+        "test": {
+          "file": "backend/internal/httpapi/model_proposals_integration_test.go",
+          "name": "TestIntegrationModelProposalsRejectsInvalidAndGenericEndpoint"
         }
       },
       {
@@ -1200,6 +1214,13 @@
         "test": {
           "file": "backend/internal/httpapi/proposals_public_integration_test.go",
           "name": "TestIntegrationSubmitProposalRejects"
+        }
+      },
+      {
+        "case": "通用提案入口不开放 new_model（必须从交稿流程关联作品提交），返回 422",
+        "test": {
+          "file": "backend/internal/httpapi/model_proposals_integration_test.go",
+          "name": "TestIntegrationModelProposalsRejectsInvalidAndGenericEndpoint"
         }
       },
       {

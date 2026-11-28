@@ -197,6 +197,7 @@ export * from './proposalDetailStatus';
 export * from './proposalList';
 export * from './proposalReviewResult';
 export * from './proposalReviewResultStatus';
+export * from './proposalSourceDemo';
 export * from './proposalSubmission';
 export * from './proposalSubmissionPayload';
 export * from './proposalSubmissionResult';

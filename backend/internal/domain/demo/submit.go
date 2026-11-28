@@ -144,7 +144,7 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 		return out, err
 	}
 
-	slug, revID, replay, err := s.createRow(ctx, in, &st)
+	slug, revID, proposalIDs, replay, err := s.createRow(ctx, in, &st)
 	if err != nil {
 		return out, err
 	}
@@ -157,6 +157,7 @@ func (s *Service) Submit(ctx context.Context, in SubmitInput) (SubmitResult, err
 	out.RevisionNo = 1
 	out.ModerationState = "pending"
 	out.LifecycleState = "draft"
+	out.ModelProposalIDs = proposalIDs
 
 	// 从这里开始，数据库里已经有这一行了。任何失败都要把它清掉。
 	if err := s.upload(ctx, revID, st); err != nil {
@@ -175,7 +176,7 @@ func (s *Service) submitURL(ctx context.Context, in SubmitInput) (SubmitResult, 
 	if err := s.checkFormat(ctx, in.DemoType, FormatURL); err != nil {
 		return out, err
 	}
-	slug, _, replay, err := s.createRow(ctx, in, nil)
+	slug, _, proposalIDs, replay, err := s.createRow(ctx, in, nil)
 	if err != nil {
 		return out, err
 	}
@@ -183,10 +184,11 @@ func (s *Service) submitURL(ctx context.Context, in SubmitInput) (SubmitResult, 
 		return *replay, nil
 	}
 	return SubmitResult{
-		Slug:            slug,
-		RevisionNo:      1,
-		ModerationState: "pending",
-		LifecycleState:  "draft",
+		Slug:             slug,
+		RevisionNo:       1,
+		ModerationState:  "pending",
+		LifecycleState:   "draft",
+		ModelProposalIDs: proposalIDs,
 	}, nil
 }
 
@@ -318,7 +320,7 @@ func (s *Service) collect(root string, st *staged) error {
 //
 // 返回值第三项非 nil 表示：幂等键撞上了另一个并发请求刚落下的行，
 // 调用方应当把它直接当成这次提交的结果（200，而不是 201）。
-func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, int64, *SubmitResult, error) {
+func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, int64, []int64, *SubmitResult, error) {
 	base := slugify(in.Title)
 	// 标题里没有可用 ASCII 时 slugify 返回空（纯中文标题就是这种情况）。
 	// 这时不能用光秃秃的 "demo" 当第一版：第二个纯中文标题投稿会撞上它，
@@ -335,7 +337,7 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 		if attempt > 0 || needsSuffix {
 			suffix, err := randomSuffix(4)
 			if err != nil {
-				return "", 0, nil, fmt.Errorf("demo: 生成 slug 失败: %w", err)
+				return "", 0, nil, nil, fmt.Errorf("demo: 生成 slug 失败: %w", err)
 			}
 			slug = base + "-" + suffix
 		}
@@ -343,7 +345,10 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			slug = slug[:maxSlugLen]
 		}
 
-		var revID int64
+		var (
+			revID       int64
+			proposalIDs []int64
+		)
 		err := s.inTx(ctx, func(tx pgx.Tx) error {
 			q := s.q.WithTx(tx)
 			d, err := q.CreateDemo(ctx, store.CreateDemoParams{
@@ -404,6 +409,13 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 				return err
 			}
 
+			// 随投稿提交的未入库模型收录提案（#590）：与作品同事务写入 proposals + proposal_refs。
+			ids, err := applyModelProposals(ctx, q, d.ID, slug, 1, in.AuthorID, in.ModelProposals)
+			if err != nil {
+				return err
+			}
+			proposalIDs = ids
+
 			// 分类挂在**作品**上，不在这一版上（见 ClassificationSlugs 的注释）。
 			// 同一事务：分类写失败就等于这次投稿失败，不能出现「作品建好了、
 			// 打了的标签丢了」——作者下次打开编辑页会看到分类是空的。
@@ -421,17 +433,17 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 			})
 		})
 		if err == nil {
-			return slug, revID, nil, nil
+			return slug, revID, proposalIDs, nil, nil
 		}
 		// 输入问题原样往上抛：模型声明不合格（resolveModelRefs）也是在这一层
 		// 返回的，若继续往下走会被包成「落库失败: …」，作者会以为是我们这边坏了。
 		if errors.Is(err, ErrInvalidInput) {
-			return "", 0, nil, err
+			return "", 0, nil, nil, err
 		}
 		if isForeignKeyViolation(err) {
 			// 走到这里只可能是 demo_type 不存在（其余外键都由服务端自己填）。
 			// 这是输入问题不是服务端故障，必须回 400 而不是 503。
-			return "", 0, nil, fmt.Errorf("%w: 作品类型不存在", ErrInvalidInput)
+			return "", 0, nil, nil, fmt.Errorf("%w: 作品类型不存在", ErrInvalidInput)
 		}
 		// 幂等键冲突要先于 slug 冲突判定：两者都是 23505，但处理完全相反——
 		// slug 冲突是「换个名字再来一次」，幂等键冲突是「这件事已经做过了，
@@ -442,18 +454,18 @@ func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (st
 				IdempotencyKey: text(in.IdempotencyKey),
 			})
 			if findErr != nil {
-				return "", 0, nil, fmt.Errorf("demo: 幂等键冲突后回查失败: %w", findErr)
+				return "", 0, nil, nil, fmt.Errorf("demo: 幂等键冲突后回查失败: %w", findErr)
 			}
 			out := replayOf(row)
-			return "", 0, &out, nil
+			return "", 0, nil, &out, nil
 		}
 		if !isUniqueViolation(err) {
-			return "", 0, nil, fmt.Errorf("demo: 落库失败: %w", err)
+			return "", 0, nil, nil, fmt.Errorf("demo: 落库失败: %w", err)
 		}
 		lastErr = err
 		s.log.Warn("slug 冲突，换一个再试", "slug", slug, "attempt", attempt+1)
 	}
-	return "", 0, nil, fmt.Errorf("demo: 无法生成唯一 slug: %w", lastErr)
+	return "", 0, nil, nil, fmt.Errorf("demo: 无法生成唯一 slug: %w", lastErr)
 }
 
 // replayOf 把「查到的已有行」翻译成一次提交的结果。
@@ -526,6 +538,9 @@ func (s *Service) compensate(ctx context.Context, slug string, st staged) {
 				// 库行已经不在了（补偿重跑），继续清文件。
 				return nil
 			}
+			return err
+		}
+		if err := q.DeleteProposalsForDemoCleanup(cctx, int8(d.ID)); err != nil {
 			return err
 		}
 		return q.DeleteDemoForCleanup(cctx, d.ID)

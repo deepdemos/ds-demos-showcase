@@ -741,6 +741,9 @@ if(submitDemoBody.modelSlugs !== undefined) {
 if(submitDemoBody.modelCalls !== undefined) {
  submitDemoBody.modelCalls.forEach(value => formData.append(`modelCalls`, value));
  }
+if(submitDemoBody.modelProposals !== undefined) {
+ submitDemoBody.modelProposals.forEach(value => formData.append(`modelProposals`, value));
+ }
 if(submitDemoBody.classificationSlugs !== undefined) {
  submitDemoBody.classificationSlugs.forEach(value => formData.append(`classificationSlugs`, value));
  }
@@ -1126,6 +1129,9 @@ if(updateDemoBody.modelSlugs !== undefined) {
  }
 if(updateDemoBody.modelCalls !== undefined) {
  updateDemoBody.modelCalls.forEach(value => formData.append(`modelCalls`, value));
+ }
+if(updateDemoBody.modelProposals !== undefined) {
+ updateDemoBody.modelProposals.forEach(value => formData.append(`modelProposals`, value));
  }
 if(updateDemoBody.classificationSlugs !== undefined) {
  updateDemoBody.classificationSlugs.forEach(value => formData.append(`classificationSlugs`, value));

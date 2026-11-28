@@ -86,6 +86,10 @@ type SubmitInput struct {
 	// 一条调用也算一条声明：ref 会被当成模型指称解析，解析不到与 ModelSlugs 同样 400。
 	// 与 ModelSlugs 重复时只算一条，调用那条带的版本优先。
 	ModelCalls []string
+	// ModelProposals 是作者随投稿提出的「收录模型」提案（#590）。
+	// 每一项是一个 JSON 对象字符串（name 必填，可选 vendor / source / providerId / externalId）。
+	// 解析、校验与按「作品 × 规范化模型名」去重落库见 model_proposals.go。
+	ModelProposals []string
 	// ClassificationSlugs 是这件作品的内容分类（取 classifications.slug）。
 	//
 	// 与 ModelSlugs 的关键区别：分类挂在**作品**上，模型挂在**版本**上
@@ -106,6 +110,8 @@ type SubmitResult struct {
 	// 传输层据此回 200 而不是 201：客户端（尤其是脚本）应当能区分
 	// 「我创建了它」与「它早就存在」——后者不该被当成一次新的上传成功。
 	Replayed bool
+	// ModelProposalIDs 是本次随投稿新建的 new_model 提案 id（重复跳过的不在此列）。
+	ModelProposalIDs []int64
 }
 
 // validate 检查元数据。文件层面的检查在 stagePackage 里。
@@ -186,6 +192,9 @@ func (in SubmitInput) validate() error {
 		return err
 	}
 	if err := validateExternalURL(in.ExternalURL); err != nil {
+		return err
+	}
+	if _, err := validateModelProposals(in.ModelProposals); err != nil {
 		return err
 	}
 	// 文件与地址互斥：外链作品没有字节，传了文件说明类型选错了；反过来，
