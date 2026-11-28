@@ -164,3 +164,30 @@ test('403 显示无查看权限说明，503 显示错误态与重试', async () 
   expect(await screen.findByText('模型列表加载失败')).toBeTruthy();
   expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
 });
+
+test('已加载列表后刷新失败时仅展示错误态，不同时残留旧数据', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  vi.mocked(listAdminModels)
+    .mockResolvedValueOnce({
+      status: 200,
+      data: { items: [makeRow({ slug: 'stale-row', name: 'Stale Model' })] },
+    } as never)
+    .mockResolvedValueOnce({ status: 403 } as never);
+
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <ModelList status="" page={1} onStatusChange={vi.fn()} onPageChange={vi.fn()} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText('Stale Model')).toBeTruthy();
+
+  await client.invalidateQueries({ queryKey: ['admin', 'models'] });
+
+  expect(await screen.findByText('没有查看权限')).toBeTruthy();
+  expect(screen.queryByText('Stale Model')).toBeNull();
+});

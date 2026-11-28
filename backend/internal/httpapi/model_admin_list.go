@@ -102,6 +102,8 @@ func (h *Handler) ListAdminModels(w http.ResponseWriter, r *http.Request, params
 		switch {
 		case errors.Is(err, identity.ErrUnauthorized):
 			writeError(w, http.StatusUnauthorized, api.Unauthorized, "请先登录")
+		case errors.Is(err, identity.ErrAccountBanned):
+			writeError(w, http.StatusForbidden, api.Forbidden, messageOf(err))
 		case errors.Is(err, errForbidden):
 			writeError(w, http.StatusForbidden, api.Forbidden, "没有模型管理权限")
 		case errors.Is(err, errNotWired):

@@ -105,28 +105,52 @@ func TestIntegrationListAdminModelsPermissions(t *testing.T) {
 		t.Fatalf("错误码 = %q，想要 forbidden", errBody.Code)
 	}
 
-	// 只持 model.create 的自定义角色也应能看列表（不绑死 model.import）。
-	roleKey := "it-mc-" + tag[:8]
-	if _, err := pool.Exec(ctx, `INSERT INTO roles (key, name, is_system, description) VALUES ($1, '仅建模型', false, '测试')`, roleKey); err != nil {
-		t.Fatalf("建角色失败: %v", err)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO role_permissions (role_key, permission_key) VALUES ($1, $2)`, roleKey, permModelCreate); err != nil {
-		t.Fatalf("赋权失败: %v", err)
-	}
-	t.Cleanup(func() {
-		if _, err := pool.Exec(ctx, `DELETE FROM role_permissions WHERE role_key = $1`, roleKey); err != nil {
-			t.Errorf("清理角色权限失败: %v", err)
+	// 只持 model.create 或只持 model.import 的自定义角色都应能看列表（不绑死单个权限键）。
+	for _, tc := range []struct {
+		suffix string
+		perm   string
+	}{
+		{"mc", permModelCreate},
+		{"mi", permModelImport},
+	} {
+		roleKey := "it-" + tc.suffix + "-" + tag[:8]
+		if _, err := pool.Exec(ctx, `INSERT INTO roles (key, name, is_builtin, description) VALUES ($1, $2, false, '测试')`, roleKey, "仅持 "+tc.perm); err != nil {
+			t.Fatalf("建角色 %s 失败: %v", roleKey, err)
 		}
-		if _, err := pool.Exec(ctx, `DELETE FROM roles WHERE key = $1`, roleKey); err != nil {
-			t.Errorf("清理角色失败: %v", err)
+		if _, err := pool.Exec(ctx, `INSERT INTO role_permissions (role_key, permission_key) VALUES ($1, $2)`, roleKey, tc.perm); err != nil {
+			t.Fatalf("赋权 %s 失败: %v", tc.perm, err)
 		}
-	})
-	if _, err := pool.Exec(ctx, `UPDATE accounts SET role = $1 WHERE sub = $2`, roleKey, plain.Sub); err != nil {
-		t.Fatalf("切角色失败: %v", err)
+		t.Cleanup(func() {
+			if _, err := pool.Exec(ctx, `DELETE FROM role_permissions WHERE role_key = $1`, roleKey); err != nil {
+				t.Errorf("清理角色权限 %s 失败: %v", roleKey, err)
+			}
+			if _, err := pool.Exec(ctx, `DELETE FROM roles WHERE key = $1`, roleKey); err != nil {
+				t.Errorf("清理角色 %s 失败: %v", roleKey, err)
+			}
+		})
+		if _, err := pool.Exec(ctx, `UPDATE accounts SET role = $1 WHERE sub = $2`, roleKey, plain.Sub); err != nil {
+			t.Fatalf("切角色 %s 失败: %v", roleKey, err)
+		}
+		rec = getAdminModels(t, h, "", plainSID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("仅持 %s 的角色状态码 = %d，想要 200；body=%s", tc.perm, rec.Code, rec.Body.String())
+		}
+	}
+
+	// 已封禁账号即使会话还在、角色有权限，也必须返回 403（不能落入 503）。
+	if _, err := pool.Exec(ctx, `UPDATE accounts SET status = 'banned' WHERE sub = $1`, plain.Sub); err != nil {
+		t.Fatalf("封禁测试账号失败: %v", err)
 	}
 	rec = getAdminModels(t, h, "", plainSID)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("仅持 model.create 的角色状态码 = %d，想要 200；body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("已封禁账号状态码 = %d，想要 403；body=%s", rec.Code, rec.Body.String())
+	}
+	var bannedErr api.Error
+	if err := json.Unmarshal(rec.Body.Bytes(), &bannedErr); err != nil {
+		t.Fatalf("解析封禁错误响应失败: %v", err)
+	}
+	if bannedErr.Code != api.Forbidden {
+		t.Fatalf("封禁错误码 = %q，想要 forbidden", bannedErr.Code)
 	}
 }
 

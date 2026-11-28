@@ -1,5 +1,5 @@
 import type { Me } from '@/api';
-import { pages, type PageEntry } from './routes';
+import { MODEL_ADMIN_PERMISSIONS, pages, type PageEntry } from './routes';
 
 /**
  * 管理区入口的权限键集合。
@@ -16,7 +16,7 @@ export const ADMIN_PERMISSIONS = [
   'demo.rebuild',
   'content.erase',
   'proposal.review',
-  'model.import',
+  ...MODEL_ADMIN_PERMISSIONS,
   'user.read',
   'user.status',
   'user.role',
@@ -47,7 +47,9 @@ function canSee(me: Me | null, page: PageEntry): boolean {
 }
 
 export function hasAnyPermission(me: Me | null, keys: readonly string[]): boolean {
-  return me !== null && keys.some((key) => me.permissions.includes(key));
+  return (
+    me !== null && Array.isArray(me.permissions) && keys.some((key) => me.permissions.includes(key))
+  );
 }
 
 /**

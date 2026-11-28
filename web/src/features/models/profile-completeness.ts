@@ -17,6 +17,13 @@ export const PROFILE_COMPLETENESS_LABEL: Record<ProfileCompleteness, string> = {
   complete: '档案完整',
 };
 
+export const MODEL_STATUSES = [
+  'active',
+  'candidate',
+  'unverified',
+  'deprecated',
+] as const satisfies readonly Model['status'][];
+
 export const MODEL_STATUS_LABEL: Record<Model['status'], string> = {
   active: '可用',
   candidate: '候选',

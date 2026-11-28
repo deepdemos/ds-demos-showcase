@@ -5,6 +5,7 @@ import { listAdminModels, type AdminModelRow, type Model } from '@/api';
 import { EmptyState, ErrorState, Pagination, Select, Skeleton } from '@/components/ui';
 import {
   isModelDelisted,
+  MODEL_STATUSES,
   MODEL_STATUS_LABEL,
   PROFILE_COMPLETENESS_LABEL,
   profileCompleteness,
@@ -16,11 +17,8 @@ export type AdminModelStatusFilter = '' | Model['status'];
 
 const STATUS_OPTIONS = [
   { value: '', label: '全部状态' },
-  { value: 'active', label: '可用' },
-  { value: 'candidate', label: '候选' },
-  { value: 'unverified', label: '未核实' },
-  { value: 'deprecated', label: '已退役' },
-] as const;
+  ...MODEL_STATUSES.map((value) => ({ value, label: MODEL_STATUS_LABEL[value] })),
+];
 
 class AdminModelsAccessError extends Error {
   readonly status: number;
@@ -65,6 +63,12 @@ export function ModelList({ status, page, onStatusChange, onPageChange }: ModelL
   );
 
   const accessError = query.error instanceof AdminModelsAccessError ? query.error : null;
+  const showPending = query.isPending;
+  const showAccessError = !showPending && query.isError && accessError !== null;
+  const showGenericError = !showPending && query.isError && accessError === null;
+  const showEmpty =
+    !showPending && !query.isError && query.data !== undefined && items.length === 0;
+  const showList = !showPending && !query.isError && visible.length > 0;
 
   return (
     <section className="rounded-xl border border-gray-200 p-4">
@@ -88,13 +92,13 @@ export function ModelList({ status, page, onStatusChange, onPageChange }: ModelL
         </div>
       </div>
 
-      {query.isPending ? (
+      {showPending ? (
         <div className="mt-4">
           <Skeleton lines={5} />
         </div>
       ) : null}
 
-      {accessError ? (
+      {showAccessError ? (
         <div className="mt-4">
           <EmptyState
             title={accessError.status === 401 ? '请先登录' : '没有查看权限'}
@@ -107,7 +111,7 @@ export function ModelList({ status, page, onStatusChange, onPageChange }: ModelL
         </div>
       ) : null}
 
-      {query.isError && !accessError ? (
+      {showGenericError ? (
         <div className="mt-4">
           <ErrorState
             title="模型列表加载失败"
@@ -118,7 +122,7 @@ export function ModelList({ status, page, onStatusChange, onPageChange }: ModelL
         </div>
       ) : null}
 
-      {query.data && items.length === 0 ? (
+      {showEmpty ? (
         <div className="mt-4">
           <EmptyState
             title="暂无模型"
@@ -131,7 +135,7 @@ export function ModelList({ status, page, onStatusChange, onPageChange }: ModelL
         </div>
       ) : null}
 
-      {visible.length > 0 ? (
+      {showList ? (
         <>
           <ul className="mt-4 list-none divide-y divide-gray-200 border-y border-gray-200 p-0">
             {visible.map(({ model, specs }) => {
