@@ -138,7 +138,8 @@ func TestIntegrationListAdminModelsPermissions(t *testing.T) {
 	}
 
 	// 已封禁账号即使会话还在、角色有权限，也必须返回 403（不能落入 503）。
-	if _, err := pool.Exec(ctx, `UPDATE accounts SET status = 'banned' WHERE sub = $1`, plain.Sub); err != nil {
+	// accounts.ck_accounts_previous_status 要求 banned 行同步记下 previous_status。
+	if _, err := pool.Exec(ctx, `UPDATE accounts SET previous_status = status, status = 'banned' WHERE sub = $1`, plain.Sub); err != nil {
 		t.Fatalf("封禁测试账号失败: %v", err)
 	}
 	rec = getAdminModels(t, h, "", plainSID)
