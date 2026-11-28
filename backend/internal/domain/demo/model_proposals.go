@@ -37,7 +37,7 @@ const (
 	// maxProposalVendorLen 与 models.vendor 的长度约束（64 字）对齐。
 	maxProposalVendorLen = 64
 
-	// 上游三元组各段长度上限（与 model_offerings 约束一致）。
+	// 上游三元组各段长度上限（严格收窄于 model_offerings 的 128 / 512 / 256 约束）。
 	maxProposalSourceLen     = 64
 	maxProposalProviderIDLen = 128
 	maxProposalExternalIDLen = 256
@@ -101,6 +101,13 @@ func prepareModelProposals(items []ModelProposal) ([]preparedModelProposal, erro
 	out := make([]preparedModelProposal, 0, len(items))
 	seen := make(map[string]struct{}, len(items))
 	for i, item := range items {
+		// PG text / jsonb 拒绝 NUL 字符（\u0000 会绕过 utf8.ValidString 并在落库时触发 22P05/22021 变 503），
+		// 必须在校验层显式拦截为 400。
+		for _, field := range []string{item.Name, item.Vendor, item.Source, item.ProviderID, item.ExternalID} {
+			if strings.ContainsRune(field, 0) {
+				return nil, fmt.Errorf("%w: 第 %d 条模型收录提案包含非法空字符（NUL）", ErrInvalidInput, i+1)
+			}
+		}
 		name := strings.TrimSpace(item.Name)
 		if name == "" {
 			return nil, fmt.Errorf("%w: 第 %d 条模型收录提案缺少模型名称（name）", ErrInvalidInput, i+1)

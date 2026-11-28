@@ -53,6 +53,9 @@ func TestValidateModelProposalsRejectsInvalidInputs(t *testing.T) {
 		{"只给 externalId 缺 providerId", []string{`{"name":"M","externalId":"m-1"}`}},
 		{"只给 source 缺三元组", []string{`{"name":"M","source":"models.dev"}`}},
 		{"单条 JSON 超长", []string{`{"name":"M","vendor":"` + strings.Repeat("x", maxProposalJSONLen) + `"}`}},
+		{"名称含 NUL 字符", []string{`{"name":"foo\u0000bar"}`}},
+		{"厂商含 NUL 字符", []string{`{"name":"M","vendor":"v\u00001"}`}},
+		{"上游标识含 NUL 字符", []string{`{"name":"M","providerId":"p\u00001","externalId":"e1"}`}},
 		{"非法 UTF-8", []string{"{\"name\":\"\xff\"}"}},
 		{"条数超上限", tooMany},
 	}

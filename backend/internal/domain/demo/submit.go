@@ -318,7 +318,7 @@ func (s *Service) collect(root string, st *staged) error {
 // slug 冲突靠唯一索引 + 重试解决，不「先查再插」：先查后插有 TOCTOU 窗口，
 // 两个并发投稿能同时通过检查。这里把 23505 当成「换一个 slug 再试」的信号。
 //
-// 返回值第三项非 nil 表示：幂等键撞上了另一个并发请求刚落下的行，
+// 返回值第四项非 nil 表示：幂等键撞上了另一个并发请求刚落下的行，
 // 调用方应当把它直接当成这次提交的结果（200，而不是 201）。
 func (s *Service) createRow(ctx context.Context, in SubmitInput, st *staged) (string, int64, []int64, *SubmitResult, error) {
 	base := slugify(in.Title)

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -223,8 +225,9 @@ WHERE d.slug = $1 AND m.slug = $2`, sub1.Slug, existingSlug).Scan(&declaredCount
 	if foundInList == nil {
 		t.Fatalf("提案列表未找到 #%d", firstPropID)
 	}
-	if foundInList.SourceDemo == nil || foundInList.SourceDemo.Slug != sub1.Slug {
-		t.Fatalf("列表来源作品不对：%+v，想要 slug=%q", foundInList.SourceDemo, sub1.Slug)
+	if foundInList.SourceDemo == nil || foundInList.SourceDemo.Slug != sub1.Slug ||
+		foundInList.SourceDemo.Title == nil || *foundInList.SourceDemo.Title != "模型提案测试作品一" {
+		t.Fatalf("列表来源作品不对：%+v，想要 slug=%q title=模型提案测试作品一", foundInList.SourceDemo, sub1.Slug)
 	}
 
 	detailRec := httptest.NewRecorder()
@@ -236,7 +239,8 @@ WHERE d.slug = $1 AND m.slug = $2`, sub1.Slug, existingSlug).Scan(&declaredCount
 	if err := json.Unmarshal(detailRec.Body.Bytes(), &pdetail); err != nil {
 		t.Fatalf("解析提案详情失败: %v", err)
 	}
-	if pdetail.SourceDemo == nil || pdetail.SourceDemo.Slug != sub1.Slug {
+	if pdetail.SourceDemo == nil || pdetail.SourceDemo.Slug != sub1.Slug ||
+		pdetail.SourceDemo.Title == nil || *pdetail.SourceDemo.Title != "模型提案测试作品一" {
 		t.Fatalf("详情来源作品不对：%+v", pdetail.SourceDemo)
 	}
 	if pdetail.Payload == nil {
@@ -245,6 +249,59 @@ WHERE d.slug = $1 AND m.slug = $2`, sub1.Slug, existingSlug).Scan(&declaredCount
 	if (*pdetail.Payload)["provider_id"] != "deepseek" || (*pdetail.Payload)["external_id"] != "deepseek-v4-preview" ||
 		(*pdetail.Payload)["demo_slug"] != sub1.Slug {
 		t.Fatalf("提案 payload 字段不全：%+v", *pdetail.Payload)
+	}
+
+	// 5. 无 proposal_refs 的提案，列表与详情的 sourceDemo 均为 nil。
+	var unlinkedID int64
+	if err := pool.QueryRow(ctx, `
+INSERT INTO proposals (kind, payload, created_by, source)
+VALUES ('new_benchmark', '{"name":"无来源基准"}'::jsonb, $1, 'user')
+RETURNING id`, author.UserID).Scan(&unlinkedID); err != nil {
+		t.Fatalf("插入无来源提案失败: %v", err)
+	}
+	unlinkedDetailRec := httptest.NewRecorder()
+	h.GetAdminProposal(unlinkedDetailRec, proposalReq(http.MethodGet, "/api/v1/admin/proposals/x", adminSID, ""), int(unlinkedID))
+	if unlinkedDetailRec.Code != http.StatusOK {
+		t.Fatalf("无来源提案详情 = %d，想要 200", unlinkedDetailRec.Code)
+	}
+	var unlinkedDetail api.ProposalDetail
+	if err := json.Unmarshal(unlinkedDetailRec.Body.Bytes(), &unlinkedDetail); err != nil {
+		t.Fatalf("解析无来源提案详情失败: %v", err)
+	}
+	if unlinkedDetail.SourceDemo != nil {
+		t.Fatalf("无 proposal_refs 提案的 sourceDemo 应为 nil，实际 = %+v", unlinkedDetail.SourceDemo)
+	}
+
+	// 6. 来源作品软删后，列表与详情的 sourceDemo 都回退为 nil（不泄露已删作品）。
+	if _, err := pool.Exec(ctx, `UPDATE demos SET deleted_at = now() WHERE slug = $1`, sub1.Slug); err != nil {
+		t.Fatalf("软删来源作品失败: %v", err)
+	}
+	afterDeleteDetail := httptest.NewRecorder()
+	h.GetAdminProposal(afterDeleteDetail, proposalReq(http.MethodGet, "/api/v1/admin/proposals/x", adminSID, ""), firstPropID)
+	if afterDeleteDetail.Code != http.StatusOK {
+		t.Fatalf("软删后提案详情 = %d，想要 200", afterDeleteDetail.Code)
+	}
+	var deletedDetail api.ProposalDetail
+	if err := json.Unmarshal(afterDeleteDetail.Body.Bytes(), &deletedDetail); err != nil {
+		t.Fatalf("解析软删后详情失败: %v", err)
+	}
+	if deletedDetail.SourceDemo != nil {
+		t.Fatalf("来源作品软删后详情 sourceDemo 应为 nil，实际 = %+v", deletedDetail.SourceDemo)
+	}
+	afterDeleteList := httptest.NewRecorder()
+	h.ListAdminProposals(afterDeleteList, proposalReq(http.MethodGet, "/api/v1/admin/proposals?kind=new_model", adminSID, ""),
+		api.ListAdminProposalsParams{Kind: strPtr("new_model")})
+	if afterDeleteList.Code != http.StatusOK {
+		t.Fatalf("软删后提案列表 = %d，想要 200", afterDeleteList.Code)
+	}
+	var deletedList api.ProposalList
+	if err := json.Unmarshal(afterDeleteList.Body.Bytes(), &deletedList); err != nil {
+		t.Fatalf("解析软删后列表失败: %v", err)
+	}
+	for _, item := range deletedList.Items {
+		if item.Id == firstPropID && item.SourceDemo != nil {
+			t.Fatalf("来源作品软删后列表 sourceDemo 应为 nil，实际 = %+v", item.SourceDemo)
+		}
 	}
 }
 
@@ -275,14 +332,15 @@ func TestIntegrationModelProposalsRejectsInvalidAndGenericEndpoint(t *testing.T)
 		t.Fatalf("通用提案入口提交 new_model 状态码 = %d，想要 422；body=%s", genericRec.Code, genericRec.Body.String())
 	}
 
-	// 2. 投稿附带半截上游三元组 → 400，且不落作品与提案。
-	badSubmit := submitDemoWithModelProposals(
-		t, h, sid, "非法提案投稿",
-		nil,
-		[]string{`{"name":"Bad Upstream","providerId":"deepseek"}`},
-	)
-	if badSubmit.Code != http.StatusBadRequest {
-		t.Fatalf("半截上游三元组投稿 = %d，想要 400；body=%s", badSubmit.Code, badSubmit.Body.String())
+	// 2. 投稿附带半截上游三元组或含 NUL 字符 → 400（不得落库，也不得 503）。
+	for _, raw := range []string{
+		`{"name":"Bad Upstream","providerId":"deepseek"}`,
+		`{"name":"foo\u0000bar"}`,
+	} {
+		badSubmit := submitDemoWithModelProposals(t, h, sid, "非法提案投稿", nil, []string{raw})
+		if badSubmit.Code != http.StatusBadRequest {
+			t.Fatalf("非法提案 %s 投稿 = %d，想要 400；body=%s", raw, badSubmit.Code, badSubmit.Body.String())
+		}
 	}
 
 	var demoCount, propCount int
@@ -296,7 +354,7 @@ func TestIntegrationModelProposalsRejectsInvalidAndGenericEndpoint(t *testing.T)
 		t.Fatalf("被拒请求不该落库，实际 demos=%d proposals=%d", demoCount, propCount)
 	}
 
-	// 3. 先成功投一件作品，再改稿时传非法 modelProposals → 400，版本号不变、零新提案。
+	// 3. 先成功投一件作品，再改稿时传非法 modelProposals → 400，版本号不变（仍只有 1 版）、零新提案。
 	okSubmit := submitDemoWithModelProposals(t, h, sid, "正常作品供改稿反例", nil, nil)
 	if okSubmit.Code != http.StatusCreated {
 		t.Fatalf("前置投稿 = %d，想要 201；body=%s", okSubmit.Code, okSubmit.Body.String())
@@ -314,5 +372,67 @@ func TestIntegrationModelProposalsRejectsInvalidAndGenericEndpoint(t *testing.T)
 	}
 	if propCount != 0 {
 		t.Fatalf("改稿被拒后不该落提案，实际 %d", propCount)
+	}
+	var revCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM demo_revisions WHERE demo_id = (SELECT id FROM demos WHERE slug = $1)`, sub.Slug).Scan(&revCount); err != nil {
+		t.Fatalf("查版本数失败: %v", err)
+	}
+	if revCount != 1 {
+		t.Fatalf("改稿被拒后版本数 = %d，想要仍为 1", revCount)
+	}
+}
+
+type failingPutStore struct {
+	storage.Store
+}
+
+func (failingPutStore) Put(context.Context, string, io.Reader, int64, string) error {
+	return errors.New("simulated storage put failure")
+}
+
+// TestIntegrationModelProposalsUploadFailureCompensates 验证上传失败触发补偿删作品时，
+// 同一投稿里刚建的 new_model 提案与 proposal_refs 也一并清干净，不留孤儿提案。
+func TestIntegrationModelProposalsUploadFailureCompensates(t *testing.T) {
+	pool := integrationPool(t)
+	q := store.New(pool)
+	idSvc := integrationIdentity(t, pool)
+	local, err := storage.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatalf("初始化存储失败: %v", err)
+	}
+	demoSvc := demo.New(pool, q, failingPutStore{Store: local}, storage.DefaultLimits(), 200<<20, 0, nil)
+	h := New(pool, q, idSvc, nil, demoSvc)
+	ctx := context.Background()
+
+	tag := uniq()
+	author, sid := registerVerified(t, pool, idSvc, registerInputFor(t, "mp-comp-"+tag[:8]))
+	t.Cleanup(func() { cleanupAuthor(t, pool, author.Sub) })
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx, `DELETE FROM proposals WHERE created_by = $1`, author.UserID); err != nil {
+			t.Errorf("清理提案失败: %v", err)
+		}
+	})
+
+	rec := submitDemoWithModelProposals(
+		t, h, sid, "上传失败补偿测试",
+		nil,
+		[]string{`{"name":"补偿清理模型 ` + tag + `","vendor":"TestVendor"}`},
+	)
+	if rec.Code == http.StatusCreated || rec.Code == http.StatusOK {
+		t.Fatalf("存储失败时投稿不该成功，状态码 = %d", rec.Code)
+	}
+
+	var demoCount, propCount, refCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM demos WHERE author_id = $1`, author.UserID).Scan(&demoCount); err != nil {
+		t.Fatalf("查作品数失败: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM proposals WHERE created_by = $1`, author.UserID).Scan(&propCount); err != nil {
+		t.Fatalf("查提案数失败: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM proposal_refs pr JOIN proposals p ON p.id = pr.proposal_id WHERE p.created_by = $1`, author.UserID).Scan(&refCount); err != nil {
+		t.Fatalf("查提案引用数失败: %v", err)
+	}
+	if demoCount != 0 || propCount != 0 || refCount != 0 {
+		t.Fatalf("上传失败补偿后残留数据：demos=%d proposals=%d refs=%d，全部应为 0", demoCount, propCount, refCount)
 	}
 }
